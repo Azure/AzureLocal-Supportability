@@ -29,7 +29,7 @@ If you are unsure which resource group, the orphaned VM belonged to - you’ll n
 
 Eg: **vmdel** was a sample VM that was orphaned.  
   
-![==image_0==.png](/.attachments/==image_0==-ecee4505-a09b-45b9-aad9-2abdfda57f71.png) 
+![VMdeleteimage.png](/TSG/ArcVMs/VMdeleteimage.png) 
 
 2. Once the Arc VM is successfully created, delete the newly created Arc VM from the Azure portal.
 
