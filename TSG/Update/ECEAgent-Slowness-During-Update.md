@@ -52,11 +52,6 @@ Write-Host "An update is not running or the slowness issue was not detected"
 CheckForAgentUpdateSlowness
 ```
 
-### Issue Confirmation
-1) Examine the progress xml for the update. 
-2) The interface FailoverECEService has the status Inprogress or Pending
-3) The time since the update was resumed **or** the start time of the interface is more than 15 minutes ago
-
 ## Mitigation Details  
 
 Running the below command from one of the cluster nodes while the agent is stuck should clear up the slowness and the update should auto remediate its state. The script forces a restart of the ECEAgent on all of the nodes in the cluster
