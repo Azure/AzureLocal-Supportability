@@ -9,6 +9,9 @@ The slowness can cause the update to take significantly longer than expected and
 This detection script can be used to detect if ECE is experiencing the issue while an update is running. If the update is not currently running but the previous update got stuck and the portal looked like the screen shot above apply the remediation and then retry the update. If the update gets stuck again while it is in progress run the detection script again and follows its recommendations.
 
 ``` Powershell
+function CheckForAgentUpdateSlowness()
+{
+
 Import-Module ECEClient
 $ErrorActionPreference = "Stop"
 
@@ -38,13 +41,15 @@ if ($mostRecentMASUpdate -ne $null )
         if  ($startTime.AddMinutes(15) -lt $(Get-Date) -and [string]::IsNullOrEmpty($endTime))
         {
             Write-Host "ECE slowness issue detected. Please run the agent restart remediation from the ECEAgent Causing Slowness during Update TSG"
+            return
         }
     }
 }
 
 Write-Host "An update is not running or the slowness issue was not detected"
+}
 
-
+CheckForAgentUpdateSlowness
 ```
 
 ### Issue Confirmation
