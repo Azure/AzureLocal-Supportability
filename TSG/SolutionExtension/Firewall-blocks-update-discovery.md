@@ -1,6 +1,6 @@
 # Update discovery issues - firewall blocking SBE manifest
 
-# Overview
+# Symptoms
 
 Attempting to check for solution updates in Azure Local using either the Portal or PowerShell can fail with various symptoms if the hardware vendor Solution Builder Extension (SBE) manifest endpoint is blocked by the customer firewall. As outlined below this endpoint rule is different depending on the system manufacturer as reported by BIOS.
 

@@ -1,6 +1,6 @@
 # Solution update "missing" after importing SBE with Add-SolutionUpdate
 
-# Overview
+# Symptoms
 A solution update (e.g. `10.2408.0.29`) that was previously in the AdditionalContentRequired State is missing from `Get-SolutionUpdate` list after the `Add-SolutionUpdate` call to add (aka import) a SBE.
 
 # Issue Validation

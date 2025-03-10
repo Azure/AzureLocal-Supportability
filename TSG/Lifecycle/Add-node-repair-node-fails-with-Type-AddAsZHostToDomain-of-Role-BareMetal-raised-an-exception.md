@@ -1,4 +1,4 @@
-# Overview
+# Symptoms
 
 In scenario where a stamp has been upgraded from **2311 or earlier directly to 2408 or 2408.1**, add node and repair node operations will fail with the following error:
 

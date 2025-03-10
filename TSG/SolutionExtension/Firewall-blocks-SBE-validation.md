@@ -1,6 +1,6 @@
 # Solution Builder Extension (SBE) validation blocked by firewall
 
-# Overview
+# Symptoms
 
 Attempting to deploy Azure Local fails with:
 - **Description**: Invoke Environment Checker action plan.

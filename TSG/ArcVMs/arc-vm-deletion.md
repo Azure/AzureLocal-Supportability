@@ -1,23 +1,23 @@
-## Workaround for deletion issue affecting Arc VMs running on Azure Local, version 23H2
+# Workaround for deletion issue affecting Arc VMs running on Azure Local, version 23H2
 
 This TSG covers workaround steps specific to addressing an issue Microsoft has identified where a subset of Arc VMs deleted between Jan 31th, 2025 and Feb 2nd, 2025 were not properly deleted.
 
-## Symptom
+# Symptoms
 
-On deleting an Arc VM in the specified time frame above, the Arc VM no longer exists in Azure but continues to run on-premises.
+On deleting an Arc VM in the specified time frame (between Jan 31th, 2025 and Feb 2nd, 2025), the Arc VM no longer exists in Azure but continues to run on-premises.
 
-## Cause
+# Cause
 
 A misconfiguration on one of the cloud components prevented Arc VM delete operations from flowing down to the Arc resource bridge.
 
 > [!NOTE]
 > This issue is not tied to any specific software releases for Azure Local.
 
-## Mitigation Details
+# Mitigation Details
 
 Microsoft resolved this issue via an emergency fix on February 2nd, 2025. All Arc VM deletions initiated after this date are expected to function as intended without further intervention.
 
-### Workaround steps to clean up orphaned Arc VMs
+## Workaround steps to clean up orphaned Arc VMs
 
 1. Recreate the Arc VM from the Azure portal using the same values as the original orphaned VM for the below parameters:
 
