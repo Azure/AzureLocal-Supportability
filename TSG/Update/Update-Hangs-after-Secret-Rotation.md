@@ -197,7 +197,7 @@ Function Restart-AzureLocalServices {
         $services = @(
             'Azure Stack HCI Download Standalone Tool Agent',
             'ECEAgent',
-            'URP Windows Service Service',
+            'URP Windows Service Service'
             )
         return;
     }
