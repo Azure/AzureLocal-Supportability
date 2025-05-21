@@ -7,8 +7,7 @@ The OS Image Version on the node does not match the version on the node.
 
 # Resolution:
 Make sure incoming node and existing nodes have same Composed Image version by running this command-
-    ```powershell
+  ```powershell
  Get-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Services\ComposedBuildInfo\Parameters
 ```
-
 
