@@ -1,0 +1,4 @@
+# Symptoms
+In Add/Repair node flow, when adding a new node, validation fails with ValidateScaleoutOSImageRecipe failure.
+
+# Error: 
