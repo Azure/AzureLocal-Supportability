@@ -10,3 +10,5 @@ Make sure incoming node and existing nodes have same Composed Image version by r
     ```powershell
  Get-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Services\ComposedBuildInfo\Parameters
 ```
+
+
