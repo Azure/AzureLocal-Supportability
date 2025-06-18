@@ -38,16 +38,17 @@ This document assists administrators in designing a network architecture that al
 ## Terminology
 
 Definitions
-: **ToR**: Top of Rack network switch.  Supporting Management, Compute and Storage intent traffic.
-: **p-NIC**: Physical Network Interface Card attached to a Azure Local node.
-: **v-Switch**: Virtual Switch configured on the Azrue Local Cluster.
-: **VLAN**: Virtual Local Area Network.
-: **SET**: [Switch Embedded Teaming][Teaming_in_Azure_Stack_HCI], supporting switch-independant teaming.
-: **MLAG**: Multi-Chassis Link Aggregation, a technique that lets two or more network switches work together as if they were one logical switch.
-: **Border Router**: Uplink device with the ToR switches, providing routing to endpoints external to the Azure Local environment.
-: **AS**: Autonomous System number used to define a BGP neighbor.
-: **WRED**: Weighted Random Early Detection, this is a congestion avoidance mechanism used in QOS policies.
-: **ECN**: Explicit Congestion Notification, this is a congestion notification mechanism used to mark packets when congestion is encountered in the communication path.  A DSCP bit is modified in the packet to identify congestion.
+
+- **ToR**: Top of Rack network switch.  Supporting Management, Compute and Storage intent traffic.
+- **p-NIC**: Physical Network Interface Card attached to a Azure Local node.
+- **v-Switch**: Virtual Switch configured on the Azrue Local Cluster.
+- **VLAN**: Virtual Local Area Network.
+- **SET**: [Switch Embedded Teaming][Teaming_in_Azure_Stack_HCI], supporting switch-independant teaming.
+- **MLAG**: Multi-Chassis Link Aggregation, a technique that lets two or more network switches work together as if they were one logical switch.
+- **Border Router**: Uplink device with the ToR switches, providing routing to endpoints external to the Azure Local environment.
+- **AS**: Autonomous System number used to define a BGP neighbor.
+- **WRED**: Weighted Random Early Detection, this is a congestion avoidance mechanism used in QOS policies.
+- **ECN**: Explicit Congestion Notification, this is a congestion notification mechanism used to mark packets when congestion is encountered in the communication path.  A DSCP bit is modified in the packet to identify congestion.
 
 ## Example Device
 
@@ -68,6 +69,7 @@ The TOR devices are setup as a Layer2/Layer3 device within an iBGP configuration
 ### Nodes
 
 Each node is equipped with two physical network interface cards, each with two physical interfaces (p-NICs).
+
 - <span style="color: #0078D4; font-size: 1.2em;">&#9632;</span> p-NICs A and B handle both compute and management intent traffic.
 - <span style="color: #0078D4; font-size: 1.2em;">&#9632;</span> p-NIC interfaces support 25G bandwidth.
 - <span style="color: #0078D4; font-size: 1.2em;">&#9632;</span> p-NICs A and B are configured as part of a Switch Embedded Teaming (SET) team, transmitting compute and management traffic. These NICs are assigned to a virtual switch (v-Switch) to support multiple network intents.  Managment intent traffic is untagged, and Compute traffic is tagged.
