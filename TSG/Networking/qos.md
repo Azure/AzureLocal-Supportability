@@ -1,6 +1,6 @@
 # QoS Policy
 
-Below is an example Cisco Nexus QoS configuration supporting an Azure Local environment. This policy ensures that storage (RDMA) and cluster heartbeat traffic are prioritized and protected from congestion, while allowing efficient bandwidth sharing for other traffic classes. The configuration includes traffic class definitions, bandwidth guarantees, congestion management, and MTU settings.
+Below is an example Cisco Nexus QoS configuration for an Azure Local environment. This policy ensures that storage (RDMA) and cluster heartbeat traffic are prioritized and protected from congestion, while enabling efficient bandwidth sharing for other traffic classes. The configuration includes traffic class definitions, bandwidth guarantees, congestion management, and MTU settings. The QoS policy should be applied to interfaces carrying storage intent traffic.
 
 ```mermaid
 flowchart TD
