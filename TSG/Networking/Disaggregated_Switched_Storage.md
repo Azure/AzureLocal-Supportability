@@ -1,6 +1,6 @@
 # Disaggregated Switch Storage Design
 
-![Disaggregated_Swtiched_Sorage_Design](./images/Disaggregated_Switched_Storage.png)
+![Disaggregated_Switched_Storage_Design](./images/Disaggregated_Switched_Storage.png)
 
 - [Disaggregated Switch Storage Design](#disaggregated-switch-storage-design)
   - [Scope](#scope)
@@ -20,12 +20,8 @@
     - [Compute, Management, Storage Network Intents](#compute-management-storage-network-intents)
   - [ToR Configuration](#tor-configuration)
     - [Enabled Capabilities](#enabled-capabilities)
-    - [QoS Policy](#qos-policy)
-      - [ClassMap](#classmap)
-      - [policy-map qos](#policy-map-qos)
-      - [policy-map type network-qos](#policy-map-type-network-qos)
-      - [policy-map type queuing](#policy-map-type-queuing)
-    - [Loop prevention](#loop-prevention)
+  - [QOS](#qos-1)
+  - [Loop prevention](#loop-prevention)
     - [VLAN](#vlan)
   - [Example SDN Configuration](#example-sdn-configuration)
   - [Layer 3 Forwarding Gateway](#layer-3-forwarding-gateway)
@@ -39,59 +35,59 @@ This document assists administrators in designing a network architecture that al
 
 Definitions
 
-- **ToR**: Top of Rack network switch.  Supporting Management, Compute and Storage intent traffic.
-- **p-NIC**: Physical Network Interface Card attached to a Azure Local node.
-- **v-Switch**: Virtual Switch configured on the Azrue Local Cluster.
+- **ToR**: Top of Rack network switch. Supports Management, Compute, and Storage intent traffic.
+- **p-NIC**: Physical Network Interface Card attached to an Azure Local node.
+- **v-Switch**: Virtual Switch configured on the Azure Local Cluster.
 - **VLAN**: Virtual Local Area Network.
-- **SET**: [Switch Embedded Teaming][Teaming_in_Azure_Stack_HCI], supporting switch-independant teaming.
-- **MLAG**: Multi-Chassis Link Aggregation, a technique that lets two or more network switches work together as if they were one logical switch.
+- **SET**: [Switch Embedded Teaming][Teaming_in_Azure_Stack_HCI], supporting switch-independent teaming (Windows Server feature).
+- **MLAG**: Multi-Chassis Link Aggregation, a technique that lets two or more network switches work together as if they were one logical switch. (Cisco Nexus uses vPC for MLAG.)
 - **Border Router**: Uplink device with the ToR switches, providing routing to endpoints external to the Azure Local environment.
 - **AS**: Autonomous System number used to define a BGP neighbor.
-- **WRED**: Weighted Random Early Detection, this is a congestion avoidance mechanism used in QOS policies.
-- **ECN**: Explicit Congestion Notification, this is a congestion notification mechanism used to mark packets when congestion is encountered in the communication path.  A DSCP bit is modified in the packet to identify congestion.
+- **WRED**: Weighted Random Early Detection, a congestion avoidance mechanism used in QoS policies.
+- **ECN**: Explicit Congestion Notification, a congestion notification mechanism used to mark packets when congestion is encountered in the communication path. A DSCP bit is modified in the packet to identify congestion.
 
 ## Example Device
 
 - Make: Cisco
-- Model: Nexus 98180YC-FX
-- Firmware: 10.3 or greater
+- Model: Nexus 93180YC-FX
+- Firmware: 10.3 or greater recommended
 
 ## Environment
 
-This document will discuss a 2 - 16 node envionrment where the Management and Compute network intents share a SET team interface.  Storage1 and Storage2 network intents are utilizing issloated network interfaces and connect to a switch to support storage traffic.
+This document discusses a 2-16 node environment where the Management and Compute network intents share a SET team interface. Storage1 and Storage2 network intents utilize isolated network interfaces and connect to a switch to support storage traffic.
 
-Within this environment there are two ToR devcies (TOR1 and TOR2).  Both of these devices are connected to each other using a MLAG configuration and a dedicated port-channel for MLAG heartbeat and iBGP routing.
+Within this environment, there are two ToR devices (TOR1 and TOR2). Both devices are connected to each other using an MLAG (vPC) configuration and a dedicated port-channel for MLAG heartbeat and iBGP routing.
 
-The TOR devices are setup as a Layer2/Layer3 device within an iBGP configuration.
+The ToR devices are set up as Layer 2/Layer 3 devices within an iBGP configuration.
 
 ## Attributes
 
 ### Nodes
 
-Each node is equipped with two physical network interface cards, each with two physical interfaces (p-NICs).
+Each node is equipped with two physical network interface cards, each with two physical interfaces (p-NICs):
 
 - 🟦 p-NICs A and B handle both compute and management intent traffic.
-- 🟦 p-NIC interfaces support 25G bandwidth.
-- 🟦 p-NICs A and B are configured as part of a Switch Embedded Teaming (SET) team, transmitting compute and management traffic. These NICs are assigned to a virtual switch (v-Switch) to support multiple network intents.  Managment intent traffic is untagged, and Compute traffic is tagged.
-- 🟪 p-NICs C and D are dedicated to storage intent traffic and are RDMA capable devices.
+- 🟦 p-NIC interfaces support 25Gbps bandwidth.
+- 🟦 p-NICs A and B are configured as part of a Switch Embedded Teaming (SET) team, transmitting compute and management traffic. These NICs are assigned to a virtual switch (v-Switch) to support multiple network intents. Management intent traffic is untagged, and Compute traffic is tagged.
+- 🟪 p-NICs C and D are dedicated to storage intent traffic and are RDMA-capable devices.
 - 🟪 p-NICs C and D can support RoCEv2 or iWARP.
-- 🟪 p-NICs C and D are connect to the ToR devices, the default vlan 711 will be assigned to p-NIC C and VLAN 712 will be assigned to p-NIC D.  The interfaces will operate in trunk mode and only one storage intent VLAN is assigned per interface.  Native VLAN not supported in this configuration, any Native VLAN traffic will be dropped.
+- 🟪 p-NICs C and D are connected to the ToR devices. VLAN 711 is assigned to p-NIC C and VLAN 712 to p-NIC D. The interfaces operate in trunk mode, and only one storage intent VLAN is assigned per interface.
 
 > [!IMPORTANT]
 > If your Azure Local environment uses iWARP-based network cards and you enable Jumbo Frames, ensure that Jumbo Frames are also enabled on all switch interfaces and network paths carrying Storage Intent traffic. For RoCEv2-based systems, enabling Jumbo Frames on the switch is not required for Storage Intent traffic.
 
 ### Switch
 
-- TOR1 is in a MLAG configuration with TOR2, three interfaces are assigned to the MLAG peer link between the devices.  Peer link bandwidth will vary depending on the customer workloads.  
-- MLAG support two network intents Management and Compute.  
-- Layer 2 traffic is supported between the cluster nodes and the ToR devices.  External connectivity is only established via Layer 3 sessions.
-- Storage intent traffic is issolated to a specific TOR and is not expected to travel between the TOR devcies.
-- TOR1 and TOR2 operate as Layer2/Layer3 devices, Layer3 is supported by BGP as the primary routing protocol.
-- TOR1 and TOR2 are configured to support an iBGP session, all external links are configured as eBGP sessions.
+- TOR1 is in an MLAG (vPC) configuration with TOR2. Three interfaces are assigned to the MLAG peer link between the devices. Peer link bandwidth should be sized based on customer workloads.
+- MLAG supports two network intents: Management and Compute.
+- Layer 2 traffic is supported between the cluster nodes and the ToR devices. External connectivity is only established via Layer 3 sessions.
+- Storage intent traffic is isolated to a specific ToR and is not expected to traverse between the ToR devices.
+- TOR1 and TOR2 operate as Layer 2/Layer 3 devices. Layer 3 is supported by BGP as the primary routing protocol.
+- TOR1 and TOR2 are configured to support an iBGP session; all external links are configured as eBGP sessions.
 
 ## Cable Map
 
-The cable map is only showing two nodes within the example environment.
+The cable map below shows two nodes as an example. For larger environments, extend the pattern accordingly.
 
 ### Node 1
 
@@ -145,23 +141,22 @@ The cable map is only showing two nodes within the example environment.
 
 ## Switch Configuration Overview
 
-placeholder high level config
+This section provides a high-level overview of the switch configuration required for Azure Local environments. The configuration focuses on enabling features and policies that support Management, Compute, and Storage network intents, as well as redundancy and high availability.
 
 ### QoS
 
-placeholder, brief explaiation of the purpose of the QOS policy and what it is.
+Quality of Service (QoS) policies are implemented to prioritize critical traffic types, such as storage (RDMA) and cluster heartbeat, and to ensure efficient bandwidth allocation for all network intents. The following sections detail the required class maps, policy maps, and system QoS application.
 
 ### Compute, Management, Storage Network Intents
 
-placeholder, brief explaination of the compute, management, storage intent networks and how they connect to the nodes and what settings are applied.
+- **Compute and Management:** These intents share a SET team interface and are typically carried over tagged and untagged VLANs, respectively. Ensure proper VLAN tagging and trunk configuration on switch ports.
+- **Storage:** Storage intent traffic uses dedicated RDMA-capable interfaces and is isolated to specific VLANs. Lossless transport is required for RDMA (RoCEv2 or iWARP), which is achieved through Priority Flow Control (PFC) and appropriate buffer allocation.
 
 ## ToR Configuration
 
 ### Enabled Capabilities
 
-Enable the following features on Cisco Nexus 93180YC-FX to support this example Azure Local environment:
-
-**Sample Cisco Nexus 9318YC-FX**
+Enable the following features on Cisco Nexus 93180YC-FX to support this Azure Local environment:
 
 ```console
 feature bgp
@@ -172,250 +167,18 @@ feature vpc
 feature lldp
 ```
 
-- BGP utilized as the primary routing protocol
-- interface-vlan, setup SVI to support managment and comptue networks.
-- LACP, used with port-channels between the ToR devices.
-- HSRP, used in conjuction with VPC to configure a highly availble switch infrastructure
-- VPC used with HSRP to make a highly available switch infrastructure.
-- LLDP, used to transmit host interface configuration values, this will be utilized by Azure Local to enhance support scenaios.
+- **BGP** is used as the primary routing protocol.
+- **interface-vlan** enables SVI creation for management and compute networks.
+- **LACP** is used for port-channels between ToR devices.
+- **HSRP** provides gateway redundancy for SVIs, used in conjunction with vPC for high availability.
+- **vPC** (Cisco's MLAG implementation) is used for switch redundancy and active-active uplinks.
+- **LLDP** is used to transmit host interface configuration values, which can be leveraged by Azure Local for enhanced support scenarios.
 
-### QoS Policy
+## QOS
 
-Below is an example Cisco Nexus QoS configuration for disaggregated switched storage. This policy is designed to ensure that storage and cluster heartbeat traffic are prioritized and protected from congestion, while also enabling efficient bandwidth sharing for other traffic classes. The configuration includes traffic class definitions, bandwidth guarantees, congestion management, and MTU settings.
+[Quality of Service (QoS) Policy](qos.md)
 
-```mermaid
-flowchart TD
-  A[Packet Ingress]:::ingress --> B{Ingress Queue}:::ingressqueue
-  B -- CoS 3 --> C[Class Map: RDMA]:::cos3
-  B -- CoS 7 --> D[Class Map: CLUSTER]:::cos7
-  B -- Other --> E[Class Map: Default]:::defaultclass
-
-  C --> F[Policy Map<br>Type: qos<br>AZLocal_SERVICES]:::qosmap
-  D --> F
-  E --> F
-
-  F -- RDMA --> F3[set qos-group 3]:::cos3
-  F -- CLUSTER --> G7[set qos-group 7]:::cos7
-  F -- Default --> H0[default qos-group 0]:::defaultclass
-
-  F3 --> X[policy-map type network-qos<br>QOS_NETWORK]:::networkqos
-  G7 --> X
-  H0 --> X
-
-  X -- qos-group 3 --> J[Queue 3<br>RDMA<br>Buffer carving<br>Pause: enabled]:::cos3
-  X -- qos-group 7 --> K[Queue 7<br>Cluster Heartbeat<br>Buffer carving]:::cos7
-  X -- qos-group 0 --> L[Default Queue<br>Buffer carving]:::defaultclass
-
-  J --> M{Egress Queue<br>QOS_EGRESS_PORT}:::egressqueue
-  K --> M
-  L --> M
-
-  M -- Queue 3 --> N[50% Bandwidth<br>WRED/ECN<br>Congestion: Mark/Drop]:::cos3
-  M -- Queue 7 --> O[1% Bandwidth]:::cos7
-  M -- Default --> P[48% Bandwidth]:::defaultclass
-
-  N --> Q[Packet Egress]
-  O --> Q
-  P --> Q
-
-  %% Annotations
-  classDef cos3 fill:#e6ffe6,stroke:#2ecc40,stroke-width:2px;
-  classDef cos7 fill:#e6e6ff,stroke:#5b5bd6,stroke-width:2px;
-  classDef defaultclass fill:#f7f7f7,stroke:#aaaaaa,stroke-width:2px;
-  classDef networkqos fill:#fff3e6,stroke:#ff9900,stroke-width:2px;
-  classDef qosmap fill:#e6f0ff,stroke:#0074d9,stroke-width:2px;
-  classDef egressqueue fill:#fbeeff,stroke:#b300b3,stroke-width:2px;
-```
-
-#### ClassMap
-
-```console
-  class-map type qos match-all RDMA
-    match cos 3
-  class-map type qos match-all CLUSTER
-    match cos 7
-```
-
-ClassMap identification is performed, checking the packet CoS values. If the CoS value matches a defined value (3, 7). For example:
-
-- CoS value 3: traffic will be identified as RDMA.
-- Cos value 7: traffic will be identified as CLUSTER.
-- if the CoS does not match any of these values it will fall into the default bucket. Default is not assigned but is implicit when no  values match.
-
-#### policy-map qos
-
-```console
-policy-map type qos AZLocal_SERVICES
-  class RDMA
-    set qos-group 3
-  class CLUSTER
-    set qos-group 7
-```
-
-Maps classified traffic to internal QoS groups, all other traffic classes not represented are placed in an implicit default class.
-
-`class RDMA`:
-
-- Assigns matched traffic to qos-group 3. Class RDMA is designaed for Storage Intent based traffic (RoCEv2 or iWARP)
-
-`class CLUSTER`:
-
-- Assigns matched traffic to qos-group 7. Class CLUSTER is designed for Cluster Heartbeat traffic. In some cases cluster heartbeat can utilize the same NIC that are designated for Storage Intent traffic. In the case where the Storage Intent interface is utilized for cluster heartbeats, this class will ensure hearbeat traffic has a higher priority than default traffic.
-
-> [!NOTE]
-> class default is not assigned in the configuration.  Default is implicit when the traffic doesn not match the other assigned groups. Default traffic will be assigned to qos-group 0.
-
-#### policy-map type network-qos
-
-```console
-policy-map type network-qos QOS_NETWORK
-  class type network-qos c-8q-nq3
-    mtu 9216
-    pause pfc-cos 3
-  class type network-qos c-8q-nq-default
-    mtu 9216
-  class type network-qos c-8q-nq7
-    mtu 9216
-```
-
-Defines global Layer 2 properties for traffic classes, such as MTU and Priority Flow Control (PFC).
-
-`class type network-qos c-8q-nq3`:
-
-- `mtu 9216` is used to perform buffer carving when no-drop classes are utilized. This is a specific setting in the Nexus platform, allowing a larger buffer allocation.
-
-> [!NOTE]
-> Carving a larger buffer allocation may not be required on other switch platforms.
-
-- `pause pfc-cos 3` is enabled to configure lossless transport of storage traffic.
-
-> [!NOTE]
-> `pause pfc-cos 3` is utilzied in this portion of the configuration and the keyword `no-drop` is not utilzied.  In the Cisco Nexus configuration pause pfc-cos 3 is sufficient to signal the traffic is lossless.  When these two are utilzied it tells the switch to pause traffic on CoS 3 when congestion is detected instead of dropping it. The keyword `no-drop` is considered optional for this switch platform. Other swtiches may require the explicit use of `no-drop` to support a lossless traffic class.
-
-`class type network-qos c-8q-nq-default` and `c-8q-nq7`:
-
-- `mtu 9216` is set the same against all other policy maps under QOS_NETWORK as a best practice.
-
-#### policy-map type queuing
-
-```console
-policy-map type queuing QOS_EGRESS_PORT
-  class type queuing c-out-8q-q3
-    bandwidth remaining percent 50
-    random-detect minimum-threshold 300 kbytes maximum-threshold 300 kbytes drop-probability 100 weight 0 ecn
-  class type queuing c-out-8q-q-default
-    bandwidth remaining percent 48
-  class type queuing c-out-8q-q1
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q2
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q4
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q5
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q6
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q7
-    bandwidth percent 1
-```
-
-Defines how bandwidth is allocated and how congestion is managed on queue egress.
-
-`class type queuing c-out-8q-q3` (RDMA/CoS 3):
-c-out-8q-q3 supports the CoS 3 RDMA traffic.
-  
-- `bandwidth remaining percent 50` of interface bandwidth for storage traffic. With this enabled, storage traffic can burst to 48% of the overall bandwidht if required.
-- `random-detect minimum-threshold 300 kbytes maximum-threshold 300 kbytes drop-probability 100 weight 0 ecn` This configuration uses WRED to enable ECN via WRED (random-detect ... ecn), which marks packets in queue 3 and will begin dropping packets in `c-out-8q-q-default` queue.
-
-An example of **ECN packet codes**
-
-| ECN Fields | Description               | Codepoints |
-| ---------- | ------------------------- | ---------- |
-| 0x00       | Non ENC-Capable Transport | Not-ECT    |
-| 0x10       | ECN-Capable Transport     | ECT(0)     |
-| 0x01       | ECN-Capable Transport     | ECT(1)     |
-| 0x11       | Congestion Encountered    | CE         |
-
-**Packet Capture showing ECN fields**
-![packet capture showing ECN values](./images/ECN.png)
-> [!Note]
-> ETC(0) and ETC(1) are equilvant.
-
-`class type queuing c-out-8q-q7` (Cluster Heartbeat/CoS 7):
-
-- Allocates 1% of bandwidth for cluster heartbeat traffic.
-
-`class type queuing c-out-8q-q-default`:  
-  
-- Remaining bandwidth (48%) is shared among default and other traffic classes.
-
-Other queues (q1, q2, q4, q5, q6):  
-
-- Set to 0% bandwidth, effectively unused in this policy.
-
-**System QoS Application:**
-Applies the defined policies globally.
-
-`system qos`:  
-
-- Attaches the queuing and network QoS policies to all interfaces.
-
-**Summary Table:**
-
-| Traffic Type      | CoS | Bandwidth Guarantee | Features Enabled | MTU  | Notes                                  |
-| ----------------- | --- | ------------------- | ---------------- | ---- | -------------------------------------- |
-| RDMA (Storage)    | 3   | minimum 50%         | PFC, ECN/WRED    | 9216 | Lossless, congestion-aware             |
-| Cluster Heartbeat | 7   | 1% (or 2% for 10G)  | Dedicated Queue  | 9216 | Strict minimum for reliability         |
-| Default/Other     | -   | Remaining (48%)     | -                | 9216 | Shared among all other traffic classes |
-
-This policy ensures that storage and cluster heartbeat traffic are always prioritized, minimizing latency and packet loss, while still allowing efficient use of available bandwidth for other traffic types.
-
-```console
-policy-map type network-qos QOS_NETWORK
-  class type network-qos c-8q-nq3
-    mtu 9216
-    pause pfc-cos 3
-  class type network-qos c-8q-nq-default
-    mtu 9216
-  class type network-qos c-8q-nq7
-    mtu 9216
-!
-class-map type qos match-all RDMA
-  match cos 3
-class-map type qos match-all CLUSTER
-  match cos 7
-!
-policy-map type qos AZS_SERVICES
-  class RDMA
-    set qos-group 3
-  class CLUSTER
-    set qos-group 7
-!
-policy-map type queuing QOS_EGRESS_PORT
-  class type queuing c-out-8q-q3
-    bandwidth remaining percent 50
-    random-detect minimum-threshold 300 kbytes maximum-threshold 300 kbytes drop-probability 100 weight 0 ecn
-  class type queuing c-out-8q-q-default
-    bandwidth remaining percent 48
-  class type queuing c-out-8q-q1
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q2
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q4
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q5
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q6
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q7
-    bandwidth percent 1
-!
-system qos
-  service-policy type queuing output QOS_EGRESS_PORT
-  service-policy type network-qos QOS_NETWORK
-```
-
-### Loop prevention
+## Loop prevention
 
 ```console
 errdisable recovery interval 600
