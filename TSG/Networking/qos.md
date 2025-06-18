@@ -109,7 +109,7 @@ policy-map type queuing QOS_EGRESS_PORT
 
 - Only queues 3, 7, and default are actively used; all other queues are set to 0% bandwidth and remain unused in this policy.
 - The `random-detect ... ecn` command enables [Explicit Congestion Notification (ECN)](ecn.md) marking for congestion management in queue 3 (RDMA traffic). This allows the switch to mark packets instead of dropping them when congestion is detected, improving performance for lossless traffic.
-- Bandwidth reservations are explicitly configured for queues 3 and 7. Queue 3 (RDMA) is guaranteed a minimum of 50% of the interface bandwidth and can utilize up to 98% if available. When maximum bandwidth is reached, tail drop is performed, and default traffic may be randomly dropped as needed. Queue 7 (Cluster Heartbeat) is reserved 1% of bandwidth for 25G interfaces and 2% for 10G interfaces, ensuring reliable delivery of critical heartbeat traffic.
+- Bandwidth reservations are explicitly configured for queues 3 and 7. Queue 3 (RDMA) is guaranteed a minimum of 50% of the interface bandwidth and can utilize up to 98% if available. When congestion occurs, tail drop is performed, and default traffic may be randomly dropped as needed. Queue 7 (Cluster Heartbeat) is reserved 1% of bandwidth for 25G interfaces and 2% for 10G interfaces, ensuring reliable delivery of critical heartbeat traffic.
 
 **Summary Table:**
 
