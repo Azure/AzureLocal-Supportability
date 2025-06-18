@@ -29,9 +29,9 @@ flowchart TD
   K --> M
   L --> M
 
-  M -- Queue 3 --> N[50% Bandwidth<br>WRED/ECN<br>Congestion: Mark/Drop]:::cos3
+  M -- Queue 3 --> N[50% Bandwidth<br>WRED/ECN<br>Congestion: Mark]:::cos3
   M -- Queue 7 --> O[1% Bandwidth]:::cos7
-  M -- Default --> P[48% Bandwidth]:::defaultclass
+  M -- Default --> P[48% Bandwidth<br>Congestion: Drop]:::defaultclass
 
   N --> Q[Packet Egress]
   O --> Q
