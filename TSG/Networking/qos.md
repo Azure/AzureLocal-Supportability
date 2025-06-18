@@ -21,7 +21,7 @@ flowchart TD
   G7 --> X
   H0 --> X
 
-  X -- qos-group 3 --> J[Queue 3<br>RDMA<br>Buffer carving<br>Pause: enabled]:::cos3
+  X -- qos-group 3 --> J[Queue 3<br>RDMA<br>Buffer carving<br>lossless transport]:::cos3
   X -- qos-group 7 --> K[Queue 7<br>Cluster Heartbeat<br>Buffer carving]:::cos7
   X -- qos-group 0 --> L[Default Queue<br>Buffer carving]:::defaultclass
 
