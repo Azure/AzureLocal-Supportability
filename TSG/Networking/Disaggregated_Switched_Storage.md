@@ -68,13 +68,12 @@ The TOR devices are setup as a Layer2/Layer3 device within an iBGP configuration
 ### Nodes
 
 Each node is equipped with two physical network interface cards, each with two physical interfaces (p-NICs).
-
-- p-NICs A and B handle both compute and management intent traffic.
-- p-NIC interfaces support 25G bandwidth.
-- p-NICs A and B are configured as part of a Switch Embedded Teaming (SET) team, transmitting compute and management traffic. These NICs are assigned to a virtual switch (v-Switch) to support multiple network intents.  Managment intent traffic is untagged, and Compute traffic is tagged.
-- p-NICs C and D are dedicated to storage intent traffic and are RDMA capable devices.
-- p-NICs C and D can support RoCEv2 or iWARP.
-- p-NICs C and D are connect to the ToR devices, the default vlan 711 will be assigned to p-NIC C and VLAN 712 will be assigned to p-NIC D.  The interfaces will operate in trunk mode and only one storage intent VLAN is assigned per interface.  Native VLAN not supported in this configuration, any Native VLAN traffic will be dropped.
+- <span style="color: #0078D4; font-size: 1.2em;">&#9632;</span> p-NICs A and B handle both compute and management intent traffic.
+- <span style="color: #0078D4; font-size: 1.2em;">&#9632;</span> p-NIC interfaces support 25G bandwidth.
+- <span style="color: #0078D4; font-size: 1.2em;">&#9632;</span> p-NICs A and B are configured as part of a Switch Embedded Teaming (SET) team, transmitting compute and management traffic. These NICs are assigned to a virtual switch (v-Switch) to support multiple network intents.  Managment intent traffic is untagged, and Compute traffic is tagged.
+- <span style="color:rgb(158, 95, 241); font-size: 1.2em;">&#9632;</span> p-NICs C and D are dedicated to storage intent traffic and are RDMA capable devices.
+- <span style="color:rgb(158, 95, 241); font-size: 1.2em;">&#9632;</span> p-NICs C and D can support RoCEv2 or iWARP.
+- <span style="color:rgb(158, 95, 241); font-size: 1.2em;">&#9632;</span> p-NICs C and D are connect to the ToR devices, the default vlan 711 will be assigned to p-NIC C and VLAN 712 will be assigned to p-NIC D.  The interfaces will operate in trunk mode and only one storage intent VLAN is assigned per interface.  Native VLAN not supported in this configuration, any Native VLAN traffic will be dropped.
 
 > [!IMPORTANT]
 > If your Azure Local environment uses iWARP-based network cards and you enable Jumbo Frames, ensure that Jumbo Frames are also enabled on all switch interfaces and network paths carrying Storage Intent traffic. For RoCEv2-based systems, enabling Jumbo Frames on the switch is not required for Storage Intent traffic.
@@ -181,6 +180,50 @@ feature lldp
 ### QoS Policy
 
 Below is an example Cisco Nexus QoS configuration for disaggregated switched storage. This policy is designed to ensure that storage and cluster heartbeat traffic are prioritized and protected from congestion, while also enabling efficient bandwidth sharing for other traffic classes. The configuration includes traffic class definitions, bandwidth guarantees, congestion management, and MTU settings.
+
+```mermaid
+flowchart TD
+  A[Packet Ingress]:::ingress --> B{Ingress Queue}:::ingressqueue
+  B -- CoS 3 --> C[Class Map: RDMA]:::cos3
+  B -- CoS 7 --> D[Class Map: CLUSTER]:::cos7
+  B -- Other --> E[Class Map: Default]:::defaultclass
+
+  C --> F[Policy Map<br>Type: qos<br>AZLocal_SERVICES]:::qosmap
+  D --> F
+  E --> F
+
+  F -- RDMA --> F3[set qos-group 3]:::cos3
+  F -- CLUSTER --> G7[set qos-group 7]:::cos7
+  F -- Default --> H0[default qos-group 0]:::defaultclass
+
+  F3 --> X[policy-map type network-qos<br>QOS_NETWORK]:::networkqos
+  G7 --> X
+  H0 --> X
+
+  X -- qos-group 3 --> J[Queue 3<br>RDMA<br>Buffer carving<br>Pause: enabled]:::cos3
+  X -- qos-group 7 --> K[Queue 7<br>Cluster Heartbeat<br>Buffer carving]:::cos7
+  X -- qos-group 0 --> L[Default Queue<br>Buffer carving]:::defaultclass
+
+  J --> M{Egress Queue<br>QOS_EGRESS_PORT}:::egressqueue
+  K --> M
+  L --> M
+
+  M -- Queue 3 --> N[50% Bandwidth<br>WRED/ECN<br>Congestion: Mark/Drop]:::cos3
+  M -- Queue 7 --> O[1% Bandwidth]:::cos7
+  M -- Default --> P[48% Bandwidth]:::defaultclass
+
+  N --> Q[Packet Egress]
+  O --> Q
+  P --> Q
+
+  %% Annotations
+  classDef cos3 fill:#e6ffe6,stroke:#2ecc40,stroke-width:2px;
+  classDef cos7 fill:#e6e6ff,stroke:#5b5bd6,stroke-width:2px;
+  classDef defaultclass fill:#f7f7f7,stroke:#aaaaaa,stroke-width:2px;
+  classDef networkqos fill:#fff3e6,stroke:#ff9900,stroke-width:2px;
+  classDef qosmap fill:#e6f0ff,stroke:#0074d9,stroke-width:2px;
+  classDef egressqueue fill:#fbeeff,stroke:#b300b3,stroke-width:2px;
+```
 
 #### ClassMap
 
