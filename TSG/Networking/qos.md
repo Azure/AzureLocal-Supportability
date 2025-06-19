@@ -107,9 +107,11 @@ policy-map type queuing QOS_EGRESS_PORT
     bandwidth remaining percent 0
 ```
 
-- Only queues 3, 7, and default are actively used; all other queues are set to 0% bandwidth and remain unused in this policy.
-- The `random-detect ... ecn` command enables [Explicit Congestion Notification (ECN)](ecn.md) marking for congestion management in queue 3 (RDMA traffic). This allows the switch to mark packets instead of dropping them when congestion is detected, improving performance for lossless traffic.
-- Bandwidth reservations are explicitly configured for queues 3 and 7. Queue 3 (RDMA) is guaranteed a minimum of 50% of the interface bandwidth and can utilize up to 98% if available. When congestion occurs, tail drop is performed, and default traffic may be randomly dropped as needed. Queue 7 (Cluster Heartbeat) is reserved 1% of bandwidth for 25G interfaces and 2% for 10G interfaces, ensuring reliable delivery of critical heartbeat traffic.
+- Only queues 3, 7, and default are actively used in this policy. All other queues are configured with 0% bandwidth and remain unused.
+- Bandwidth reservations are explicitly configured for queues 3 and 7. Queue 3 (RDMA) is guaranteed a minimum of 50% of the interface bandwidth and can use up to 98% if available. When congestion occurs, tail drop is performed and default traffic may be randomly dropped as needed. Queue 7 (Cluster Heartbeat) is reserved 1% of bandwidth for 25G interfaces and 2% for 10G interfaces. This ensures reliable delivery of critical heartbeat traffic.
+- The `random-detect ... ecn` command enables [Explicit Congestion Notification (ECN)](ecn.md) marking for congestion management in queue 3 (RDMA traffic). When congestion is detected, the switch marks packets instead of dropping them, which improves performance for lossless traffic.
+- The `random-detect minimum-threshold 300 kbytes maximum-threshold 300 kbytes drop-probability 100 weight 0` configuration sets the minimum and maximum queue thresholds for WRED (Weighted Random Early Detection). When the queue depth reaches 300 kbytes, packets are marked or dropped with a probability of 100%. The weight parameter influences how quickly the average queue size responds to changes in traffic, with a lower value making the response immediate.
+- Because class 3 (RDMA) is configured as lossless, the switch will not drop packets from this class during congestion. Instead, when the interface is congested, packets from the default class will be dropped to maintain lossless delivery for class 3 traffic.
 
 **Summary Table:**
 
