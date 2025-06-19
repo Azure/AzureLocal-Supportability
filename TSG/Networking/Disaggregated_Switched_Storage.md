@@ -23,6 +23,12 @@
   - [QOS](#qos-1)
   - [Loop prevention](#loop-prevention)
     - [VLAN](#vlan)
+    - [Interface](#interface)
+      - [Compute/Management Intent](#computemanagement-intent)
+      - [Storage Intent](#storage-intent)
+      - [Heartbeat/iBGP](#heartbeatibgp)
+      - [MLAG](#mlag)
+    - [BGP Routing](#bgp-routing)
   - [Example SDN Configuration](#example-sdn-configuration)
   - [Layer 3 Forwarding Gateway](#layer-3-forwarding-gateway)
   - [References Documents](#references-documents)
@@ -217,15 +223,198 @@ interface Vlan7
   no shutdown
   mtu 9216
   no ip redirects
-  ip address 100.71.55.2/26
+  ip address 10.101.176.2/26
   no ipv6 redirects
 interface Vlan8
   description Compute_8
   no shutdown
   mtu 9216
   no ip redirects
-  ip address 100.71.55.2/26
+  ip address 10.101.177.2/26
   no ipv6 redirects
+```
+
+### Interface
+
+#### Compute/Management Intent
+
+```console
+interface Ethernet1/1
+  description Switched-Compute-Management
+  no cdp enable
+  switchport
+  switchport mode trunk
+  switchport trunk native vlan 7
+  switchport trunk allowed vlan 8
+  spanning-tree port type edge trunk
+  mtu 9216
+  no logging event port link-status
+  no shutdown
+
+interface Ethernet1/2
+  description Switched-Compute-Management
+  no cdp enable
+  switchport
+  switchport mode trunk
+  switchport trunk native vlan 7
+  switchport trunk allowed vlan 8
+  spanning-tree port type edge trunk
+  mtu 9216
+  no logging event port link-status
+  no shutdown
+```
+
+#### Storage Intent
+
+```console
+interface Ethernet1/21
+  description Switched-Storage
+  no cdp enable
+  switchport
+  switchport mode trunk
+  switchport trunk native vlan 99
+  switchport trunk allowed vlan 711
+  priority-flow-control mode on send-tlv
+  spanning-tree port type edge trunk
+  mtu 9216
+  no logging event port link-status
+  service-policy type qos input AZS_SERVICES no-stats
+  no shutdown
+
+interface Ethernet1/22
+  description Switched-Storage
+  no cdp enable
+  switchport
+  switchport mode trunk
+  switchport trunk native vlan 99
+  switchport trunk allowed vlan 711
+  priority-flow-control mode on send-tlv
+  spanning-tree port type edge trunk
+  mtu 9216
+  no logging event port link-status
+  service-policy type qos input AZS_SERVICES no-stats
+  no shutdown
+```
+
+#### Heartbeat/iBGP
+
+```console
+interface port-channel50
+  description VPC:HEARTBEAT
+  logging event port link-status
+  mtu 9216
+  ip address 100.71.55.25/30
+
+interface Ethernet1/47
+  description P2P_HEARTBEAT
+  no cdp enable
+  mtu 9216
+  logging event port link-status
+  channel-group 50 mode active
+  no shutdown
+
+interface Ethernet1/48
+  description P2P_HEARTBEAT
+  no cdp enable
+  mtu 9216
+  logging event port link-status
+  channel-group 50 mode active
+  no shutdown
+```
+
+#### MLAG
+
+```console
+vpc domain 2
+  peer-switch
+  role priority 1
+  peer-keepalive destination 100.71.55.26 source 100.71.55.25 vrf default
+  delay restore 150
+  peer-gateway
+  auto-recovery
+
+interface port-channel101
+  description VPC:MLAG_PEER
+  switchport
+  switchport mode trunk
+  switchport trunk native vlan 99
+  switchport trunk allowed vlan 7-8
+  spanning-tree port type network
+  logging event port link-status
+  vpc peer-link
+
+interface Ethernet1/49
+  description MLAG_Peer
+  no cdp enable
+  switchport
+  switchport mode trunk
+  switchport trunk native vlan 99
+  switchport trunk allowed vlan 7-8
+  logging event port link-status
+  channel-group 101 mode active
+  no shutdown
+
+interface Ethernet1/50
+  description MLAG_Peer
+  no cdp enable
+  switchport
+  switchport mode trunk
+  switchport trunk native vlan 99
+  switchport trunk allowed vlan 7-8
+  logging event port link-status
+  channel-group 101 mode active
+  no shutdown
+```
+
+### BGP Routing
+
+```console
+!!! Only advertise the default route
+ip prefix-list DefaultRoute seq 10 permit 0.0.0.0/0
+ip prefix-list DefaultRoute seq 50 deny 0.0.0.0/0 le 32
+
+!!! Receive BGP Advertisements for 0.0.0.0/0, deny all others.
+ip prefix-list FROM-BORDER seq 10 permit 0.0.0.0/0
+ip prefix-list FROM-BORDER seq 30 deny 0.0.0.0/0 le 32
+
+!!! Advertise any network except for 0.0.0.0/0
+ip prefix-list TO-BORDER seq 5 deny 0.0.0.0/0
+ip prefix-list TO-BORDER seq 10 permit 0.0.0.0/0 le 32
+
+router bgp 64511
+  router-id <Loopback-IP>
+  bestpath as-path multipath-relax
+  log-neighbor-changes
+  address-family ipv4 unicast
+    network <Loopback-IP>/32
+    network <Border1-IP>/30
+    network <Border2-IP>/30
+    network <Port-Channel50-IP>/30
+    ! VLAN7
+    network 10.101.176.0/24
+    ! VLAN8
+    network 10.101.177.0/24
+    maximum-paths 8
+    maximum-paths ibgp 8
+  neighbor <Border1-IP>
+    remote-as 64404
+    description TO_Border1
+    address-family ipv4 unicast
+      prefix-list FROM-BORDER in
+      prefix-list TO-BORDER out
+      maximum-prefix 12000 warning-only
+  neighbor <Border2-IP>
+    remote-as 64404
+    description TO_Border2
+    address-family ipv4 unicast
+      prefix-list FROM-BORDER in
+      prefix-list TO-BORDER out
+      maximum-prefix 12000 warning-only
+  neighbor <Port-Channel50-IP>
+    remote-as 64511
+    description TO_TOR2
+    address-family ipv4 unicast
+      maximum-prefix 12000 warning-only
 ```
 
 ## Example SDN Configuration
