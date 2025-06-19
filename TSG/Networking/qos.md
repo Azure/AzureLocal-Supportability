@@ -2,6 +2,39 @@
 
 Below is an example Cisco Nexus QoS configuration for an Azure Local environment. This policy ensures that storage (RDMA) and cluster heartbeat traffic are prioritized and protected from congestion, while enabling efficient bandwidth sharing for other traffic classes. The configuration includes traffic class definitions, bandwidth guarantees, congestion management, and MTU settings. The QoS policy should be applied to interfaces carrying storage intent traffic.
 
+## Requirements
+
+1. Support three CoS values will be utilized within the Azure Local environment, default values are as follows:
+   - CoS 3: Storage, also refered to as RDMA.
+   - CoS 7: Cluster Heartbeat
+   - CoS 0: Default traffic
+2. Support Storage and Cluster heatbeat traffic with Priority Flow Control (802.1Qbb)
+   - Establish Storage as a no-drop traffic class.
+   - Cluster heartbeat traffic will have the highest Priority to protect protect against packet loss.
+   - Default traffic is the lowest prioirty, in the event of congestion.  Default will be dropped to protect Storage and Cluster.
+3. Bandwidth Reservations utilizing ETS (802.1Qaz)
+   - Storage assigned a minimum 50% of the interface bandwidth.
+   - Cluster assigned a minimum 1 - 2% of the interface bandwidth.  The percentage is based on the Interface speed
+     - 10G: 2%
+     - 25G or Greater: 1%
+4. Congestion Notification
+   - Support for Explicit Congestion Notification (ECN) with Storage traffic.
+
+## In Scope network patterns
+
+This QoS policy is applicable to the following Azure Local deployment models:
+
+- **Fully hyperconverged:** Compute, management, and storage traffic all share the same network interface.
+- **Disaggregated:** Compute and management traffic are assigned to dedicated interfaces, while storage traffic is isolated on its own separate interface.
+- **Rack Aware Clsuter:** Based on Disaggreated design with room to room to storage links.
+  - [Disaggregated Design](./Disaggregated_Switched_Storage.md)
+
+## Out of Scope network patterns
+
+Switchless configuration do not require a switch QOS policy. The switch is not used to transport storage traffic.
+
+## QOS Policy Overview
+
 ```mermaid
 flowchart TD
   A[Packet Ingress]:::ingress --> B{Ingress Queue}:::ingressqueue
