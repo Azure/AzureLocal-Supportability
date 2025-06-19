@@ -31,7 +31,7 @@ This QoS policy is applicable to the following Azure Local deployment models:
 
 ## Out of Scope network patterns
 
-Switchless configuration do not require a switch QOS policy. The switch is not used to transport storage traffic.
+Switchless configurations do not require a switch QoS policy, as the switch is not used to transport storage traffic. In these scenarios, storage traffic is handled directly between endpoints without traversing a network switch, making switch-based QoS settings unnecessary.
 
 ## QOS Policy Overview
 
@@ -88,7 +88,7 @@ class-map type qos match-all CLUSTER
   match cos 7
 ```
 
-ClassMap identification is performed by checking the packet CoS values. If the CoS value matches a defined value (3 or 7), it is classified accordingly. Traffic not matching these values falls into the implicit default class.
+ClassMap identification is performed by matching the packet's CoS (Class of Service) value. If the CoS value is 3 (for RDMA/Storage) or 7 (for Cluster Heartbeat), the traffic is classified into the corresponding class. All other traffic is automatically assigned to the implicit default class. Matching solely on CoS ensures accurate classification and prevents critical traffic from being misclassified as default. This approach simplifies policy management.
 
 ## Policy Map (QoS)
 
@@ -115,7 +115,7 @@ policy-map type network-qos QOS_NETWORK
     mtu 9216
 ```
 
-This policy map defines global Layer 2 properties for traffic classes, including MTU and Priority Flow Control (PFC) for CoS 3 and 7. The `pause pfc-cos 3` command enables lossless transport for storage traffic (CoS 3). On some switch platforms, the `no-drop` keyword is used to designate lossless behavior. In Cisco NX-OS, however, `pause pfc-cos 3` alone is sufficient, and the use of `no-drop` is optional. The `mtu 9216` setting is applied to all classes for consistency and best practice. On Cisco Nexus, `mtu 9216` also enables buffer carving for the ingress queue, while other switch vendors may handle buffer allocation differently or may not expose this setting.
+This policy map sets global Layer 2 properties for each traffic class by configuring the MTU and enabling Priority Flow Control (PFC) for storage traffic (CoS 3). The `pause pfc-cos 3` command activates PFC on CoS 3, ensuring lossless transport for RDMA and storage traffic. On Cisco NX-OS, this command alone is sufficient to achieve lossless behavior for the specified class, and the `no-drop` keyword is optional and can be added for clarity if needed. The `mtu 9216` command applies a consistent jumbo frame size to all classes, which is recommended for uniformity and optimal support of high-throughput workloads. On Cisco Nexus switches, setting the MTU to 9216 also initiates buffer carving for the ingress queue, which helps optimize buffer allocation for demanding, low-latency applications. Buffer management and MTU configuration may vary on other switch platforms, so it is important to review vendor documentation for platform-specific recommendations.
 
 ## Policy Map (Queuing)
 
@@ -143,7 +143,7 @@ policy-map type queuing QOS_EGRESS_PORT
 - Only queues 3, 7, and default are actively used in this policy. All other queues are configured with 0% bandwidth and remain unused.
 - Bandwidth reservations are explicitly configured for queues 3 and 7. Queue 3 (RDMA) is guaranteed a minimum of 50% of the interface bandwidth and can use up to 98% if available. When congestion occurs, tail drop is performed and default traffic may be randomly dropped as needed. Queue 7 (Cluster Heartbeat) is reserved 1% of bandwidth for 25G interfaces and 2% for 10G interfaces. This ensures reliable delivery of critical heartbeat traffic.
 - The `random-detect ... ecn` command enables [Explicit Congestion Notification (ECN)](ecn.md) marking for congestion management in queue 3 (RDMA traffic). When congestion is detected, the switch marks packets instead of dropping them, which improves performance for lossless traffic.
-- The `random-detect minimum-threshold 300 kbytes maximum-threshold 300 kbytes drop-probability 100 weight 0` configuration sets the minimum and maximum queue thresholds for WRED (Weighted Random Early Detection). When the queue depth reaches 300 kbytes, packets are marked or dropped with a probability of 100%. The weight parameter influences how quickly the average queue size responds to changes in traffic, with a lower value making the response immediate.
+- The `random-detect minimum-threshold 300 kbytes maximum-threshold 300 kbytes drop-probability 100 weight 0` configuration sets the minimum and maximum queue thresholds for WRED (Weighted Random Early Detection). When the queue depth reaches 300 kbytes, packets are marked or dropped with a probability of 100%. The weight parameter influences how quickly the average queue size responds to changes in traffic, with a lower value making the response immediate.  RDMA traffic can spike in micro second bursts and having the immediate response ensure the best protection of the lossless traffic.
 - Because class 3 (RDMA) is configured as lossless, the switch will not drop packets from this class during congestion. Instead, when the interface is congested, packets from the default class will be dropped to maintain lossless delivery for class 3 traffic.
 
 **Summary Table:**
