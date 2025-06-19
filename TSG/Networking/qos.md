@@ -26,8 +26,8 @@ This QoS policy is applicable to the following Azure Local deployment models:
 
 - **Fully hyperconverged:** Compute, management, and storage traffic all share the same network interface.
 - **Disaggregated:** Compute and management traffic are assigned to dedicated interfaces, while storage traffic is isolated on its own separate interface.
-- **Rack Aware Clsuter:** Based on Disaggreated design with room to room to storage links.
   - [Disaggregated Design](./Disaggregated_Switched_Storage.md)
+- **Rack Aware Clsuter:** Based on Disaggreated design with room to room to storage links.
 
 ## Out of Scope network patterns
 
@@ -206,6 +206,30 @@ system qos
 ```
 
 This applies the defined queuing and network QoS policies globally to all interfaces.
+
+## Interface Application of QOS
+
+Example of a storage interface supporting a disaggregated Azure Local environment.
+
+```console
+interface Ethernet1/17
+  description Storage Intent
+  switchport
+  switchport mode trunk
+  switchport trunk native vlan 99
+  switchport trunk allowed vlan 711
+  priority-flow-control mode on send-tlv
+  spanning-tree port type edge trunk
+  mtu 9216
+  no logging event port link-status
+  service-policy type qos input AZS_SERVICES
+  no shutdown
+```
+
+In this example, the key points are the use of `priority-flow-control` and `service-policy`. 
+- `priority-flow-control mode on send-tlv`: PFC (IEEE 802.1Qbb) allows you to pause traffic on specific CoS (Class of Service) lanes instead of pausing all traffic on the link. This is crucial for lossless Ethernet, especially for storage traffic (like RDMA), which is sensitive to packet loss.
+- `service-policy type qos input AZS_SERVICES`: Applies a QoS policy, which maps storage and cluster traffic to a specific CoS value that PFC will act upon.
+
 
 ## Reference
 
