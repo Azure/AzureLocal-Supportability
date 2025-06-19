@@ -232,6 +232,12 @@ In this example, the key points are the use of `priority-flow-control` and `serv
 - `priority-flow-control mode on send-tlv`: PFC (IEEE 802.1Qbb) allows you to pause traffic on specific CoS (Class of Service) lanes instead of pausing all traffic on the link. This is crucial for lossless Ethernet, especially for storage traffic (like RDMA), which is sensitive to packet loss.
 - `service-policy type qos input AZS_SERVICES`: Applies a QoS policy, which maps storage and cluster traffic to a specific CoS value that PFC will act upon.
 
+## Terminology
+
+- **ToR**: Top of Rack network switch. Supports Management, Compute, and Storage intent traffic.
+- **WRED**: Weighted Random Early Detection, a congestion avoidance mechanism used in QoS policies.
+- **ECN**: Explicit Congestion Notification, a congestion notification mechanism used to mark packets when congestion is encountered in the communication path. A DSCP bit is modified in the packet to identify congestion.
+- **RDMA**: Remote Direct Memory Access. A technology that enables direct memory access from the memory of one computer into that of another without involving either one's operating system or CPU. This allows for high-throughput, low-latency networking, which is especially beneficial for storage and high-performance computing workloads.
 
 ## Reference
 
@@ -257,9 +263,3 @@ In this example, the key points are the use of `priority-flow-control` and `serv
 [802-1qbb]: https://1.ieee802.org/dcb/802-1qbb/ "This standard specifies protocols, procedures and managed objects that enable flow control per traffic class on IEEE 802 full-duplex links. Data Center Bridging networks (bridges and end nodes) are characterized by limited bandwidth-delay product and limited hop-count. Traffic class is identified by the VLAN tag priority values. Priority-based flow control is intended to eliminate frame loss due to congestion. This is achieved by a mechanism similar to the IEEE 802.3x PAUSE, but operating on individual priorities. This mechanism, in conjunction with other Data Center Bridging technologies, enables support for higher layer protocols that are highly loss sensitive while not affecting the operation of traditional LAN protocols utilizing other priorities. In addition, PFC complements Congestion Notification in Data Center Bridging networks. Operation of priority-based flow control is limited to a domain controlled by a Data Center Bridging control protocol that controls the application of Priority-based Flow Control, Enhanced Transmission Selection, and Congestion Notification."
 [802-1qaz]: https://1.ieee802.org/dcb/802-1qaz/ "This standard specifies enhancement of transmission selection to support allocation of bandwidth amongst traffic classes. When the offered load in a traffic class doesn't use its allocated bandwidth, enhanced transmission selection will allow other traffic classes to use the available bandwidth. The bandwidth-allocation priorities will coexist with strict priorities. It will include managed objects to support bandwidth allocation."
 
-## Terminology
-
-- **ToR**: Top of Rack network switch. Supports Management, Compute, and Storage intent traffic.
-- **WRED**: Weighted Random Early Detection, a congestion avoidance mechanism used in QoS policies.
-- **ECN**: Explicit Congestion Notification, a congestion notification mechanism used to mark packets when congestion is encountered in the communication path. A DSCP bit is modified in the packet to identify congestion.
-- **RDMA**: Remote Direct Memory Access. A technology that enables direct memory access from the memory of one computer into that of another without involving either one's operating system or CPU. This allows for high-throughput, low-latency networking, which is especially beneficial for storage and high-performance computing workloads.
