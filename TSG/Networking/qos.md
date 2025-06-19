@@ -82,7 +82,7 @@ policy-map type network-qos QOS_NETWORK
     mtu 9216
 ```
 
-This policy map defines global Layer 2 properties for traffic classes, such as MTU and Priority Flow Control (PFC). The `pause pfc-cos 3` command enables lossless transport for storage traffic (CoS 3). The `mtu 9216` setting is applied to all classes for consistency and best practice.  `mtu 9216` is used to apply a buffer carving for the ingress queue, other switch manufactures may not expose this method.
+This policy map defines global Layer 2 properties for traffic classes, such as MTU and Priority Flow Control (PFC). The `pause pfc-cos 3` command enables lossless transport for storage traffic (CoS 3). Other switch manufactures may use the syntax `no-drop` to desgnate a lossless setting.  `no-drop` in the NXOS configuration is an optional additional setting because `pause pfc-cos 3` is already applying the lossless application.  Other switch manufactures might use the key word `no-drop` to invoke a lossless setting. The `mtu 9216` setting is applied to all classes for consistency and best practice.  `mtu 9216` is used to apply a buffer carving for the ingress queue, other switch manufactures may not expose this method.
 
 ## Policy Map (Queuing)
 
