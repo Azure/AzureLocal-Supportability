@@ -236,4 +236,4 @@ This applies the defined queuing and network QoS policies globally to all interf
 - **ToR**: Top of Rack network switch. Supports Management, Compute, and Storage intent traffic.
 - **WRED**: Weighted Random Early Detection, a congestion avoidance mechanism used in QoS policies.
 - **ECN**: Explicit Congestion Notification, a congestion notification mechanism used to mark packets when congestion is encountered in the communication path. A DSCP bit is modified in the packet to identify congestion.
-**RDMA**: Remote Direct Memory Access. A technology that enables direct memory access from the memory of one computer into that of another without involving either one's operating system or CPU. This allows for high-throughput, low-latency networking, which is especially beneficial for storage and high-performance computing workloads.
+- **RDMA**: Remote Direct Memory Access. A technology that enables direct memory access from the memory of one computer into that of another without involving either one's operating system or CPU. This allows for high-throughput, low-latency networking, which is especially beneficial for storage and high-performance computing workloads.
