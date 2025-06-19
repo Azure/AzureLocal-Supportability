@@ -146,7 +146,7 @@ policy-map type queuing QOS_EGRESS_PORT
 - The `random-detect minimum-threshold 300 kbytes maximum-threshold 300 kbytes drop-probability 100 weight 0` configuration sets the minimum and maximum queue thresholds for WRED (Weighted Random Early Detection). When the queue depth reaches 300 kbytes, packets are marked or dropped with a probability of 100%. The weight parameter influences how quickly the average queue size responds to changes in traffic, with a lower value making the response immediate.  RDMA traffic can spike in micro second bursts and having the immediate response ensure the best protection of the lossless traffic.
 - Because class 3 (RDMA) is configured as lossless, the switch will not drop packets from this class during congestion. Instead, when the interface is congested, packets from the default class will be dropped to maintain lossless delivery for class 3 traffic.
 
-**Summary Table:**
+### Summary Table
 
 | Traffic Type      | CoS | Bandwidth Guarantee | Features Enabled | MTU  | Notes                                  |
 | ----------------- | --- | ------------------- | ---------------- | ---- | -------------------------------------- |
