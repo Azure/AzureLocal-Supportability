@@ -26,14 +26,14 @@ Implementing QoS is mandatory for Azure Local deployments that support Storage i
 
 ### Network ATC Data Center Bridging (DCB) and VLAN Defaults
 
-| Setting                | Default Value                          | Description                                                                            |
-| ---------------------- | -------------------------------------- | -------------------------------------------------------------------------------------- |
-| DCBX                   | Enabled                                | Data Center Bridging Exchange protocol is enabled for LLDP configuration notification only. |
-| Priority Flow Control  | Enabled                                | PFC (IEEE 802.1Qbb) is enabled for lossless transport on storage traffic.              |
-| ETS (Bandwidth)        | Storage 50%<br>Cluster 1-2%<br>Default (Remander)                             | Bandwidth reservations <br>Cluster Heartbeat:<br>2% if the adapter are <=10Gbps<br>1% if the adapter are >10 Gbps                                                                     |
-| ECN                    | Enabled                                | Explicit Congestion Notification is enabled for RDMA/Storage traffic.                  |
-| VLAN                   | 711<br>712                   | Default Storage Intent VLAN assignments                                 |
-| CoS (Class of Service) | Storage: 3<br>Cluster: 7<br>Default: 0 | Default CoS values for traffic classification.                                         |
+| Setting                | Default Value                                     | Description                                                                                                       |
+| ---------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| DCBX                   | Enabled                                           | Data Center Bridging Exchange protocol is enabled for LLDP configuration notification only.                       |
+| Priority Flow Control  | Enabled                                           | PFC (IEEE 802.1Qbb) is enabled for lossless transport on storage traffic.                                         |
+| ETS (Bandwidth)        | Storage 50%<br>Cluster 1-2%<br>Default (Remander) | Bandwidth reservations <br>Cluster Heartbeat:<br>2% if the adapter are <=10Gbps<br>1% if the adapter are >10 Gbps |
+| ECN                    | Enabled                                           | Explicit Congestion Notification is enabled for RDMA/Storage traffic.                                             |
+| VLAN                   | 711<br>712                                        | Default Storage Intent VLAN assignments                                                                           |
+| CoS (Class of Service) | Storage: 3<br>Cluster: 7<br>Default: 0            | Default CoS values for traffic classification.                                                                    |
 
 > [!NOTE]
 > These defaults can be overridden using [Network ATC][NetworkAtc] custom settings. For more details, see [Manage Network ATC][NetworkAtcOverride].
