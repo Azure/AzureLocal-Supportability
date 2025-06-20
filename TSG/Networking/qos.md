@@ -28,7 +28,7 @@ Implementing QoS is mandatory for Azure Local deployments that support Storage i
 
 | Setting                | Default Value                          | Description                                                                            |
 | ---------------------- | -------------------------------------- | -------------------------------------------------------------------------------------- |
-| DCBX                   | Enabled                                | Data Center Bridging Exchange protocol is enabled for LLDP configuration notification. |
+| DCBX                   | Enabled                                | Data Center Bridging Exchange protocol is enabled for LLDP configuration notification only. |
 | Priority Flow Control  | Enabled                                | PFC (IEEE 802.1Qbb) is enabled for lossless transport on storage traffic.              |
 | ETS (Bandwidth)        | Storage 50%<br>Cluster 1-2%<br>Default (Remander)                             | Bandwidth reservations <br>Cluster Heartbeat:<br>2% if the adapter are <=10Gbps<br>1% if the adapter are >10 Gbps                                                                     |
 | ECN                    | Enabled                                | Explicit Congestion Notification is enabled for RDMA/Storage traffic.                  |
