@@ -24,7 +24,7 @@ Implementing QoS is mandatory for Azure Local deployments that support Storage i
 
 ## Azure Local Defaults
 
-### Network ATC Data Center Bridging (DCB) Defaults
+### Network ATC Data Center Bridging (DCB) and VLAN Defaults
 
 | Setting                | Default Value                          | Description                                                                            |
 | ---------------------- | -------------------------------------- | -------------------------------------------------------------------------------------- |
