@@ -36,7 +36,7 @@ Implementing QoS is mandatory for Azure Local deployments that support Storage i
 | CoS (Class of Service) | Storage: 3<br>Cluster: 7<br>Default: 0 | Default CoS values for traffic classification.                                         |
 
 > [!NOTE]
-> These defaults can be overridden using Network [ATC][NetworkAtc] custom settings. For more details, see [Manage Network ATC][NetworkAtcOverride].
+> These defaults can be overridden using [Network ATC][NetworkAtc] custom settings. For more details, see [Manage Network ATC][NetworkAtcOverride].
 
 ## In Scope network patterns
 
