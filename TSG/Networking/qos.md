@@ -22,6 +22,22 @@ Implementing QoS is mandatory for Azure Local deployments that support Storage i
 4. Congestion Notification
    - Support for Explicit Congestion Notification (ECN) with Storage traffic.
 
+## Azure Local Defaults
+
+### Network ATC Data Center Bridging (DCB) Defaults
+
+| Setting                | Default Value                          | Description                                                                            |
+| ---------------------- | -------------------------------------- | -------------------------------------------------------------------------------------- |
+| DCBX                   | Enabled                                | Data Center Bridging Exchange protocol is enabled for LLDP configuration notification. |
+| Priority Flow Control  | Enabled                                | PFC (IEEE 802.1Qbb) is enabled for lossless transport on storage traffic.              |
+| ETS (Bandwidth)        | Storage 50%<br>Cluster 1-2%<br>Default (Remander)                             | Bandwidth reservations <br>Cluster Heartbeat:<br>2% if the adapter are <=10Gbps<br>1% if the adapter are >10 Gbps                                                                     |
+| ECN                    | Enabled                                | Explicit Congestion Notification is enabled for RDMA/Storage traffic.                  |
+| VLAN                   | 711<br>712                   | Default Storage Intent VLAN assignments                                 |
+| CoS (Class of Service) | Storage: 3<br>Cluster: 7<br>Default: 0 | Default CoS values for traffic classification.                                         |
+
+> [!NOTE]
+> These defaults can be overridden using Network [ATC[NetworkAtc]] custom settings. For more details, see [Manage Network ATC][NetworkAtcOverride].
+
 ## In Scope network patterns
 
 This QoS policy is applicable to the following Azure Local deployment models:
@@ -251,6 +267,8 @@ In this example, the key points are the use of `priority-flow-control` and `serv
 - [RFC 3168 - The Addition of Explicit Congestion Notification (ECN) to IP][rfc3168]
 - [802.1Qbb Priority-based Flow Control][802-1qbb]
 - [802.1Qaz Enhanced Transmission Selection][802-1qaz]
+- [Deploy host networking with Network ATC][NetworkAtc]
+- [Manage Network ATC][NetworkAtcOverride]
 
 [AzureLocalPhysicalNetworkRequirements]: https://learn.microsoft.com/en-us/azure/azure-local/concepts/physical-network-requirements
 [AzureLocalNetworkConsiderationForCloudDeploymentOfAzureLocal]: https://learn.microsoft.com/en-us/azure/azure-local/plan/cloud-deployment-network-considerations "This article discusses how to design and plan an Azure Local system network for cloud deployment. Before you continue, familiarize yourself with the various Azure Local networking patterns and available configurations."
@@ -262,4 +280,6 @@ In this example, the key points are the use of `priority-flow-control` and `serv
 [rfc3168]: https://www.rfc-editor.org/rfc/rfc3168 "We begin by describing TCP's use of packet drops as an indication of congestion.  Next we explain that with the addition of active queue management (e.g., RED) to the Internet infrastructure, where routers detect congestion before the queue overflows, routers are no longer limited to packet drops as an indication of congestion.  Routers can instead set the Congestion Experienced (CE) codepoint in the IP header of packets from ECN-capable transports.  We describe when the CE codepoint is to be set in routers, and describe modifications needed to TCP to make it ECN-capable.  Modifications to other transport protocols (e.g., unreliable unicast or multicast, reliable multicast, other reliable unicast transport protocols) could be considered as those protocols are developed and advance through the standards process.  We also describe in this document the issues involving the use of ECN within IP tunnels, and within IPsec tunnels in particular."
 [802-1qbb]: https://1.ieee802.org/dcb/802-1qbb/ "This standard specifies protocols, procedures and managed objects that enable flow control per traffic class on IEEE 802 full-duplex links. Data Center Bridging networks (bridges and end nodes) are characterized by limited bandwidth-delay product and limited hop-count. Traffic class is identified by the VLAN tag priority values. Priority-based flow control is intended to eliminate frame loss due to congestion. This is achieved by a mechanism similar to the IEEE 802.3x PAUSE, but operating on individual priorities. This mechanism, in conjunction with other Data Center Bridging technologies, enables support for higher layer protocols that are highly loss sensitive while not affecting the operation of traditional LAN protocols utilizing other priorities. In addition, PFC complements Congestion Notification in Data Center Bridging networks. Operation of priority-based flow control is limited to a domain controlled by a Data Center Bridging control protocol that controls the application of Priority-based Flow Control, Enhanced Transmission Selection, and Congestion Notification."
 [802-1qaz]: https://1.ieee802.org/dcb/802-1qaz/ "This standard specifies enhancement of transmission selection to support allocation of bandwidth amongst traffic classes. When the offered load in a traffic class doesn't use its allocated bandwidth, enhanced transmission selection will allow other traffic classes to use the available bandwidth. The bandwidth-allocation priorities will coexist with strict priorities. It will include managed objects to support bandwidth allocation."
+[NetworkAtc]: https://learn.microsoft.com/en-us/windows-server/networking/network-atc/network-atc?pivots=azure-local
+[NetworkAtcOverride]:https://learn.microsoft.com/en-us/windows-server/networking/network-atc/manage-network-atc#update-or-override-network-settings
 
