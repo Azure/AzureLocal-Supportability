@@ -7,13 +7,13 @@ Implementing QoS is mandatory for Azure Local deployments that support Storage i
 ## Requirements
 
 1. Support three CoS values will be utilized within the Azure Local environment, default values are as follows:
-   - CoS 3: Storage, also refered to as RDMA.
+   - CoS 3: Storage, also referred to as RDMA.
    - CoS 7: Cluster Heartbeat
    - CoS 0: Default traffic
-2. Support Storage and Cluster heatbeat traffic with Priority Flow Control (802.1Qbb)
+2. Support Storage and Cluster heartbeat traffic with Priority Flow Control (802.1Qbb)
    - Establish Storage as a no-drop traffic class.
-   - Cluster heartbeat traffic will have the highest Priority to protect protect against packet loss.
-   - Default traffic is the lowest prioirty, in the event of congestion.  Default will be dropped to protect Storage and Cluster.
+   - Cluster heartbeat traffic will have the highest Priority to protect against packet loss.
+   - Default traffic is the lowest priority, in the event of congestion.  Default will be dropped to protect Storage and Cluster.
 3. Bandwidth Reservations utilizing ETS (802.1Qaz)
    - Storage assigned a minimum 50% of the interface bandwidth.
    - Cluster assigned a minimum 1 - 2% of the interface bandwidth.  The percentage is based on the Interface speed
@@ -26,14 +26,14 @@ Implementing QoS is mandatory for Azure Local deployments that support Storage i
 
 ### Network ATC Data Center Bridging (DCB) and VLAN Defaults
 
-| Setting                | Default Value                                     | Description                                                                                                       |
-| ---------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| DCBX                   | Enabled                                           | Data Center Bridging Exchange protocol is enabled for LLDP configuration notification only.                       |
-| Priority Flow Control  | Enabled                                           | PFC (IEEE 802.1Qbb) is enabled for lossless transport on storage traffic.                                         |
-| ETS (Bandwidth)        | Storage 50%<br>Cluster 1-2%<br>Default (Remander) | Bandwidth reservations <br>Cluster Heartbeat:<br>2% if the adapter are <=10Gbps<br>1% if the adapter are >10 Gbps |
-| ECN                    | Enabled                                           | Explicit Congestion Notification is enabled for RDMA/Storage traffic.                                             |
-| VLAN                   | 711<br>712                                        | Default Storage Intent VLAN assignments                                                                           |
-| CoS (Class of Service) | Storage: 3<br>Cluster: 7<br>Default: 0            | Default CoS values for traffic classification.                                                                    |
+| Setting                | Default Value                                      | Description                                                                                                       |
+| ---------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| DCBX                   | Enabled                                            | Data Center Bridging Exchange protocol is enabled for LLDP configuration notification only.                       |
+| Priority Flow Control  | Enabled                                            | PFC (IEEE 802.1Qbb) is enabled for lossless transport on storage traffic.                                         |
+| ETS (Bandwidth)        | Storage 50%<br>Cluster 1-2%<br>Default (Remainder) | Bandwidth reservations <br>Cluster Heartbeat:<br>2% if the adapter are <=10Gbps<br>1% if the adapter are >10 Gbps |
+| ECN                    | Enabled                                            | Explicit Congestion Notification is enabled for RDMA/Storage traffic.                                             |
+| VLAN                   | 711<br>712                                         | Default Storage Intent VLAN assignments. These values can be customized.                                          |
+| CoS (Class of Service) | Storage: 3<br>Cluster: 7<br>Default: 0             | Default CoS values for traffic classification.  These values can be customized.                                   |
 
 > [!NOTE]
 > These defaults can be overridden using [Network ATC][NetworkAtc] custom settings. For more details, see [Manage Network ATC][NetworkAtcOverride].
@@ -45,7 +45,7 @@ This QoS policy is applicable to the following Azure Local deployment models:
 - **Fully hyperconverged:** Compute, management, and storage traffic all share the same network interface.
 - **Disaggregated:** Compute and management traffic are assigned to dedicated interfaces, while storage traffic is isolated on its own separate interface.
   - [Disaggregated Design](./Disaggregated_Switched_Storage.md)
-- **Rack Aware Clsuter:** Based on Disaggreated design with room to room to storage links.
+- **Rack Aware Cluster:** Based on Disaggregated design with room to room to storage links.
 
 ## Out of Scope network patterns
 
@@ -189,7 +189,7 @@ class-map type qos match-all RDMA
 class-map type qos match-all CLUSTER
   match cos 7
 !
-policy-map type qos AZS_SERVICES
+policy-map type qos AZLocal_SERVICES
   class RDMA
     set qos-group 3
   class CLUSTER
@@ -240,13 +240,14 @@ interface Ethernet1/17
   spanning-tree port type edge trunk
   mtu 9216
   no logging event port link-status
-  service-policy type qos input AZS_SERVICES
+  service-policy type qos input AZLocal_SERVICES
   no shutdown
 ```
 
-In this example, the key points are the use of `priority-flow-control` and `service-policy`. 
+In this example, the key points are the use of `priority-flow-control` and `service-policy`.
+
 - `priority-flow-control mode on send-tlv`: PFC (IEEE 802.1Qbb) allows you to pause traffic on specific CoS (Class of Service) lanes instead of pausing all traffic on the link. This is crucial for lossless Ethernet, especially for storage traffic (like RDMA), which is sensitive to packet loss.
-- `service-policy type qos input AZS_SERVICES`: Applies a QoS policy, which maps storage and cluster traffic to a specific CoS value that PFC will act upon.
+- `service-policy type qos input AZLocal_SERVICES`: Applies a QoS policy, which maps storage and cluster traffic to a specific CoS value that PFC will act upon.
 
 ## Terminology
 
