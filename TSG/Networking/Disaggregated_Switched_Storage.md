@@ -1,5 +1,7 @@
 # Disaggregated Switch Storage Design
 
+# DRAFT Document
+
 ![Disaggregated_Switched_Storage_Design](./images/Disaggregated_Switched_Storage.png)
 
 - [Disaggregated Switch Storage Design](#disaggregated-switch-storage-design)
