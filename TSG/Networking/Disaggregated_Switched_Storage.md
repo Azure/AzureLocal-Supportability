@@ -280,7 +280,7 @@ interface port-channel50
   mtu 9216
   ip address 100.71.55.25/30
 
-interface Ethernet1/47
+interface Ethernet1/41
   description P2P_HEARTBEAT
   no cdp enable
   mtu 9216
@@ -288,7 +288,7 @@ interface Ethernet1/47
   channel-group 50 mode active
   no shutdown
 
-interface Ethernet1/48
+interface Ethernet1/42
   description P2P_HEARTBEAT
   no cdp enable
   mtu 9216
