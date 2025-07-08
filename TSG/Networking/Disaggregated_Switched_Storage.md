@@ -28,6 +28,7 @@
       - [Key Configuration Details](#key-configuration-details)
     - [Interface](#interface)
       - [Compute/Management Intent](#computemanagement-intent)
+      - [Configuration Analysis](#configuration-analysis)
       - [Storage Intent TOR 1](#storage-intent-tor-1)
       - [Heartbeat/iBGP](#heartbeatibgp)
       - [MLAG](#mlag)
@@ -96,7 +97,16 @@ Each node is equipped with two physical network interface cards, each with two p
 
 ## Cable Map
 
-The cable map below shows two nodes as an example. For larger environments, extend the pattern accordingly.
+The cable map below shows two nodes as an example. For larger environments, extend the pattern accordingly. Maintaining a consistent wiring pattern is essential for successful Azure Local deployments.
+
+> [!NOTE]
+> Azure Local deployments require consistent wiring patterns for proper operation:
+> - All p-NIC A interfaces should connect to TOR1
+> - All p-NIC B interfaces should connect to TOR2
+> - All p-NIC C interfaces should connect to TOR1
+> - All p-NIC D interfaces should connect to TOR2
+>
+> Consistent cabling ensures proper traffic flow, simplifies troubleshooting, and helps avoid deployment challenges. We recommend verifying your wiring pattern matches this guidance before beginning deployment.
 
 ### Node 1 and Node 2
 
@@ -250,6 +260,8 @@ interface Vlan8
 
 #### Compute/Management Intent
 
+These interfaces connect to Azure Local nodes' p-NIC A and p-NIC B interfaces, which are configured as Switch Embedded Teaming (SET) members. This configuration supports both management and compute network intents through VLAN separation while providing redundancy across both ToR switches.
+
 ```console
 interface Ethernet1/1
   description Switched-Compute-Management
@@ -260,7 +272,7 @@ interface Ethernet1/1
   switchport trunk allowed vlan 8
   spanning-tree port type edge trunk
   mtu 9216
-  no logging event port link-status
+  logging event port link-status
   no shutdown
 
 interface Ethernet1/2
@@ -272,9 +284,36 @@ interface Ethernet1/2
   switchport trunk allowed vlan 8
   spanning-tree port type edge trunk
   mtu 9216
-  no logging event port link-status
+  logging event port link-status
   no shutdown
 ```
+
+#### Configuration Analysis
+
+**VLAN Configuration**:
+
+- **VLAN 7 (Management Intent)**: Configured as the native VLAN to carry untagged management traffic from Azure Local nodes. This includes Windows Admin Center communications, PowerShell remoting, cluster management traffic, and health monitoring services.
+
+- **VLAN 8 (Compute Intent)**: Configured as a tagged VLAN to carry compute workload traffic, including virtual machine communications, tenant network traffic, and Azure Arc-enabled services.
+
+**Network Redundancy**: Both VLANs 7 and 8 are supported on both TOR1 and TOR2 switches, providing high availability through the vPC (MLAG) configuration. The HSRP configuration on the corresponding SVIs (interface Vlan7 and Vlan8) utilizes the peer link between ToR devices to maintain gateway redundancy and ensure seamless failover for Azure Local nodes.
+
+**MTU Configuration**: The MTU 9216 setting is optional and specifically configured to support Software Defined Networking (SDN) environments. This jumbo frame configuration is required for:
+
+- Network Controller communications
+- SDN gateway operations  
+- Virtual network overlay protocols
+
+If your Azure Local deployment does not utilize SDN features, the MTU can be set to the standard 1500 bytes.
+
+**Interface Optimization**:
+
+- **CDP Disabled**: Cisco Discovery Protocol is disabled as it's not required for Azure Local environments and reduces unnecessary protocol overhead
+- **Spanning Tree Edge**: Configured as edge trunk ports since these connect directly to end devices (Azure Local nodes), enabling faster convergence
+- **Link Status Logging**: Enabled to provide visibility into interface state changes for troubleshooting and monitoring
+
+> [!NOTE]
+> These interfaces support the SET team configuration on Azure Local nodes, where p-NIC A connects to TOR1 and p-NIC B connects to TOR2. This provides active-active connectivity with automatic failover capabilities, ensuring high availability for both management and compute traffic.
 
 #### Storage Intent TOR 1
 
@@ -289,7 +328,7 @@ interface Ethernet1/21
   priority-flow-control mode on send-tlv
   spanning-tree port type edge trunk
   mtu 9216
-  no logging event port link-status
+  logging event port link-status
   service-policy type qos input AZS_SERVICES
   no shutdown
 
@@ -303,7 +342,7 @@ interface Ethernet1/22
   priority-flow-control mode on send-tlv
   spanning-tree port type edge trunk
   mtu 9216
-  no logging event port link-status
+  logging event port link-status
   service-policy type qos input AZS_SERVICES
   no shutdown
 ```
