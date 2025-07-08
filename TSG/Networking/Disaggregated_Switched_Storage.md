@@ -5,6 +5,7 @@
 ![Disaggregated_Switched_Storage_Design](./images/Disaggregated_Switched_Storage.png)
 
 - [Disaggregated Switch Storage Design](#disaggregated-switch-storage-design)
+- [DRAFT Document](#draft-document)
   - [Scope](#scope)
   - [Terminology](#terminology)
   - [Example Device](#example-device)
@@ -23,6 +24,8 @@
   - [QOS](#qos-1)
   - [Loop prevention](#loop-prevention)
     - [VLAN](#vlan)
+      - [VLAN Design Rationale](#vlan-design-rationale)
+      - [Key Configuration Details](#key-configuration-details)
     - [Interface](#interface)
       - [Compute/Management Intent](#computemanagement-intent)
       - [Storage Intent TOR 1](#storage-intent-tor-1)
@@ -161,12 +164,11 @@ feature lldp
 
 ## Loop prevention
 
+The spanning tree configuration implements Multiple Spanning Tree (MST) protocol to prevent network loops while allowing redundant paths. The spanning-tree port type edge bpduguard default command configures all ports as edge ports by default (typically used for end devices) and enables BPDU guard protection, which will disable ports that unexpectedly receive spanning tree BPDUs. The priority settings establish a hierarchy where MST instances 0 and 1 have higher priority (lower numerical value of 20480) compared to MST instance 2 (28672), making instances 0 and 1 more likely to become the root bridge.
+
+The MST configuration section creates a spanning tree region named "AzureLocal" with revision 1, which helps identify switches that should share the same MST configuration. The VLAN-to-instance mappings distribute different VLANs across multiple spanning tree instances: instance 1 handles VLANs 1-710 and 713-1999, instance 2 manages VLANs 2000-4094, and instance 3 is dedicated to VLANs 711-712. This segmentation allows for better load balancing and convergence times by having different spanning tree calculations for different groups of VLANs.
+
 ```console
-errdisable recovery interval 600
-errdisable recovery cause link-flap
-errdisable recovery cause udld
-errdisable recovery cause bpduguard
-!
 spanning-tree port type edge bpduguard default
 spanning-tree mst 0-1 priority 20480
 spanning-tree mst 2 priority 28672
@@ -179,6 +181,8 @@ spanning-tree mst configuration
 ```
 
 ### VLAN
+
+This section configures the necessary VLANs to support Azure Local network intents and establishes Switched Virtual Interfaces (SVIs) for Layer 3 connectivity. The VLAN structure is designed to provide network segmentation, security, and optimal traffic flow for different Azure Local workloads.
 
 ```console
 vlan 1-2,7-8,99,711
@@ -208,6 +212,37 @@ interface Vlan8
   ip address 10.101.177.2/26
   no ipv6 redirects
 ```
+
+#### VLAN Design Rationale
+
+**Management VLAN (VLAN 7)**: Configured as an SVI with IP address 10.101.176.2/26, this VLAN provides out-of-band management access to Azure Local nodes. This network segment carries Windows Admin Center traffic, PowerShell remoting, and other administrative communications. The SVI enables the ToR switch to act as the default gateway for management traffic, providing Layer 3 routing to external management systems and administrative networks.
+
+**Compute VLAN (VLAN 8)**: Configured as an SVI with IP address 10.101.177.2/26, this VLAN handles Azure Local virtual machine traffic and compute workloads. The SVI provides gateway services for tenant VMs and enables north-south traffic flow between Azure Local workloads and external networks. This configuration supports SDN virtual networks and provides connectivity for Azure Arc-enabled services.
+
+**Storage VLAN (VLAN 711)**: This VLAN operates exclusively at Layer 2 and intentionally has no SVI configuration. Storage traffic uses RDMA protocols (RoCEv2 or iWARP) that bypass the traditional TCP/IP stack, eliminating the need for Layer 3 routing. VLAN 711 is isolated to TOR1 only and carries storage traffic from Azure Local nodes connected to TOR1 (p-NIC C interfaces). This ensures optimal performance and maintains the lossless characteristics required for Storage Spaces Direct operations.
+
+**Native VLAN (VLAN 99)**: Serves as a security boundary for untagged traffic. Any misconfigured or untagged frames are automatically assigned to this VLAN, preventing unauthorized access to production networks. This follows Cisco security best practices and provides operational visibility into potential configuration issues.
+
+**Unused Interface VLAN (VLAN 2)**: Acts as a parking VLAN for unused switch ports. Assign unused interfaces to this VLAN to prevent unauthorized device connections and maintain network security posture.
+
+#### Key Configuration Details
+
+- **MTU 9216**: Jumbo frames are configured on management and compute SVIs to support Software Defined Networking (SDN) services in Azure Local environments. This MTU setting is specifically required for SDN virtual networks, Network Controller communications, and gateway services. If your Azure Local deployment does not utilize SDN features, standard MTU (1500) can be used instead.
+
+- **IP Redirects Disabled**: Both IPv4 and IPv6 redirects are disabled on SVIs as a best practice for Azure Local deployments. IP redirects can conflict with various Azure Local services including Network Controller, SDN gateway operations, and cluster networking components. Disabling redirects ensures proper traffic flow and prevents routing conflicts within the Azure Local environment.
+
+- **Subnet Sizing**: /26 subnets provide 62 usable IP addresses per network intent, sufficient for typical Azure Local cluster deployments while maintaining efficient IP space utilization.  See the [Azure Local Network Patterns guide][AzureLocalNetworkPattern] to determine the correct subnet size.
+
+> [!NOTE]
+> **TOR2 Storage VLAN Configuration**: TOR2 requires a separate storage VLAN 712 configuration:
+> ```console
+> vlan 712
+>   name Storage_712_TOR2
+> ```
+> VLAN 712 is isolated to TOR2 and carries storage traffic from Azure Local nodes connected to TOR2 (p-NIC D interfaces). Each ToR switch maintains its own dedicated storage VLAN to ensure traffic isolation and optimal RDMA performance. Storage traffic never traverses between ToR switches, even in the vPC configuration.
+
+> [!IMPORTANT]
+> Ensure HSRP is configured on VLANs 7 and 8 to provide gateway redundancy between TOR1 and TOR2. This configuration will be detailed in the HSRP section of the interface configuration.
 
 ### Interface
 
@@ -408,6 +443,7 @@ router bgp 64511
 - [Cisco Nexus Configure Queuing and Scheduling][CiscoNexusQueuingAndScheduling]
 - [Cisco WRED-Explicit Congestion Notification][CiscoWredECN]
 - [RFC 3168 - The Addition of Explicit Congestion Notification (ECN) to IP][rfc3168]
+- [Azure Local network deployment patterns][AzureLocalNetworkPattern]
 
 [AzureLocalPhysicalNetworkRequirements]: https://learn.microsoft.com/en-us/azure/azure-local/concepts/physical-network-requirements
 [Teaming_in_Azure_Stack_HCI]: https://techcommunity.microsoft.com/blog/networkingblog/teaming-in-azure-stack-hci/1070642 "Switch Embedded Teaming (SET) and was introduced in Windows Server 2016. SET is available when Hyper-V is installed on any Server OS (Windows Server 2016 and higher) and Windows 10 version 1809 (and higher)"
@@ -420,3 +456,4 @@ router bgp 64511
 [CiscoWredECN]: https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/qos_conavd/configuration/15-mt/qos-conavd-15-mt-book/qos-conavd-wred-ecn.html "WRED drops packets, based on the average queue length exceeding a specific threshold value, to indicate congestion. ECN is an extension to WRED in that ECN marks packets instead of dropping them when the average queue length exceeds a specific threshold value. When configured with the WRED -- Explicit Congestion Notification feature, routers and end hosts would use this marking as a signal that the network is congested and slow down sending packets."
 [rfc3168]: https://www.rfc-editor.org/rfc/rfc3168 "We begin by describing TCP's use of packet drops as an indication of congestion.  Next we explain that with the addition of active queue management (e.g., RED) to the Internet infrastructure, where routers detect congestion before the queue overflows, routers are no longer limited to packet drops as an indication of congestion.  Routers can instead set the Congestion Experienced (CE) codepoint in the IP header of packets from ECN-capable transports.  We describe when the CE codepoint is to be set in routers, and describe modifications needed to TCP to make it ECN-capable.  Modifications to other transport protocols (e.g., unreliable unicast or multicast, reliable multicast, other reliable unicast transport protocols) could be considered as those protocols are developed and advance through the standards process.  We also describe in this document the issues involving the use of ECN within IP tunnels, and within IPsec tunnels in particular."
 [ECN]: ./ecn.md "Explicit Congestion Notification (ECN) is a network congestion management mechanism that enables switches and routers to signal congestion without dropping packets. In Azure Local QoS implementations, ECN is specifically configured for storage (RDMA) traffic to maintain lossless transport while providing congestion feedback to endpoints."
+[AzureLocalNetworkPattern]: https://learn.microsoft.com/en-us/azure/azure-local/plan/choose-network-pattern "This article describes a set of network patterns references to architect, deploy, and configure Azure Local using either one, two or three physical hosts. Depending on your needs or scenarios, you can go directly to your pattern of interest. Each pattern is described as a standalone entity and includes all the network components for specific scenarios."
