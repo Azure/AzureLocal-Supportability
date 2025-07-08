@@ -100,28 +100,28 @@ The cable map below shows two nodes as an example. For larger environments, exte
 
 ### Node 1 and Node 2
 
-| Device    | Interface |      | Device | Interface    || Device    | Interface |      | Device | Interface    |
-| --------- | --------- | ---- | ------ | ------------ |-| --------- | --------- | ---- | ------ | ------------ |
-| **Node1** | p-NIC A   | <==> | TOR1   | Ethernet1/1  || **Node2** | p-NIC A   | <==> | TOR1   | Ethernet1/2  |
-| **Node1** | p-NIC B   | <==> | TOR2   | Ethernet1/1  || **Node2** | p-NIC B   | <==> | TOR2   | Ethernet1/2  |
-| **Node1** | p-NIC C   | <==> | TOR1   | Ethernet1/15 || **Node2** | p-NIC C   | <==> | TOR1   | Ethernet1/16 |
-| **Node1** | p-NIC D   | <==> | TOR2   | Ethernet1/15 || **Node2** | p-NIC D   | <==> | TOR2   | Ethernet1/16 |
+| Device    | Interface |      | Device | Interface    |     | Device    | Interface |      | Device | Interface    |
+| --------- | --------- | ---- | ------ | ------------ | --- | --------- | --------- | ---- | ------ | ------------ |
+| **Node1** | p-NIC A   | <==> | TOR1   | Ethernet1/1  |     | **Node2** | p-NIC A   | <==> | TOR1   | Ethernet1/2  |
+| **Node1** | p-NIC B   | <==> | TOR2   | Ethernet1/1  |     | **Node2** | p-NIC B   | <==> | TOR2   | Ethernet1/2  |
+| **Node1** | p-NIC C   | <==> | TOR1   | Ethernet1/15 |     | **Node2** | p-NIC C   | <==> | TOR1   | Ethernet1/16 |
+| **Node1** | p-NIC D   | <==> | TOR2   | Ethernet1/15 |     | **Node2** | p-NIC D   | <==> | TOR2   | Ethernet1/16 |
 
 ### TOR 1 and TOR 2
 
-| Device   | Interface    |      | Device  | Interface    ||Device   | Interface    |      | Device  | Interface    |
-| -------- | ------------ | ---- | ------- | ------------ |--| -------- | ------------ | ---- | ------- | ------------ |
-| **TOR1** | Ethernet1/1  | <==> | Node1   | p-NIC A      || **TOR2** | Ethernet1/1  | <==> | Node1   | p-NIC B      |
-| **TOR1** | Ethernet1/2  | <==> | Node2   | p-NIC A      || **TOR2** | Ethernet1/2  | <==> | Node2   | p-NIC B      |
-| **TOR1** | Ethernet1/15 | <==> | Node1   | p-NIC C      || **TOR2** | Ethernet1/15 | <==> | Node1   | p-NIC D      |
-| **TOR1** | Ethernet1/16 | <==> | Node2   | p-NIC C      || **TOR2** | Ethernet1/16 | <==> | Node2   | p-NIC D      |
-| **TOR1** | Ethernet1/41 | <==> | TOR2    | Ethernet1/41 || **TOR2** | Ethernet1/41 | <==> | TOR1    | Ethernet1/41 |
-| **TOR1** | Ethernet1/42 | <==> | TOR2    | Ethernet1/42 || **TOR2** | Ethernet1/42 | <==> | TOR1    | Ethernet1/42 |
-| **TOR1** | Ethernet1/47 | <==> | Border1 | Ethernet1/x  || **TOR2** | Ethernet1/47 | <==> | Border1 | Ethernet1/x  |
-| **TOR1** | Ethernet1/48 | <==> | Border2 | Ethernet1/x  || **TOR2** | Ethernet1/48 | <==> | Border2 | Ethernet1/x  |
-| **TOR1** | Ethernet1/49 | <==> | TOR2    | Ethernet1/49 || **TOR2** | Ethernet1/49 | <==> | TOR1    | Ethernet1/49 |
-| **TOR1** | Ethernet1/50 | <==> | TOR2    | Ethernet1/50 || **TOR2** | Ethernet1/50 | <==> | TOR1    | Ethernet1/50 |
-| **TOR1** | Ethernet1/51 | <==> | TOR2    | Ethernet1/51 || **TOR2** | Ethernet1/51 | <==> | TOR1    | Ethernet1/51 |
+| Device   | Interface    |      | Device  | Interface    |     | Device   | Interface    |      | Device  | Interface    |
+| -------- | ------------ | ---- | ------- | ------------ | --- | -------- | ------------ | ---- | ------- | ------------ |
+| **TOR1** | Ethernet1/1  | <==> | Node1   | p-NIC A      |     | **TOR2** | Ethernet1/1  | <==> | Node1   | p-NIC B      |
+| **TOR1** | Ethernet1/2  | <==> | Node2   | p-NIC A      |     | **TOR2** | Ethernet1/2  | <==> | Node2   | p-NIC B      |
+| **TOR1** | Ethernet1/15 | <==> | Node1   | p-NIC C      |     | **TOR2** | Ethernet1/15 | <==> | Node1   | p-NIC D      |
+| **TOR1** | Ethernet1/16 | <==> | Node2   | p-NIC C      |     | **TOR2** | Ethernet1/16 | <==> | Node2   | p-NIC D      |
+| **TOR1** | Ethernet1/41 | <==> | TOR2    | Ethernet1/41 |     | **TOR2** | Ethernet1/41 | <==> | TOR1    | Ethernet1/41 |
+| **TOR1** | Ethernet1/42 | <==> | TOR2    | Ethernet1/42 |     | **TOR2** | Ethernet1/42 | <==> | TOR1    | Ethernet1/42 |
+| **TOR1** | Ethernet1/47 | <==> | Border1 | Ethernet1/x  |     | **TOR2** | Ethernet1/47 | <==> | Border1 | Ethernet1/x  |
+| **TOR1** | Ethernet1/48 | <==> | Border2 | Ethernet1/x  |     | **TOR2** | Ethernet1/48 | <==> | Border2 | Ethernet1/x  |
+| **TOR1** | Ethernet1/49 | <==> | TOR2    | Ethernet1/49 |     | **TOR2** | Ethernet1/49 | <==> | TOR1    | Ethernet1/49 |
+| **TOR1** | Ethernet1/50 | <==> | TOR2    | Ethernet1/50 |     | **TOR2** | Ethernet1/50 | <==> | TOR1    | Ethernet1/50 |
+| **TOR1** | Ethernet1/51 | <==> | TOR2    | Ethernet1/51 |     | **TOR2** | Ethernet1/51 | <==> | TOR1    | Ethernet1/51 |
 
 ## Switch Configuration Overview
 
