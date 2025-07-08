@@ -235,10 +235,12 @@ interface Vlan8
 
 > [!NOTE]
 > **TOR2 Storage VLAN Configuration**: TOR2 requires a separate storage VLAN 712 configuration:
+>
 > ```console
 > vlan 712
 >   name Storage_712_TOR2
 > ```
+>
 > VLAN 712 is isolated to TOR2 and carries storage traffic from Azure Local nodes connected to TOR2 (p-NIC D interfaces). Each ToR switch maintains its own dedicated storage VLAN to ensure traffic isolation and optimal RDMA performance. Storage traffic never traverses between ToR switches, even in the vPC configuration.
 
 > [!IMPORTANT]
@@ -288,7 +290,7 @@ interface Ethernet1/21
   spanning-tree port type edge trunk
   mtu 9216
   no logging event port link-status
-  service-policy type qos input AZS_SERVICES no-stats
+  service-policy type qos input AZS_SERVICES
   no shutdown
 
 interface Ethernet1/22
@@ -302,7 +304,7 @@ interface Ethernet1/22
   spanning-tree port type edge trunk
   mtu 9216
   no logging event port link-status
-  service-policy type qos input AZS_SERVICES no-stats
+  service-policy type qos input AZS_SERVICES
   no shutdown
 ```
 
