@@ -14,7 +14,7 @@ Troubleshooting guides (TSGs) are grouped by categories and stored in relevantly
 * [Infra Lifecycle Operations](./TSG/Lifecycle/README.md) - Add Server, Repair Server.
 * [Arc VMs](./TSG/ArcVMs/README.md) - VM lifecycle management, licensing, extensions, networking and storage.
 * [Security](./TSG/Security/README.md) - WDAC, BitLocker, Secret Rotation, Syslog, Defender for Cloud.
-* [Networking](./TSG/Networking/README.md) - Proxy and Arc Gateway.
+* [Networking](./TSG/Networking/README.md) - Physical Network, Proxy and Arc Gateway.
 * [Monitoring](./TSG/Monitoring/README.md) - Insights, Metric and Alerts.
 * [Azure Virtual Desktop](./TSG/AVD/README.md) - Azure Virtual Desktop.
 * [Azure Kubernetes](./TSG/AKS/README.md) - Deployment, Networking, Update.
