@@ -1,6 +1,6 @@
-# Azure Local - Fully Converged Network Design [Draft]
+# Azure Local - Fully Converged Physical Network Design [Draft]
 
-- [Azure Local - Fully Converged Network Design](#azure-local---fully-converged-network-design)
+- [Azure Local - Fully Converged Physical Network Design](#azure-local---fully-converged-physical-network-design)
   - [Overview](#overview)
   - [Key Components](#key-components)
   - [Network Design Comparison: Fully Converged vs Switched vs Switchless](#network-design-comparison-fully-converged-vs-switched-vs-switchless)
@@ -19,7 +19,7 @@
 
 ## Overview
 
-Azure Local's fully converged network architecture integrates **management**, **compute**, and **storage traffic** over the same physical Ethernet interfaces. This design minimizes hardware footprint while maximizing performance, scalability, and simplicity of deployment.
+Azure Local's fully converged physical network architecture integrates **management**, **compute**, and **storage traffic** over the same physical Ethernet interfaces. This design minimizes hardware footprint while maximizing performance, scalability, and simplicity of deployment.
 
 ## Key Components
 
@@ -27,9 +27,9 @@ Azure Local's fully converged network architecture integrates **management**, **
 
 - **Azure Local Machine**: - **Azure Local Machine**: A physical host node running the Azure Local OS. In a fully converged design, each machine typically has **two high-speed physical NIC ports** (10Gbps or higher) that **support RDMA** (Remote Direct Memory Access). These interfaces are used to carry **management, compute, and storage traffic** over a unified logical fabric.
 
-- **Network ATC (Automatic Traffic Control)**: Azure's intent-based networking framework used to define and deploy logical networking configurations (called "intents") on the host nodes. In the fully converged pattern, a single `Management + Compute + Storage` intent is used per interface.
+- **Network ATC**: Azure's intent-based networking framework used to define and deploy logical networking configurations (called "intents") on the host nodes. In the fully converged pattern, a single `Management + Compute + Storage` intent is used per interface.
 
-- **SET (Switch Embedded Teaming)**: A Windows-native NIC teaming method that creates a single logical interface from multiple physical NICs. It operates in **switch-independent mode**, meaning no LACP or switch-side configuration is needed—ideal for simple, resilient designs.
+- **SET (Switch Embedded Teaming)**: A Windows-native NIC teaming method that creates a single logical interface from multiple physical NICs. It operates in **switch-independent mode**, also SET is the **only** supported vmswitch technology on Azure Local.
 
 ## Network Design Comparison: Fully Converged vs Switched vs Switchless
 
@@ -37,7 +37,7 @@ Azure Local's fully converged network architecture integrates **management**, **
 |---------------------|------------------------------------------------------------------------------|----------------------------------------------------------|-----------------------------------------------------------|
 | **Fully Converged** | 2 NICs per host. All traffic (Mgmt + Compute + Storage) over both NICs       | Trunk ports with tagged VLANs: Mgmt, Compute, Storage     | Efficient design with minimal cabling and full RDMA support |
 | **Switched**        | 4 NICs per host. 2 for Mgmt + Compute, 2 dedicated to Storage traffic        | Trunk for Mgmt/Compute; separate trunk for Storage | High-performance setups with physical traffic isolation     |
-| **Switchless**      | 2 NICs per host to switch (Mgmt + Compute) + 2×(N−1) direct host-to-host NICs for Storage | Only Trunk for Mgmt/Compute | Low-cost or remote site setup with no storage switches      |
+| **Switchless**      | 2 NICs per host to switch (Mgmt + Compute) + (N−1) direct host-to-host NICs for Storage | Only Trunk for Mgmt/Compute | Low-cost or remote site setup with no storage switches      |
 
 ## Three-Node Fully Converged Environment
 
@@ -152,7 +152,7 @@ interface Ethernet1/1-3
 > **Note**: QoS policies and routing design (e.g., uplinks, BGP/OSPF, default gateway) will be introduced in a separate document.
 
 ## Q&A
-#### In Fully Converged Network Design, can I configure TOR1 only allow only Storage VLAN 711, and TOR2 only allow Storage VLAN 712?
+#### Q: In Fully Converged Network Design, can I configure TOR1 only allow only Storage VLAN 711, and TOR2 only allow Storage VLAN 712?
 
 No, that configuration is not recommended in a fully converged design.
 
@@ -161,6 +161,16 @@ When using **SET (Switch Embedded Teaming)** on the host, both physical NICs are
 If the switch port on TOR1 only allows VLAN 711, it will **drop any traffic tagged with VLAN 712**, leading to packet loss and connectivity issues.
 
 To ensure **redundancy, load balancing, and high availability**, all trunk ports on the ToR switches must be configured to **allow all required VLANs**, including Management (7), Compute (201), and both Storage VLANs (711 and 712).
+
+#### Q: Management and Compute VLANs are allowed across the MLAG peer link. Do I also need to allow the Storage VLANs across the MLAG link between the two ToR switches?
+No, it's not required — and in most cases, it's better not to.
+
+Storage traffic in this design uses **RDMA**, which is extremely sensitive to latency and jitter. By design, **each storage VLAN (711, 712) stays local to its connected switch**, allowing hosts to communicate directly through the same ToR without needing to traverse the MLAG peer link.
+
+Allowing storage VLANs across the MLAG link is technically possible, but doing so can introduce **unnecessary latency and complexity**. To preserve the **low-latency, deterministic behavior** of RDMA paths, it's best to keep storage traffic **isolated per switch** and rely on **host-side redundancy** via SET teaming and multiple storage VLANs.
+
+> ✅ Allow: Management and Compute VLANs across MLAG  
+> 🚫 Avoid: Storage VLANs across MLAG (keep local per switch)
 
 ## Reference Documents
 
