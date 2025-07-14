@@ -20,3 +20,4 @@
 * [OS update automatically set to run on 3rd Tuesday following SBE update](./OS-update-automatically-set-to-run-on-3rd-Tuesday-following-SBE-update.md)
 * [Solution Update UpdateFOD error.md](./SolutionUpdate-UpdateFOD.md)
 * [Update fails with Exception caught in Test-AzStackHciNetwork validator](./Update-fails-with-Exception-caught-in-Test-AzStackHciNetwork-validator.md)
+* [Update CAU run fails 'Previous CAU run status was Canceled'](./Update-CAU-run-fails-previous-CAU-run-status-was-Canceled.md)
