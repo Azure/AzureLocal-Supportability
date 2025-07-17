@@ -147,7 +147,7 @@ flowchart TD
 
 
 
-> In this example, the switch is in switched deployment pattern, 7 is M, 201 is C, 711 is S1, and 712 is S2.
+> In this example, the Azure Local is deployed with Switched pattern, 7 is M, 201 is C, 711 is S1, and 712 is S2. So the ToR1 and ToR2 Hosts-Facing ports should be configured as follows:
 
 ###### TOR1
 ``` console
