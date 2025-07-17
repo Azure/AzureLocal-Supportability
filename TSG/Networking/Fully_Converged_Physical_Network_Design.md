@@ -1,21 +1,22 @@
 # Azure Local - Fully Converged Physical Network Design [Draft]
 
 - [Azure Local - Fully Converged Physical Network Design](#azure-local---fully-converged-physical-network-design)
-  - [Overview](#overview)
-  - [Key Components](#key-components)
-  - [Network Design Comparison: Fully Converged vs Switched vs Switchless](#network-design-comparison-fully-converged-vs-switched-vs-switchless)
-  - [Three-Node Fully Converged Environment](#three-node-fully-converged-environment)
-    - [Host Nodes](#host-nodes)
-    - [Cable Map](#cable-map)
-      - [Node 1](#node-1)
-      - [Node 2](#node-2)
-      - [Node 3](#node-3)
-    - [VLAN Architecture](#vlan-architecture)
-    - [ToR Switches](#tor-switches)
-      - [Interface & VLAN Configuration](#interface--vlan-configuration)
-  - [Reference Documents](#reference-documents)
+- [Overview](#overview)
+- [Key Components](#key-components)
+- [Three-Node Fully Converged Environment](#three-node-fully-converged-environment)
+  - [Host Nodes](#host-nodes)
+  - [Cable Map](#cable-map)
+    - [Node 1](#node-1)
+    - [Node 2](#node-2)
+    - [Node 3](#node-3)
+  - [VLAN Architecture](#vlan-architecture)
+  - [ToR Switches](#tor-switches)
+    - [Interface & VLAN Configuration](#interface--vlan-configuration)
+- [Q&A](#qa)
+- [Reference Documents](#reference-documents)
 
-![2 node Switchless with 2 ToR](images/AzureLocalPhysicalNetworkDiagram_FullyConverged.png)
+
+![AzureLocalPhysicalNetworkDiagram_FullyConverged](images/AzureLocalPhysicalNetworkDiagram_FullyConverged.png)
 
 ## Overview
 
