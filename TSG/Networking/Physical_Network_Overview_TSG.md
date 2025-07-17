@@ -6,16 +6,16 @@ _A foundational guide covering Azure Local physical network deployment patterns,
 
 ## Table of Contents
 
-1. [Introduction](#1-introduction)
-2. [Deployment Patterns Overview](#2-deployment-patterns-overview)
-3. [Physical Network Hardware & Configuration Requirements](#3-physical-network-hardware--configuration-requirements)
-4. [Initial Troubleshooting for Physical Network Issues](#4-initial-troubleshooting-for-physical-network-issues)
-  4.1 [Identify Deployment Pattern & Interface Configuration](#41-identify-deployment-pattern--interface-configuration)
-  4.2 [Verify Physical connections between Hosts and ToR Switches](#42-verify-physical-connections-between-hosts-and-tor-switches)
-  4.3 [Verify Azure Local Host MAC Learning on the Switch](#43-verify-azure-local-host-mac-learning-on-the-switch)
-  4.4 [Advanced Troubleshooting](#44-advanced-troubleshooting)
-5. [Q&A](#5-qa)
-6. [Appendix](#6-appendix)
+- [1. Introduction](#1-introduction)
+- [2. Deployment Patterns Overview](#2-deployment-patterns-overview)
+- [3. Physical Network Hardware & Configuration Requirements](#3-physical-network-hardware--configuration-requirements)
+- [4. Initial Troubleshooting for Physical Network Issues](#4-initial-troubleshooting-for-physical-network-issues)
+  - [4.1 Identify Deployment Pattern & Interface Configuration](#41-identify-deployment-pattern--interface-configuration)
+  - [4.2 Verify Physical Connections Between Hosts and ToR Switches](#42-verify-physical-connections-between-hosts-and-tor-switches)
+  - [4.3 Verify Azure Local Host MAC Learning on the Switch](#43-verify-azure-local-host-mac-learning-on-the-switch)
+  - [4.4 Advanced Troubleshooting](#44-advanced-troubleshooting)
+- [5. Q&A](#5-qa)
+- [6. Appendix](#6-appendix)
 
 ---
 
