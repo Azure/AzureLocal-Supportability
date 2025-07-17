@@ -6,16 +6,12 @@ _A foundational guide covering Azure Local physical network deployment patterns,
 
 ## Table of Contents
 
-1. [Introduction](#introduction)
-2. [Deployment Patterns Overview](#deployment-patterns-overview)
-3. [Hard Requirements & Reference Configurations](#hard-requirements--reference-configurations)
-4. [Log Collection Guidelines](#log-collection-guidelines)
-5. [Troubleshooting Use Cases](#troubleshooting-use-cases)
-   - [5.1 Interface Configuration & Operation](#51-interface-configuration--operation)
-   - [5.2 MAC/ARP Layer Issues](#52-macarp-layer-issues)
-   - [5.3 LLDP Neighbor Troubleshooting](#53-lldp-neighbor-troubleshooting)
-6. [Appendix](#appendix)
-7. [References](#references)
+1. [Introduction](#1-introduction)
+2. [Deployment Patterns Overview](#2-deployment-patterns-overview)
+3. [Physical Network Hardware & Configuration Requirements](#3-physical-network-hardware--configuration-requirements)
+4. [Initial Troubleshooting for Physical Network Issues](#4-initial-troubleshooting-for-physical-network-issues)
+5. [Q&A](#5-qa)
+6. [Appendix](#6-appendix)
 
 ---
 
@@ -109,11 +105,9 @@ This tool is designed to automate the generation of Azure Local switch configura
 
 ---
 
-## 4. Initial Diagnostics for Physical Network Issues
+## 4. Initial Troubleshooting for Physical Network Issues
 
 This section provides clear, step-by-step guidance to help identify and troubleshoot common physical network issues in Azure Local environments.
-
-> Note: Advanced topics such as RDMA, latency tuning, SDN setup, BGP, MLAG, and Spanning Tree will be covered in separate documents.
 
 ### 4.1 Identify Deployment Pattern & Interface Configuration
 

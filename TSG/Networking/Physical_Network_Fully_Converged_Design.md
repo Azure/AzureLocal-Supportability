@@ -1,16 +1,19 @@
 # Azure Local - Fully Converged Physical Network Design [Draft]
 
+## Table of Contents
+
 - [Overview](#overview)
 - [Key Components](#key-components)
-- [Three-Node Fully Converged Environment](#three-node-fully-converged-environment)
-  - [Host Nodes](#host-nodes)
-  - [Cable Map](#cable-map)
-    - [Node 1](#node-1)
-    - [Node 2](#node-2)
-    - [Node 3](#node-3)
+- [Fully Converged Network Design – Physical Topology](#fully-converged-network-design--physical-topology)
+  - [Topology Diagram](#topology-diagram)
+  - [Example: Three-Host Cabling Map](#example-three-host-cabling-map)
+    - [Host 1](#host-1)
+    - [Host 2](#host-2)
+    - [Host 3](#host-3)
   - [VLAN Architecture](#vlan-architecture)
   - [ToR Switches](#tor-switches)
     - [Interface & VLAN Configuration](#interface--vlan-configuration)
+    - [Validation in Lab Environment](#validation-in-lab-environment)
 - [Q&A](#qa)
 - [Reference Documents](#reference-documents)
 
