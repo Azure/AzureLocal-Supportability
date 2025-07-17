@@ -1,6 +1,5 @@
 # Azure Local - Fully Converged Physical Network Design [Draft]
 
-- [Azure Local - Fully Converged Physical Network Design](#azure-local---fully-converged-physical-network-design)
 - [Overview](#overview)
 - [Key Components](#key-components)
 - [Three-Node Fully Converged Environment](#three-node-fully-converged-environment)
@@ -16,8 +15,6 @@
 - [Reference Documents](#reference-documents)
 
 
-![AzureLocalPhysicalNetworkDiagram_FullyConverged](images/AzureLocalPhysicalNetworkDiagram_FullyConverged.png)
-
 ## Overview
 
 Azure Local's fully converged physical network architecture integrates **management**, **compute**, and **storage** traffic over the same physical Ethernet interfaces. This design minimizes hardware footprint while maximizing performance, scalability, and simplicity of deployment.
@@ -26,57 +23,59 @@ Azure Local's fully converged physical network architecture integrates **managem
 
 - **Top-of-Rack (ToR) Switches**: Physical switches that provide redundant L2/L3 connectivity. Each Azure Local machine connects to two separate ToR switches for high availability, with all switch ports configured as IEEE 802.1Q trunk ports to support multiple VLANs.
 
-- **Azure Local Machine**: A physical host node running the Azure Local OS. In a fully converged design, each machine typically has **two high-speed physical NIC ports** (10Gbps or higher) that **support RDMA** (Remote Direct Memory Access). These interfaces are used to carry **management, compute, and storage** traffic over a unified logical fabric.
+- **Azure Local Machine**: A physical host running the Azure Local OS. In a fully converged design, each machine typically has **two high-speed physical NICs** (10Gbps or higher) that **support RDMA** (Remote Direct Memory Access). These interfaces are used to carry **management, compute, and storage** traffic over a unified logical fabric.
 
-- **Network ATC**: Azure Local intent-based networking framework used to define and deploy logical networking configurations (called "intents") on the host nodes. In the fully converged pattern, a single `Management + Compute + Storage` intent is cross the NICs.
+- **Network ATC**: Azure Local intent-based networking framework used to define and deploy logical networking configurations (called "intents") on the hosts. In the fully converged pattern, a single `Management + Compute + Storage` intent is cross the NICs.
 
 - **SET (Switch Embedded Teaming)**: A Windows-native NIC teaming method that creates a single logical interface from multiple physical NICs. It operates in **switch-independent mode**, also SET is the **only** supported vmswitch technology on Azure Local.
 
 
 
-## Three-Node Fully Converged Environment
+## Fully Converged Network Design – Physical Topology
 
-This example illustrates a **three-node Azure Local deployment** using the **fully converged network design**. While this setup is based on three nodes, the same architecture scales easily to larger environments with minimal changes.
+This example illustrates a **fully converged Azure Local environment**, where **Management**, **Compute**, and **Storage** traffic all share the same NICs using **VLAN tagging**. While the diagram shows a dual-node-to-ToR cabling structure, the same design easily scales from **2 to 16 nodes** with minimal changes.
 
-### Host Nodes
+> ✅ Fully converged: All traffic types (Mgmt, Compute, Storage) run over the same physical links  
+> ✅ Redundant ToR: Each node connects to both TOR1 and TOR2  
+> ✅ SET (Switch Embedded Team): Used on the host to bond NICs for fault tolerance
 
-- **Total Nodes**: 3 Azure Local machines
-- **Each Node**:
-  - 2 high-speed RDMA-capable NICs (e.g., 25GbE)
-  - Both NICs connect to redundant ToR switches
-  - All traffic types (Management, Compute, Storage) share the same NICs using VLAN tagging
+### Topology Diagram
 
+![AzureLocalPhysicalNetworkDiagram_FullyConverged](images/AzureLocalPhysicalNetworkDiagram_FullyConverged.png)
 
-### Cable Map
+---
 
-This section shows the physical cabling between each host's NICs and the redundant Top-of-Rack (ToR) switches in the three-node fully converged setup.
+### Example: Three-Host Cabling Map
 
-#### Node 1
+The following table shows physical connections between NICs and the Top-of-Rack switches in a **3-Host setup**. Each Host has two Ethernet ports, and each port connects to a different ToR switch to ensure redundancy.
 
-| Device    | Interface |      | Device | Interface   |
-|-----------|-----------|------|--------|-------------|
-| **Node1** | p-NIC A   | <==> | TOR1   | Ethernet1/1 |
-| **Node1** | p-NIC B   | <==> | TOR2   | Ethernet1/1 |
-
-#### Node 2
+#### Host 1
 
 | Device    | Interface |      | Device | Interface   |
 |-----------|-----------|------|--------|-------------|
-| **Node2** | p-NIC A   | <==> | TOR1   | Ethernet1/2 |
-| **Node2** | p-NIC B   | <==> | TOR2   | Ethernet1/2 |
+| **Host1** | NIC A     | <==> | TOR1   | Ethernet1/1 |
+| **Host1** | NIC B     | <==> | TOR2   | Ethernet1/1 |
 
-#### Node 3
+#### Host 2
 
 | Device    | Interface |      | Device | Interface   |
 |-----------|-----------|------|--------|-------------|
-| **Node3** | p-NIC A   | <==> | TOR1   | Ethernet1/3 |
-| **Node3** | p-NIC B   | <==> | TOR2   | Ethernet1/3 |
+| **Host2** | NIC A     | <==> | TOR1   | Ethernet1/2 |
+| **Host2** | NIC B     | <==> | TOR2   | Ethernet1/2 |
+
+#### Host 3
+
+| Device    | Interface |      | Device | Interface   |
+|-----------|-----------|------|--------|-------------|
+| **Host3** | NIC A     | <==> | TOR1   | Ethernet1/3 |
+| **Host3** | NIC B     | <==> | TOR2   | Ethernet1/3 |
+
 
 ### VLAN Architecture
 
 | VLAN Type     | Purpose                             | VLAN ID |
 |---------------|-------------------------------------|---------|
-| Management    | Cluster and node management traffic | 7       |
+| Management    | Cluster and Host management traffic | 7       |
 | Compute       | VM / workload traffic               | 201     |
 | Storage 1     | SMB over RDMA (path 1)              | 711     |
 | Storage 2     | SMB over RDMA (path 2)              | 712     |
@@ -133,7 +132,7 @@ interface Vlan201
     ip 100.101.177.1
 
 interface Ethernet1/1-3
-  description To_Azure_Local_Host
+  description To_Azure_Local_Host_FullyConverged
   switchport
   switchport mode trunk
   switchport trunk native vlan 7
@@ -144,12 +143,72 @@ interface Ethernet1/1-3
   service-policy type qos input AZS_SERVICES
   no shutdown
 ```
+
 > **Note**: QoS policies and routing design (e.g., uplinks, BGP/OSPF, default gateway) will be introduced in a separate document.
+
+
+#### Validation in Lab Environment
+
+##### On Azure Local Host
+- Verify the host's MAC address and VLAN configuration.
+- For virtual adapters, run `Get-VMNetworkAdapterIsolation` to view VLAN isolation settings.
+
+
+```powershell
+[Host3]: PS C:\Users\Administrator\Documents> Get-NetAdapter | ft InterfaceAlias, VlanID, MacAddress
+
+InterfaceAlias                     VlanID MacAddress       
+--------------                     ------ ----------       
+ethernet                                0 0C-42-A1-F9-69-4A
+vSMB(managementcompute#ethernet 2)        00-15-5D-C8-20-07
+ethernet 2                              0 0C-42-A1-F9-69-4B
+vManagement(managementcompute)            0C-42-A1-F9-69-4A
+vSMB(managementcompute#ethernet)          00-15-5D-C8-20-06
+
+[Host3]: PS C:\Users\Administrator\Documents> Get-VMNetworkAdapterIsolation -ManagementOS | ft ParentAdapter, IsolationMode, DefaultIsolationID
+
+ParentAdapter                                                         IsolationMode DefaultIsolationID
+-------------                                                         ------------- ------------------
+VMInternalNetworkAdapter, Name = 'vSMB(managementcompute#ethernet)'            Vlan                711
+VMInternalNetworkAdapter, Name = 'vManagement(managementcompute)'              Vlan                  0
+VMInternalNetworkAdapter, Name = 'vSMB(managementcompute#ethernet 2)'          Vlan                712
+
+```
+
+##### On ToR Switches
+
+- Verify the MAC address table for each ToR switch to ensure the host's MAC addresses are learned correctly.
+
+```console
+# On ToR1
+TOR1# show mac address-table interface ethernet 1/3
+Legend:
+        * - primary entry, G - Gateway MAC, (R) - Routed MAC, O - Overlay MAC
+        age - seconds since last seen,+ - primary entry using vPC Peer-Link,
+        (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
+   VLAN     MAC Address      Type      age     Secure NTFY Ports
+---------+-----------------+--------+---------+------+----+------------------
+*    7     0c42.a1f9.694a   dynamic  0         F      F    Eth1/3
+*  711     0015.5dc8.2006   dynamic  0         F      F    Eth1/3
+
+# On ToR2
+TOR2# show mac address-table interface ethernet 1/3
+Legend:
+        * - primary entry, G - Gateway MAC, (R) - Routed MAC, O - Overlay MAC
+        age - seconds since last seen,+ - primary entry using vPC Peer-Link,
+        (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
+   VLAN     MAC Address      Type      age     Secure NTFY Ports
+---------+-----------------+--------+---------+------+----+------------------
+*  712     0015.5dc8.2007   dynamic  0         F      F    Eth1/3
+
+```
+
 
 ## Q&A
 ### Q: In Fully Converged Network Design, can I configure TOR1 only allow only Storage VLAN 711, and TOR2 only allow Storage VLAN 712?
 
-A: No, this configuration is not supported and will lead to connectivity issues.
+**A:** 
+No, this configuration is not supported and will lead to connectivity issues.
 
 When using **SET (Switch Embedded Teaming)** on the host, both physical NICs are treated as a single logical interface. The operating system dynamically balances traffic — including storage — across both NICs. This means that **Storage VLAN 712 traffic could be sent through the NIC connected to TOR1**, and vice versa.
 
@@ -157,14 +216,16 @@ If the switch port on TOR1 only allows VLAN 711, it will **drop any traffic tagg
 
 To ensure **redundancy, load balancing, and high availability**, all trunk ports on the ToR switches must be configured to **allow all required VLANs**, including Management (7), Compute (201), and both Storage VLANs (711 and 712).
 
-### Q: Management and Compute VLANs are allowed across the MLAG peer link. Do I also need to allow the Storage VLANs across the MLAG link between the two ToR switches?
+### Q: Management and Compute VLANs are allowed across the ToRs peer link. Do I also need to allow the Storage VLANs across the peer link between the two ToR switches?
 
-A: In a **Switched** deployment, allowing Storage VLANs across the MLAG peer link is **not required** because each storage VLAN is pinned to a specific ToR.
 
-However, in a **Fully Converged** deployment, **Storage VLANs must be allowed across the MLAG peer link**. This is not for regular storage traffic, but to support failover scenarios.
+**A:** 
+In a **Switched** deployment, allowing Storage VLANs across the ToRs peer link is **not required** because each storage VLAN is pinned to a specific ToR.
+
+However, in a **Fully Converged** deployment, **Storage VLANs must be allowed across the ToRs peer link**. This is not for regular storage traffic, but to support failover scenarios.
 
 For example:  
-If Host1 has NIC1 connected to ToR1 and NIC2 connected to ToR2, and it uses Storage VLAN 711—under normal conditions, traffic flows through ToR1. If NIC1 fails, Host1 will send storage traffic through NIC2 and ToR2. Without VLAN 711 allowed across the MLAG peer link, that traffic cannot reach its destination and will be dropped.
+If Host1 has NIC1 connected to ToR1 and NIC2 connected to ToR2, and it uses Storage VLAN 711—under normal conditions, traffic flows through ToR1. If NIC1 fails, Host1 will send storage traffic through NIC2 and ToR2. Without VLAN 711 allowed across the ToRs peer link, that traffic cannot reach its destination and will be dropped.
 
 
 

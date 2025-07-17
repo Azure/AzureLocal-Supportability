@@ -345,36 +345,26 @@ So the cable mapping based on the lldp neighbors output is as follows:
 
 | Host Name | NIC Name     | MAC Address           | Connected ToR | ToR Interface     |
 |-----------|--------------|------------------------|---------------|-------------------|
-| Host1     | Ethernet     | C8-4B-D6-90-C7-E5      | TOR1          | ethernet1/1     |
-| Host1     | Ethernet 2   | C8-4B-D6-90-C7-E6      | TOR2          | ethernet1/1   |
-| Host1     | Ethernet 3   | C8-4B-D6-90-C7-E7      | TOR1          | ethernet1/21    |
-| Host1     | Ethernet 4   | C8-4B-D6-90-C7-E8      | TOR2          | ethernet1/21   |
+| Host1     | Ethernet     | C8-4B-D6-90-C7-E5      | ToR1          | Ethernet1/1     |
+| Host1     | Ethernet 2   | C8-4B-D6-90-C7-E6      | ToR2          | Ethernet1/1   |
+| Host1     | Ethernet 3   | C8-4B-D6-90-C7-E7      | ToR1          | Ethernet1/21    |
+| Host1     | Ethernet 4   | C8-4B-D6-90-C7-E8      | ToR2          | Ethernet1/21   |
 
 
 ---
 
-### 4.3 Verify Azure Local Host MAC and IP Learning on the Switch
+### 4.3 Verify Azure Local Host MAC Learning on the Switch
 
-
-Make sure the switch has correctly learned the host's MAC and IP addresses through the expected VLANs.
+Switches learn which MAC addresses are connected to which ports and VLANs. If a switch doesn’t learn the correct MAC for a host’s NICs, traffic won’t reach the intended host. This step ensures each host is properly connected and the network knows where to send traffic.
 
 #### Troubleshooting Flowchart
 
 ```mermaid
-flowchart TD
-    A[Start: Verify MAC & IP Learning] --> B[Run 'show mac address-table']
-    B --> B1{Is MAC address visible\nfor each host NIC VLAN?}
-    B1 -->|Yes| C[Proceed to ARP check]
-    B1 -->|No| E[Check VLAN config\nand port status]
-
-    C --> D[Run 'show ip arp']
-    D --> D1{Is IP-to-MAC entry\nvisible for each host IP?}
-    D1 -->|Yes| F[✅ MAC/IP learning is correct]
-    D1 -->|No| G[Check host IP config,\nVLAN, and interface state]
-
-    E --> H[Correct port VLANs or cabling]
-    G --> H
-
+flowchart LR
+    A[Start] --> B[Run 'show mac address-table' on ToR]
+    B --> B1{Is MAC address visible for each host NIC VLAN?}
+    B1 -->|Yes| C[MAC learning correctly]
+    B1 -->|No| D[Check switch port trunk config and host NIC config to align VLANs]
 ```
 
 ##### Log Collection & Analysis
@@ -382,31 +372,63 @@ flowchart TD
   - Verify that the MAC addresses of each host NIC are learned on the expected VLANs
   - Check for any missing or incorrect entries
 
-- `show ip arp`  
-  - Verify that the IP addresses of each host are correctly mapped to their MAC addresses
-
 ###### On Azure Local Host
 ``` Powershell
-[Host1]: PS C:\Users\Administrator\Documents> Get-NetAdapter | Where-Object { $_.InterfaceAlias -eq "ethernet 3" -or $_.InterfaceAlias -eq "ethernet 4" } | ft InterfaceAlias, VlanID, MacAddress
+[Host1]: PS C:\Users\Administrator\Documents> Get-NetAdapter | ft InterfaceAlias, VlanID, MacAddress
  
 InterfaceAlias VlanID MacAddress
 -------------- ------ ----------
-ethernet 4        712 E8-EB-D3-9B-97-45
-ethernet 3        711 E8-EB-D3-9B-97-44
-
-[Host1]: PS C:\Users\Administrator\Documents> Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -eq "ethernet 3" -or $_.InterfaceAlias -eq "ethernet 4" } | ft InterfaceAlias, IPAddress
- 
-InterfaceAlias IPAddress
--------------- ---------
-ethernet 4     169.254.45.71
-ethernet 3     169.254.70.204
+ethernet 4        712 C8-4B-D6-90-C7-E8
+ethernet 3        711 C8-4B-D6-90-C7-E7
+ethernet 2        0   C8-4B-D6-90-C7-E6
+ethernet          0   C8-4B-D6-90-C7-E5
 
 ```
 
 ###### On ToR Switch
 ``` console
+# On TOR1
+TOR1# show mac address-table interface ethernet 1/1
+Legend:
+        * - primary entry, G - Gateway MAC, (R) - Routed MAC, O - Overlay MAC
+        age - seconds since last seen,+ - primary entry using vPC Peer-Link,
+        (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
+   VLAN     MAC Address      Type      age     Secure NTFY Ports
+---------+-----------------+--------+---------+------+----+------------------
+*    7     cb4b.d690.c7e5   dynamic  0         F      F    Eth1/1
+
+TOR1# show mac address-table interface ethernet 1/21
+Legend:
+        * - primary entry, G - Gateway MAC, (R) - Routed MAC, O - Overlay MAC
+        age - seconds since last seen,+ - primary entry using vPC Peer-Link,
+        (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
+   VLAN     MAC Address      Type      age     Secure NTFY Ports
+---------+-----------------+--------+---------+------+----+------------------
+*  711     cb4b.d690.c7e7   dynamic  0         F      F    Eth1/21
+
+
+# On TOR2
+TOR2# show mac address-table interface ethernet 1/1
+Legend:
+        * - primary entry, G - Gateway MAC, (R) - Routed MAC, O - Overlay MAC
+        age - seconds since last seen,+ - primary entry using vPC Peer-Link,
+        (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
+   VLAN     MAC Address      Type      age     Secure NTFY Ports
+---------+-----------------+--------+---------+------+----+------------------
+*    7     cb4b.d690.c7e6   dynamic  0         F      F    Eth1/1
+
+TOR2# show mac address-table interface ethernet 1/21
+Legend:
+        * - primary entry, G - Gateway MAC, (R) - Routed MAC, O - Overlay MAC
+        age - seconds since last seen,+ - primary entry using vPC Peer-Link,
+        (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
+   VLAN     MAC Address      Type      age     Secure NTFY Ports
+---------+-----------------+--------+---------+------+----+------------------
+*  712     cb4b.d690.c7e8   dynamic  0         F      F    Eth1/21
 ```
 
+### 4.4 Advanced Troubleshooting
+This TSG just covers the basic physical network troubleshooting steps. For more advanced topics like RDMA, latency tuning, SDN setup, BGP, MLAG, and Spanning Tree, please refer to the dedicated documents in the Azure Local documentation set.
 
 ## 5. Q&A
 
@@ -456,6 +478,30 @@ By using **two storage VLANs** (e.g., 711 and 712), each mapped to separate NICs
 - ✅ SET provides link-level redundancy
 - ✅ Two storage VLANs ensure **RDMA-level failover** and **ToR-local communication**
 - 🚫 One VLAN risks **cross-ToR RDMA**, which reduces performance
+
+
+### Q: Are **DCB (Data Center Bridging)** features like **PFC** and **ETS** needed for RDMA in Azure Local, including both **RoCEv2** and **iWARP**?
+
+**A:**  
+While **DCB features** such as **Priority Flow Control (PFC)** and **Enhanced Transmission Selection (ETS)** are not strictly required, they are **highly recommended** for both **RoCEv2** and **iWARP** to optimize RDMA performance in Azure Local environments.
+
+Overall Comparison:
+
+- **RoCEv2** uses **UDP**, which is fast but **cannot tolerate packet loss**.  
+  → It **needs PFC** to prevent packet drops, and DCB is **required** for optimal performance.
+
+- **iWARP** uses **TCP**, which can handle **packet loss** but is **slower**.  
+  → It **doesn’t require PFC**, but enabling **DCB** can still help reduce latency.
+
+> ⚠️ Even though **iWARP** uses reliable TCP transport and does **not mandate DCB**, enabling **PFC and ETS** can still help minimize congestion and latency, especially in mixed RDMA environments.  
+> Enabling DCB across the fabric ensures **consistent, predictable low-latency** behavior for RDMA workloads.
+
+### Q: Why can't I see the storage IP in the ARP table, while the Compute and Management IPs are visible?
+
+**A:**
+This is expected behavior in Azure Local deployments.
+
+In the reference design, the **Storage VLAN is configured as a Layer 2 (L2) network without an IP subnet**. Storage traffic is **VLAN-tagged and handled entirely at Layer 2**, so it doesn't involve IP-based communication or ARP resolution. In contrast, **Management and Compute VLANs are Layer 3 networks** with IP addresses, which is why their entries appear in the ARP table.
 
 
 
