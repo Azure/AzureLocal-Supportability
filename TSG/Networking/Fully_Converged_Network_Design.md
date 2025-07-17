@@ -1,9 +1,8 @@
 # Azure Local - Fully Converged Network Design [Draft]
 
-- [Azure Local - Fully Converged Network Design](#azure-local---fully-converged-network-design)
+- [Azure Local - Fully Converged Network Design \[Draft\]](#azure-local---fully-converged-network-design-draft)
   - [Overview](#overview)
   - [Key Components](#key-components)
-  - [Network Design Comparison: Fully Converged vs Switched vs Switchless](#network-design-comparison-fully-converged-vs-switched-vs-switchless)
   - [Three-Node Fully Converged Environment](#three-node-fully-converged-environment)
     - [Host Nodes](#host-nodes)
     - [Cable Map](#cable-map)
@@ -12,32 +11,29 @@
       - [Node 3](#node-3)
     - [VLAN Architecture](#vlan-architecture)
     - [ToR Switches](#tor-switches)
-      - [Interface & VLAN Configuration](#interface--vlan-configuration)
+      - [Interface \& VLAN Configuration](#interface--vlan-configuration)
+        - [Sample NX-OS Configuration (Simplified)](#sample-nx-os-configuration-simplified)
+  - [Q\&A](#qa)
+    - [Q: In Fully Converged Network Design, can I configure TOR1 only allow only Storage VLAN 711, and TOR2 only allow Storage VLAN 712?](#q-in-fully-converged-network-design-can-i-configure-tor1-only-allow-only-storage-vlan-711-and-tor2-only-allow-storage-vlan-712)
+    - [Q: Management and Compute VLANs are allowed across the MLAG peer link. Do I also need to allow the Storage VLANs across the MLAG link between the two ToR switches?](#q-management-and-compute-vlans-are-allowed-across-the-mlag-peer-link-do-i-also-need-to-allow-the-storage-vlans-across-the-mlag-link-between-the-two-tor-switches)
   - [Reference Documents](#reference-documents)
 
-![2 node Switchless with 2 ToR](images/AzureLocalFullyConvergedNetworkDiagram.png)
+![2 node Switchless with 2 ToR](images/AzureLocalPhysicalNetworkDiagram_FullyConverged.png)
 
 ## Overview
 
-Azure Local's fully converged network architecture integrates **management**, **compute**, and **storage traffic** over the same physical Ethernet interfaces. This design minimizes hardware footprint while maximizing performance, scalability, and simplicity of deployment.
+Azure Local's fully converged physical network architecture integrates **management**, **compute**, and **storage** traffic over the same physical Ethernet interfaces. This design minimizes hardware footprint while maximizing performance, scalability, and simplicity of deployment.
 
 ## Key Components
 
 - **Top-of-Rack (ToR) Switches**: Physical switches that provide redundant L2/L3 connectivity. Each Azure Local machine connects to two separate ToR switches for high availability, with all switch ports configured as IEEE 802.1Q trunk ports to support multiple VLANs.
 
-- **Azure Local Machine**: - **Azure Local Machine**: A physical host node running the Azure Local OS. In a fully converged design, each machine typically has **two high-speed physical NIC ports** (10Gbps or higher) that **support RDMA** (Remote Direct Memory Access). These interfaces are used to carry **management, compute, and storage traffic** over a unified logical fabric.
+- **Azure Local Machine**: A physical host node running the Azure Local OS. In a fully converged design, each machine typically has **two high-speed physical NIC ports** (10Gbps or higher) that **support RDMA** (Remote Direct Memory Access). These interfaces are used to carry **management, compute, and storage** traffic over a unified logical fabric.
 
-- **Network ATC (Automatic Traffic Control)**: Azure's intent-based networking framework used to define and deploy logical networking configurations (called "intents") on the host nodes. In the fully converged pattern, a single `Management + Compute + Storage` intent is used per interface.
+- **Network ATC**: Azure Local intent-based networking framework used to define and deploy logical networking configurations (called "intents") on the host nodes. In the fully converged pattern, a single `Management + Compute + Storage` intent is cross the NICs.
 
 - **SET (Switch Embedded Teaming)**: A Windows-native NIC teaming method that creates a single logical interface from multiple physical NICs. It operates in **switch-independent mode**, meaning no LACP or switch-side configuration is needed—ideal for simple, resilient designs.
 
-## Network Design Comparison: Fully Converged vs Switched vs Switchless
-
-| Design Type         | Host NIC Traffic                                                   | Switch Port VLAN                        | Typical Use Case                                          |
-|---------------------|------------------------------------------------------------------------------|----------------------------------------------------------|-----------------------------------------------------------|
-| **Fully Converged** | 2 NICs per host. All traffic (Mgmt + Compute + Storage) over both NICs       | Trunk ports with tagged VLANs: Mgmt, Compute, Storage     | Efficient design with minimal cabling and full RDMA support |
-| **Switched**        | 4 NICs per host. 2 for Mgmt + Compute, 2 dedicated to Storage traffic        | Trunk for Mgmt/Compute; separate trunk for Storage | High-performance setups with physical traffic isolation     |
-| **Switchless**      | 2 NICs per host to switch (Mgmt + Compute) + 2×(N−1) direct host-to-host NICs for Storage | Only Trunk for Mgmt/Compute | Low-cost or remote site setup with no storage switches      |
 
 ## Three-Node Fully Converged Environment
 
@@ -152,15 +148,26 @@ interface Ethernet1/1-3
 > **Note**: QoS policies and routing design (e.g., uplinks, BGP/OSPF, default gateway) will be introduced in a separate document.
 
 ## Q&A
-#### In Fully Converged Network Design, can I configure TOR1 only allow only Storage VLAN 711, and TOR2 only allow Storage VLAN 712?
+### Q: In Fully Converged Network Design, can I configure TOR1 only allow only Storage VLAN 711, and TOR2 only allow Storage VLAN 712?
 
-No, that configuration is not recommended in a fully converged design.
+A: No, this configuration is not supported and will lead to connectivity issues.
 
 When using **SET (Switch Embedded Teaming)** on the host, both physical NICs are treated as a single logical interface. The operating system dynamically balances traffic — including storage — across both NICs. This means that **Storage VLAN 712 traffic could be sent through the NIC connected to TOR1**, and vice versa.
 
 If the switch port on TOR1 only allows VLAN 711, it will **drop any traffic tagged with VLAN 712**, leading to packet loss and connectivity issues.
 
 To ensure **redundancy, load balancing, and high availability**, all trunk ports on the ToR switches must be configured to **allow all required VLANs**, including Management (7), Compute (201), and both Storage VLANs (711 and 712).
+
+### Q: Management and Compute VLANs are allowed across the MLAG peer link. Do I also need to allow the Storage VLANs across the MLAG link between the two ToR switches?
+
+A: In a **Switched** deployment, allowing Storage VLANs across the MLAG peer link is **not required** because each storage VLAN is pinned to a specific ToR.
+
+However, in a **Fully Converged** deployment, **Storage VLANs must be allowed across the MLAG peer link**. This is not for regular storage traffic, but to support failover scenarios.
+
+For example:  
+If Host1 has NIC1 connected to ToR1 and NIC2 connected to ToR2, and it uses Storage VLAN 711—under normal conditions, traffic flows through ToR1. If NIC1 fails, Host1 will send storage traffic through NIC2 and ToR2. Without VLAN 711 allowed across the MLAG peer link, that traffic cannot reach its destination and will be dropped.
+
+
 
 ## Reference Documents
 
