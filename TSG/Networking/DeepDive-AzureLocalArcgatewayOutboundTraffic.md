@@ -136,6 +136,8 @@ This ensures AKS clusters maintain secure and compliant outbound connectivity.
 
 ![AKS Clusters HTTPS Traffic](./images/AzureLocalPublicPathFlowsFinal-1Node-Step5-AKSFlows.dark.svg)
 
+---
+
 ### 5 bis. AKS Clusters on separated subnet from Infra subnet
 
 The diagram below shows HTTPS traffic handling and firewall requirements for Azure Kubernetes Service (AKS) cluster when running on separated subnet from the Azure Local infrastructure subnet. The example below represents how each type of TCP and HTTPS traffic from AKS subnet is being routed to help security teams to understand what ports or FQDN endpoints must be opened in their firewall or/and proxy that is filtering traffic from AKS subnet to infrastructure subnet and internet.
@@ -157,7 +159,7 @@ For additional information about these required firewall rules please check the 
 
 #### Firewall requirements on AKS subnet for HTTPS traffic not supported by Arc gateway (Pink arrow traffic 🟥)
 
-Although when running Arc gateway on the Azure Local hosts and AKS reduces the amount of HTTPS endpoints required to be opened on the AKS subnet, it is still required to allow access to those endpoints that are not supported by Arc gateway. Please check the following article for a comprehensive list of FQDN endpoints required for AKS on a separated subnet, when using Arc gateway [AKS subnet required FQDN endpoints when using Arc gateway](https://learn.microsoft.com/en-us/azure/aks/aksarc/arc-gateway-aks-arc)
+Although when running Arc gateway on the Azure Local hosts and AKS reduces the amount of HTTPS endpoints required to be opened on the AKS subnet, it is still required to allow access to those endpoints that are not supported by Arc gateway. Please check the following article for a comprehensive list of FQDN endpoints required for AKS on a separated subnet, when using Arc gateway [AKS subnet required FQDN endpoints when using Arc gateway](https://learn.microsoft.com/en-us/azure/aks/aksarc/arc-gateway-aks-arc#confirm-access-to-required-urls)
 
 ![AKS Clusters on separated subnet](./images/AzureLocalPublicPathFlowsFinal-AKSSubnetFirewallRequirements.dark.svg)
 
