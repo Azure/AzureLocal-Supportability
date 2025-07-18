@@ -219,18 +219,6 @@ If the switch port on TOR1 only allows VLAN 711, it will **drop any traffic tagg
 
 To ensure **redundancy, load balancing, and high availability**, all trunk ports on the ToR switches must be configured to **allow all required VLANs**, including Management (7), Compute (201), and both Storage VLANs (711 and 712).
 
-### Q: Management and Compute VLANs are allowed across the ToRs peer link. Do I also need to allow the Storage VLANs across the peer link between the two ToR switches?
-
-
-**A:** 
-In a **Switched** deployment, allowing Storage VLANs across the ToRs peer link is **not required** because each storage VLAN is pinned to a specific ToR.
-
-However, in a **Fully Converged** deployment, **Storage VLANs must be allowed across the ToRs peer link**. This is not for regular storage traffic, but to support failover scenarios.
-
-For example:  
-If Host1 has NIC1 connected to ToR1 and NIC2 connected to ToR2, and it uses Storage VLAN 711—under normal conditions, traffic flows through ToR1. If NIC1 fails, Host1 will send storage traffic through NIC2 and ToR2. Without VLAN 711 allowed across the ToRs peer link, that traffic cannot reach its destination and will be dropped.
-
-
 
 ## Reference Documents
 

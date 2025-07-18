@@ -477,6 +477,30 @@ By using **two storage VLANs** (e.g., 711 and 712), each mapped to separate NICs
 - ✅ Two storage VLANs ensure **RDMA-level failover** and **ToR-local communication**
 - 🚫 One VLAN risks **cross-ToR RDMA**, which reduces performance
 
+### Q: Management and Compute VLANs are allowed across the ToRs peer link. Do I also need to allow the Storage VLANs across the peer link between the two ToR switches?
+
+**A:** 
+- In a **Switched** deployment, **Storage VLANs do not need to be allowed** across the ToR peer link. Each host uses a dedicated Storage VLAN that maps to a specific ToR switch. This keeps storage traffic local, avoiding cross-ToR paths.
+
+- In a **Fully Converged** deployment, **Storage VLANs must be allowed** on the ToR peer link. While regular storage traffic doesn’t cross ToRs, **failover scenarios** make the peer link critical.
+
+#### Fully Converged Deployment
+
+- Host1  
+  → NIC1 → ToR1 (normal path)  
+  → NIC2 → ToR2 (failover path)  
+- Uses Storage VLAN 711  
+- If NIC1 fails, Host1 switches to NIC2  
+- **If VLAN 711 is not allowed on the peer link**, ToR2 cannot forward traffic to the storage network — **traffic is dropped**.
+
+#### Switched Deployment
+
+- Host1 → NIC1 → Storage VLAN 711 → ToR1  
+- Host1 → NIC2 → Storage VLAN 712 → ToR2  
+- Each ToR handles its own storage traffic  
+- No cross-ToR forwarding needed  
+- **No need to allow Storage VLANs across the peer link**
+
 
 ### Q: Are **DCB (Data Center Bridging)** features like **PFC** and **ETS** needed for RDMA in Azure Local, including both **RoCEv2** and **iWARP**?
 
