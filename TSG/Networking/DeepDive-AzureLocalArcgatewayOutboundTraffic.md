@@ -125,6 +125,7 @@ This ensures ARB appliance VM traffic is securely managed and compliant with you
 
 This diagram shows HTTPS traffic handling for Azure Kubernetes Service (AKS) clusters within Azure Local:
 
+- This scenario represents AKS cluster running on the same subnet used for Azure Local infrastructure. If AKS cluster is running on a separated subnet, please check the next scenario 5bis.
 - AKS cluster Control Plane VM routes HTTPS traffic through the Cluster IP proxy on port 40343.
 - AKS Worker Node VM routes HTTPS traffic through the Cluster IP proxy on port 40343.
 - The Cluster IP proxy securely forwards allowed traffic through the Arc gateway's HTTPS tunnel to Azure endpoints.
@@ -137,15 +138,20 @@ This ensures AKS clusters maintain secure and compliant outbound connectivity.
 
 ### 5 bis. AKS Clusters on separated subnet from Infra subnet
 
-This diagram shows HTTPS traffic handling and firewall requirements for Azure Kubernetes Service (AKS) cluster when running on separated subnet from the Azure Local infrastructure subnet. The example below represents how each type of TCP and HTTPS traffic from AKS subnet is being routed to help security teams to understand what ports or FQDN endpoints must be opened in their firewall or/and proxy that is filtering traffic from AKS subnet to infrastructure subnet and internet.
+The diagram below shows HTTPS traffic handling and firewall requirements for Azure Kubernetes Service (AKS) cluster when running on separated subnet from the Azure Local infrastructure subnet. The example below represents how each type of TCP and HTTPS traffic from AKS subnet is being routed to help security teams to understand what ports or FQDN endpoints must be opened in their firewall or/and proxy that is filtering traffic from AKS subnet to infrastructure subnet and internet.
 
 #### Firewall requirements for traffic between AKS subnet and Azure Local infrastructure subnet (light blue 📘 and light yellow arrows 📒)
 
-- AKS subnet must have access to Azure Local Cluster IP on port 40343. Firewall must be configured to allow this traffic in both L4 and L7 for HTTPS and HTTP Connect. (light blue arrow).
-- AKS subnet must have access to Azure Local Cluster IP on port 55000. Firewall must be configured to allow this TCP traffic. (light blue arrow).
-- AKS subnet must have access to Azure Local Cluster IP on port 65000. Firewall must be configured to allow this TCP traffic. (light light arrow).
-- Bidirectional traffic from AKS subnet to Azure Local infra subnet and vice versa must access TCP port 22. Firewall must be configured to allow this traffic. (light yellow arrows).
-- Bidirectional traffic from AKS subnet to Azure Local infra subnet and vice versa must access TCP port 6443. Firewall must be configured to allow this traffic. (light yellow arrows).
+- AKS subnet must have access to Azure Local Cluster IP on port 40343. 
+  - Firewall must be configured to allow this traffic in both L4 and L7 for HTTPS and HTTP Connect. (light blue arrow).
+- AKS subnet must have access to Azure Local Cluster IP on port 55000. 
+  - Firewall must be configured to allow this TCP traffic. (light blue arrow).
+- AKS subnet must have access to Azure Local Cluster IP on port 65000. 
+  - Firewall must be configured to allow this TCP traffic. (light light arrow).
+- Bidirectional traffic from AKS subnet to Azure Local infra subnet and vice versa must access TCP port 22. 
+  - Firewall must be configured to allow this traffic. (light yellow arrows).
+- Bidirectional traffic from AKS subnet to Azure Local infra subnet and vice versa must access TCP port 6443. 
+  - Firewall must be configured to allow this traffic. (light yellow arrows).
 
 For additional information about these required firewall rules please check the following AKS article: [AKS subnet required ports when using Arc gateway](https://learn.microsoft.com/en-us/azure/aks/aksarc/network-system-requirements?branch=main&branchFallbackFrom=pr-en-us-18420#network-port-and-cross-vlan-requirements)
 
@@ -164,6 +170,7 @@ This diagram explains HTTPS traffic handling for Azure Local virtual machines (V
 - Each Azure Local VM uses its own dedicated Arc proxy to route HTTPS traffic.
 - Allowed HTTPS traffic is securely tunneled through the Arc gateway to Azure public endpoints.
 - Non-allowed traffic is redirected to your firewall/proxy for security enforcement.
+- If Azure Local VMs are running on a separated subnet from the infrastructure you will need to configure the firewall/proxy to allow the traffic from that subnet.
 
 This ensures Azure Local VMs have secure, controlled, and compliant outbound connectivity.
 
