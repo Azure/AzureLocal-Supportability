@@ -135,6 +135,32 @@ This ensures AKS clusters maintain secure and compliant outbound connectivity.
 
 ![AKS Clusters HTTPS Traffic](./images/AzureLocalPublicPathFlowsFinal-1Node-Step5-AKSFlows.dark.svg)
 
+### 5 bis. AKS Clusters on separated subnet from Infra subnet
+
+This diagram shows HTTPS traffic handling and firewall requirements for Azure Kubernetes Service (AKS) cluster when running on separated subnet from infrastructure subnet. The example below represents how each type of TCP and HTTPS traffic from AKS subnet is being routed to help security teams to understand what ports or FQDN endpoints must be opened in their firewall or/and proxy that is filtering traffic from AKS subnet to infrastructure subnet and internet.
+
+#### Firewall requirements for traffic between AKS subnet and Azure Local infrastructure subnet (light blue and yellow arrows)
+
+- AKS subnet must have access to Azure Local Cluster IP on port 40343. Firewall must be configured to allow this traffic in both L4 and L7 for HTTPS and HTTP Connect. (light blue arrow)
+- AKS subnet must have access to Azure Local Cluster IP on port 55000. Firewall must be configured to allow this TCP traffic. (light blue arrow)
+- AKS subnet must have access to Azure Local Cluster IP on port 65000. Firewall must be configured to allow this TCP traffic. (light light arrow)
+- Bidirectional traffic from AKS subnet to Azure Local infra subnet and vice versa must access TCP port 22. Firewall must be configured to allow this traffic. (Yellow arrows)
+- Bidirectional traffic from AKS subnet to Azure Local infra subnet and vice versa must access TCP port 6443. Firewall must be configured to allow this traffic. (Yellow arrows).
+
+For additional information about these required firewall rules please check the following AKS article: [AKS subnet required ports when using Arc gateway](https://learn.microsoft.com/en-us/azure/aks/aksarc/network-system-requirements?branch=main&branchFallbackFrom=pr-en-us-18420#network-port-and-cross-vlan-requirements)
+
+### Firewall requirements on AKS subnet for HTTPS traffic not supported by Arc gateway (Pink arrow traffic)
+
+Although when running Arc gateway on the Azure Local hosts reduces the amount of HTTPS endpoints required to be opened on the AKS subnet, it is still required to allow access to those endpoints that are not supported by Arc gateway such as "https://login.microsoftonline.com". It is important to allow access to the FQDN endpoints in the firewall filtering traffic on the AKS subnet. Please check the following article for a comprehensive list of FQDN endpoints required for AKS when using Arc gateway [AKS subnet required FQDN endpoints when using Arc gateway](https://learn.microsoft.com/en-us/azure/aks/aksarc/arc-gateway-aks-arc)
+
+### Firewall requirements on AKS subnet for HTTPS traffic sent over the Arc gateway configured on the Pods (light green traffic ove Arc gateway tunnel from AKS pods)
+
+- The Cluster IP proxy securely forwards allowed traffic through the Arc gateway's HTTPS tunnel to Azure endpoints.
+- AKS Pods creates the Arc gateway connection to route HTTPS traffic over the Arc gateway HTTP connect tunnel.
+- Traffic not permitted by the Arc gateway is sent to your firewall/proxy for further security checks.
+
+![AKS Clusters on separated subnet](./images/AzureLocalPublicPathFlowsFinal-AKSSubnetFirewallRequirements.dark.svg)
+
 ---
 
 ### 6. Azure Local VMs HTTPS Traffic via Dedicated Arc Proxy
