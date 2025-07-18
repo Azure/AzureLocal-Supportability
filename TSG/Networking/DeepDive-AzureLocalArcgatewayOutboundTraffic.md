@@ -144,16 +144,16 @@ The diagram below shows HTTPS traffic handling and firewall requirements for Azu
 
 #### Firewall requirements for traffic between AKS subnet and Azure Local infrastructure subnet (light blue 📘 and light yellow arrows 📒)
 
-- AKS subnet must have access to Azure Local Cluster IP on port 40343. 
-  - Firewall must be configured to allow this traffic in both L4 and L7 for HTTPS and HTTP Connect. (light blue arrow).
-- AKS subnet must have access to Azure Local Cluster IP on port 55000. 
-  - Firewall must be configured to allow this TCP traffic. (light blue arrow).
-- AKS subnet must have access to Azure Local Cluster IP on port 65000. 
-  - Firewall must be configured to allow this TCP traffic. (light light arrow).
-- Bidirectional traffic from AKS subnet to Azure Local infra subnet and vice versa must access TCP port 22. 
-  - Firewall must be configured to allow this traffic. (light yellow arrows).
-- Bidirectional traffic from AKS subnet to Azure Local infra subnet and vice versa must access TCP port 6443. 
-  - Firewall must be configured to allow this traffic. (light yellow arrows).
+1. AKS subnet must have access to Azure Local Cluster IP on port 40343.
+   - Firewall must be configured to allow this traffic in both L4 and L7 for HTTPS and HTTP Connect. (light blue arrow).
+2. AKS subnet must have access to Azure Local Cluster IP on port 55000.
+   - Firewall must be configured to allow this TCP traffic. (light blue arrow).
+3. AKS subnet must have access to Azure Local Cluster IP on port 65000.
+   - Firewall must be configured to allow this TCP traffic. (light light arrow).
+4. Bidirectional traffic from AKS subnet to Azure Local infra subnet and vice versa must access TCP port 22.
+   - Firewall must be configured to allow this traffic. (light yellow arrows).
+5. Bidirectional traffic from AKS subnet to Azure Local infra subnet and vice versa must access TCP port 6443.
+   - Firewall must be configured to allow this traffic. (light yellow arrows).
 
 For additional information about these required firewall rules please check the following AKS article: [AKS subnet required ports when using Arc gateway](https://learn.microsoft.com/en-us/azure/aks/aksarc/network-system-requirements?branch=main&branchFallbackFrom=pr-en-us-18420#network-port-and-cross-vlan-requirements)
 
