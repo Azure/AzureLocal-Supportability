@@ -30,6 +30,7 @@
       - [Compute/Management Intent](#computemanagement-intent)
       - [Configuration Analysis](#configuration-analysis)
       - [Storage Intent TOR 1](#storage-intent-tor-1)
+      - [Configuration Details](#configuration-details)
       - [Heartbeat/iBGP](#heartbeatibgp)
       - [MLAG](#mlag)
     - [BGP Routing](#bgp-routing)
@@ -325,6 +326,8 @@ If your Azure Local deployment does not utilize SDN features, the MTU can be set
 
 #### Storage Intent TOR 1
 
+These interfaces connect to Azure Local nodes' dedicated storage NICs (p-NIC C interfaces) and are specifically configured to support RDMA traffic for Storage Spaces Direct operations. The configuration ensures lossless transport and optimal performance for storage workloads.
+
 ```console
 interface Ethernet1/21
   description Switched-Storage
@@ -355,6 +358,43 @@ interface Ethernet1/22
   no shutdown
 ```
 
+
+#### Configuration Details
+
+**Physical Connectivity**:
+
+- **Ethernet1/21**: Connects to **Node1 p-NIC C** (dedicated storage interface)
+- **Ethernet1/22**: Connects to **Node2 p-NIC C** (dedicated storage interface)
+- **Pattern**: All p-NIC C interfaces from every Azure Local node connect to TOR1 for storage traffic isolation
+
+**VLAN Configuration**:
+
+- **VLAN 99 (Native)**: Configured as the default native VLAN to capture any untagged traffic. This serves as a security boundary and operational best practice, ensuring that misconfigured or untagged frames are isolated from production storage traffic.
+- **VLAN 711 (Storage)**: The dedicated storage intent VLAN that carries all RDMA traffic for Storage Spaces Direct operations. Each storage interface is assigned to only one storage VLAN (711 for TOR1, 712 for TOR2) to maintain traffic isolation and prevent cross-switch storage communication.
+
+**LLDP Integration**:
+
+- **priority-flow-control mode on send-tlv**: Enables LLDP transmission of Priority Flow Control capabilities and Data Center Bridging Exchange (DCBX) information from the ToR switch to the Azure Local nodes. The switch advertises its QoS configuration, PFC capabilities, and traffic class mappings to the connected nodes. Azure Local nodes operate in "willing mode 0" (non-willing mode), meaning they will not accept or apply DCBX configuration changes from the switch. Instead, Azure Local uses this DCBX information strictly for diagnostic and validation purposes - allowing administrators and support teams to verify that the switch interface configuration matches the expected QoS settings and troubleshoot any configuration mismatches during deployment or operation.
+
+**MTU Configuration**:
+
+- **MTU 9216**: Configures jumbo frame support, but actual utilization depends on the RDMA transport protocol:
+  - **iWARP-based RDMA**: Utilizes the configured jumbo frames (9216 bytes) for improved performance and reduced CPU overhead
+  - **RoCEv2-based RDMA**: Operates with standard Ethernet frames (1500 bytes) and ignores the jumbo frame configuration, as RoCEv2 handles frame segmentation differently
+
+**Quality of Service**:
+
+- **service-policy type qos input AZS_SERVICES**: Applies the QoS policy that enables traffic classification, bandwidth guarantees, and congestion management for storage and cluster heartbeat traffic. This policy ensures that storage RDMA traffic receives appropriate priority and lossless transport characteristics.
+
+**Lossless Transport**:
+
+- **Priority Flow Control (PFC)**: Combined with the QoS policy, PFC ensures lossless delivery of storage traffic by providing per-priority pause capabilities, preventing packet drops that would severely impact RDMA performance.
+
+> [!NOTE]
+> **TOR2 Storage Configuration**: The corresponding interfaces on TOR2 (connecting to p-NIC D) would be configured identically but allow VLAN 712 instead of VLAN 711, maintaining storage traffic isolation between the two ToR switches.
+
+> [!IMPORTANT]
+> **RDMA Protocol Considerations**: Verify your Azure Local cluster's RDMA configuration (iWARP vs. RoCEv2) to ensure optimal switch configuration. While jumbo frames benefit iWARP deployments, they are not utilized by RoCEv2. Properly configure the MTU and QoS settings based on the deployed RDMA protocol to achieve the best performance and reliability for storage workloads.
 
 #### Heartbeat/iBGP
 
