@@ -396,6 +396,8 @@ interface Ethernet1/22
 
 #### Heartbeat/iBGP
 
+The iBGP peer link provides dedicated connectivity between TOR1 and TOR2 for BGP route exchange and high-availability communications. This link operates independently of the vPC peer link and ensures reliable routing convergence and failover capabilities.
+
 ```console
 interface port-channel50
   description iBGP_PEER_LINK
@@ -420,7 +422,50 @@ interface Ethernet1/42
   no shutdown
 ```
 
+**Configuration Details**
 
+**Physical Connectivity**:
+
+- **Ethernet1/41**: First physical interface in the iBGP peer link bundle
+- **Ethernet1/42**: Second physical interface providing redundancy and increased bandwidth
+- **Port-Channel 50**: LACP-based aggregation of the two physical interfaces for high availability
+
+**Link Aggregation**:
+
+- **LACP Active Mode**: Both interfaces are configured with `channel-group 50 mode active`, ensuring active LACP negotiation with the peer switch. This provides automatic failover if one physical link fails and enables load balancing across both interfaces.
+
+**IP Addressing**:
+
+- **IP Address 10.71.55.25/30**: Point-to-point /30 subnet providing efficient IP utilization. TOR1 uses .25/30, while TOR2 would be configured with .26/30. This dedicated subnet isolates BGP traffic from other network segments and provides a reliable communication path for routing protocol exchanges.
+
+**MTU Configuration**:
+
+- **MTU 9216**: Jumbo frame configuration supports efficient routing table exchanges and reduces fragmentation for large BGP updates. This is particularly beneficial in environments with extensive route advertisements or frequent topology changes.
+
+**Interface Optimization**:
+
+- **Link Status Logging**: Enabled on all interfaces to provide visibility into link state changes, critical for troubleshooting routing convergence issues
+
+**BGP Integration**:
+
+This port-channel serves as the transport for iBGP sessions between TOR1 and TOR2, enabling:
+
+- **Route Synchronization**: Ensures both switches maintain consistent routing tables for Azure Local network segments
+- **Failover Coordination**: Provides reliable communication for BGP convergence during link or device failures  
+- **Load Balancing**: Supports ECMP (Equal Cost Multi-Path) routing decisions across both ToR switches
+
+> [!NOTE]
+> **TOR2 Configuration**: The corresponding configuration on TOR2 would be identical except for the IP address:
+>
+> ```console
+> interface port-channel50
+>   ip address 10.71.55.26/30
+> ```
+>
+> This creates the point-to-point link between the two switches for iBGP communication.
+
+> [!IMPORTANT]
+> **Separation from vPC Peer Link**: This iBGP peer link operates independently of the vPC peer link (port-channel 101) to ensure routing protocol stability. The separation prevents potential issues where vPC control traffic could interfere with BGP convergence during failover scenarios.
 
 #### HSRP TOR to TOR Link
 
