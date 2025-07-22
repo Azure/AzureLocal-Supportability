@@ -35,7 +35,7 @@
       - [HSRP TOR to TOR Link](#hsrp-tor-to-tor-link)
       - [HSRP Peer Link](#hsrp-peer-link)
     - [BGP Routing](#bgp-routing)
-  - [Example SDN Configuration](#example-sdn-configuration)
+  - [Example SDN and Gateway Configuration](#example-sdn-and-gateway-configuration)
   - [References Documents](#references-documents)
 
 ## Scope
@@ -514,7 +514,7 @@ This peer link enables critical HSRP functionality between TOR1 and TOR2:
 
 [Azure Local BGP Routing][BGPConfig]
 
-## Example SDN Configuration
+## Example SDN and Gateway Configuration
 
 [Azure Local SDN and Gateway configuration][AZSDN]
 
