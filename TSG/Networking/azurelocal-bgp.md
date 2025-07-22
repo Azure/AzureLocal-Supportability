@@ -1,3 +1,27 @@
+# BGP Routing Configuration for Azure Local
+
+This document provides BGP routing configuration guidance for Azure Local cluster deployments using Cisco Nexus switches. The configuration establishes Layer 3 connectivity, redundant gateway services, and external network reachability for Azure Local environments.
+
+## Overview
+
+BGP serves as the primary routing protocol for Azure Local ToR switch configurations, enabling:
+
+- **External Connectivity**: Provides routing between Azure Local clusters and external networks through upstream border routers
+- **High Availability**: Implements redundant paths and automatic failover for continuous cluster connectivity
+- **Load Balancing**: Distributes traffic across multiple uplinks using ECMP (Equal Cost Multi-Path) routing
+- **Route Control**: Filters and controls route advertisements to maintain network security and optimize routing tables
+
+## Configuration Applicability
+
+This BGP configuration applies to both Azure Local deployment patterns:
+
+- **Hyper-Converged Deployments**: Where management, compute, and storage traffic share network interfaces with QoS-based traffic separation
+- **Disaggregated Deployments**: Where storage traffic uses dedicated network interfaces and isolated VLANs
+
+The configuration implements iBGP sessions between ToR switches for route synchronization and eBGP sessions to upstream border routers for external connectivity. Storage networks remain at Layer 2 only, using RDMA protocols that bypass traditional IP routing.
+
+## BGP Configuration
+
 ### BGP Routing
 
 The BGP routing configuration establishes Layer 3 connectivity for Azure Local environments, providing redundant gateway services and external network reachability. This configuration applies to both hyper-converged and disaggregated Azure Local deployments, implementing both iBGP sessions between ToR switches and eBGP sessions to upstream border routers.
@@ -101,3 +125,8 @@ The BGP process advertises the following networks:
 
 > [!IMPORTANT]
 > **Storage Network Exclusion**: Storage networks are intentionally excluded from BGP advertisements in both hyper-converged and disaggregated Azure Local configurations. Storage traffic operates exclusively at Layer 2 using RDMA protocols (RoCEv2 or iWARP) that bypass the traditional TCP/IP stack, eliminating the need for Layer 3 routing. This applies to both dedicated storage VLANs in disaggregated deployments and storage traffic classes in hyper-converged deployments.
+
+## Related Documentation
+
+- [Disaggregated Switch Storage Design](./Disaggregated_Switched_Storage.md) - Complete switch configuration guide for Azure Local disaggregated deployments, including VLAN design, interface configuration, HSRP setup, and physical connectivity patterns
+- [Quality of Service (QoS) Policy](./qos.md) - QoS configuration for Azure Local environments, including traffic classification, bandwidth allocation, and lossless transport for storage traffic
