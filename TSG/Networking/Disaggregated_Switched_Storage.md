@@ -32,7 +32,7 @@
       - [Storage Intent TOR 1](#storage-intent-tor-1)
       - [Configuration Details](#configuration-details)
       - [Heartbeat/iBGP](#heartbeatibgp)
-      - [MLAG](#mlag)
+      - [HSRP TOR to TOR Link](#hsrp-tor-to-tor-link)
     - [BGP Routing](#bgp-routing)
   - [Example SDN Configuration](#example-sdn-configuration)
   - [Layer 3 Forwarding Gateway](#layer-3-forwarding-gateway)
@@ -158,15 +158,13 @@ feature bgp
 feature interface-vlan
 feature hsrp
 feature lacp
-feature vpc
 feature lldp
 ```
 
 - **BGP** is used as the primary routing protocol.
 - **interface-vlan** enables SVI creation for management and compute networks.
 - **LACP** is used for port-channels between ToR devices.
-- **HSRP** provides gateway redundancy for SVIs, used in conjunction with vPC for high availability.
-- **vPC** (Cisco's MLAG implementation) is used for switch redundancy and active-active uplinks.
+- **HSRP** provides gateway redundancy for SVIs.
 - **LLDP** is used to transmit host interface configuration values, which can be leveraged by Azure Local for enhanced support scenarios.
 
 ## QOS
@@ -422,29 +420,20 @@ interface Ethernet1/42
   no shutdown
 ```
 
-#### MLAG
+#### HSRP TOR to TOR Link
 
 ```console
-vpc domain 2
-  peer-switch
-  role priority 1
-  peer-keepalive destination 100.71.55.26 source 100.71.55.25 vrf default
-  delay restore 150
-  peer-gateway
-  auto-recovery
-
 interface port-channel101
-  description VPC:MLAG_PEER
+  description HSRP_PEER
   switchport
   switchport mode trunk
   switchport trunk native vlan 99
   switchport trunk allowed vlan 7-8
   spanning-tree port type network
   logging event port link-status
-  vpc peer-link
 
 interface Ethernet1/49
-  description MLAG_Peer
+  description HSRP_PEER
   no cdp enable
   switchport
   switchport mode trunk
@@ -455,7 +444,7 @@ interface Ethernet1/49
   no shutdown
 
 interface Ethernet1/50
-  description MLAG_Peer
+  description HSRP_PEER
   no cdp enable
   switchport
   switchport mode trunk
@@ -466,20 +455,14 @@ interface Ethernet1/50
   no shutdown
 ```
 
+
+
 ### BGP Routing
 
 ```console
 !!! Only advertise the default route
 ip prefix-list DefaultRoute seq 10 permit 0.0.0.0/0
 ip prefix-list DefaultRoute seq 50 deny 0.0.0.0/0 le 32
-
-!!! Receive BGP Advertisements for 0.0.0.0/0, deny all others.
-ip prefix-list FROM-BORDER seq 10 permit 0.0.0.0/0
-ip prefix-list FROM-BORDER seq 30 deny 0.0.0.0/0 le 32
-
-!!! Advertise any network except for 0.0.0.0/0
-ip prefix-list TO-BORDER seq 5 deny 0.0.0.0/0
-ip prefix-list TO-BORDER seq 10 permit 0.0.0.0/0 le 32
 
 router bgp 64511
   router-id <Loopback-IP>
@@ -500,19 +483,17 @@ router bgp 64511
     remote-as 64404
     description TO_Border1
     address-family ipv4 unicast
-      prefix-list FROM-BORDER in
-      prefix-list TO-BORDER out
+      prefix-list DefaultRoute in
       maximum-prefix 12000 warning-only
   neighbor <Border2-IP>
     remote-as 64404
     description TO_Border2
     address-family ipv4 unicast
-      prefix-list FROM-BORDER in
-      prefix-list TO-BORDER out
+      prefix-list DefaultRoute in
       maximum-prefix 12000 warning-only
   neighbor <Port-Channel50-IP>
     remote-as 64511
-    description TO_TOR2
+    description TO_TOR2_IBGP
     address-family ipv4 unicast
       maximum-prefix 12000 warning-only
 ```
