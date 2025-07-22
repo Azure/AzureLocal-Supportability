@@ -36,7 +36,6 @@
       - [HSRP Peer Link](#hsrp-peer-link)
     - [BGP Routing](#bgp-routing)
   - [Example SDN Configuration](#example-sdn-configuration)
-  - [Layer 3 Forwarding Gateway](#layer-3-forwarding-gateway)
   - [References Documents](#references-documents)
 
 ## Scope
@@ -517,7 +516,7 @@ This peer link enables critical HSRP functionality between TOR1 and TOR2:
 
 ## Example SDN Configuration
 
-## Layer 3 Forwarding Gateway
+[Azure Local SDN and Gateway configuration][AZSDN]
 
 ## References Documents
 
@@ -546,3 +545,4 @@ This peer link enables critical HSRP functionality between TOR1 and TOR2:
 [ECN]: ./ecn.md "Explicit Congestion Notification (ECN) is a network congestion management mechanism that enables switches and routers to signal congestion without dropping packets. In Azure Local QoS implementations, ECN is specifically configured for storage (RDMA) traffic to maintain lossless transport while providing congestion feedback to endpoints."
 [AzureLocalNetworkPattern]: https://learn.microsoft.com/en-us/azure/azure-local/plan/choose-network-pattern "This article describes a set of network patterns references to architect, deploy, and configure Azure Local using either one, two or three physical hosts. Depending on your needs or scenarios, you can go directly to your pattern of interest. Each pattern is described as a standalone entity and includes all the network components for specific scenarios."
 [BGPConfig]: ./azurelocal-bgp.md "BGP routing configuration for Azure Local environments, including iBGP and eBGP setup, route filtering, and load balancing for both hyper-converged and disaggregated deployments."
+[AZSDN]: ./azurelocal-sdn-gateway.md
