@@ -463,7 +463,7 @@ This port-channel serves as the transport for iBGP sessions between TOR1 and TOR
 > This creates the point-to-point link between the two switches for iBGP communication.
 
 > [!IMPORTANT]
-> **Separation from vPC Peer Link**: This iBGP peer link operates independently of the vPC peer link (port-channel 101) to ensure routing protocol stability. The separation prevents potential issues where vPC control traffic could interfere with BGP convergence during failover scenarios.
+> **Separation from vPC Peer Link**: This iBGP peer link operates independently of the HSRP peer link (port-channel 101) to ensure routing protocol stability.
 
 #### HSRP TOR to TOR Link
 
