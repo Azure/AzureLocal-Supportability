@@ -214,6 +214,10 @@ interface Vlan7
   no ip redirects
   ip address 10.101.176.2/26
   no ipv6 redirects
+  hsrp version 2
+  hsrp 7
+    priority 150 forwarding-threshold lower 1 upper 150
+    ip 10.101.176.1
 interface Vlan8
   description Compute_8
   no shutdown
@@ -221,13 +225,17 @@ interface Vlan8
   no ip redirects
   ip address 10.101.177.2/26
   no ipv6 redirects
+  hsrp version 2
+  hsrp 8
+    priority 150 forwarding-threshold lower 1 upper 150
+    ip 10.101.177.1
 ```
 
 #### VLAN Design Rationale
 
-**Management VLAN (VLAN 7)**: Configured as an SVI with IP address 10.101.176.2/26, this VLAN provides out-of-band management access to Azure Local nodes. This network segment carries Windows Admin Center traffic, PowerShell remoting, and other administrative communications. The SVI enables the ToR switch to act as the default gateway for management traffic, providing Layer 3 routing to external management systems and administrative networks.
+**Management VLAN (VLAN 7)**: Configured as an SVI with IP address 10.101.176.2/26, this VLAN provides out-of-band management access to Azure Local nodes. This network segment carries Windows Admin Center traffic, PowerShell remoting, and other administrative communications. The SVI enables the ToR switch to act as the default gateway for management traffic, providing Layer 3 routing to external management systems and administrative networks. HSRP is configured with virtual IP 10.101.176.1 and priority 150 to provide gateway redundancy with TOR2.
 
-**Compute VLAN (VLAN 8)**: Configured as an SVI with IP address 10.101.177.2/26, this VLAN handles Azure Local virtual machine traffic and compute workloads. The SVI provides gateway services for tenant VMs and enables north-south traffic flow between Azure Local workloads and external networks. This configuration supports SDN virtual networks and provides connectivity for Azure Arc-enabled services.
+**Compute VLAN (VLAN 8)**: Configured as an SVI with IP address 10.101.177.2/26, this VLAN handles Azure Local virtual machine traffic and compute workloads. The SVI provides gateway services for tenant VMs and enables north-south traffic flow between Azure Local workloads and external networks. This configuration supports SDN virtual networks and provides connectivity for Azure Arc-enabled services. HSRP is configured with virtual IP 10.101.177.1 and priority 150 to ensure high availability gateway services across both ToR switches.
 
 **Storage VLAN (VLAN 711)**: This VLAN operates exclusively at Layer 2 and intentionally has no SVI configuration. Storage traffic uses RDMA protocols (RoCEv2 or iWARP) that bypass the traditional TCP/IP stack, eliminating the need for Layer 3 routing. VLAN 711 is isolated to TOR1 only and carries storage traffic from Azure Local nodes connected to TOR1 (p-NIC C interfaces). This ensures optimal performance and maintains the lossless characteristics required for Storage Spaces Direct operations.
 
