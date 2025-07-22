@@ -407,7 +407,6 @@ interface port-channel50
 
 interface Ethernet1/41
   description iBGP_PEER_LINK
-  no cdp enable
   mtu 9216
   logging event port link-status
   channel-group 50 mode active
@@ -415,7 +414,6 @@ interface Ethernet1/41
 
 interface Ethernet1/42
   description iBGP_PEER_LINK
-  no cdp enable
   mtu 9216
   logging event port link-status
   channel-group 50 mode active
@@ -481,7 +479,6 @@ interface port-channel101
 
 interface Ethernet1/49
   description HSRP_PEER
-  no cdp enable
   switchport
   switchport mode trunk
   switchport trunk native vlan 99
@@ -492,7 +489,6 @@ interface Ethernet1/49
 
 interface Ethernet1/50
   description HSRP_PEER
-  no cdp enable
   switchport
   switchport mode trunk
   switchport trunk native vlan 99
