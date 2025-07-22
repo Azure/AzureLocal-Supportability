@@ -69,7 +69,8 @@ There are three primary physical network deployment patterns for Azure Local, de
 | **Switchless**      | 2 NICs per host to switch (M + C) + (N−1) direct host-to-host NICs for S | Trunk to host with M, C VLANs only; no S VLANs on ToRs | Low-cost, small-site or edge deployments without storage switches |
 
 
-> ⚠️ **Note:**  Storage VLANs are preferably configured as **Layer 2 (L2) VLANs without IP subnets** to simplify the overall network design. Since storage traffic is **tagged by Azure Local hosts**, make sure these VLANs are always configured as **tagged VLANs (trunk ports)** on the **ToR (Top of Rack)** switches.
+> [!IMPORTANT]  
+> Storage VLANs are preferably configured as **Layer 2 (L2) VLANs without IP subnets** to simplify the overall network design. Since storage traffic is **tagged by Azure Local hosts**, make sure these VLANs are always configured as **tagged VLANs (trunk ports)** on the **ToR (Top of Rack)** switches.
 
 
 ---
@@ -101,7 +102,8 @@ The physical network must be configured in alignment with Azure Local’s host n
 | **LLDP with TLVs**    | Switches must support LLDP with VLAN, ETS, and PFC TLVs, which will be used for network discovery and monitoring.              |
 | **BGP Support**       | Required for SDN compute overlays.                                    |
 
-> 💡 These are high-level requirements. Please refer to the official documentation to ensure full alignment with your specific deployment needs.
+> [!NOTE]
+>  These are high-level requirements. Please refer to the official documentation to ensure full alignment with your specific deployment needs.
 
 This tool is designed to automate the generation of Azure Local switch configurations based on input JSON files. In addition to automation, it includes sample configuration files that can be used as reference. The tool is actively maintained and will continue to evolve in alignment with Azure Local's latest requirements.
 🔗 [AzureStack_Network_Switch_Config_Generator](https://github.com/microsoft/AzureStack_Network_Switch_Config_Generator)
@@ -137,7 +139,8 @@ flowchart TD
 ```
 #### Log Collection & Analysis
 
-> Note: The following examples use Cisco NX-OS for reference. Please adjust the commands based on your switch vendor's CLI.
+> [!NOTE]
+> The following examples use Cisco NX-OS for reference. Please adjust the commands based on your switch vendor's CLI.
 
 ##### Interface Configuration Verification
 - `show run interface <interface_name>`  
@@ -147,7 +150,7 @@ flowchart TD
 
 
 
-> In this example, the Azure Local is deployed with Switched pattern, 7 is M, 201 is C, 711 is S1, and 712 is S2. So the ToR1 and ToR2 Hosts-Facing ports should be configured as follows:
+In this example, the Azure Local is deployed with **Switched** pattern, **7 is M, 201 is C, 711 is S1, and 712 is S2**. So the ToR1 and ToR2 Hosts-Facing ports should be configured as follows:
 
 ###### TOR1
 ``` console
@@ -515,7 +518,8 @@ Overall Comparison:
 - **iWARP** uses **TCP**, which can handle **packet loss** but is **slower**.  
   → It **doesn’t require PFC**, but enabling **DCB** can still help reduce latency.
 
-> ⚠️ Even though **iWARP** uses reliable TCP transport and does **not mandate DCB**, enabling **PFC and ETS** can still help minimize congestion and latency, especially in mixed RDMA environments.  
+> [!NOTE]
+>  Even though **iWARP** uses reliable TCP transport and does **not mandate DCB**, enabling **PFC and ETS** can still help minimize congestion and latency, especially in mixed RDMA environments.  
 > Enabling DCB across the fabric ensures **consistent, predictable low-latency** behavior for RDMA workloads.
 
 ### Q: Why can't I see the storage IP in the ARP table, while the Compute and Management IPs are visible?

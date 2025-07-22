@@ -2,20 +2,26 @@
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Key Components](#key-components)
-- [Fully Converged Network Design – Physical Topology](#fully-converged-network-design--physical-topology)
-  - [Topology Diagram](#topology-diagram)
-  - [Example: Three-Host Cabling Map](#example-three-host-cabling-map)
-    - [Host 1](#host-1)
-    - [Host 2](#host-2)
-    - [Host 3](#host-3)
-  - [VLAN Architecture](#vlan-architecture)
-  - [ToR Switches](#tor-switches)
-    - [Interface & VLAN Configuration](#interface--vlan-configuration)
-    - [Validation in Lab Environment](#validation-in-lab-environment)
-- [Q&A](#qa)
-- [Reference Documents](#reference-documents)
+- [Azure Local - Fully Converged Physical Network Design \[Draft\]](#azure-local---fully-converged-physical-network-design-draft)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Key Components](#key-components)
+  - [Fully Converged Network Design – Physical Topology](#fully-converged-network-design--physical-topology)
+    - [Topology Diagram](#topology-diagram)
+    - [Example: Three-Host Cabling Map](#example-three-host-cabling-map)
+      - [Host 1](#host-1)
+      - [Host 2](#host-2)
+      - [Host 3](#host-3)
+    - [VLAN Architecture](#vlan-architecture)
+    - [ToR Switches](#tor-switches)
+      - [Interface \& VLAN Configuration](#interface--vlan-configuration)
+        - [Sample NX-OS Configuration (Simplified)](#sample-nx-os-configuration-simplified)
+      - [Validation in Lab Environment](#validation-in-lab-environment)
+        - [On Azure Local Host](#on-azure-local-host)
+        - [On ToR Switches](#on-tor-switches)
+  - [Q\&A](#qa)
+    - [Q: In Fully Converged Network Design, can I configure TOR1 only allow only Storage VLAN 711, and TOR2 only allow Storage VLAN 712?](#q-in-fully-converged-network-design-can-i-configure-tor1-only-allow-only-storage-vlan-711-and-tor2-only-allow-storage-vlan-712)
+  - [Reference Documents](#reference-documents)
 
 
 ## Overview
@@ -83,6 +89,7 @@ The following table shows physical connections between NICs and the Top-of-Rack 
 | Storage 1     | SMB over RDMA (path 1)              | 711     |
 | Storage 2     | SMB over RDMA (path 2)              | 712     |
 
+> [!NOTE]
 > Two storage VLANs are used to ensure **path-level redundancy** for RDMA traffic, enhancing **storage high availability**. Each VLAN can map to different physical NICs and ToR switches.
 
 ### ToR Switches
@@ -147,7 +154,8 @@ interface Ethernet1/1-3
   no shutdown
 ```
 
-> **Note**: QoS policies and routing design (e.g., uplinks, BGP/OSPF, default gateway) will be introduced in a separate document.
+> [!NOTE]
+> QoS policies and routing design (e.g., uplinks, BGP/OSPF, default gateway) will be introduced in a separate document.
 
 
 #### Validation in Lab Environment

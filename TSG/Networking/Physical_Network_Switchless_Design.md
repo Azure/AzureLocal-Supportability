@@ -360,14 +360,6 @@ Neighbor relationships are then established for three interfaces. Two of these n
 ip prefix-list DefaultRoute seq 10 permit 0.0.0.0/0
 ip prefix-list DefaultRoute seq 50 deny 0.0.0.0/0 le 32
 
-!!! Receive BGP Advertisements for 0.0.0.0/0, deny all others.
-ip prefix-list FROM-BORDER seq 10 permit 0.0.0.0/0
-ip prefix-list FROM-BORDER seq 30 deny 0.0.0.0/0 le 32
-
-!!! Advertise any network except for 0.0.0.0/0
-ip prefix-list TO-BORDER seq 5 deny 0.0.0.0/0
-ip prefix-list TO-BORDER seq 10 permit 0.0.0.0/0 le 32
-
 router bgp 64511
   router-id <Loopback-IP>
   bestpath as-path multipath-relax
