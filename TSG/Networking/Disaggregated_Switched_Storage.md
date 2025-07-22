@@ -398,13 +398,13 @@ interface Ethernet1/22
 
 ```console
 interface port-channel50
-  description VPC:HEARTBEAT
+  description iBGP_PEER_LINK
   logging event port link-status
   mtu 9216
-  ip address 100.71.55.25/30
+  ip address 10.71.55.25/30
 
 interface Ethernet1/41
-  description P2P_HEARTBEAT
+  description iBGP_PEER_LINK
   no cdp enable
   mtu 9216
   logging event port link-status
@@ -412,13 +412,15 @@ interface Ethernet1/41
   no shutdown
 
 interface Ethernet1/42
-  description P2P_HEARTBEAT
+  description iBGP_PEER_LINK
   no cdp enable
   mtu 9216
   logging event port link-status
   channel-group 50 mode active
   no shutdown
 ```
+
+
 
 #### HSRP TOR to TOR Link
 
