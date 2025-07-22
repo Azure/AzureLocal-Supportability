@@ -33,6 +33,7 @@
       - [Configuration Details](#configuration-details)
       - [Heartbeat/iBGP](#heartbeatibgp)
       - [HSRP TOR to TOR Link](#hsrp-tor-to-tor-link)
+      - [HSRP Peer Link](#hsrp-peer-link)
     - [BGP Routing](#bgp-routing)
   - [Example SDN Configuration](#example-sdn-configuration)
   - [Layer 3 Forwarding Gateway](#layer-3-forwarding-gateway)
@@ -498,48 +499,21 @@ interface Ethernet1/50
   no shutdown
 ```
 
+#### HSRP Peer Link
 
+The HSRP peer link provides Layer 2 connectivity between TOR1 and TOR2, enabling HSRP synchronization for management and compute network intents. This link ensures reliable gateway redundancy and enables seamless failover capabilities for Azure Local cluster connectivity.
+
+**HSRP Integration**:
+
+This peer link enables critical HSRP functionality between TOR1 and TOR2:
+
+- **Gateway Redundancy**: Supports HSRP hello message exchange between the switches for VLANs 7 and 8, ensuring seamless gateway failover for Azure Local nodes.
+- **State Synchronization**: Enables real-time synchronization of HSRP active/standby states and priority changes between the ToR switches.
+- **Preemption Control**: Facilitates coordinated failover using HSRP forwarding thresholds configured on the SVIs to prevent unnecessary state changes.
 
 ### BGP Routing
 
-```console
-!!! Only advertise the default route
-ip prefix-list DefaultRoute seq 10 permit 0.0.0.0/0
-ip prefix-list DefaultRoute seq 50 deny 0.0.0.0/0 le 32
-
-router bgp 64511
-  router-id <Loopback-IP>
-  bestpath as-path multipath-relax
-  log-neighbor-changes
-  address-family ipv4 unicast
-    network <Loopback-IP>/32
-    network <Border1-IP>/30
-    network <Border2-IP>/30
-    network <Port-Channel50-IP>/30
-    ! VLAN7
-    network 10.101.176.0/24
-    ! VLAN8
-    network 10.101.177.0/24
-    maximum-paths 8
-    maximum-paths ibgp 8
-  neighbor <Border1-IP>
-    remote-as 64404
-    description TO_Border1
-    address-family ipv4 unicast
-      prefix-list DefaultRoute in
-      maximum-prefix 12000 warning-only
-  neighbor <Border2-IP>
-    remote-as 64404
-    description TO_Border2
-    address-family ipv4 unicast
-      prefix-list DefaultRoute in
-      maximum-prefix 12000 warning-only
-  neighbor <Port-Channel50-IP>
-    remote-as 64511
-    description TO_TOR2_IBGP
-    address-family ipv4 unicast
-      maximum-prefix 12000 warning-only
-```
+[Azure Local BGP Routing][BGPConfig]
 
 ## Example SDN Configuration
 
@@ -571,3 +545,4 @@ router bgp 64511
 [rfc3168]: https://www.rfc-editor.org/rfc/rfc3168 "We begin by describing TCP's use of packet drops as an indication of congestion.  Next we explain that with the addition of active queue management (e.g., RED) to the Internet infrastructure, where routers detect congestion before the queue overflows, routers are no longer limited to packet drops as an indication of congestion.  Routers can instead set the Congestion Experienced (CE) codepoint in the IP header of packets from ECN-capable transports.  We describe when the CE codepoint is to be set in routers, and describe modifications needed to TCP to make it ECN-capable.  Modifications to other transport protocols (e.g., unreliable unicast or multicast, reliable multicast, other reliable unicast transport protocols) could be considered as those protocols are developed and advance through the standards process.  We also describe in this document the issues involving the use of ECN within IP tunnels, and within IPsec tunnels in particular."
 [ECN]: ./ecn.md "Explicit Congestion Notification (ECN) is a network congestion management mechanism that enables switches and routers to signal congestion without dropping packets. In Azure Local QoS implementations, ECN is specifically configured for storage (RDMA) traffic to maintain lossless transport while providing congestion feedback to endpoints."
 [AzureLocalNetworkPattern]: https://learn.microsoft.com/en-us/azure/azure-local/plan/choose-network-pattern "This article describes a set of network patterns references to architect, deploy, and configure Azure Local using either one, two or three physical hosts. Depending on your needs or scenarios, you can go directly to your pattern of interest. Each pattern is described as a standalone entity and includes all the network components for specific scenarios."
+[BGPConfig]: ./azurelocal-bgp.md "BGP routing configuration for Azure Local environments, including iBGP and eBGP setup, route filtering, and load balancing for both hyper-converged and disaggregated deployments."
