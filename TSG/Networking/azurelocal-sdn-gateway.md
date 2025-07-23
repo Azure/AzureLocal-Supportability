@@ -1,6 +1,33 @@
+# Azure Local SDN and Layer 3 Gateway Configuration
+
+This document provides configuration guidance for Software Defined Networking (SDN) gateway connectivity in Azure Local cluster deployments using Cisco Nexus switches. The configurations support both Layer 3 forwarding scenarios and SDN load balancer integration for Azure Local environments.
+
+## Overview
+
+Azure Local SDN gateway functionality enables connectivity between virtual networks running on Azure Local clusters and external physical networks. This capability is essential for hybrid scenarios where workloads need to communicate across both virtualized and traditional network infrastructure.
+
+### SDN Gateway Features
+
+- **Layer 3 Forwarding**: Provides routing between SDN virtual networks and external physical networks
+- **Load Balancer Integration**: Supports Azure Local Software Load Balancer (SLBMUX) for traffic distribution
+- **Dynamic Routing**: Uses BGP for automatic route advertisement and learning
+- **Static Routing**: Supports manual route configuration for controlled environments
+- **Multi-Tenant Support**: Enables isolated networking for different workloads and tenants
+
+### Configuration Applicability
+
+This SDN gateway configuration applies to both Azure Local deployment patterns:
+
+- **Hyper-Converged Deployments**: Where management, compute, and storage traffic share network interfaces with QoS-based traffic separation. SDN gateways utilize the compute network (typically VLAN 8) for external connectivity.
+
+- **Disaggregated Deployments**: Where storage traffic uses dedicated network interfaces and isolated VLANs. SDN gateways operate independently of storage networks, using the compute network infrastructure for external routing.
+
+The gateway configurations leverage the existing compute network infrastructure (VLAN 8 in the reference examples) while maintaining isolation from storage networks, which always remain at Layer 2 using RDMA protocols.
+
 ## Example SDN configuration
 
-This section of the BGP configuration is tailored to support an [Azure Local SDN](https://learn.microsoft.com/en-us/azure/azure-local/manage/load-balancers) scenario using VLAN8.
+This section of the BGP configuration is tailored to support an [Azure Local SDN](https://learn.microsoft.com/en-us/azure/azure-local/manage/load-balancers) scenario using VLAN8. 
+For complete BGP routing configuration details, including iBGP setup and route filtering, see the [Azure Local BGP Routing Configuration][BGP] document.
 
 **Dynamic BGP Neighbor Definition**:
 A BGP neighbor is defined using the 10.101.177.0/24 subnet, which corresponds to VLAN8 and is reserved for the SLBMUX. The SLBMUX can use any IP address within this subnet, so the configuration specifies the entire subnet as the neighbor. The remote AS is set to 65158, and the neighbor is labeled TO_SDN_SLBMUX for clarity. When a subnet is used as the BGP neighbor, the switch operates in passive mode and waits for the SLBMUX to initiate the BGP connection.
@@ -98,6 +125,7 @@ This approach is particularly useful in environments where dynamic routing proto
 
 ## Related Documentation
 
-[Azure Local BGP][BGP]
+- [Azure Local BGP Routing Configuration][BGP] - Complete BGP configuration for Azure Local environments
+- [Disaggregated Switch Storage Design](./Disaggregated_Switched_Storage.md) - Complete switch configuration guide for Azure Local disaggregated deployments
 
 [BGP]: ./azurelocal-bgp.md "BGP routing configuration for Azure Local environments, including iBGP and eBGP setup, route filtering, and load balancing for both hyper-converged and disaggregated deployments."
