@@ -1,14 +1,20 @@
-# Disaggregated Switch Storage Design
+# Azure Local Disaggregated Storage Network Design with Cisco Nexus Switches
+
+This document provides network configuration guidance for Azure Local clusters using disaggregated storage architecture with Cisco Nexus Top-of-Rack (ToR) switches.
 
 # DRAFT Document
 
 ![Disaggregated_Switched_Storage_Design](./images/Disaggregated_Switched_Storage.png)
 
-- [Disaggregated Switch Storage Design](#disaggregated-switch-storage-design)
+- [Azure Local Disaggregated Storage Network Design with Cisco Nexus Switches](#azure-local-disaggregated-storage-network-design-with-cisco-nexus-switches)
 - [DRAFT Document](#draft-document)
   - [Scope](#scope)
   - [Terminology](#terminology)
   - [Example Device](#example-device)
+  - [Prerequisites](#prerequisites)
+    - [Azure Local Cluster Requirements](#azure-local-cluster-requirements)
+    - [Network Infrastructure Requirements](#network-infrastructure-requirements)
+    - [RDMA Configuration](#rdma-configuration)
   - [Environment](#environment)
   - [Attributes](#attributes)
     - [Nodes](#nodes)
@@ -36,6 +42,12 @@
       - [HSRP Peer Link](#hsrp-peer-link)
     - [BGP Routing](#bgp-routing)
   - [Example SDN and Gateway Configuration](#example-sdn-and-gateway-configuration)
+  - [Configuration Validation](#configuration-validation)
+    - [Interface Status](#interface-status)
+    - [VLAN and SVI Status](#vlan-and-svi-status)
+    - [BGP and Routing](#bgp-and-routing)
+    - [QoS and PFC](#qos-and-pfc)
+    - [Azure Local Integration](#azure-local-integration)
   - [References Documents](#references-documents)
 
 ## Scope
@@ -63,13 +75,51 @@ Definitions
 - Model: Nexus 93180YC-FX
 - Firmware: 10.3 or greater recommended
 
+## Prerequisites
+
+Before implementing this configuration, ensure the following requirements are met:
+
+### Azure Local Cluster Requirements
+
+- Azure Local cluster with 2-16 nodes
+- Each node equipped with:
+
+  - 2x 25Gbps NICs for compute/management (p-NIC A/B)
+  - 2x RDMA-capable NICs for storage (p-NIC C/D supporting RoCEv2 or iWARP)
+- Switch Embedded Teaming (SET) configured on compute/management interfaces
+- Storage Spaces Direct configured for storage workloads
+
+### Network Infrastructure Requirements
+
+- 2x Cisco Nexus 93180YC-FX switches (or equivalent meeting [Azure Local physical network requirements][AzureLocalPhysicalNetworkRequirements])
+- NX-OS firmware version 10.3 or later
+- Sufficient port capacity for node connections and inter-switch links
+- Layer 3 connectivity to border routers/upstream infrastructure
+
+**Switch Requirements**: Ensure your switch hardware meets the specifications outlined in the [Azure Local Physical Network Requirements][AzureLocalPhysicalNetworkRequirements] documentation, including:
+
+- Port density and bandwidth requirements
+- Buffer sizing for lossless RDMA transport
+- QoS and Priority Flow Control (PFC) capabilities
+- LLDP and DCBX support for automatic configuration discovery
+
+### RDMA Configuration
+
+- Determine RDMA protocol: RoCEv2 or iWARP
+- Configure appropriate MTU settings based on RDMA protocol choice
+- Ensure PFC and QoS policies align with RDMA requirements
+
 ## Environment
 
-This document discusses a 2-16 node environment where the Management and Compute network intents share a SET team interface. Storage1 and Storage2 network intents utilize isolated network interfaces and connect to a switch to support storage traffic.
+This document discusses a 2-16 node environment where the Management and Compute network intents share a SET team interface. Storage1 and Storage2 network intents utilize isolated network interfaces and connect to separate ToR switches to support storage traffic isolation.
 
-Within this environment, there are two ToR devices (TOR1 and TOR2). Both devices are connected to each other using an MLAG (vPC) configuration and a dedicated port-channel for MLAG heartbeat and iBGP routing.
+Within this environment, there are two ToR devices (TOR1 and TOR2). The devices are configured with HSRP for gateway redundancy and iBGP for routing, but do NOT use vPC (MLAG) for the storage network interfaces to maintain strict traffic isolation required for RDMA operations.
 
-The ToR devices are set up as Layer 2/Layer 3 devices within an iBGP configuration.
+**Key Architecture Points:**
+- Management and Compute intents: Utilize redundancy across both ToR switches
+- Storage intents: Isolated to individual ToR switches (no inter-switch communication)
+- Gateway redundancy: Achieved through HSRP configuration
+- Routing: iBGP between ToR switches, eBGP to external networks
 
 ## Attributes
 
@@ -327,8 +377,8 @@ If your Azure Local deployment does not utilize SDN features, the MTU can be set
 These interfaces connect to Azure Local nodes' dedicated storage NICs (p-NIC C interfaces) and are specifically configured to support RDMA traffic for Storage Spaces Direct operations. The configuration ensures lossless transport and optimal performance for storage workloads.
 
 ```console
-interface Ethernet1/21
-  description Switched-Storage
+interface Ethernet1/15
+  description Switched-Storage-Node1-pNIC-C
   no cdp enable
   switchport
   switchport mode trunk
@@ -341,8 +391,8 @@ interface Ethernet1/21
   service-policy type qos input AZS_SERVICES
   no shutdown
 
-interface Ethernet1/22
-  description Switched-Storage
+interface Ethernet1/16
+  description Switched-Storage-Node2-pNIC-C
   no cdp enable
   switchport
   switchport mode trunk
@@ -361,8 +411,8 @@ interface Ethernet1/22
 
 **Physical Connectivity**:
 
-- **Ethernet1/21**: Connects to **Node1 p-NIC C** (dedicated storage interface)
-- **Ethernet1/22**: Connects to **Node2 p-NIC C** (dedicated storage interface)
+- **Ethernet1/15**: Connects to **Node1 p-NIC C** (dedicated storage interface)
+- **Ethernet1/16**: Connects to **Node2 p-NIC C** (dedicated storage interface)
 - **Pattern**: All p-NIC C interfaces from every Azure Local node connect to TOR1 for storage traffic isolation
 
 **VLAN Configuration**:
@@ -370,9 +420,20 @@ interface Ethernet1/22
 - **VLAN 99 (Native)**: Configured as the default native VLAN to capture any untagged traffic. This serves as a security boundary and operational best practice, ensuring that misconfigured or untagged frames are isolated from production storage traffic.
 - **VLAN 711 (Storage)**: The dedicated storage intent VLAN that carries all RDMA traffic for Storage Spaces Direct operations. Each storage interface is assigned to only one storage VLAN (711 for TOR1, 712 for TOR2) to maintain traffic isolation and prevent cross-switch storage communication.
 
-**LLDP Integration**:
+**LLDP and DCBX Integration**:
 
-- **priority-flow-control mode on send-tlv**: Enables LLDP transmission of Priority Flow Control capabilities and Data Center Bridging Exchange (DCBX) information from the ToR switch to the Azure Local nodes. The switch advertises its QoS configuration, PFC capabilities, and traffic class mappings to the connected nodes. Azure Local nodes operate in "willing mode 0" (non-willing mode), meaning they will not accept or apply DCBX configuration changes from the switch. Instead, Azure Local uses this DCBX information strictly for diagnostic and validation purposes - allowing administrators and support teams to verify that the switch interface configuration matches the expected QoS settings and troubleshoot any configuration mismatches during deployment or operation.
+- **priority-flow-control mode on send-tlv**: Enables the switch to advertise its Priority Flow Control (PFC) capabilities and Data Center Bridging Exchange (DCBX) configuration to connected Azure Local nodes via LLDP. 
+
+The switch transmits QoS policy information including:
+- Traffic class mappings
+- PFC enabled priorities  
+- Buffer allocation settings
+- Congestion management parameters
+
+Azure Local nodes operate in "non-willing mode" for DCBX, meaning they will not accept configuration changes from the switch. Instead, this information is used for:
+- Validation of switch/host configuration alignment
+- Troubleshooting QoS and RDMA connectivity issues
+- Support diagnostic data collection
 
 **MTU Configuration**:
 
@@ -389,7 +450,40 @@ interface Ethernet1/22
 - **Priority Flow Control (PFC)**: Combined with the QoS policy, PFC ensures lossless delivery of storage traffic by providing per-priority pause capabilities, preventing packet drops that would severely impact RDMA performance.
 
 > [!NOTE]
-> **TOR2 Storage Configuration**: The corresponding interfaces on TOR2 (connecting to p-NIC D) would be configured identically but allow VLAN 712 instead of VLAN 711, maintaining storage traffic isolation between the two ToR switches.
+> **TOR2 Storage Configuration**: TOR2 requires corresponding storage interface and VLAN configuration:
+>
+> ```console
+> vlan 712
+>   name Storage_712_TOR2
+>
+> interface Ethernet1/15
+>   description Switched-Storage-Node1-pNIC-D
+>   no cdp enable
+>   switchport
+>   switchport mode trunk
+>   switchport trunk native vlan 99
+>   switchport trunk allowed vlan 712
+>   priority-flow-control mode on send-tlv
+>   spanning-tree port type edge trunk
+>   mtu 9216
+>   logging event port link-status
+>   service-policy type qos input AZS_SERVICES
+>   no shutdown
+>
+> interface Ethernet1/16
+>   description Switched-Storage-Node2-pNIC-D
+>   no cdp enable
+>   switchport
+>   switchport mode trunk
+>   switchport trunk native vlan 99
+>   switchport trunk allowed vlan 712
+>   priority-flow-control mode on send-tlv
+>   spanning-tree port type edge trunk
+>   mtu 9216
+>   logging event port link-status
+>   service-policy type qos input AZS_SERVICES
+>   no shutdown
+> ```
 
 > [!IMPORTANT]
 > **RDMA Protocol Considerations**: Verify your Azure Local cluster's RDMA configuration (iWARP vs. RoCEv2) to ensure optimal switch configuration. While jumbo frames benefit iWARP deployments, they are not utilized by RoCEv2. Properly configure the MTU and QoS settings based on the deployed RDMA protocol to achieve the best performance and reliability for storage workloads.
@@ -518,11 +612,52 @@ This peer link enables critical HSRP functionality between TOR1 and TOR2:
 
 [Azure Local SDN and Gateway configuration][AZSDN]
 
+## Configuration Validation
+
+After deploying this configuration, validate the following:
+
+### Interface Status
+
+```console
+show interface brief
+show interface trunk
+show spanning-tree brief
+```
+
+### VLAN and SVI Status
+
+```console
+show vlan brief
+show interface vlan brief
+show hsrp brief
+```
+
+### BGP and Routing
+
+```console
+show ip bgp summary
+show ip route bgp
+show hsrp brief
+```
+
+### QoS and PFC
+
+```console
+show policy-map interface ethernet1/15
+show interface ethernet1/15 priority-flow-control
+```
+
+### Azure Local Integration
+
+- Verify SET team formation on cluster nodes
+- Confirm RDMA connectivity using Azure Local validation tools
+- Test storage performance and verify lossless transport
+
 ## References Documents
 
+- [Physical network requirements for Azure Local][AzureLocalPhysicalNetworkRequirements]
 - [Teaming in Azure Stack HCI][Teaming_in_Azure_Stack_HCI]
 - [Network considerations for cloud deployments of Azure Local][AzureLocalNetworkConsiderationForCloudDeploymentOfAzureLocal]
-- [Physical network requirements for Azure Local][AzureLocalPhysicalNetworkRequirements]
 - [Manage Azure Local gateway connections][AzureLocalManageGatewayConnections]
 - [Microsoft Azure Local Connectivity to Cisco Nexus 9000 Series Switches in Cisco NX-OS and Cisco® Application Centric Infrastructure (Cisco ACI™) Mode][CiscoNexus9000NXOSACI]
 - [RoCE Storage Implementation over NX-OS VXLAN Fabrics][ROCEStorageNXOSVXLANFabric]
@@ -532,7 +667,7 @@ This peer link enables critical HSRP functionality between TOR1 and TOR2:
 - [RFC 3168 - The Addition of Explicit Congestion Notification (ECN) to IP][rfc3168]
 - [Azure Local network deployment patterns][AzureLocalNetworkPattern]
 
-[AzureLocalPhysicalNetworkRequirements]: https://learn.microsoft.com/en-us/azure/azure-local/concepts/physical-network-requirements
+[AzureLocalPhysicalNetworkRequirements]: https://learn.microsoft.com/en-us/azure/azure-local/concepts/physical-network-requirements?view=azloc-2507&tabs=overview%2C24H2reqs "Physical network requirements for Azure Local clusters, including switch specifications, port requirements, and network topology guidance for successful deployments."
 [Teaming_in_Azure_Stack_HCI]: https://techcommunity.microsoft.com/blog/networkingblog/teaming-in-azure-stack-hci/1070642 "Switch Embedded Teaming (SET) and was introduced in Windows Server 2016. SET is available when Hyper-V is installed on any Server OS (Windows Server 2016 and higher) and Windows 10 version 1809 (and higher)"
 [AzureLocalNetworkConsiderationForCloudDeploymentOfAzureLocal]: https://learn.microsoft.com/en-us/azure/azure-local/plan/cloud-deployment-network-considerations "This article discusses how to design and plan an Azure Local system network for cloud deployment. Before you continue, familiarize yourself with the various Azure Local networking patterns and available configurations."
 [AzureLocalManageGatewayConnections]: https://learn.microsoft.com/en-us/azure/azure-local/manage/gateway-connections?#create-an-l3-connection "L3 forwarding enables connectivity between the physical infrastructure in the data center and the SDN virtual networks. With an L3 forwarding connection, tenant network VMs can connect to a physical network through the SDN gateway. In this case, the SDN gateway acts as a router between the SDN virtual network and the physical network."
