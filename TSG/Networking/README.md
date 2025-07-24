@@ -1,12 +1,14 @@
 # TSG and Reference Documents for Azure Local Networking
 
+For Azure Local Network Resources related to Environment Validator, see [TSG/EnvironmentValidator/Networking/README.md](TSG/EnvironmentValidator/Networking/README.md).
+
 ## 📚 Quick Access Directory
 
 ### Arc Gateway & Outbound Connectivity
 - [Deep Dive: Arc Gateway Outbound Traffic](Arc-Gateway-Outbound-Connectivity/deepdive-arcgateway-outbound-traffic.md)
 - [Troubleshoot: General Outbound Connectivity](Arc-Gateway-Outbound-Connectivity/Troubleshoot-Outbound-Connectivity.md)
 
-### Top of Rack Switch
+### Top of Rack Switch Configuration
 - [Reference: 2-Node Switchless Storage](Top-Of-Rack-Switch/Reference-TOR-2Node-Switchless-Storage.md)
 - [Reference: BGP Configuration](Top-Of-Rack-Switch/Reference-TOR-BGP.md)
 - [Reference: Disaggregated Switched Storage](Top-Of-Rack-Switch/Reference-TOR-Disaggregated-Switched-Storage.md)
