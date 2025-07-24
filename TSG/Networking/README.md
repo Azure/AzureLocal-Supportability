@@ -5,7 +5,7 @@ For Azure Local Network Resources related to Environment Validator, see [TSG/Env
 ## 📚 Quick Access Directory
 
 ### Arc Gateway & Outbound Connectivity
-- [Deep Dive: Arc Gateway Outbound Traffic](Arc-Gateway-Outbound-Connectivity/deepdive-arcgateway-outbound-traffic.md)
+- [Deep Dive: Arc Gateway Outbound Traffic](Arc-Gateway-Outbound-Connectivity/DeepDive-ArcGateway-Outbound-Traffic.md)
 - [Troubleshoot: General Outbound Connectivity](Arc-Gateway-Outbound-Connectivity/Troubleshoot-Outbound-Connectivity.md)
 
 ### Top of Rack Switch Configuration

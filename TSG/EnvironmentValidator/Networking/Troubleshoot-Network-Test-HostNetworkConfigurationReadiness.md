@@ -1,39 +1,17 @@
-# Contributing to Azure Local Networking Environment Validator Documentation
-
-## Contribution Guidelines
-
-1. Copy the TSG Template below and fill in the required sections
-2. Name the file according to the [File Naming Conventions](#file-naming-conventions)
-3. Keep content focused and actionable
-4. Any mitigation steps provided should be safe to perform and not disrupt the system
-5. Update the [README.md](README.md) with any new topics or files added
-
-## File Naming Conventions
-
-Use the following naming schema for new files, use - to separate words:
-```
-Troubleshoot-Network-Test-<validator_name>.md
-```
-
-Example: `Troubleshoot-Network-Test-HostNetworkConfigurationReadiness.md`
-
-## TSG Template
-
-````markdown
-# !!VALIDATOR_NAME
+# AzStackHci_Network_Test_HostNetworkConfigurationReadiness
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr>
     <th style="text-align:left; width: 180px;">Name</th>
-    <td><strong>!!VALIDATOR_NAME</strong></td>
+    <td><strong>AzStackHci_Network_Test_HostNetworkConfigurationReadiness</strong></td>
   </tr>
   <tr>
     <th style="text-align:left; width: 180px;">Severity</th>
-    <td><strong>!!VALIDATOR_LEVEL</strong>: This validator will block operations until remediated.</td>
+    <td><strong>Critical</strong>: This validator will block operations until remediated.</td>
   </tr>
   <tr>
     <th style="text-align:left;">Applicable Scenarios</th>
-    <td><strong>!!WHAT_SCENARIOS_DOES_THIS_APPLY_TO? (Deployment,AddNode,Update)</strong></td>
+    <td><strong>Update</strong></td>
   </tr>
 </table>
 
@@ -54,7 +32,7 @@ You can also use this section to expand upon different scenarios and configurati
 
 ### Review Environment Validator Output
 
-!!OUTPUT - Capture the Alert from a test run and put it here. Modify the JSON to remove any references to nodes, ips, or timestamps. See the example below:
+!!OUTPUT - Capture the Alert from a test run and put it here. See the example below:
 
 Review the Environment Validator output JSON. Check the `AdditionalData.Detail` field for summary of which Hosts are not configured properly. You can identify the host by the `TargetResourceID` field.
 
@@ -83,7 +61,7 @@ Here is an example:
 }
 ```
 
-### Failure: !!FAILURE_MESSAGE - Put any failure messages from the Detail section here, if there are multiple possible messages, split them into different sections
+### Failure: External VMSwitch ComputeSwitch(compute) is not having any VMNetworkAdapter attached to it.\\nERROR: Please remove the VMSwich, or add at least one VMNetworkAdapter to it.
 
 !!FAILURE_MESSAGE_DESCRIPTION - Put a description of the failure message here. How should it be interpreted?
 
@@ -112,5 +90,6 @@ Add more examples as needed
 
 and more...
 
-Don't forget to include any cleanup steps!
-````
+## Verification Method
+
+!!VERIFICATION_METHOD - How can the customer verify that they configured everything properly, without running the Environment Validator from scratch?

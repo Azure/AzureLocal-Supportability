@@ -4,6 +4,8 @@ For Azure Local Network Resources not related to Environment Validator, see [TSG
 
 ## 📚 Quick Access Directory
 
+- [Troubleshoot: Host Network Configuration Readiness](Troubleshooting-Network-Test-HostNetworkConfigurationReadiness.md)
+
 ---
 
 ## Contributing
