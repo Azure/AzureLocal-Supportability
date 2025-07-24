@@ -1,8 +1,6 @@
-# Symptoms
+# Azure Local - Recreate Intent Without SR-IOV
 
 Third Party Network Virtual Appliances (NVAs) that requires MAC spoofing enabled or virtual network adapter vlan trunk configuration are not working properly when the management and compute intent virtual switch or the compute intent virtual switch has SR-IOV enabled. By default Azure Local relies on Network ATC for virtual switch configuration and SR-IOV is enabled on all virtual switches. If the customer requires to use these network features for their network virtual appliances they will need to recreate the intents using Network ATC using the specific overrides.
-
-> CSS only Note: There is a day 0 bug in Hyper-V switch that does not support enabling MAC Spoofing or vlan trunking when SR-IOV is enabled. A bug fixing is being evaluated but most likely will require OEM drivers updates as well.  
 
 # Issue Validation
 To narrow down the issue, you need to determine whether it is a host-level issue or a VM issue. If all VMs on the Host report the same error, it usually indicates a host-level issue, and you should validate the host. If only some VMs report the error, the host might be in the correct status, and you should focus on validating the VM's Network Interface setting.

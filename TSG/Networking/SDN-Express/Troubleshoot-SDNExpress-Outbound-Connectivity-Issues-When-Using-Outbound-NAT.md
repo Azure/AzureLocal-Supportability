@@ -1,4 +1,5 @@
-# Symptoms
+# Azure Local - Troubleshoot Outbound Network Connectivity when using Outbound NAT
+
 You have deployed Virtual Machines into a Virtual Network and have created an outbound NAT pool to provide native outbound access to the internet. 
 In some situations, you may notice that traffic is not working properly when making outbound calls.
 

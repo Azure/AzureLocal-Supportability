@@ -1,4 +1,4 @@
-# Azure Local Disaggregated Storage Network Design with Cisco Nexus Switches
+# Azure Local - Disaggregated Storage Network Design with Cisco Nexus Switches
 
 This document provides network configuration guidance for Azure Local clusters using disaggregated storage architecture with Cisco Nexus Top-of-Rack (ToR) switches.
 

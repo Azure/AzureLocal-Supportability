@@ -1,4 +1,4 @@
-# Azure Local Arc Gateway Outbound Connectivity Deep Dive
+# Azure Local - Arc Gateway Outbound Connectivity Deep Dive
 
 ## Overview
 

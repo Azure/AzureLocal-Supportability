@@ -1,4 +1,4 @@
-# Explicit Congestion Notification
+# Azure Local - Explicit Congestion Notification
 
 Explicit Congestion Notification (ECN) is a network congestion management mechanism that enables switches and routers to signal congestion without dropping packets. In Azure Local QoS implementations, ECN is specifically configured for storage (RDMA) traffic to maintain lossless transport while providing congestion feedback to endpoints.
 

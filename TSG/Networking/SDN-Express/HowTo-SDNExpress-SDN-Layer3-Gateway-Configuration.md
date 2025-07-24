@@ -1,4 +1,4 @@
-# Azure Local SDN and Layer 3 Gateway Configuration
+# Azure Local - SDN and Layer 3 Gateway Configuration
 
 This document provides configuration guidance for Software Defined Networking (SDN) gateway connectivity in Azure Local cluster deployments using Cisco Nexus switches. The configurations support both Layer 3 forwarding scenarios and SDN load balancer integration for Azure Local environments.
 

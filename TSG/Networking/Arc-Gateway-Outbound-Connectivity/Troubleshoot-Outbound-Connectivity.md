@@ -1,4 +1,4 @@
-# Troubleshoot Azure Local outbound network connectivity
+# Azure Local - Troubleshoot Outbound Network Connectivity
 
 ## Overview
 

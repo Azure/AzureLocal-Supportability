@@ -1,70 +1,26 @@
-# 📘 Technical Docs and TSGs for Azure Local Networking & SDN
+# TSG and Reference Documents for Azure Local Networking
 
-This folder contains references, deep dives, troubleshooting guides, and how-to documentation focused on Azure Local networking scenarios — including TOR Configurations, Arc Gateway & Outbound Connectivity, SDN, and more.
+## 📚 Quick Access Directory
 
----
+### Arc Gateway & Outbound Connectivity
+- [Deep Dive: Arc Gateway Outbound Traffic](Arc-Gateway-Outbound-Connectivity/deepdive-arcgateway-outbound-traffic.md)
+- [Troubleshoot: General Outbound Connectivity](Arc-Gateway-Outbound-Connectivity/Troubleshoot-Outbound-Connectivity.md)
 
-## 📂 Folder Structure
+### Top of Rack Switch
+- [Reference: 2-Node Switchless Storage](Top-Of-Rack-Switch/Reference-TOR-2Node-Switchless-Storage.md)
+- [Reference: BGP Configuration](Top-Of-Rack-Switch/Reference-TOR-BGP.md)
+- [Reference: Disaggregated Switched Storage](Top-Of-Rack-Switch/Reference-TOR-Disaggregated-Switched-Storage.md)
+- [Reference: Explicit Congestion Notification](Top-Of-Rack-Switch/Reference-TOR-Explicit-Congestion-Notification.md)
+- [Reference: QoS Policy Configuration](Top-Of-Rack-Switch/Reference-TOR-QOS-Policy-Configuration.md)
 
-The repo is organized by **major topic areas**, with each folder containing related technical content:
-
-| Folder                             | Description                                                          |
-|------------------------------------|----------------------------------------------------------------------|
-| `ArcGateway-OutboundConnectivity/` | Outbound traffic flow and connectivity through Arc Gateway.          |
-| `HostNetworking/`                  | VM network adapters, VLANs, NIC teaming, and host-level traffic flow.|
-| `Top-Of-Rack-Switch/`              | TOR switch configurations and best practices.                        |
-| `SDN-Enabled-by-ARC/`              | SDN scenarios enabled through ARC.                                   |
-| `SDN-Express/`                     | SDN scenarios enabled through SDN Express and WAC.                   |
-
----
-
-## 📄 File Naming Conventions
-
-To keep things organized and consistent, use the following naming schema for new files:
-
-```
-<type>-<topic>-<specifics>.md
-```
-
-### 🔧 `<type>` values:
-| Type           | Use for...                                   |
-|----------------|----------------------------------------------|
-| `DeepDive`     | Detailed technical explanations              |
-| `HowTo`        | Step-by-step deployment or config guides     |
-| `Troubleshoot` | Troubleshooting known issues                 |
-| `Reference`    | Reference configurations and resources       |
-
-### Example `<topic>` values:
-| Topic                         | Use for...                                   |
-|-------------------------------|----------------------------------------------|
-| `ArcGateway`                  | Detailed technical explanations              |
-| `OutboundConnectivity`        | Step-by-step deployment or config guides     |
-| `SDNExpress`                  | Troubleshooting known issues                 |
-| `HostNetworking`              | Reference configurations and resources       |
-| `TOR`                         | Reference configurations and resources       |
-
-### 🌐 Examples:
-- `Reference-TOR-Disaggregated-Switched-Storage`
-- `Troubleshoot-SDNExpress-PolicyConfigurationFailure-VirtualGateway-NetworkConnection`
-- `howto-hostnetworking-pnic-mapping.md`
-
-Use **kebab-case** (`-`) for readability and consistency (words are lowercase and separated by hyphens).
+### SDN Express
+- [How To: SDN Layer 3 Gateway Configuration](SDN-Express/HowTo-SDNExpress-SDN-Layer3-Gateway-Configuration.md)
+- [Troubleshoot: Host Unreachable](SDN-Express/Troubleshoot-SDNExpress-HealthAlert-HostUnreachable.md)
+- [Troubleshoot: Outbound Connectivity Issues with NAT](SDN-Express/Troubleshoot-SDNExpress-Outbound-Connectivity-Issues-When-Using-Outbound-NAT.md)
+- [Troubleshoot: Recreate Intent Without SR-IOV](SDN-Express/Troubleshoot-SDNExpress-Recreate-Intent-No-SRIOV.md)
 
 ---
 
-## ✅ Contribution Guidelines
+## Contributing
 
-We welcome internal contributions to improve this repo. To contribute:
-
-1. Choose the correct folder based on the topic.
-2. Use the filename schema above.
-3. Add a short entry to the folder’s `README.md` describing your new file.
-4. Keep content focused, concise, and technically accurate.
-
-If in doubt, open a draft PR for early feedback.
-
----
-
-## 📬 Feedback
-
-Have questions or want to suggest improvements? Open an issue or contact the repo owners.
+For contribution guidelines see [CONTRIBUTING.md](CONTRIBUTING.md).
