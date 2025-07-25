@@ -2,7 +2,7 @@
 
 For Network Environment Validator Resources, see [TSG/EnvironmentValidator/Networking/README.md](../EnvironmentValidator/Networking/README.md).
 
-## 📚 Quick Access
+## 📚 Table of Contents
 
 ### Arc Gateway & Outbound Connectivity
 - [Deep Dive: Arc Gateway Outbound Traffic](Arc-Gateway-Outbound-Connectivity/DeepDive-ArcGateway-Outbound-Traffic.md)
