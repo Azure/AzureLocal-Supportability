@@ -1,6 +1,6 @@
-# TSGs Azure Local Networking Environment Validator Failures
+# TSGs for Azure Local Network Environment Validator Failures
 
-For Azure Local Network Resources not related to Environment Validator, see [TSG/Networking/README.md](TSG/Networking/README.md).
+For Azure Local Network Resources not related to Environment Validator, see [TSG/Networking/README.md](../../Networking/README.md).
 
 ## 📚 Quick Access
 

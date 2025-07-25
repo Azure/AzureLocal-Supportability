@@ -1,6 +1,6 @@
 # TSG and Reference Documents for Azure Local Networking
 
-For Azure Local Network Resources related to Environment Validator, see [TSG/EnvironmentValidator/Networking/README.md](TSG/EnvironmentValidator/Networking/README.md).
+For Network Environment Validator Resources, see [TSG/EnvironmentValidator/Networking/README.md](../EnvironmentValidator/Networking/README.md).
 
 ## 📚 Quick Access
 

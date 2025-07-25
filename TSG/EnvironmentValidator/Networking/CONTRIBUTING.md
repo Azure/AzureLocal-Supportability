@@ -29,11 +29,11 @@ Example: `Troubleshoot-Network-Test-HostNetworkConfigurationReadiness.md`
   </tr>
   <tr>
     <th style="text-align:left; width: 180px;">Severity</th>
-    <td><strong>!!VALIDATOR_LEVEL</strong>: This validator will block operations until remediated.</td>
+    <td><strong>!!VALIDATOR_LEVEL</strong>: This validator will/will not block operations until remediated.</td>
   </tr>
   <tr>
     <th style="text-align:left;">Applicable Scenarios</th>
-    <td><strong>!!WHAT_SCENARIOS_DOES_THIS_APPLY_TO? (Deployment,AddNode,Update)</strong></td>
+    <td><strong>!!WHAT_SCENARIOS_DOES_THIS_APPLY_TO? (Deployment,AddNode,Update, etc...)</strong></td>
   </tr>
 </table>
 
