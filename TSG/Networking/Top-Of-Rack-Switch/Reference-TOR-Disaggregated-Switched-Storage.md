@@ -217,7 +217,7 @@ feature lldp
 
 ## QOS
 
-[Quality of Service (QoS) Policy](qos.md)
+[Quality of Service (QoS) Policy](Reference-TOR-QOS-Policy-Configuration.md)
 
 ## Loop prevention
 

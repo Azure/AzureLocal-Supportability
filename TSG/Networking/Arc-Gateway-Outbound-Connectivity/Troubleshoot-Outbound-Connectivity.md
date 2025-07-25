@@ -79,7 +79,7 @@ Example output is shown in the animated GIF image below, which shows an interact
 
 The primary source of information is **copying / exporting the CSV output file** and Transcript file that are saved on the node (_or device running the 'Test-AzureLocalConnectivity' function_) to your laptop or desktop PC to open the CSV output in Excel, or another CSV file viewer.
 
-Click here to [**view an example CSV file output**](./Example_AzureLocal_ConnectivityTest_EastUS_computer-name_2025-04-01-11-15-59.csv)
+Click here to [**view an example CSV file output**](./examples/Example_AzureLocal_ConnectivityTest_EastUS_computer-name_2025-04-01-11-15-59.csv)
 
 ![Test-AzureLocalConnectivity Demo](./images/Test-AzureLocalConnectivity_Demo.gif)
 
