@@ -28,7 +28,6 @@ Use the following naming schema for new files:
 - `ArcGateway` - Arc Gateway and related services
 - `OutboundConnectivity` - Network connectivity and routing
 - `SDNExpress` - Software-defined networking components
-- `HostNetworking` - Host-level network configuration
 - `TOR` - Top of Rack switch management
 
 ### `<specifics>`:
@@ -47,6 +46,5 @@ The repo is organized by major topic areas, you can add new files to existing fo
 | Folder                               | Description                                                          |
 |--------------------------------------|----------------------------------------------------------------------|
 | `Arc-Gateway-Outbound-Connectivity/` | Outbound traffic flow and connectivity through Arc Gateway           |
-| `Host-Networking/`                   | VM network adapters, VLANs, NIC teaming, and host-level traffic flow |
 | `SDN-Express/`                       | SDN scenarios enabled through SDN Express and WAC                    |
 | `Top-Of-Rack-Switch/`                | Top of Rack switch configuration and reference implementations       |
