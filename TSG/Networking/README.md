@@ -2,7 +2,7 @@
 
 For Azure Local Network Resources related to Environment Validator, see [TSG/EnvironmentValidator/Networking/README.md](TSG/EnvironmentValidator/Networking/README.md).
 
-## 📚 Quick Access Directory
+## 📚 Quick Access
 
 ### Arc Gateway & Outbound Connectivity
 - [Deep Dive: Arc Gateway Outbound Traffic](Arc-Gateway-Outbound-Connectivity/DeepDive-ArcGateway-Outbound-Traffic.md)
