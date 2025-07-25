@@ -126,6 +126,6 @@ This approach is particularly useful in environments where dynamic routing proto
 ## Related Documentation
 
 - [Azure Local BGP Routing Configuration][BGP] - Complete BGP configuration for Azure Local environments
-- [Disaggregated Switch Storage Design](./Disaggregated_Switched_Storage.md) - Complete switch configuration guide for Azure Local disaggregated deployments
+- [Disaggregated Switch Storage Design](../Top-Of-Rack-Switch/Reference-TOR-Disaggregated-Switched-Storage.md) - Complete switch configuration guide for Azure Local disaggregated deployments
 
 [BGP]: ./azurelocal-bgp.md "BGP routing configuration for Azure Local environments, including iBGP and eBGP setup, route filtering, and load balancing for both hyper-converged and disaggregated deployments."

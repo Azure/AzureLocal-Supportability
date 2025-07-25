@@ -128,5 +128,5 @@ The BGP process advertises the following networks:
 
 ## Related Documentation
 
-- [Disaggregated Switch Storage Design](./Disaggregated_Switched_Storage.md) - Complete switch configuration guide for Azure Local disaggregated deployments, including VLAN design, interface configuration, HSRP setup, and physical connectivity patterns
-- [Quality of Service (QoS) Policy](./qos.md) - QoS configuration for Azure Local environments, including traffic classification, bandwidth allocation, and lossless transport for storage traffic
+- [Disaggregated Switch Storage Design](Reference-TOR-Disaggregated-Switched-Storage.md) - Complete switch configuration guide for Azure Local disaggregated deployments, including VLAN design, interface configuration, HSRP setup, and physical connectivity patterns
+- [Quality of Service (QoS) Policy](Reference-TOR-QOS-Policy-Configuration.md) - QoS configuration for Azure Local environments, including traffic classification, bandwidth allocation, and lossless transport for storage traffic
