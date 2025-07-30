@@ -10,10 +10,12 @@ For Network Environment Validator Resources, see [TSG/EnvironmentValidator/Netwo
 
 ### Top of Rack Switch Configuration
 - [Reference: 2-Node Switchless Storage](Top-Of-Rack-Switch/Reference-TOR-2Node-Switchless-Storage.md)
-- [Reference: BGP Configuration](Top-Of-Rack-Switch/Reference-TOR-BGP.md)
 - [Reference: Disaggregated Switched Storage](Top-Of-Rack-Switch/Reference-TOR-Disaggregated-Switched-Storage.md)
+- [Reference: Fully Converged Storage](Top-Of-Rack-Switch/Reference-TOR-Fully-Converged-Storage.md)
+- [Reference: BGP Configuration](Top-Of-Rack-Switch/Reference-TOR-BGP.md)
 - [Reference: Explicit Congestion Notification](Top-Of-Rack-Switch/Reference-TOR-Explicit-Congestion-Notification.md)
 - [Reference: QoS Policy Configuration](Top-Of-Rack-Switch/Reference-TOR-QOS-Policy-Configuration.md)
+- [Troubleshoot: TOR Overview Guidance](Top-Of-Rack-Switch/Troubleshoot-TOR-Overview-Guidance.md)
 
 ### SDN Express
 - [How To: SDN Layer 3 Gateway Configuration](SDN-Express/HowTo-SDNExpress-SDN-Layer3-Gateway-Configuration.md)
