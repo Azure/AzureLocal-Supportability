@@ -166,6 +166,9 @@ interface Ethernet1/1-3
 - For virtual adapters, run `Get-VMNetworkAdapterIsolation` to view VLAN isolation settings.
 
 
+> [!NOTE]
+> The following PowerShell command outputs are from a post-deployment Azure Local cluster and are used to validate the network configuration.
+
 ```powershell
 [Host3]: PS C:\Users\Administrator\Documents> Get-NetAdapter | ft InterfaceAlias, VlanID, MacAddress
 
