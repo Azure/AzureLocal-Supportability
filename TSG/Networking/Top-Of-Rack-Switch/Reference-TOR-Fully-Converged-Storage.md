@@ -26,7 +26,7 @@
 
 ## Overview
 
-Azure Local's fully converged physical network architecture integrates **management**, **compute**, and **storage** traffic over the same physical Ethernet interfaces. This design minimizes hardware footprint while maximizing performance, scalability, and simplicity of deployment.
+Azure Local's fully converged physical network architecture integrates **management**, **compute**, and **storage** traffic over the same physical Ethernet interfaces. This design minimizes hardware footprint while maximizing scalability, and simplicity of deployment.
 
 ## Key Components
 

@@ -46,7 +46,7 @@ This content will continue to evolve over time. **Feedback, suggestions, and con
 ---
 
 ## 2. Deployment Patterns Overview
-There are three primary physical network deployment patterns for Azure Local, depends on the use case and scale of the environment, and the mainly difference is how the storage traffic is handled:
+There are three primary physical network deployment patterns for Azure Local, depending on the use case and scale of the environment, and the main difference is how the storage traffic is handled:
 
 - **Fully-Converged**: All traffic types (M, C, S) share the same physical NICs. This design minimizes hardware footprint while maximizing performance and scalability.
 ![Fully-Converged with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_FullyConverged.png)
@@ -91,7 +91,7 @@ If you're an **OEM** and wish to qualify your switches for Azure Local deploymen
 ### Network Configuration Requirements
 
 The physical network must be configured in alignment with Azure Local’s host networking requirements, and details and official configuration guidance are available here:  
-🔗 [Azure Local – Host Network Requirements](https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements?view=azloc-2506)
+🔗 [Azure Local – Host Network Requirements](https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements)
 
 
 | Requirement           | Notes                                                                 |
