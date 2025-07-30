@@ -1,9 +1,6 @@
-# Azure Local - Fully Converged Physical Network Design [Draft]
+# Azure Local - Fully Converged Physical Network Design
 
-## Table of Contents
-
-- [Azure Local - Fully Converged Physical Network Design \[Draft\]](#azure-local---fully-converged-physical-network-design-draft)
-  - [Table of Contents](#table-of-contents)
+- [Azure Local - Fully Converged Physical Network Design](#azure-local---fully-converged-physical-network-design)
   - [Overview](#overview)
   - [Key Components](#key-components)
   - [Fully Converged Network Design – Physical Topology](#fully-converged-network-design--physical-topology)
@@ -19,6 +16,9 @@
       - [Validation in Lab Environment](#validation-in-lab-environment)
         - [On Azure Local Host](#on-azure-local-host)
         - [On ToR Switches](#on-tor-switches)
+  - [QOS](#qos)
+    - [BGP Routing](#bgp-routing)
+  - [Example SDN and Gateway Configuration](#example-sdn-and-gateway-configuration)
   - [Q\&A](#qa)
     - [Q: In Fully Converged Network Design, can I configure TOR1 only allow only Storage VLAN 711, and TOR2 only allow Storage VLAN 712?](#q-in-fully-converged-network-design-can-i-configure-tor1-only-allow-only-storage-vlan-711-and-tor2-only-allow-storage-vlan-712)
   - [Reference Documents](#reference-documents)
@@ -44,9 +44,10 @@ Azure Local's fully converged physical network architecture integrates **managem
 
 This example illustrates a **fully converged Azure Local environment**, where **Management**, **Compute**, and **Storage** traffic all share the same NICs using **VLAN tagging**. While the diagram shows a dual-node-to-ToR cabling structure, the same design easily scales from **2 to 16 nodes** with minimal changes.
 
-> ✅ Fully converged: All traffic types (Mgmt, Compute, Storage) run over the same physical links  
-> ✅ Redundant ToR: Each node connects to both TOR1 and TOR2  
-> ✅ SET (Switch Embedded Team): Used on the host to bond NICs for fault tolerance
+> [!NOTE]
+> - Fully converged: All traffic types (Mgmt, Compute, Storage) run over the same physical links  
+> -  Redundant ToR: Each node connects to both TOR1 and TOR2  
+> -  SET (Switch Embedded Team): Used on the host to bond NICs for fault tolerance
 
 ### Topology Diagram
 
@@ -213,6 +214,18 @@ Legend:
 *  712     0015.5dc8.2007   dynamic  0         F      F    Eth1/3
 
 ```
+
+## QOS
+
+[Quality of Service (QoS) Policy](Reference-TOR-QOS-Policy-Configuration.md)
+
+### BGP Routing
+
+[Azure Local BGP Routing](Reference-TOR-BGP-Routing-Configuration.md)
+
+## Example SDN and Gateway Configuration
+
+[Azure Local SDN and Gateway configuration](Reference-TOR-SDN-and-Gateway-Configuration.md)
 
 
 ## Q&A

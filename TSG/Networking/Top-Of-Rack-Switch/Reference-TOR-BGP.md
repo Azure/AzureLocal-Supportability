@@ -2,6 +2,14 @@
 
 This document provides BGP routing configuration guidance for Azure Local cluster deployments using Cisco Nexus switches. The configuration establishes Layer 3 connectivity, redundant gateway services, and external network reachability for Azure Local environments.
 
+- [Azure Local - BGP Routing Configuration](#azure-local---bgp-routing-configuration)
+  - [Overview](#overview)
+  - [Configuration Applicability](#configuration-applicability)
+  - [BGP Configuration](#bgp-configuration)
+    - [BGP Routing](#bgp-routing)
+  - [Related Documentation](#related-documentation)
+
+
 ## Overview
 
 BGP serves as the primary routing protocol for Azure Local ToR switch configurations, enabling:

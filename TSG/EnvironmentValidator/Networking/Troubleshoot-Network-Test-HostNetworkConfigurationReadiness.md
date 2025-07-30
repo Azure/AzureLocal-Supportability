@@ -11,7 +11,7 @@
   </tr>
   <tr>
     <th style="text-align:left;">Applicable Scenarios</th>
-    <td><strong>Deployment, Add Node, Pre-Update</strong></td>
+    <td><strong>Deployment, Add-Server, Pre-Update</strong></td>
   </tr>
 </table>
 
@@ -25,7 +25,7 @@ The validator enforces the following requirements on each node:
 1. Each Adapter defined in the intent must have a DNS Client Configuration.
 2. Hyper-V must be running on the host node.
 3. The Management VM Network Adapter must be connected to the Management VMSwitch.
-4. All adapters defined in any intent must be physical NICs and in the "Up" state.
+4. All adapters defined in all intents must be physical NICs and in the "Up" state.
 5. Management, Compute, and Storage intents must be defined in the system with the same adapters (they may be converged or non-converged).
 
 ## Troubleshooting Steps

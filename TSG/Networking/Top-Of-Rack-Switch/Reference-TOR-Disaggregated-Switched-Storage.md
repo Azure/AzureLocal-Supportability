@@ -5,7 +5,7 @@ This document provides network configuration guidance for Azure Local clusters u
 
 ![Disaggregated_Switched_Storage_Design](./images/Disaggregated_Switched_Storage.png)
 
-- [Azure Local Disaggregated Storage Network Design with Cisco Nexus Switches](#azure-local-disaggregated-storage-network-design-with-cisco-nexus-switches)
+- [Azure Local - Disaggregated Storage Network Design with Cisco Nexus Switches](#azure-local---disaggregated-storage-network-design-with-cisco-nexus-switches)
   - [Scope](#scope)
   - [Terminology](#terminology)
   - [Example Device](#example-device)
@@ -604,11 +604,11 @@ This peer link enables critical HSRP functionality between TOR1 and TOR2:
 
 ### BGP Routing
 
-[Azure Local BGP Routing][BGPConfig]
+[Azure Local BGP Routing](Reference-TOR-BGP-Routing-Configuration.md)
 
 ## Example SDN and Gateway Configuration
 
-[Azure Local SDN and Gateway configuration][AZSDN]
+[Azure Local SDN and Gateway configuration](Reference-TOR-SDN-and-Gateway-Configuration.md)
 
 ## Configuration Validation
 
