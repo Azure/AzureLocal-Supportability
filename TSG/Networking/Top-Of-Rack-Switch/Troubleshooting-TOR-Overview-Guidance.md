@@ -48,15 +48,15 @@ This content will continue to evolve over time. **Feedback, suggestions, and con
 ## 2. Deployment Patterns Overview
 There are three primary physical network deployment patterns for Azure Local, depending on the use case and scale of the environment, and the main difference is how the storage traffic is handled:
 
-- **Fully-Converged**: All traffic types (M, C, S) share the same physical NICs. This design minimizes hardware footprint while maximizing performance and scalability.
-![Fully-Converged with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_FullyConverged.png)
-
+- **Switchless**: A cost-effective design where storage traffic is handled directly between hosts without a dedicated switch. This is typically used in smaller or remote deployments where simplicity and cost are prioritized.
+![Switchless with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_Switchless.png)
 
 - **Switched**: Separate NICs for M/C and S traffic, providing physical isolation. This pattern is suitable for high-performance setups where storage traffic needs dedicated bandwidth.
 ![Switched with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_Switched.png)
 
-- **Switchless**: A cost-effective design where storage traffic is handled directly between hosts without a dedicated switch. This is typically used in smaller or remote deployments where simplicity and cost are prioritized.
-![Switchless with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_Switchless.png)
+- **Fully-Converged**: All traffic types (M, C, S) share the same physical NICs. This design minimizes hardware footprint while maximizing performance and scalability.
+![Fully-Converged with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_FullyConverged.png)
+
 
 ### Comparison Summary: Fully-Converged vs Switched vs Switchless
 
@@ -64,9 +64,9 @@ There are three primary physical network deployment patterns for Azure Local, de
 
 | Design Type         | Host NIC Traffic                                                   |  VLAN on ToRs                       | Typical Use Case                                      |
 |---------------------|---------------------------------------------------------------------|--------------------------------------------------------|--------------------------------------------------------|
-| **Fully Converged** | 2 NICs per host. All traffic (M + C + S) over both NICs | Host-facing ports are configured as trunks carrying M, C, and S VLANs — all VLANs must be allowed on both ToRs | Simple, scalable design with RDMA and minimal cabling |
-| **Switched**        | 4 NICs per host. 2 for M + C, 2 for S                | Host-facing ports are configured as trunks: M and C VLANs are present on both ToRs; S1 VLAN is only on ToR1, and S2 VLAN is only on ToR2 | For dedicated storage performance and traffic separation |
 | **Switchless**      | 2 NICs per host to switch (M + C) + (N−1) direct host-to-host NICs for S | Trunk to host with M, C VLANs only; no S VLANs on ToRs | Low-cost, small-site or edge deployments without storage switches |
+| **Switched**        | 4 NICs per host. 2 for M + C, 2 for S                | Host-facing ports are configured as trunks: M and C VLANs are present on both ToRs; S1 VLAN is only on ToR1, and S2 VLAN is only on ToR2 | For dedicated storage performance and traffic separation |
+| **Fully Converged** | 2 NICs per host. All traffic (M + C + S) over both NICs | Host-facing ports are configured as trunks carrying M, C, and S VLANs — all VLANs must be allowed on both ToRs | Simple, scalable design with RDMA and minimal cabling |
 
 
 > [!IMPORTANT]  
@@ -438,7 +438,12 @@ This TSG just covers the basic physical network troubleshooting steps. For more 
 **A:**  
 Azure Local uses **two separate storage VLANs** (e.g., VLAN 711 and VLAN 712) to provide **high availability and fault tolerance** for storage traffic.
 
-It’s true that **Windows SET (Switch Embedded Teaming)** provides NIC-level fault tolerance. However,  **RDMA (Remote Direct Memory Access)** traffic is **bound to a specific NIC** and switch. If only **one storage VLAN** is used, RDMA traffic can be forced to cross the **peer link** between ToR switches — which we want to avoid in performance-sensitive environments.
+It’s true that **Windows SET (Switch Embedded Teaming)** provides NIC-level fault tolerance. However, **RDMA (Remote Direct Memory Access)** traffic is **tied to a specific physical NIC and its upstream switch**. If there’s only **one storage VLAN**, RDMA traffic may be forced to cross the **peer link** between the ToR switches — which is undesirable in performance-sensitive scenarios.
+
+- In a **Fully Converged** deployment, **Network Intent with SET** is used because all VLANs (Management, Compute, Storage) must be available across the teamed NICs.
+
+- In contrast, for a **Switched** deployment, only **Network Intent** is applied — **SET is not used** — because **storage (SMB) traffic uses dedicated RDMA NICs directly**, without teaming.
+
 
 For example, in a **switched scenario**:
 - If **Host1** uses **NIC1 → ToR1**
