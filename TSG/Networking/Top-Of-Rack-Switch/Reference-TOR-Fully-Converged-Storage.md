@@ -26,13 +26,11 @@ This document provides a comprehensive reference for implementing a fully conver
         - [Switch Validation](#switch-validation)
   - [Quality of Service (QoS)](#quality-of-service-qos)
     - [BGP Routing](#bgp-routing)
-  - [SDN and Gateway Configuration](#sdn-and-gateway-configuration)
   - [Frequently Asked Questions](#frequently-asked-questions)
     - [Q: Can I configure both Storage VLANs on both TOR switches?](#q-can-i-configure-both-storage-vlans-on-both-tor-switches)
   - [Additional Resources](#additional-resources)
     - [Official Documentation](#official-documentation)
     - [Technical Deep Dives](#technical-deep-dives)
-    - [Related Configuration Guides](#related-configuration-guides)
 
 ## Executive Summary
 
@@ -367,13 +365,8 @@ Quality of Service configuration is essential for optimal Azure Local performanc
 
 For BGP routing configuration and best practices in Azure Local deployments:
 
-**Reference**: [Azure Local BGP Routing](Reference-TOR-BGP-Routing-Configuration.md)
+**Reference**: [Azure Local BGP Routing](Reference-TOR-BGP.md)
 
-## SDN and Gateway Configuration
-
-For Software Defined Networking and gateway configuration examples:
-
-**Reference**: [Azure Local SDN and Gateway Configuration](Reference-TOR-SDN-and-Gateway-Configuration.md)
 
 ## Frequently Asked Questions
 
@@ -415,13 +408,3 @@ For comprehensive Azure Local networking information, refer to these official Mi
 ### Technical Deep Dives
 - **[Teaming in Azure Stack HCI](https://techcommunity.microsoft.com/blog/networkingblog/teaming-in-azure-stack-hci/1070642)**  
   Technical blog covering NIC teaming concepts and implementation
-
-### Related Configuration Guides
-- **Quality of Service (QoS) Policy Configuration**: `Reference-TOR-QOS-Policy-Configuration.md`
-- **BGP Routing Configuration**: `Reference-TOR-BGP-Routing-Configuration.md`  
-- **SDN and Gateway Configuration**: `Reference-TOR-SDN-and-Gateway-Configuration.md`
-
----
-
-> [!NOTE]
-> This document is part of the Azure Local networking reference series. For the most current information, always refer to the official Microsoft Azure Local documentation at [docs.microsoft.com](https://docs.microsoft.com).

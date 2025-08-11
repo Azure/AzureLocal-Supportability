@@ -577,8 +577,3 @@ For comprehensive Azure Local networking guidance, refer to these official Micro
 
 - **[Software Defined Networking (SDN) in Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/software-defined-networking-23h2?view=azloc-2506)**  
   Comprehensive guide to SDN implementation and configuration in Azure Local environments
-
----
-
-> [!NOTE]
-> This document is part of the Azure Local networking guidance series. For the most current information and updates, always refer to the official Microsoft Azure Local documentation at [docs.microsoft.com](https://docs.microsoft.com).
