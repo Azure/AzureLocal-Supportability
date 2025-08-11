@@ -25,7 +25,7 @@ This document provides a comprehensive reference for implementing a fully conver
         - [Azure Local Host Validation](#azure-local-host-validation)
         - [Switch Validation](#switch-validation)
   - [Quality of Service (QoS)](#quality-of-service-qos)
-    - [BGP Routing](#bgp-routing)
+  - [BGP Routing](#bgp-routing)
   - [Frequently Asked Questions](#frequently-asked-questions)
     - [Q: Can I configure both Storage VLANs on both TOR switches?](#q-can-i-configure-both-storage-vlans-on-both-tor-switches)
   - [Additional Resources](#additional-resources)
@@ -361,7 +361,7 @@ Quality of Service configuration is essential for optimal Azure Local performanc
 
 **Reference**: [Quality of Service (QoS) Policy](Reference-TOR-QOS-Policy-Configuration.md)
 
-### BGP Routing
+## BGP Routing
 
 For BGP routing configuration and best practices in Azure Local deployments:
 
