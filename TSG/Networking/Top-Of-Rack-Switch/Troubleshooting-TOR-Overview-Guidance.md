@@ -1,6 +1,6 @@
-# Azure Local – Physical Network Overview & Troubleshooting Guidance
+# Azure Local – Physical Network Overview & Troubleshooting Guide
 
-_A foundational guide covering Azure Local physical network deployment patterns, key configuration requirements, log collection practices, and troubleshooting workflows._
+_A comprehensive reference covering Azure Local physical network deployment patterns, configuration requirements, validation procedures, and troubleshooting methodologies for enterprise deployments._
 
 ---
 
@@ -9,68 +9,79 @@ _A foundational guide covering Azure Local physical network deployment patterns,
 - [1. Introduction](#1-introduction)
 - [2. Deployment Patterns Overview](#2-deployment-patterns-overview)
 - [3. Physical Network Hardware & Configuration Requirements](#3-physical-network-hardware--configuration-requirements)
-- [4. Initial Troubleshooting for Physical Network Issues](#4-initial-troubleshooting-for-physical-network-issues)
-  - [4.1 Identify Deployment Pattern & Interface Configuration](#41-identify-deployment-pattern--interface-configuration)
-  - [4.2 Verify Physical Connections Between Hosts and ToR Switches](#42-verify-physical-connections-between-hosts-and-tor-switches)
-  - [4.3 Verify Azure Local Host MAC Learning on the Switch](#43-verify-azure-local-host-mac-learning-on-the-switch)
+- [4. Network Troubleshooting Methodology](#4-network-troubleshooting-methodology)
+  - [4.1 Deployment Pattern & Interface Configuration Verification](#41-deployment-pattern--interface-configuration-verification)
+  - [4.2 Physical Connectivity Verification](#42-physical-connectivity-verification)
+  - [4.3 MAC Address Learning Verification](#43-mac-address-learning-verification)
   - [4.4 Advanced Troubleshooting](#44-advanced-troubleshooting)
-- [5. Q&A](#5-qa)
-- [6. Appendix](#6-appendix)
+- [5. Frequently Asked Questions](#5-frequently-asked-questions)
+- [6. Additional Resources](#6-additional-resources)
 
 ---
 
 ## 1. Introduction
 
-This document provides a high-level introduction to **Azure Local physical networking**, including common deployment patterns, key configuration requirements, and typical troubleshooting scenarios. It also covers frequently asked questions (FAQ) to clarify design choices and operational considerations.
+This document provides comprehensive guidance for **Azure Local physical networking**, covering deployment patterns, configuration requirements, and systematic troubleshooting methodologies. It includes practical examples, validation procedures, and frequently asked questions to support enterprise deployments.
 
-Whether you're already familiar with these topics or exploring them for the first time, this guide can serve as a helpful **knowledge refresher** and reference. It complements the official Azure documentation and aims to provide practical guidance for real-world deployments.
+This guide complements the official Azure Local documentation and provides practical implementation guidance for IT professionals, network architects, and system integrators working with Azure Local infrastructure.
 
-This content will continue to evolve over time. **Feedback, suggestions, and contributions are welcome** to help improve accuracy and usability for everyone working with Azure Local.
+> [!NOTE]
+> This document focuses specifically on physical network infrastructure. For logical networking, SDN configuration, and advanced topics, please refer to the dedicated Azure Local documentation resources listed in the Additional Resources section.
 
 
-### Terms and Acronyms
+### Key Terminology
 
-- **ToR**: Top-of-Rack switch — the physical switch directly connected to Azure Local hosts.
-- **M**: Management VLAN — carries management traffic.
-- **C**: Compute VLAN — carries tenant or compute traffic.
-- **S1**: Storage 1 VLAN traffic.
-- **S2**: Storage 2 VLAN traffic.
-- **SET**: Switch Embedded Teaming — a Windows-native NIC teaming technology that provides redundancy and load balancing without requiring switch-based aggregation (like LACP).
-- **RDMA**: Remote Direct Memory Access — enables high-throughput, low-latency communication directly between memory across hosts, used for storage traffic.
-- **LLDP**: Link Layer Discovery Protocol — used to discover directly connected neighbors and interface mapping between hosts and switches.
-- **PFC**: Priority Flow Control — an IEEE 802.1Qbb standard that enables lossless Ethernet by pausing traffic per priority class (commonly used for RDMA).
-- **ETS**: Enhanced Transmission Selection — an IEEE 802.1Qaz standard that enables bandwidth allocation among traffic classes, often used with PFC to manage RDMA and non-RDMA coexistence.
-- **DCB**: Data Center Bridging — a suite of IEEE standards (including PFC and ETS) that enhances Ethernet for data center use by enabling lossless and traffic-class-aware transport over Ethernet.
+This section defines essential terms and acronyms used throughout this document:
+
+| Term | Definition |
+|------|------------|
+| **ToR (Top-of-Rack Switch)** | Physical network switch directly connected to Azure Local nodes, providing Layer 2/3 connectivity |
+| **Management VLAN (M)** | Network segment dedicated to cluster management and administrative traffic |
+| **Compute VLAN (C)** | Network segment for virtual machine workloads and tenant traffic |
+| **Storage VLAN 1 (S1)** | Primary storage network segment for SMB over RDMA traffic |
+| **Storage VLAN 2 (S2)** | Secondary storage network segment for SMB over RDMA traffic |
+| **SET (Switch Embedded Teaming)** | Windows-native NIC aggregation technology providing redundancy without switch-based LACP |
+| **RDMA (Remote Direct Memory Access)** | High-performance networking technology enabling direct memory-to-memory communication |
+| **LLDP (Link Layer Discovery Protocol)** | IEEE 802.1AB standard for network topology discovery and cable verification |
+| **PFC (Priority Flow Control)** | IEEE 802.1Qbb standard enabling lossless Ethernet for RDMA traffic |
+| **ETS (Enhanced Transmission Selection)** | IEEE 802.1Qaz standard for bandwidth allocation and traffic class management |
+| **DCB (Data Center Bridging)** | IEEE standards suite (PFC, ETS) enhancing Ethernet for data center environments |
 
 
 ---
 
 ## 2. Deployment Patterns Overview
-There are three primary physical network deployment patterns for Azure Local, depending on the use case and scale of the environment, and the main difference is how the storage traffic is handled:
 
-- **Switchless**: A cost-effective design where storage traffic is handled directly between hosts without a dedicated switch. This is typically used in smaller or remote deployments where simplicity and cost are prioritized.
+Azure Local supports three primary physical network deployment patterns, each optimized for different use cases, scale requirements, and operational considerations. The fundamental difference between these patterns lies in how storage traffic is handled and isolated:
+
+### Deployment Pattern Descriptions
+
+**Switchless Deployment**
+A cost-effective design optimized for smaller deployments where storage traffic flows directly between nodes without dedicated switching infrastructure. This pattern minimizes hardware requirements and is ideal for edge locations and remote sites where simplicity and cost optimization are priorities.
+
 ![Switchless with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_Switchless.png)
 
-- **Switched**: Separate NICs for M/C and S traffic, providing physical isolation. This pattern is suitable for high-performance setups where storage traffic needs dedicated bandwidth.
+**Switched Deployment**  
+A high-performance design utilizing dedicated NICs for management/compute and storage traffic, providing storage physical isolation. This pattern is recommended for enterprise deployments requiring maximum storage performance and dedicated bandwidth allocation for storage workloads.
+
 ![Switched with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_Switched.png)
 
-- **Fully-Converged**: All traffic types (M, C, S) share the same physical NICs. This design minimizes hardware footprint while maximizing performance and scalability.
+**Fully Converged Deployment**
+A balanced design where all traffic types (management, compute, storage) share the same physical NICs through VLAN segmentation. This pattern minimizes hardware footprint while maintaining high scalability. **Design Consistency**: Follows the same storage VLAN pattern as Switched deployment with "One Storage VLAN per TOR" as the baseline configuration to ensure RDMA traffic utilization and prevent storage traffic cross the ToR peer links.
+
 ![Fully-Converged with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_FullyConverged.png)
 
 
-### Comparison Summary: Fully-Converged vs Switched vs Switchless
+### Deployment Pattern Comparison
 
-## Network Design Comparison
+| Deployment Pattern  | Host NIC Configuration | ToR Switch VLAN Configuration | Primary Use Cases |
+|---------------------|------------------------|-------------------------------|-------------------|
+| **Switchless** | 2 NICs to switches (M+C traffic) + (N−1) direct inter-node NICs (S traffic) | Trunk ports with M, C VLANs only; no storage VLANs on ToRs | Edge deployments, remote sites, cost-sensitive environments |
+| **Switched** | 4 NICs per host: 2 for M+C traffic, 2 dedicated for storage | M and C VLANs on both ToRs; S1 VLAN exclusive to ToR1, S2 VLAN exclusive to ToR2 | Enterprise deployments requiring dedicated storage performance and traffic isolation |
+| **Fully Converged** | 2 NICs per host carrying all traffic types (M+C+S) via VLAN segmentation | **Baseline**: One Storage VLAN per TOR (S1→ToR1, S2→ToR2). **Optional**: Both storage VLANs on both ToRs for enhanced resilience | General-purpose deployments balancing performance, simplicity, and hardware efficiency |
 
-| Design Type         | Host NIC Traffic                                                   |  VLAN on ToRs                       | Typical Use Case                                      |
-|---------------------|---------------------------------------------------------------------|--------------------------------------------------------|--------------------------------------------------------|
-| **Switchless**      | 2 NICs per host to switch (M + C) + (N−1) direct host-to-host NICs for S | Trunk to host with M, C VLANs only; no S VLANs on ToRs | Low-cost, small-site or edge deployments without storage switches |
-| **Switched**        | 4 NICs per host. 2 for M + C, 2 for S                | Host-facing ports are configured as trunks: M and C VLANs are present on both ToRs; S1 VLAN is only on ToR1, and S2 VLAN is only on ToR2 | For dedicated storage performance and traffic separation |
-| **Fully Converged** | 2 NICs per host. All traffic (M + C + S) over both NICs | Host-facing ports are configured as trunks carrying M, C, and S VLANs — all VLANs must be allowed on both ToRs | Simple, scalable design with RDMA and minimal cabling |
-
-
-> [!IMPORTANT]  
-> Storage VLANs are preferably configured as **Layer 2 (L2) VLANs without IP subnets** to simplify the overall network design. Since storage traffic is **tagged by Azure Local hosts**, make sure these VLANs are always configured as **tagged VLANs (trunk ports)** on the **ToR (Top of Rack)** switches.
+> [!IMPORTANT]
+> **Storage VLAN Configuration**: Storage VLANs should be configured as **Layer 2 networks without IP subnets** to optimize network design. Since Azure Local nodes handle storage traffic tagging, ensure these VLANs are configured as **tagged VLANs on trunk ports** across all ToR switches.
 
 
 ---
@@ -111,11 +122,11 @@ This tool is designed to automate the generation of Azure Local switch configura
 
 ---
 
-## 4. Initial Troubleshooting for Physical Network Issues
+## 4. Network Troubleshooting Methodology
 
-This section provides clear, step-by-step guidance to help identify and troubleshoot common physical network issues in Azure Local environments.
+This section provides systematic troubleshooting procedures for identifying and resolving common physical network issues in Azure Local environments. Follow these procedures in sequence for efficient problem isolation and resolution.
 
-### 4.1 Identify Deployment Pattern & Interface Configuration
+### 4.1 Deployment Pattern & Interface Configuration Verification
 
 #### Troubleshooting Flowchart
 
@@ -280,7 +291,7 @@ d
 
 ```
 
-### 4.2 Verify Physical connections between Hosts and ToR Switches
+### 4.2 Physical Connectivity Verification
 
 #### Troubleshooting Flowchart
 
@@ -354,7 +365,7 @@ So the cable mapping based on the lldp neighbors output is as follows:
 
 ---
 
-### 4.3 Verify Azure Local Host MAC Learning on the Switch
+### 4.3 MAC Address Learning Verification
 
 Switches learn which MAC addresses are connected to which ports and VLANs. If a switch doesn’t learn the correct MAC for a host’s NICs, traffic won’t reach the intended host. This step ensures each host is properly connected and the network knows where to send traffic.
 
@@ -429,14 +440,15 @@ Legend:
 ```
 
 ### 4.4 Advanced Troubleshooting
-This TSG just covers the basic physical network troubleshooting steps. For more advanced topics like RDMA, latency tuning, SDN setup, BGP, MLAG, and Spanning Tree, please refer to the dedicated documents in the Azure Local documentation set.
 
-## 5. Q&A
+This document covers fundamental physical network troubleshooting procedures. For advanced networking topics including RDMA optimization, latency tuning, Software Defined Networking (SDN) configuration, BGP routing, MLAG implementation, and Spanning Tree Protocol troubleshooting, please refer to the dedicated technical documentation available in the Azure Local documentation library.
 
-### Q: Why does Azure Local use two storage networks in the design? Can I use just one?
+## 5. Frequently Asked Questions
+
+### Q: Why does Azure Local utilize two storage networks in the design architecture? Can a single storage network be implemented instead?
 
 **A:**  
-Azure Local uses **two separate storage VLANs** (e.g., VLAN 711 and VLAN 712) to provide **high availability and fault tolerance** for storage traffic.
+Azure Local implements **dual storage VLANs** (typically VLAN 711 and VLAN 712) to ensure **high availability and fault tolerance** for storage traffic. The core design principle follows **"One Storage VLAN per TOR"** architecture for consistency across deployment patterns.
 
 It’s true that **Windows SET (Switch Embedded Teaming)** provides NIC-level fault tolerance. However, **RDMA (Remote Direct Memory Access)** traffic is **tied to a specific physical NIC and its upstream switch**. If there’s only **one storage VLAN**, RDMA traffic may be forced to cross the **peer link** between the ToR switches — which is undesirable in performance-sensitive scenarios.
 
@@ -492,14 +504,30 @@ By using **two storage VLANs** (e.g., 711 and 712), each mapped to separate NICs
 
 - In a **Fully Converged** deployment, **Storage VLANs must be allowed** on the ToR peer link. While regular storage traffic doesn’t cross ToRs, **failover scenarios** make the peer link critical.
 
-#### Fully Converged Deployment
+#### Fully Converged Deployment - Baseline Configuration (Recommended)
 
-- Host1  
-  → NIC1 → ToR1 (normal path)  
-  → NIC2 → ToR2 (failover path)  
-- Uses Storage VLAN 711  
-- If NIC1 fails, Host1 switches to NIC2  
-- **If VLAN 711 is not allowed on the peer link**, ToR2 cannot forward traffic to the storage network — **traffic is dropped**.
+- **TOR1**: Handles Storage VLAN 711 only  
+- **TOR2**: Handles Storage VLAN 712 only  
+- Host1 → NIC1 → Storage VLAN 711 → ToR1  
+- Host1 → NIC2 → Storage VLAN 712 → ToR2  
+- Each ToR handles its own storage traffic  
+- **No need to allow Storage VLANs across the peer link**
+- **Ensures consistent design pattern** and **guaranteed RDMA usage**
+
+#### Fully Converged Deployment - Optional Enhanced Configuration
+
+- Both Storage VLANs (711 and 712) configured on both ToRs  
+- Host1 → NIC1 → ToR1 (can use either VLAN 711 or 712)  
+- Host1 → NIC2 → ToR2 (can use either VLAN 711 or 712)  
+- **Storage VLANs must be allowed** on the ToR peer link for failover scenarios
+- **Enhanced resilience primarily benefits physical NIC failure scenarios**
+
+**Key Considerations:**
+- **Application Layer**: Storage applications only care about available SMB channels and whether they support RDMA
+- **Network Layer**: Physical network provides the underlying connectivity paths
+- **Failover Behavior**: If RDMA channels are unavailable, SMB will automatically fall back to standard TCP traffic
+- **Two-Layer Design**: Application layer (SMB channels) operates independently of network layer (VLAN paths)
+- **Additional Complexity**: Enhanced configuration increases network complexity without significant performance benefits under normal operations
 
 #### Switched Deployment
 
@@ -536,8 +564,21 @@ In the reference design, the **Storage VLAN is configured as a Layer 2 (L2) netw
 
 
 
-## 6. Appendix
+## 6. Additional Resources
 
-- [Physical network requirements for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/physical-network-requirements?view=azloc-2506&tabs=overview%2C24H2reqs)
-- [Host network requirements for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements?view=azloc-2506)
-- [Software Defined Networking (SDN) in Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/software-defined-networking-23h2?view=azloc-2506)
+For comprehensive Azure Local networking guidance, refer to these official Microsoft documentation resources:
+
+### Official Documentation
+- **[Physical network requirements for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/physical-network-requirements?view=azloc-2506&tabs=overview%2C24H2reqs)**  
+  Complete hardware and configuration requirements for Azure Local network infrastructure
+
+- **[Host network requirements for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements?view=azloc-2506)**  
+  Detailed guidance for host-level networking configuration and requirements
+
+- **[Software Defined Networking (SDN) in Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/software-defined-networking-23h2?view=azloc-2506)**  
+  Comprehensive guide to SDN implementation and configuration in Azure Local environments
+
+---
+
+> [!NOTE]
+> This document is part of the Azure Local networking guidance series. For the most current information and updates, always refer to the official Microsoft Azure Local documentation at [docs.microsoft.com](https://docs.microsoft.com).
