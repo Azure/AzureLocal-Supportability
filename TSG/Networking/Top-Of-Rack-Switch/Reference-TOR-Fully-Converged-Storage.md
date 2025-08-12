@@ -256,11 +256,11 @@ interface Ethernet1/1-3
 
 #### Configuration Validation
 
-This section provides comprehensive validation procedures to verify the network configuration is functioning correctly in production environments.
+This section provides comprehensive validation procedures to verify the network configuration is functioning correctly in **already deployed Azure Local environments**. These validation commands are intended for troubleshooting and verifying existing production deployments, not for fresh installations.
 
 ##### Azure Local Host Validation
 
-Use these PowerShell commands on Azure Local nodes to validate network adapter configuration and RDMA connectivity:
+Use these PowerShell commands on **deployed Azure Local nodes** to validate network adapter configuration and RDMA connectivity:
 
 **1. Verify Network Adapter Configuration**
 ```powershell
@@ -373,7 +373,11 @@ For BGP routing configuration and best practices in Azure Local deployments:
 ### Q: Can I configure both Storage VLANs on both TOR switches?
 
 **A:** 
-**Yes, configuring both Storage VLANs on both TORs will work, but it's an optional enhanced configuration.** The referenced baseline configuration follows the **One Storage VLAN per TOR** pattern for consistency with switched deployment.
+**Yes, you can configure both Storage VLANs on both TOR switches, but you won't get too much benefit from it.** Here's why:
+
+1. **We always want storage to stay in RDMA** - The baseline configuration already ensures RDMA connectivity is maintained
+2. **We don't want traffic to cross the TOR peer link** - Having both VLANs on both switches may introduce unnecessary inter-switch traffic
+3. **It's a balance between resilience vs performance** - The added complexity doesn't provide significant resilience improvements
 
 **Baseline Configuration (Recommended):**
 - **TOR1**: Configure only Storage VLAN 711 (plus Management and Compute VLANs)
@@ -383,15 +387,13 @@ This approach ensures:
 - **Design consistency** across deployment patterns
 - **Guaranteed RDMA usage** - storage traffic cannot fall back to regular TCP
 - **Simplified configuration** and troubleshooting
+- **Optimal performance** - no unnecessary cross-TOR traffic
 
 **Optional Enhanced Configuration:**
-Customers can optionally configure both Storage VLANs (711 and 712) on both TOR switches for additional resilience, but this is **not required or mandatory**. The baseline "One Storage VLAN per TOR" configuration provides sufficient redundancy through the host-side **SET (Switch Embedded Teaming)** and ensures reliable RDMA connectivity.
-
-**S2D Traffic Considerations:**
-Both configurations work effectively because S2D (Storage Spaces Direct) traffic utilizes SMB channels. As long as SMB channels with RDMA are available, the storage traffic will perform optimally regardless of whether you use the baseline (One Storage VLAN per TOR) or enhanced (both VLANs on both TORs) configuration.
+While customers can configure both Storage VLANs (711 and 712) on both TOR switches, this configuration is **not recommended** as it provides minimal additional resilience. The baseline "One Storage VLAN per TOR" configuration already provides sufficient redundancy through the host-side **SET (Switch Embedded Teaming)** and ensures reliable RDMA connectivity without the potential performance implications.
 
 > [!IMPORTANT]
-> The primary goal is to maintain design consistency and force storage traffic to always use RDMA instead of allowing fallback to regular TCP traffic.
+> The primary goal is to maintain design consistency, force storage traffic to always use RDMA instead of allowing fallback to regular TCP traffic, and avoid unnecessary cross-TOR traffic that could impact performance.
 
 
 ## Additional Resources
