@@ -129,8 +129,8 @@ The fully converged design uses VLAN segmentation to isolate different traffic t
 |---------------|-------------------------------------|---------|----------------------------------------|
 | Management    | Cluster and host management traffic | 7       | Native VLAN, L3 routed (SVI)          |
 | Compute       | Virtual machine workload traffic    | 201     | Tagged VLAN, L3 routed (SVI)          |
-| Storage 1     | SMB over RDMA (primary path)       | 711     | Tagged VLAN, L2 only (no SVI)         |
-| Storage 2     | SMB over RDMA (secondary path)      | 712     | Tagged VLAN, L2 only (no SVI)         |
+| Storage 1     | SMB1 over RDMA       | 711     | Tagged VLAN, L2 only (no SVI)         |
+| Storage 2     | SMB2 over RDMA      | 712     | Tagged VLAN, L2 only (no SVI)         |
 
 > [!IMPORTANT]
 > **Storage VLAN Design Pattern**: The fully converged deployment follows the same pattern as switched deployment: **One Storage VLAN per TOR** is the baseline configuration. This design ensures storage traffic always uses RDMA instead of falling back to regular TCP traffic.

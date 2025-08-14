@@ -43,8 +43,8 @@ This section defines essential terms and acronyms used throughout this document:
 | **ToR (Top-of-Rack Switch)** | Physical network switch directly connected to Azure Local nodes, providing Layer 2/3 connectivity |
 | **Management VLAN (M)** | Network segment dedicated to cluster management and administrative traffic |
 | **Compute VLAN (C)** | Network segment for virtual machine workloads and tenant traffic |
-| **Storage VLAN 1 (S1)** | Primary storage network segment for SMB over RDMA traffic |
-| **Storage VLAN 2 (S2)** | Secondary storage network segment for SMB over RDMA traffic |
+| **Storage VLAN 1 (S1)** | Storage network segment for SMB1 over RDMA traffic |
+| **Storage VLAN 2 (S2)** | Storage network segment for SMB2 over RDMA traffic |
 | **SET (Switch Embedded Teaming)** | Windows-native NIC aggregation technology providing redundancy without switch-based LACP |
 | **RDMA (Remote Direct Memory Access)** | High-performance networking technology enabling direct memory-to-memory communication |
 | **LLDP (Link Layer Discovery Protocol)** | IEEE 802.1AB standard for network topology discovery and cable verification |
