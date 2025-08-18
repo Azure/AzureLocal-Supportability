@@ -43,8 +43,8 @@ This section defines essential terms and acronyms used throughout this document:
 | **ToR (Top-of-Rack Switch)** | Physical network switch directly connected to Azure Local nodes, providing Layer 2/3 connectivity |
 | **Management VLAN (M)** | Network segment dedicated to cluster management and administrative traffic |
 | **Compute VLAN (C)** | Network segment for virtual machine workloads and tenant traffic |
-| **Storage VLAN 1 (S1)** | Primary storage network segment for SMB over RDMA traffic |
-| **Storage VLAN 2 (S2)** | Secondary storage network segment for SMB over RDMA traffic |
+| **Storage VLAN 1 (S1)** | Storage network segment for SMB1 over RDMA traffic |
+| **Storage VLAN 2 (S2)** | Storage network segment for SMB2 over RDMA traffic |
 | **SET (Switch Embedded Teaming)** | Windows-native NIC aggregation technology providing redundancy without switch-based LACP |
 | **RDMA (Remote Direct Memory Access)** | High-performance networking technology enabling direct memory-to-memory communication |
 | **LLDP (Link Layer Discovery Protocol)** | IEEE 802.1AB standard for network topology discovery and cable verification |
@@ -128,97 +128,53 @@ This tool is designed to automate the generation of Azure Local switch configura
 
 ## 4. Frequently Asked Questions
 
-### Q: Why does Azure Local utilize two storage networks in the design architecture? Can a single storage network be implemented instead?
+### Q: Why does Azure Local utilize two storage networks in the design architecture, and do Storage VLANs need to be configured across the ToR peer link?
 
 **A:**  
-Azure Local implements **dual storage VLANs** (typically VLAN 711 and VLAN 712) to ensure **high availability and fault tolerance** for storage traffic. The core design principle follows **"One Storage VLAN per TOR"** architecture for consistency across deployment patterns.
+Azure Local implements **dual storage VLANs** (typically VLAN 711 and VLAN 712) to ensure **high availability and fault tolerance** for storage traffic. The core design principle follows **"One Storage VLAN per ToR"** architecture for consistency across all deployment patterns.
 
-It's true that **Windows SET (Switch Embedded Teaming)** provides NIC-level fault tolerance. However, **RDMA (Remote Direct Memory Access)** traffic is **tied to a specific physical NIC and its upstream switch**. If there's only **one storage VLAN**, RDMA traffic may be forced to cross the **peer link** between the ToR switches — which is undesirable in performance-sensitive scenarios.
+**Storage VLANs and Peer Link Configuration:**
+**No, Storage VLANs should not be configured across the ToR peer link** in any deployment pattern. While Management and Compute VLANs are allowed across ToR peer links, Storage VLANs follow a different architecture.
 
-- In a **Fully Converged** deployment, **Network Intent with SET** is used because all VLANs (Management, Compute, Storage) must be available across the teamed NICs.
+**Key Design Principles:**
+- **ToR Switch Level**: Each ToR switch handles **only one storage VLAN** - no storage traffic crosses the ToR peer link
+- **Host Level**: **Windows SET (Switch Embedded Teaming)** in Fully Converged deployments uses vNIC to pNIC mapping based on adapter order to ensure storage traffic reaches the correct ToR switch
+- **Resilience**: Two storage VLANs provide **host-side resilience** while ToR switches optimize **RDMA performance** to the right destination
 
-- In contrast, for a **Switched** deployment, only **Network Intent** is applied — **SET is not used** — because **storage (SMB) traffic uses dedicated RDMA NICs directly**, without teaming.
+**Architecture Overview:**
 
+In **both Switched and Fully Converged** deployments:
+- **ToR1**: Handles Storage VLAN 711 exclusively  
+- **ToR2**: Handles Storage VLAN 712 exclusively  
+- **No storage traffic crosses the ToR peer link**
 
-For example, in a **switched scenario**:
-- If **Host1** uses **NIC1 → ToR1**
-- And **Host2** uses **NIC2 → ToR2**
-- Then all RDMA storage traffic between them must **cross the peer link**
-
-```txt
-          +--------+            +--------+
-          |  ToR1  | <--------> |  ToR2  |
-          +--------+  peer link +--------+
-             |  |                  |  |
-             |  |                  |  |
-         +---+--+--+           +---+--+--+
-         | NIC1   |           | NIC2   |
-     Host1       Host2     Host1       Host2
-     VLAN711     VLAN711   VLAN711     VLAN711
-
-```
-
-This introduces **unnecessary latency and jitter**, which can degrade RDMA performance.
-
-By using **two storage VLANs** (e.g., 711 and 712), each mapped to separate NICs and switches, the design allows RDMA traffic to **stay local** to the switch as much as possible. Traffic only crosses the peer link **when a failover occurs**, not during normal operation.
-
-```txt
-          +--------+            +--------+
-          |  ToR1  | <--------> |  ToR2  |
-          +--------+  peer link +--------+
-             |  |                  |  |
-             |  |                  |  |
-         +---+--+--+           +---+--+--+
-         | NIC1   |           | NIC2   |
-     Host1       Host2     Host1       Host2
-     VLAN711     VLAN711   VLAN712     VLAN712
-
-```
-
-#### Summary:
-- ✅ SET provides link-level redundancy
-- ✅ Two storage VLANs ensure **RDMA-level failover** and **ToR-local communication**
-- 🚫 One VLAN risks **cross-ToR RDMA**, which reduces performance
-
-### Q: Management and Compute VLANs are allowed across the ToRs peer link. Do I also need to allow the Storage VLANs across the peer link between the two ToR switches?
-
-**A:** 
-- In a **Switched** deployment, **Storage VLANs do not need to be allowed** across the ToR peer link. Each host uses a dedicated Storage VLAN that maps to a specific ToR switch. This keeps storage traffic local, avoiding cross-ToR paths.
-
-- In a **Fully Converged** deployment, **Storage VLANs must be allowed** on the ToR peer link. While regular storage traffic doesn't cross ToRs, **failover scenarios** make the peer link critical.
-
-#### Fully Converged Deployment - Baseline Configuration (Recommended)
-
-- **TOR1**: Handles Storage VLAN 711 only  
-- **TOR2**: Handles Storage VLAN 712 only  
-- Host1 → NIC1 → Storage VLAN 711 → ToR1  
-- Host1 → NIC2 → Storage VLAN 712 → ToR2  
-- Each ToR handles its own storage traffic  
-- **No need to allow Storage VLANs across the peer link**
-- **Ensures consistent design pattern** and **guaranteed RDMA usage**
-
-#### Fully Converged Deployment - Optional Enhanced Configuration
-
-- Both Storage VLANs (711 and 712) configured on both ToRs  
-- Host1 → NIC1 → ToR1 (can use either VLAN 711 or 712)  
-- Host1 → NIC2 → ToR2 (can use either VLAN 711 or 712)  
-- **Storage VLANs must be allowed** on the ToR peer link for failover scenarios
-- **Enhanced resilience primarily benefits physical NIC failure scenarios**
-
-**Key Considerations:**
-- **Application Layer**: Storage applications only care about available SMB channels and whether they support RDMA
-- **Network Layer**: Physical network provides the underlying connectivity paths
-- **Failover Behavior**: If RDMA channels are unavailable, SMB will automatically fall back to standard TCP traffic
-- **Two-Layer Design**: Application layer (SMB channels) operates independently of network layer (VLAN paths)
-- **Additional Complexity**: Enhanced configuration increases network complexity without significant performance benefits under normal operations
+**Deployment Pattern Implementation:**
 
 #### Switched Deployment
+- Uses **dedicated storage NICs** (no SET)
+- Host1 → dedicated NIC1 → Storage VLAN 711 → ToR1  
+- Host1 → dedicated NIC2 → Storage VLAN 712 → ToR2  
+- **Direct NIC-to-ToR mapping** without teaming
+- **No storage VLANs required on the peer link**
 
-- Host1 → NIC1 → Storage VLAN 711 → ToR1  
-- Host1 → NIC2 → Storage VLAN 712 → ToR2  
-- Each ToR handles its own storage traffic  
-- No cross-ToR forwarding needed  
-- **No need to allow Storage VLANs across the peer link**
+#### Fully Converged Deployment
+- Uses **SET (Switch Embedded Teaming)** for all traffic types
+- SET performs **vNIC to pNIC mapping** based on adapter order
+- Host1 → SET maps Storage VLAN 711 → pNIC1 → ToR1  
+- Host1 → SET maps Storage VLAN 712 → pNIC2 → ToR2  
+- **SET ensures correct vNIC to pNIC mapping** based on adapter order
+- **No storage VLANs required on the peer link**
+
+**Why this design works:**
+- **Host-side resilience**: SET (in Fully Converged) or dedicated NICs (in Switched) provide redundancy
+- **ToR-side optimization**: Each ToR switch optimizes RDMA performance for its assigned storage VLAN
+- **Clean separation**: Management and Compute VLANs handle inter-ToR communication needs
+
+#### Summary:
+- ✅ **One Storage VLAN per ToR** - no storage traffic crosses ToR peer links
+- ✅ **SET provides host-side resilience** and correct traffic routing in Fully Converged deployments  
+- ✅ **Dual storage VLANs ensure failover capabilities** while maintaining RDMA performance optimization
+- ✅ **Storage VLANs are not configured on ToR peer links** - unlike Management and Compute VLANs
 
 
 ### Q: Are **DCB (Data Center Bridging)** features like **PFC** and **ETS** required for RDMA in Azure Local deployments?
