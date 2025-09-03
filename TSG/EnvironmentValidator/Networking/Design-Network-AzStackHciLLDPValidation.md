@@ -147,8 +147,6 @@ These are vendor-specific extensions that provide advanced networking features:
         $secPassWord = Read-Host "Enter password for $userName" -AsSecureString
         $hostCred = New-Object System.Management.Automation.PSCredential($userName, $secPassWord)
         [System.Management.Automation.Runspaces.PSSession[]] $allServerSessions = @();
-        [System.Collections.Hashtable] $StorageAdapterVLANIDInfo = @{ "adapter1" = 711; "adapter2" = 712 }
-        [System.Management.Automation.Runspaces.PSSession[]] $allServerSessions = @();
         foreach ($currentServer in $allServers) {
             $currentSession = Microsoft.PowerShell.Core\New-PSSession -ComputerName $currentServer -Credential $hostCred -ErrorAction Stop
             $allServerSessions += $currentSession
