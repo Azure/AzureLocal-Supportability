@@ -5,7 +5,7 @@
 1. [Overview](#overview)
 2. [Prerequisites and Requirements](#prerequisites-and-requirements)
 3. [What Invoke-AzStackHciLLDPValidation Does](#what-invoke-azstackhcilldpvalidation-does)
-4. [Why LLDP for Azure Stack HCI Validation](#why-lldp-for-azure-stack-hci-validation)
+4. [Why LLDP for Azure Local Validation](#why-lldp-for-azure-stack-hci-validation)
 5. [LLDP TLV Data Collection](#lldp-tlv-data-collection)
 6. [How the Function Processes LLDP Data](#how-the-function-processes-lldp-data)
 7. [Function Usage and Parameters](#function-usage-and-parameters)
@@ -18,19 +18,19 @@
 
 ## Overview
 
-This documentation describes the core functions of `Invoke-AzStackHciLLDPValidation` and focuses on **why**, **what**, and **how** the tool collects LLDP TLVs, parses them, and validates network connections and configurations for Azure Stack HCI environments.
+This documentation describes the core functions of `Invoke-AzStackHciLLDPValidation` and focuses on **why**, **what**, and **how** the tool collects LLDP TLVs, parses them, and validates network connections and configurations for Azure Local environments.
 
 `Invoke-AzStackHciLLDPValidation` is a core validation function within the **Azure Stack Environment Validator tool** that performs comprehensive LLDP (Link Layer Discovery Protocol) network validation. This PowerShell function is designed for **Azure local administrators and deployment teams** to validate physical network connections and configurations before cluster deployment.
 
 **Function Location**: Part of the Azure Stack Environment Validator (`AzStackHci.EnvironmentChecker`) module  
-**Primary Purpose**: Collect, parse, and validate LLDP TLV data to ensure network switches and connections meet Azure Stack HCI requirements
+**Primary Purpose**: Collect, parse, and validate LLDP TLV data to ensure network switches and connections meet Azure Local requirements
 
-The function automatically discovers network connectivity between Azure Stack HCI hosts and their connected Top-of-Rack (ToR) switches by collecting LLDP TLVs, parsing the raw data into structured information, and validating that cables are properly connected and network configurations comply with deployment requirements.
+The function automatically discovers network connectivity between Azure Local hosts and their connected Top-of-Rack (ToR) switches by collecting LLDP TLVs, parsing the raw data into structured information, and validating that cables are properly connected and network configurations comply with deployment requirements.
 
 ## Prerequisites and Requirements
 
 ### Software Requirements
-- Windows Server 2019/2022 or Azure Stack HCI OS on target nodes
+- Windows Server 2019/2022 or Azure Local OS on target nodes
 - PowerShell 5.1 or later
 - Local administrator privileges on all nodes
 - PowerShell remoting enabled between nodes
@@ -41,7 +41,7 @@ The function automatically discovers network connectivity between Azure Stack HC
 - Layer 2 connectivity between hosts and switches
 
 ### Pre-Deployment Setup Commands
-Run these commands on each Azure Stack HCI node before using the tool:
+Run these commands on each Azure Local node before using the tool:
 
 ```powershell
 # Install required Windows features (run as administrator)
@@ -73,15 +73,15 @@ This function integrates seamlessly with the broader Azure Stack Environment Val
 - **Result Integration**: Outputs structured validation results that integrate with other validator functions
 - **Report Generation**: Contributes network validation data to the overall environment assessment report
 
-## Why LLDP for Azure Stack HCI Validation?
+## Why LLDP for Azure Local Validation?
 
-The `Invoke-AzStackHciLLDPValidation` function leverages LLDP (Link Layer Discovery Protocol) as a critical component of Azure Stack HCI environment validation because:
+The `Invoke-AzStackHciLLDPValidation` function leverages LLDP (Link Layer Discovery Protocol) as a critical component of Azure Local environment validation because:
 
 - **Automated Network Discovery**: Eliminates manual cable tracing by automatically discovering switch connections and configurations
 - **Standards-Based Validation**: Uses industry-standard IEEE 802.1AB protocol supported by all enterprise switches
 - **Real-Time Configuration Check**: Provides current network state validation including VLANs, QoS, and connectivity
 - **Multi-Vendor Support**: Works consistently across different switch vendors (Cisco, Dell, HPE, Aruba, etc.)
-- **Environment Validator Integration**: Provides network validation data that integrates with other Azure Stack HCI readiness checks
+- **Environment Validator Integration**: Provides network validation data that integrates with other Azure Local readiness checks
 
 ## LLDP TLV Data Collection
 
@@ -156,12 +156,12 @@ These are vendor-specific extensions that provide advanced networking features:
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `PSSession` | PSSession[] | Yes | PowerShell sessions to target Azure Stack HCI nodes |
+| `PSSession` | PSSession[] | Yes | PowerShell sessions to target Azure Local nodes |
 | `OutputPath` | String | Yes | Directory path for LLDP validation output files |
 | `PassThru` | Switch | No | Returns validation objects for further processing |
 
 ### Return Values
-The function returns Azure Stack HCI result objects containing:
+The function returns Azure Local result objects containing:
 - **Validation Status**: SUCCESS, WARNING, or FAILURE
 - **Detailed Results**: Connection mappings, TLV analysis, and configuration validation
 - **Output Files**: JSON files containing raw and processed LLDP data
@@ -355,7 +355,7 @@ This manual process shows what the automated tool does across all adapters on al
 **Conversion Process**:
 - IEEE 802.1Qbb PFC extension for lossless traffic
 - Byte 8 (binary: 00001000) = Priority 3 enabled for PFC
-- **Result**: PFC enabled on Priority 3 (RDMA Traffic Class) as required by Microsoft's Azure Stack HCI RDMA traffic considerations
+- **Result**: PFC enabled on Priority 3 (RDMA Traffic Class) as required by Microsoft's Azure Local RDMA traffic considerations
 - **Requirement**: PFC must be enabled for the RDMA traffic class (Priority 3) to ensure lossless SMB Direct storage traffic in RoCE deployments
 
 **Enhanced Transmission Selection (ETS) TLV**:
@@ -369,12 +369,12 @@ This manual process shows what the automated tool does across all adapters on al
 ```
 
 **Conversion Process**:
-- Traffic Class assignments and bandwidth allocations per Microsoft's official Azure Stack HCI RDMA traffic requirements:
+- Traffic Class assignments and bandwidth allocations per Microsoft's official Azure Local RDMA traffic requirements:
 - **System Traffic Class** (Priority 7) → 2% bandwidth reservation (for system heartbeats)
 - **RDMA Traffic Class** (Priority 3) → 50% bandwidth reservation (for lossless SMB Direct storage traffic)
 - **Default Traffic Class** (Priority 0) → Remaining bandwidth (for VM traffic and management)
 
-**Business Value**: Confirms Data Center Bridging (DCB) configuration aligns with Microsoft's official Azure Stack HCI RDMA traffic considerations, ensuring proper bandwidth allocation for system heartbeats (2%), lossless storage traffic (50%), and default traffic classes as required for RoCE deployments.
+**Business Value**: Confirms Data Center Bridging (DCB) configuration aligns with Microsoft's official Azure Local RDMA traffic considerations, ensuring proper bandwidth allocation for system heartbeats (2%), lossless storage traffic (50%), and default traffic classes as required for RoCE deployments.
 
 ## Output Files and Analysis
 
@@ -410,13 +410,13 @@ This manual process shows what the automated tool does across all adapters on al
 ## Key Benefits of Invoke-AzStackHciLLDPValidation
 
 ### For Deployment Teams Using Azure Stack Environment Validator
-- **Integrated Validation**: Seamlessly integrates with the broader Azure Stack HCI environment validation workflow
+- **Integrated Validation**: Seamlessly integrates with the broader Azure Local environment validation workflow
 - **Automated Network Verification**: Part of the comprehensive pre-deployment validation that checks all system readiness aspects
 - **Environment Validator Results**: Provides structured validation results that integrate with other environment checks
 - **Self-Service Validation**: Enables deployment teams to validate network readiness without network team dependency
 
-### For Azure Stack HCI Environment Readiness
-- **Comprehensive Environment Check**: Network validation as part of complete Azure Stack HCI readiness assessment  
+### For Azure Local Environment Readiness
+- **Comprehensive Environment Check**: Network validation as part of complete Azure Local readiness assessment  
 - **Pre-Deployment Confidence**: Ensures network infrastructure is ready before cluster deployment begins
 - **Integrated Reporting**: Network validation results combine with compute, storage, and other infrastructure checks
 - **Deployment Risk Reduction**: Identifies network issues early in the validation process, preventing deployment failures
@@ -424,20 +424,20 @@ This manual process shows what the automated tool does across all adapters on al
 ## Common Use Cases for Invoke-AzStackHciLLDPValidation
 
 ### Azure Stack Environment Validator Integration
-1. **Comprehensive Environment Validation**: Run as part of the complete Azure Stack HCI environment readiness check using `Invoke-AzStackHciEnvironmentChecker`
+1. **Comprehensive Environment Validation**: Run as part of the complete Azure Local environment readiness check using `Invoke-AzStackHciEnvironmentChecker`
 2. **Pre-Deployment Network Validation**: Execute standalone network validation before cluster deployment begins
 3. **Environment Validator Workflow**: Integrate LLDP validation with compute, storage, and other infrastructure readiness checks
 
 ### Specific Network Validation Scenarios
 4. **Physical Connection Verification**: Validate all network cables are connected to correct switch ports per deployment plan
-5. **Switch Compatibility Check**: Ensure connected switches support required LLDP TLVs and Azure Stack HCI features
+5. **Switch Compatibility Check**: Ensure connected switches support required LLDP TLVs and Azure Local features
 6. **Network Configuration Validation**: Verify VLAN settings, MTU configurations, and QoS parameters across all nodes
 7. **Deployment Readiness Assessment**: Generate comprehensive network validation reports for deployment team review
 
 
 ## Frequently Asked Questions (FAQ)
 
-### Q: When should I run Invoke-AzStackHciLLDPValidation during Azure Stack HCI deployment?
+### Q: When should I run Invoke-AzStackHciLLDPValidation during Azure Local deployment?
 **A:** This function is typically executed as part of the comprehensive Azure Stack Environment Validator workflow, but can also be run standalone for focused network validation.
 
 **Integration Approaches:**
@@ -449,13 +449,13 @@ This manual process shows what the automated tool does across all adapters on al
 1. Data center team completes cable installation
 2. **Run Azure Stack Environment Validator** (includes LLDP validation)
 3. Fix any network connection issues found
-4. Begin Azure Stack HCI cluster deployment
+4. Begin Azure Local cluster deployment
 
 ### Q: How does Invoke-AzStackHciLLDPValidation integrate with the Environment Validator?
-**A:** The function seamlessly integrates with the broader Azure Stack HCI environment validation workflow:
+**A:** The function seamlessly integrates with the broader Azure Local environment validation workflow:
 
 - **Unified Execution**: Runs automatically when `Invoke-AzStackHciEnvironmentChecker` is executed
-- **Structured Results**: Returns standardized Azure Stack HCI result objects that integrate with other validation checks
+- **Structured Results**: Returns standardized Azure Local result objects that integrate with other validation checks
 - **Combined Reporting**: Network validation results are included in comprehensive environment assessment reports
 - **Prerequisite Validation**: Can be run independently to validate network readiness before other environment checks
 
