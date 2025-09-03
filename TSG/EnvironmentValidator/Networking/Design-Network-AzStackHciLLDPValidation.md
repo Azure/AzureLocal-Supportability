@@ -136,12 +136,16 @@ These are vendor-specific extensions that provide advanced networking features:
 ## Function Usage and Parameters
 
 ### Basic Function Invocation
+> **Security Note:**  
+> For security, never hardcode passwords in scripts. Instead, prompt for credentials at runtime or use secure credential storage (such as Windows Credential Manager or Azure Key Vault). The following example demonstrates secure password input.
+
 ```powershell
         $allServers = "<ARRAY OF SERVERS' IP>"
         $logOutputPath = "<LOGFILELOCATION>"
         $userName = "<LOCALADMIN>"
-        $secPassWord = ConvertTo-SecureString "<LOCALADMINPASSWORD>" -AsPlainText -Force
-        $hostCred = New-Object System.Management.Automation.PSCredential($username, $secPassWord)
+        # Prompt for password securely
+        $secPassWord = Read-Host "Enter password for $userName" -AsSecureString
+        $hostCred = New-Object System.Management.Automation.PSCredential($userName, $secPassWord)
         [System.Management.Automation.Runspaces.PSSession[]] $allServerSessions = @();
         [System.Collections.Hashtable] $StorageAdapterVLANIDInfo = @{ "adapter1" = 711; "adapter2" = 712 }
         [System.Management.Automation.Runspaces.PSSession[]] $allServerSessions = @();
