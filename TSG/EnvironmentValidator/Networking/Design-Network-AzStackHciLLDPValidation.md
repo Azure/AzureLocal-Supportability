@@ -5,16 +5,16 @@
 1. [Overview](#overview)
 2. [Prerequisites and Requirements](#prerequisites-and-requirements)
 3. [What Invoke-AzStackHciLLDPValidation Does](#what-invoke-azstackhcilldpvalidation-does)
-4. [Why LLDP for Azure Local Validation](#why-lldp-for-azure-stack-hci-validation)
+4. [Why LLDP for Azure Local Validation](#why-lldp-for-azure-local-validation)
 5. [LLDP TLV Data Collection](#lldp-tlv-data-collection)
-6. [How the Function Processes LLDP Data](#how-the-function-processes-lldp-data)
-7. [Function Usage and Parameters](#function-usage-and-parameters)
-8. [NetLLDPAgent Commands](#netlldpagent-commands-and-usage)
+6. [Function Usage and Parameters](#function-usage-and-parameters)
+7. [How the Function Processes LLDP Data](#how-the-function-processes-lldp-data)
+8. [NetLLDPAgent Commands and Usage](#netlldpagent-commands-and-usage)
 9. [Practical Examples](#practical-examples)
 10. [Output Files and Analysis](#output-files-and-analysis)
-11. [Key Benefits](#key-benefits-of-invoke-azstackhcilldpvalidation)
-12. [Common Use Cases](#common-use-cases-for-invoke-azstackhcilldpvalidation)
-13. [Frequently Asked Questions](#frequently-asked-questions-faq)
+11. [Key Benefits of Invoke-AzStackHciLLDPValidation](#key-benefits-of-invoke-azstackhcilldpvalidation)
+12. [Common Use Cases for Invoke-AzStackHciLLDPValidation](#common-use-cases-for-invoke-azstackhcilldpvalidation)
+13. [Frequently Asked Questions (FAQ)](#frequently-asked-questions-faq)
 
 ## Overview
 
