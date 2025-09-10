@@ -29,11 +29,11 @@ To mitigate this issue, we will need to manually trigger a full solution update 
 
 2. Get the latest MAS Update xml file:
    
-   `$ececlient = Create-ECEClusterServiceClient`
-   
-   `$LastUpdate = Get-ActionPlanInstances -ececlient $ececlient | Where-Object ActionPlanName -match "MAS Update" | Sort-Object -Property EndDateTime -Descending | Select-Object -First 1`
-   
-   `$LastUpdate.ProgressAsXml | Out-File c:\temp\LastUpdate.xml`
+   ```
+   $ececlient = Create-ECEClusterServiceClient
+   $LastUpdate = Get-ActionPlanInstances -ececlient $ececlient | Where-Object ActionPlanName -match "MAS Update" | Sort-Object -Property EndDateTime -Descending | Select-Object -First 1   
+   $LastUpdate.ProgressAsXml | Out-File c:\temp\LastUpdate.xml
+   ```
 
    Once you get the LastUpdate xml file, if the status of step Name="Update Host OS" is not 'Error', you might have collected the wrong xml file. You can use the below command to list all action plan instances and find the one which has 'ActionPlanName' as 'MAS Update' and the time matches with last known failure time. Also, the status of the action plan should be 'Failed':
 
@@ -68,15 +68,17 @@ To mitigate this issue, we will need to manually trigger a full solution update 
 ## What to do if the final status is 'Failed'
 Once the action plan finished. If the final status is 'Failed', you could use below command to collect the latest update xml file again:
 
-`$LastUpdate = Get-ActionPlanInstances -ececlient $ececlient | Where-Object ActionPlanName - 
- match "MAS Update" | Sort-Object -Property EndDateTime -Descending | Select-Object -First 1`
-
-`$LastUpdate.ProgressAsXml | Out-File c:\temp\LatestUpdate.xml`
+```
+$LastUpdate = Get-ActionPlanInstances -ececlient $ececlient | Where-Object ActionPlanName -match "MAS Update" | Sort-Object -Property EndDateTime -Descending | Select-Object -First 1
+$LastUpdate.ProgressAsXml | Out-File c:\temp\LatestUpdate.xml
+```
 
 Open the LatestUpdate.xml, if the error is still within step 'Update Host OS'. You could use below command to collect CAU related log and attached it to the ICM (note that this cmdlet saves a zip file to current directory as CAUDebugTrace.zip; to save at custom location use -FilePath parameter):
 
-`$clusterName = Get-Cluster`
-`Save-CauDebugTrace -ClusterName $clusterName -FeatureUpdateLogs All -Force`
+```
+$clusterName = Get-Cluster
+Save-CauDebugTrace -ClusterName $clusterName -FeatureUpdateLogs All -Force
+```
 
 If the failure is not in step 'Update Host OS', you might create a new ICM and find the correct owner of that interface.
 
