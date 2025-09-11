@@ -18,7 +18,7 @@ Below is a simplified **PowerShell script** that will automate the steps necessa
 2. Validate that the status of `Update Host OS` step is `Error`.
 3. Replace the child `<Task>` node inside the `Update Host Os` step to configure for a full retry.
 4. Save the modified XML with a timestamped filename to temp.
-5. Invoke the updated action plan to trigger a full retry.
+5. Invoke the updated action plan to trigger retry.
 
 ## How to Run the Script
 1. Contents of the script:  
@@ -82,7 +82,7 @@ Below is a simplified **PowerShell script** that will automate the steps necessa
    ```powershell
    .\RetryUpdate.ps1
    ```
-   The script will run the necessary checks and modify the action plan XML, save it as `RetryUpdate_yymmdd-hhMM.xml` temp folder, and then trigger a retry automatically.
+   The script will run the necessary checks and modify the action plan XML, save it as `LastUpdate_yymmdd-hhMM.xml` temp folder, and then trigger a retry automatically.
 
 4. **Monitor progress**:
    The script outputs the new Action Plan Instance ID. You can monitor it using:
