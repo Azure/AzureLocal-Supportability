@@ -67,7 +67,7 @@ $settingsMitigation = {
         throw "[$($env:ComputerName)] Unable to find Settings.xml at the expected path: $settingsFilePath"
     }
 
-    Add-Type -AssemblyName "System.Xml.Linq"
+    Add-Type -AssemblyName "System.Xml.Linq"  
 
     $xml = [xml](Get-Content $settingsFilePath)
     $nsMgr = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
@@ -89,6 +89,12 @@ $settingsMitigation = {
     )
 
     foreach ($param in $paramsToAdd) {
+        $existingParam = $targetSection.Parameter | where Name -eq $param
+        if ($existingParam) {
+            Write-Host "[$($env:ComputerName)] Parameter $param already exists. Skipping addition." -Foregroundcolor Gray
+            continue
+        }
+
         $newParam = $xml.CreateElement("Parameter", "http://schemas.microsoft.com/2011/01/fabric")
         $newParam.SetAttribute("Name", $param)
         $newParam.SetAttribute("Value", "1")
