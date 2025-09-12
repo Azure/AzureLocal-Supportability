@@ -89,7 +89,7 @@ $settingsMitigation = {
     )
 
     foreach ($param in $paramsToAdd) {
-        $existingParam = $targetSection.Parameter | where Name -eq $param
+        $existingParam = $targetSection.Parameter | Where-Object Name -eq $param
         if ($existingParam) {
             Write-Host "[$($env:ComputerName)] Parameter $param already exists. Skipping addition." -Foregroundcolor Gray
             continue
