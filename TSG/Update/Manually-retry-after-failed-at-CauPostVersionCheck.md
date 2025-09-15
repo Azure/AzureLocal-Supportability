@@ -41,7 +41,7 @@ Below is a simplified **PowerShell script** that will automate the steps necessa
    Write-Host "Found action plan $($update.InstanceID) for update version $($update.RuntimeParameters.UpdateVersion)."
    
    # Load XML and locate 'Update Host OS' step
-   $xml = $update.ProgressAsXml
+   [xml]$xml = $update.ProgressAsXml
    $updateHostStep = $xml.SelectSingleNode("//Step[@Name='Update Host OS']")
    if (-not $updateHostStep) {
        throw "Cannot find 'Update Host OS' step in the action plan."
