@@ -20,7 +20,7 @@ The ARB may go Offline for many reasons, including a known issue related to CAU 
 # Validation
 Validate that the ARB VM resource is indeed Offline by running the following script:
 ```powershell
-Get-ClusterGroup -Name "*control-plane*"
+Get-ClusterGroup -Name "*control-plan*"
 ```
 If the resource state is Offline, you may attempt the following mitigation. Otherwise, please contact Microsoft support. 
 
@@ -30,9 +30,9 @@ If the resource state is Offline, you may attempt the following mitigation. Othe
 The mitigation will simply try to start the ARB VM resource.
 
 ```powershell
-Get-ClusterGroup -Name "*control-plane*" | Start-ClusterGroup
+Get-ClusterGroup -Name "*control-plan*" | Start-ClusterGroup
 # Check the resource state again
-Get-ClusterGroup -Name "*control-plane*"
+Get-ClusterGroup -Name "*control-plan*"
 ```
 
 Then retry the update.
