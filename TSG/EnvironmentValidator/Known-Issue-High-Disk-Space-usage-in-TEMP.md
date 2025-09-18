@@ -20,7 +20,7 @@ On each node where the issue exists, run the following script:
 ```PowerShell
 $nugetName = 'AzStackHci.EnvironmentChecker'
 $tempPath = 'C:\Users\HCIOrchestrator\AppData\Local\Temp'
-$tempNugetFolders = Get-ChildItem -Path "$env:TEMP" -Recurse -Filter "$nugetName.*" -Directory -ErrorAction SilentlyContinue
+$tempNugetFolders = Get-ChildItem -Path $tempPath -Recurse -Filter "$nugetName.*" -Directory -ErrorAction SilentlyContinue
 foreach ($tnf in $tempNugetFolders)
 {
     try
