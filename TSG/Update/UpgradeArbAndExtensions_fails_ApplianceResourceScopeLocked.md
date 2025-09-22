@@ -8,7 +8,7 @@ This behavior is **distinct from previous scope lock errors**, where mitigation 
 
 The error message returned during failure is:
 
-```Powershell
+```powershell
 [UpgradeArbAndExtensions :arcappliance upgrade] Failed with Error C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin\az.cmd arcappliance upgrade hci --config-file "C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\MocArb\WorkingDirectory\Appliance\hci-appliance.yaml" --only-show-errors returned a non empty error stream [ERROR: (ApplianceResourceScopeLocked) A ReadOnly or CanNotDelete lock exists on Microsoft.ResourceConnector/appliances/s-cluster-arcbridge, please refer to documentation on how to remove the lock before proceeding with upgrade. Documentation found here: https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/lock-resources?tabs=json#lock-inheritance]
 ```
 
