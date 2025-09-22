@@ -11,7 +11,7 @@
   </tr>
   <tr>
     <th style="text-align:left;">Applicable Scenarios</th>
-    <td><strong>Validation before deployment</strong></td>
+    <td><strong>Deployment</strong></td>
   </tr>
 </table>
 
