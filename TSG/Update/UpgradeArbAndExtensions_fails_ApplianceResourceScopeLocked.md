@@ -18,7 +18,7 @@ To confirm that the failure you're encountering is due to a scope lock on the AR
 
 ### Expected Behavior
 - The ARB is in a `Running` state.
-- The update fails  during the `UpgradeArbAndExtensions` step.
+- The update fails during the `UpgradeArbAndExtensions` step.
 - The error message includes `ApplianceResourceScopeLocked` and references a `ReadOnly` or `CanNotDelete` lock.
 
 ### Validation via Azure Portal
@@ -40,7 +40,7 @@ To resolve this issue, any lock on the ARB resource must be removed. Once the lo
 1. Navigate to the ARB resource in the Azure Portal.
 2. Under **Settings**, select **Locks**.
 3. Identify any `ReadOnly` or `CanNotDelete` locks.
-4. Remove any lock.
+4. To remove a lock, click the delete (trash) icon next to the lock, or select the lock and click **Delete** at the top of the page.
 
 
 #### **2. Retry the update**
