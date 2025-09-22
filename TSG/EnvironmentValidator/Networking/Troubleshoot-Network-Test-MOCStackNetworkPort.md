@@ -83,7 +83,7 @@ https://www.powershellgallery.com/packages/AzStackHci.EnvironmentChecker/1.2100.
 
 The function `Test-MOCStackNetworkPort` performs the connectivity test by iterating the expected ports and calling `Test-NetConnection` without a destination, which triggers the reachability probe (commonly hitting `internetbeacon.msedge.net`).
 
-```
+``` Powershell
 function Test-MOCStackNetworkPort
 {
     <#
