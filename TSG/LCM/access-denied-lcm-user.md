@@ -30,7 +30,7 @@ update package download failure with details similar to "Action plan GetCauDevic
 Before running the following steps, please log into a node with the LCM user credential to ensure the credential works. If you do not know your LCM username, please view the [Retrieving your LCM (user deployment) username section](#retrieving-your-lcm-deployment-user-username). If you do not know your LCM user credentials, then you will need to recreate the LCM user and follow this document to ensure the LCM user is set up properly.
 
 ### Step 1: Check if LCM user is in the Local Administrators Group on all cluster nodes
-Run the script below on all cluster nodes. replace the `$lcmUser` variable with your LCM (deployment) user, and fill in `$groupsContainingLCMUser` if not logged in as lcmUser. 
+Run the script below on all cluster nodes. Replace the `$lcmUser` variable with your LCM (deployment) user, and fill in `$groupsContainingLCMUser` if not logged in as lcmUser. 
 
 ```Powershell
 # Set your LCM user
