@@ -30,16 +30,25 @@ update package download failure with details similar to "Action plan GetCauDevic
 Before running the following steps, please log into a node with the LCM user credential to ensure the credential works. If you do not know your LCM username, please view the [Retrieving your LCM (user deployment) username section](#retrieving-your-lcm-deployment-user-username). If you do not know your LCM user credentials, then you will need to recreate the LCM user and follow this document to ensure the LCM user is set up properly.
 
 ### Step 1: Check if LCM user is in the Local Administrators Group on all cluster nodes
-Run the script below, replacing the `lcmUser` variable with your LCM (deployment) user on all cluster nodes. 
+Run the script below on all cluster nodes. replace the `$lcmUser` variable with your LCM (deployment) user, and fill in `$groupsContainingLCMUser` if not logged in as lcmUser. 
 
 ```Powershell
-# Set your LCM user and the list of groups that contain the LCM user
+# Set your LCM user
 $lcmUser = 'DOMAIN\LCMUser'
-$groupsContainingLCMUser = @(
+# If logged in as LCMUser, run script at this point. Otherwise go to next comment
+$groupsContainingLCMUser = (whoami /groups) |
+    Select-Object -Skip 6 |
+    ForEach-Object {
+        ($_ -split '\s{2,}')[0]
+    } |
+    Where-Object { $_ -and $_ -ne "===" }
+
+# If not logged in as lcmUser, manually populate groups lcmUser belongs to, and uncomment below
+<#$groupsContainingLCMUser = @(
     'DOMAIN\Group1',
     'DOMAIN\Group2',
     'DOMAIN\Group3'
-)
+)#>
 
 Write-Output "Checking if the LCM user or any of the specified groups are in the local Administrators group..."
 
