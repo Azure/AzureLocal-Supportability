@@ -59,6 +59,7 @@ Don't see a component? [See all components](./README.md#table-of-contents)
 4. **Save with correct naming**: `<Type>-<Topic>-<Specifics>.md`
 5. **Update the component README.md** to list your new file
 6. **Submit a pull request** with your changes
+7. **Email hcisupportability@microsoft.com** include a link to your PR to get your PR reviewed.
 
 Reference [Markdown Snippets](./TSG/Templates/Markdown-Snippets.md) for helpful formatting tips, diagrams, and more.
 
