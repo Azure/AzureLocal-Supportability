@@ -70,19 +70,21 @@ Format each review comment with:
 - [ ] Default values clearly indicated
 
 ## Language Assistance Guidelines
-- Suggest corrections for spelling and grammar in a supportive manner
-- Frame language suggestions as "improvements" rather than "corrections"
-- Focus on clarity rather than perfect English
-- Prioritize technical accuracy over language perfection
+When reviewing or suggesting language improvements (in order of importance):
+1. Focus on clarity rather than perfect English
+2. Prioritize technical accuracy over language perfection
+3. Suggest corrections for spelling
+
+Frame language suggestions as "improvements" rather than "corrections"
 
 ## PowerShell Code Guidelines
 When reviewing or suggesting PowerShell code in documentation:
 - Pay special attention to commands that change environment state (e.g., restart, stop, remove, set, write).
 - For state-changing commands:
   - Verify code is safe for production environments.
-  - Implement defensive coding techniques (check conditions before taking action).
+  - Implement defensive coding techniques (check conditions before taking action). But avoid excessive complexity.
   - Include verification steps before and after changes.
-  - Ensure commands don't disrupt workloads.
+  - Ensure commands don't disrupt workloads. If they do, provide clear warnings.
   - Check for proper error handling.
   - Use placeholders like <hostname> instead of hardcoded values.
 
@@ -91,16 +93,8 @@ Example:
 # DANGEROUS EXAMPLE - Could cause an unexpected state
 Restart-Service -Name "CriticalService" -Force
 
-# SAFER ALTERNATIVE - Checks status and confirm before action
-$serviceName = "CriticalService"
-$service = Get-Service -Name $serviceName
-Write-Host "Current status of $serviceName is: $($service.Status)"
-
-$confirmation = Read-Host "Are you sure you want to restart $serviceName? (y/n)"
-if ($confirmation -eq 'y') {
-    Write-Host "Restarting $serviceName..."
-    Restart-Service -Name $serviceName
-}
+# SAFER ALTERNATIVE - Don't use force
+Restart-Service -Name "CriticalService"
 ```
 
 Example:

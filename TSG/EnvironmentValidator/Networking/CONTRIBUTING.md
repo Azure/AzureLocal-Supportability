@@ -85,6 +85,8 @@ Here is an example:
 }
 ```
 
+---
+
 ### Failure: !!FAILURE_MESSAGE - Put any failure messages from the Detail section here, if there are multiple possible messages, split them into different sections
 
 !!FAILURE_MESSAGE_DESCRIPTION - Put a description of the failure message here. How should it be interpreted?
