@@ -4,6 +4,7 @@ For Azure Local Network Resources not related to Environment Validator, see [TSG
 
 ## 📚 Table of Contents
 
+- [Troubleshoot: MOC Stack Network Port](Troubleshoot-Network-Test-MOCStackNetworkPort.md)
 - [Troubleshoot: Host Network Configuration Readiness](Troubleshoot-Network-Test-HostNetworkConfigurationReadiness.md)
 - [Troubleshoot: Storage Adapter Readiness](Troubleshoot-Network-Test-StorageAdapterReadiness.md)
 - [Troubleshoot: Storage Connections Connectivity Check](Troubleshoot-Network-Test-StorageConnections-ConnectivityCheck.md)
