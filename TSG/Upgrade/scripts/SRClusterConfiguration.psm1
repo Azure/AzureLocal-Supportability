@@ -231,7 +231,7 @@ function Export-SRClusterConfiguration
     
     if ($Partnerships -eq $null -or $Groups.Count -eq 0)
     {    
-        Add-Content -Path $File.Name -Value $SRStringTable.NoSRObjectsFound
+        Add-Content -Path $File.FullName -Value $SRStringTable.NoSRObjectsFound
 
         return
     }
@@ -288,15 +288,15 @@ function Export-SRClusterConfiguration
             $SourceGroupInfo            = Get-SRGroupInfo -Group $SourceRG -ClusterResource $SourceGroupSRResource
             $DestinationGroupInfo       = Get-SRGroupInfo -Group $DestinationRG -ClusterResource $DestinationGroupSRResource
 
-            Add-Content -Path $File.Name -Value $partnershipToString
-            Add-Content -Path $File.Name -Value ([String]::Empty)
-            Add-Content -Path $File.Name -Value "`t Source SR Group:"            
-            Add-GroupContent -Path $File.Name -Value $SourceGroupInfo
-            Add-Content -Path $File.Name -Value ([String]::Empty)            
-            Add-Content -Path $File.Name -Value "`t Destination SR Group:" 
-            Add-GroupContent -Path $File.Name -Value $DestinationGroupInfo
-            Add-Content -Path $File.Name -Value ([String]::Empty)
-            Add-Content -Path $File.Name -Value ([String]::Empty)
+            Add-Content -Path $File.FullName -Value $partnershipToString
+            Add-Content -Path $File.FullName -Value ([String]::Empty)
+            Add-Content -Path $File.FullName -Value "`t Source SR Group:"            
+            Add-GroupContent -Path $File.FullName -Value $SourceGroupInfo
+            Add-Content -Path $File.FullName -Value ([String]::Empty)            
+            Add-Content -Path $File.FullName -Value "`t Destination SR Group:" 
+            Add-GroupContent -Path $File.FullName -Value $DestinationGroupInfo
+            Add-Content -Path $File.FullName -Value ([String]::Empty)
+            Add-Content -Path $File.FullName -Value ([String]::Empty)
 
 
             if ($Groups.ContainsKey($SourceGroupName))
@@ -316,11 +316,11 @@ function Export-SRClusterConfiguration
     #
     if ($Groups.Count -gt 0)
     {
-        Add-Content -Path $File.Name -Value ([String]::Empty)
-        Add-Content -Path $File.Name  -Value "#"
-        Add-Content -Path $File.Name  -Value ("# " + $SRStringTable.GroupsNotInPartnership)
-        Add-Content -Path $File.Name  -Value "#"
-        Add-Content -Path $File.Name  -Value ([String]::Empty)
+        Add-Content -Path $File.FullName -Value ([String]::Empty)
+        Add-Content -Path $File.FullName  -Value "#"
+        Add-Content -Path $File.FullName  -Value ("# " + $SRStringTable.GroupsNotInPartnership)
+        Add-Content -Path $File.FullName  -Value "#"
+        Add-Content -Path $File.FullName  -Value ([String]::Empty)
 
         foreach ($groupName in $Groups.Keys)
         {
@@ -331,9 +331,9 @@ function Export-SRClusterConfiguration
             $SRResource = $SRClusterResources[$groupName]
             $GroupInfo = Get-SRGroupInfo -Group $Group -ClusterResource $SRResource
 
-            Add-Content -Path $File.Name -Value ("`t SR Group " + $Group.Name + ":")   
-            Add-GroupContent -Path $File.Name -Value $GroupInfo
-            Add-Content -Path $File.Name  -Value ([String]::Empty)
+            Add-Content -Path $File.FullName -Value ("`t SR Group " + $Group.Name + ":")   
+            Add-GroupContent -Path $File.FullName -Value $GroupInfo
+            Add-Content -Path $File.FullName  -Value ([String]::Empty)
 
             $ExportedGroups += 1
         }
