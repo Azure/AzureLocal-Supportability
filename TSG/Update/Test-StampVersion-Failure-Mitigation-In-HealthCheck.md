@@ -106,7 +106,7 @@ if ("Upgrade" -ne $stampInformation.InstallationMethod) {
           $eceClient.SetStampVersion($stampVersion).GetAwaiter().GetResult()
           $eceClient.InvalidateCloudDefinitionCache().GetAwaiter().GetResult()
         } else {
-          Write-Host "Not 2508 stamp version environment. Issue does not exist on the build $stampVersionMinor."
+          Write-Host "Not 2508 services version environment. Issue does not exist on the services version $servicesVersionMinor."
         }
     } else {
         # Not impacted by this issue, skip checking
