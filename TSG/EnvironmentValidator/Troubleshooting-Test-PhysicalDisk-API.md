@@ -33,7 +33,7 @@ This environment validator failure occurs when the Physical Disks in the cluster
 
 Physical Disks on every node in the cluster must meet the following criteria:
 
-- Minimum number of data disks for Azure Local <a href="https://learn.microsoft.com/en-us/windows-server/storage/storage-spaces/storage-spaces-direct-hardware-requirements#physical-deployments" target="_blank">Deployments</a>, <a href="https://learn.microsoft.com/en-us/azure/azure-local/concepts/system-requirements-small-23h2?view=azloc-2506#device-requirements" target="_blank">(Low Capacity)</a> 
+- Minimum number of data disks for Azure Local <a href="https://learn.microsoft.com/en-us/windows-server/storage/storage-spaces/storage-spaces-direct-hardware-requirements#physical-deployments" target="_blank">Deployments</a>, <a href="https://learn.microsoft.com/en-us/azure/azure-local/concepts/system-requirements-small-23h2#device-requirements" target="_blank">(Low Capacity)</a> 
 - Disk Consistency - All nodes should have the same number of instances per disk type.
 - Disk Health - All disks should have a healthy status, operational status and no indicator light on.
 
@@ -284,11 +284,11 @@ Overall, this is not a supported scenario for a medium sized deployment because 
 
 ### Conclusion 
 
-**For disks to be eligible** they should have a CanPool value of true*, be have a BusType of SATA, SAS, NVMe or SCM, MediaType of HDD, SSD or SCM and not be a boot disk.
+**For disks to be eligible** they should have a CanPool value of true*, have a BusType of SATA, SAS, NVMe or SCM, MediaType of HDD, SSD or SCM and not be a boot disk.
 
 For storage to be eligible across a cluster, all nodes should have the same **eligible disk layout** e.g. 5 HDD and 3 SSDs, or 4 SSDs and 2 NVMe.
 
 Common issues:  
 - Data Disks CanPool property is false, from the output above there will be a CannotPoolReason property indicating why the disk cannot be pooled. Check the following article to help with remediation https://learn.microsoft.com/en-us/windows-server/storage/storage-spaces/storage-spaces-states
-- Data Disk BusType is RAID. For Azure Local RAID controller cards or SAN (Fibre Channel, iSCSI, FCoE) storage, shared SAS enclosures connected to multiple machines, or any form of multi-path IO (MPIO) where drives are accessible by multiple paths, aren't supported. https://learn.microsoft.com/en-us/azure/azure-local/concepts/system-requirements-23h2?view=azloc-24113#machine-and-storage-requirements
+- Data Disk BusType is RAID. For Azure Local RAID controller cards or SAN (Fibre Channel, iSCSI, FCoE) storage, shared SAS enclosures connected to multiple machines, or any form of multi-path IO (MPIO) where drives are accessible by multiple paths, aren't supported. https://learn.microsoft.com/en-us/azure/azure-local/concepts/system-requirements-23h2#machine-and-storage-requirements
 - Nodes do not have the same number of supported disks, including the same number disks of the same type.
