@@ -22,7 +22,7 @@ if ("Upgrade" -ne $stampInformation.InstallationMethod) {
     $servicesVersionMinor = $servicesVersionObj.Minor
     if ($stampVersionMinor -eq 2509) {
         if ($servicesVersionMinor -eq 2508) {
-          Write-Host "Issue exist of mismatched version."
+          Write-Host "Issue exist of mismatched version. Please continue with the mitigation in the TSG."
         } else {
           Write-Host "Not 2508 services version environment. Issue does not exist on the services version $servicesVersionMinor."
         }
