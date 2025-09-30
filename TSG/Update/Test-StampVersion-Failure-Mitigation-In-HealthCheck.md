@@ -77,16 +77,40 @@ We will need to run this command
 ```
 Import-Module ECEClient
 $eceClient = Create-ECEClusterServiceClient
-# Depending on the OS Version the version is different
-$osMajorVersion = $([environment]::OSVersion.Version.Major.ToString())
-$osMinorVersion = $([environment]::OSVersion.Version.Minor.ToString())
-$osBuildVersion = $([environment]::OSVersion.Version.Build.ToString())
-$is23H2 = (($osMajorVersion -eq "10") -and ($osMinorVersion -eq "0") -and ($osBuildVersion -eq "25398"))
-if ($is23H2) {
-  $stampVersion = "11.2508.1001.51"
+$stampInformation = Get-StampInformation
+if ("Upgrade" -ne $stampInformation.InstallationMethod) {
+    # Not brownfield env, skip checking
+    Write-Host "Not HCI environment. Issue does not exist."
 } else {
-  $stampVersion = "12.2508.1001.52"
+    $servicesVersion = $stampInformation.ServicesVersion
+    $stampVersion = $stampInformation.StampVersion
+    $stampVersionObj = [Version]::Parse($stampVersion)
+    $servicesVersionObj = [Version]::Parse($servicesVersion)
+    # Both stampVersion and ServicesVersion are going to be updated during PnU as well.
+    $stampVersionMinor = $stampVersionObj.Minor
+    $servicesVersionMinor = $servicesVersionObj.Minor
+    if ($stampVersionMinor -eq 2509) {
+        # Stamp Version must be 2509
+        if ($servicesVersionMinor -eq 2508) {
+          Write-Host "Issue exist of mismatched version."
+          # Depending on the OS Version the version is different
+          $osMajorVersion = $([environment]::OSVersion.Version.Major.ToString())
+          $osMinorVersion = $([environment]::OSVersion.Version.Minor.ToString())
+          $osBuildVersion = $([environment]::OSVersion.Version.Build.ToString())
+          $is23H2 = (($osMajorVersion -eq "10") -and ($osMinorVersion -eq "0") -and ($osBuildVersion -eq "25398"))
+          if ($is23H2) {
+            $stampVersion = "11.2508.1001.51"
+          } else {
+            $stampVersion = "12.2508.1001.52"
+          }
+          $eceClient.SetStampVersion($stampVersion).GetAwaiter().GetResult()
+          $eceClient.InvalidateCloudDefinitionCache().GetAwaiter().GetResult()
+        } else {
+          Write-Host "Not 2508 stamp version environment. Issue does not exist on the build $stampVersionMinor."
+        }
+    } else {
+        # Not impacted by this issue, skip checking
+        Write-Host "Not 2509 stamp version environment. Issue does not exist on the build $stampVersionMinor."
+    }
 }
-$eceClient.SetStampVersion($stampVersion).GetAwaiter().GetResult()
-$eceClient.InvalidateCloudDefinitionCache().GetAwaiter().GetResult()
 ```
