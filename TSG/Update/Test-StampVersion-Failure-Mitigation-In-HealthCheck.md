@@ -103,7 +103,15 @@ if ("Upgrade" -ne $stampInformation.InstallationMethod) {
           } else {
             $stampVersion = "12.2508.1001.52"
           }
+          # Set Stamp Version
           $eceClient.SetStampVersion($stampVersion).GetAwaiter().GetResult()
+          # Set Initial Deployed Version
+          $parametersUpdateDefinition = New-Object Microsoft.AzureStack.Solution.Deploy.EnterpriseCloudEngine.Controllers.Models.CloudParametersUpdateDescription
+          $parametersUpdateDefinition.BaseElementXPath = "//Category[@Name='Setup']//Parameter[@Name='InitialDeployedVersion']"
+          $parametersUpdateDefinition.Type = "UpdateAttribute"
+          $parametersUpdateDefinition.AttributeName = "Value"
+          $parametersUpdateDefinition.AttributeValue = $stampVersion
+          $null = $eceClient.UpdateCloudParameters($parametersUpdateDefinition).GetAwaiter().GetResult()
           $eceClient.InvalidateCloudDefinitionCache().GetAwaiter().GetResult()
         } else {
           Write-Host "Not 2508 services version environment. Issue does not exist on the services version $servicesVersionMinor."
