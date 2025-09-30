@@ -34,6 +34,12 @@ if ("Upgrade" -ne $stampInformation.InstallationMethod) {
 
 ```
 
+If the command above returns the below line then the issue exist and need to be mitigated by using the below script.
+
+```
+Issue exist of mismatched version. Please continue with the mitigation in the TSG.
+```
+
 # Cause
 
 There is an issue with timing in 2509 release that can cause 2509 stamp version to be incorrectly set on a 2508 services version that is running 2508 components.
