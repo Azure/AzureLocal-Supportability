@@ -105,6 +105,7 @@ if ("Upgrade" -ne $stampInformation.InstallationMethod) {
           }
           # Set Stamp Version
           $eceClient.SetStampVersion($stampVersion).GetAwaiter().GetResult()
+          $eceClient.InvalidateCloudDefinitionCache().GetAwaiter().GetResult()
           # Set Initial Deployed Version
           $parametersUpdateDefinition = New-Object Microsoft.AzureStack.Solution.Deploy.EnterpriseCloudEngine.Controllers.Models.CloudParametersUpdateDescription
           $parametersUpdateDefinition.BaseElementXPath = "//Category[@Name='Setup']//Parameter[@Name='InitialDeployedVersion']"
