@@ -7,8 +7,6 @@ Environment Validator runs a Validated Recipe validator prior to Update. The tes
 During pre-update validation, the Validated Recipe tests fail on Test PowerShell Module version.
 
 Inspecting the Pre-Update health check results (the example is PowerShell but these results are available in the console)
-```
-```
 
 Reveals the following failure:
 
