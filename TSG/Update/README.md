@@ -25,5 +25,4 @@
 * [Update gets stuck with 'ClearCorruptReports' CAU error ](./Update-gets-stuck-with-ClearCorruptReports-CAU-error.md)
 * [ValidateDotNetUpdatesOnCluster wusa.exe process completed with exit code](./ValidateDotNetUpdatesOnCluster-wusa-exit-code.md)
 * [Update service crash or UpdateBootstrap ResetOverrideDiscoveryUri failure](./UpdateService-Crash-on-non-en-US.md)
-  
-
+* [Resumed update fails immediately](./Resumed-update-fails-immediately.md)
