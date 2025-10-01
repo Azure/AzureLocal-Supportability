@@ -114,6 +114,7 @@ if ("Upgrade" -ne $stampInformation.InstallationMethod) {
           $parametersUpdateDefinition.AttributeValue = $stampVersion
           $null = $eceClient.UpdateCloudParameters($parametersUpdateDefinition).GetAwaiter().GetResult()
           $eceClient.InvalidateCloudDefinitionCache().GetAwaiter().GetResult()
+          Write-Host "Fixed issue of mismatched version. Stamp Version is now $stampVersion."
         } else {
           Write-Host "Not 2508 services version environment. Issue does not exist on the services version $servicesVersionMinor."
         }
