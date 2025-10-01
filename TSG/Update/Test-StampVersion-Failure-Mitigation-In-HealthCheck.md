@@ -21,16 +21,16 @@ Reveals the following failure:
 "Severity":  2,
 "Description":  "Validating that the services version is supported.",
 "Remediation":  "Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion",
-"TargetResourceID":  "V-HOST1",
-"TargetResourceName":  "V-HOST1",
+"TargetResourceID":  "NODE01",
+"TargetResourceName":  NODE01",
 "TargetResourceType":  "ValidatedRecipe",
 "Timestamp":  "\/Date(1759362825653)\/",
 "AdditionalData":  {
-                       "Detail":  "Checking version of Azure Stack HCI stamp on host [V-HOST1]. Got services version [10.2508.0.21]. We cannot start upgrade.The services version is not supported in this pnu. Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion",
+                       "Detail":  "Checking version of Azure Stack HCI stamp on host [NODE01]. Got services version [10.2508.0.21]. We cannot start upgrade.The services version is not supported in this pnu. Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion",
                        "Status":  "FAILURE",
                        "TimeStamp":  "10/01/2025 23:53:45",
                        "Resource":  "Validated Assembly Recipe",
-                       "Source":  "V-HOST1"
+                       "Source":  "NODE01"
                    },
 "HealthCheckSource":  "Manual\\Standard\\Medium\\ValidatedRecipe\\7a4ba847"```
 ```
@@ -56,11 +56,11 @@ Status             : FAILURE
 Severity           : CRITICAL
 Description        : Validating that the services version is supported.
 Remediation        : Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion
-TargetResourceID   : V-HOST1
-TargetResourceName : V-HOST1
+TargetResourceID   : NODE01
+TargetResourceName : NODE01
 TargetResourceType : ValidatedRecipe
 Timestamp          : 10/1/2025 11:52:08 PM
-AdditionalData     : {[Detail, Checking version of Azure Stack HCI stamp on host [V-HOST1]. Got services version
+AdditionalData     : {[Detail, Checking version of Azure Stack HCI stamp on host [NODE01]. Got services version
                      [10.2508.0.21]. We cannot start upgrade.The services version is not supported in this pnu. Please
                      follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion], [Status,
                      FAILURE], [TimeStamp, 10/01/2025 23:52:08], [Resource, Validated Assembly Recipe]...}
