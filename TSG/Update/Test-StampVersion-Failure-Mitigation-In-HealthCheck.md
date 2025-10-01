@@ -11,27 +11,28 @@ Inspecting the Pre-Update health check results (the example is PowerShell but th
 Reveals the following failure:
 
 ```
-"Name":  "AzStackHci_ValidatedRecipe_StampVersion"
-"DisplayName":  "Test Azure Local Stamp Version"
-"Tags":  {}
-"Title":  "Test Azure Local Stamp Version"
-"Status":  1,
-"Severity":  2
-"Description":  "Validating that the stamp version and services version is correct."
-"Remediation":  "Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion"
-"TargetResourceID":  "NODE01"
-"TargetResourceName":  "NODE01"
-"TargetResourceType":  "ValidatedRecipe",
-"Timestamp":  "09/29/2025 22:58:07",
-"AdditionalData":  {
-                       "Detail":  "Checking version of Azure Stack HCI stamp on host [V-HOST1]. Got stamp version [12.2509.1001.22] and services version [10.2508.0.21]. There is a mismatch.The stamp version has a mismatch with services version. Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion",
-                       "Status":  "FAILURE",
-                       "TimeStamp":  "09/29/2025 22:58:07",
-                       "Resource":  "Validated Assembly Recipe",
-                       "Source":  "V-HOST1"
-                   },
-"HealthCheckSource":  "Manual\\Standard\\Medium\\ValidatedRecipe\\f33fc5c1"```
-```
+"Name":  "AzStackHci_ValidatedRecipe_ServicesVersion",
+                                "DisplayName":  "Test Azure Local Services Version",
+                                "Tags":  {
+
+                                         },
+                                "Title":  "Test Azure Local Services Version",
+                                "Status":  1,
+                                "Severity":  2,
+                                "Description":  "Validating that the services version is supported.",
+                                "Remediation":  "Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion",
+                                "TargetResourceID":  "V-HOST1",
+                                "TargetResourceName":  "V-HOST1",
+                                "TargetResourceType":  "ValidatedRecipe",
+                                "Timestamp":  "\/Date(1759362825653)\/",
+                                "AdditionalData":  {
+                                                       "Detail":  "Checking version of Azure Stack HCI stamp on host [V-HOST1]. Got services version [10.2508.0.21]. We cannot start upgrade.The services version is not supported in this pnu. Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion",
+                                                       "Status":  "FAILURE",
+                                                       "TimeStamp":  "10/01/2025 23:53:45",
+                                                       "Resource":  "Validated Assembly Recipe",
+                                                       "Source":  "V-HOST1"
+                                                   },
+                                "HealthCheckSource":  "Manual\\Standard\\Medium\\ValidatedRecipe\\7a4ba847"```
 
 # Issue Validation
 
@@ -46,24 +47,23 @@ The output can be viewed to confirm a failure state:
 ```
 PS C:\> $result
 
-HealthCheckSource  : Manual\Standard\Medium\ValidatedRecipe\9ba4f181
-Name               : AzStackHci_ValidatedRecipe_StampVersion
-DisplayName        : Test Azure Local Stamp Version
+HealthCheckSource  : Manual\Standard\Medium\ValidatedRecipe\5e289cab
+Name               : AzStackHci_ValidatedRecipe_ServicesVersion
+DisplayName        : Test Azure Local Services Version
 Tags               : {}
-Title              : Test Azure Local Stamp Version
+Title              : Test Azure Local Services Version
 Status             : FAILURE
 Severity           : CRITICAL
-Description        : Validating that the stamp version and services version is correct.
+Description        : Validating that the services version is supported.
 Remediation        : Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion
-TargetResourceID   : NODE01
-TargetResourceName : NODE01
+TargetResourceID   : V-HOST1
+TargetResourceName : V-HOST1
 TargetResourceType : ValidatedRecipe
-Timestamp          : 9/29/2025 11:19:24 PM
-AdditionalData     : {[Detail, Checking version of Azure Stack HCI stamp on host [V-HOST1]. Got stamp version
-                     [12.2509.1001.22] and services version [10.2508.0.21]. There is a mismatch.The stamp version has a
-                     mismatch with services version. Please follow this TSG to correct the stamp version:
-                     https://aka.ms/azhci-tsg-stampversion], [Status, FAILURE], [TimeStamp, 09/29/2025 23:19:24],
-                     [Resource, Validated Assembly Recipe]...}
+Timestamp          : 10/1/2025 11:52:08 PM
+AdditionalData     : {[Detail, Checking version of Azure Stack HCI stamp on host [V-HOST1]. Got services version
+                     [10.2508.0.21]. We cannot start upgrade.The services version is not supported in this pnu. Please
+                     follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion], [Status,
+                     FAILURE], [TimeStamp, 10/01/2025 23:52:08], [Resource, Validated Assembly Recipe]...}
 ```
 
 # Cause
