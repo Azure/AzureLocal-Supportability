@@ -12,28 +12,28 @@ Reveals the following failure:
 
 ```
 "Name":  "AzStackHci_ValidatedRecipe_ServicesVersion",
-                                "DisplayName":  "Test Azure Local Services Version",
-                                "Tags":  {
+"DisplayName":  "Test Azure Local Services Version",
+"Tags":  {
 
-                                         },
-                                "Title":  "Test Azure Local Services Version",
-                                "Status":  1,
-                                "Severity":  2,
-                                "Description":  "Validating that the services version is supported.",
-                                "Remediation":  "Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion",
-                                "TargetResourceID":  "V-HOST1",
-                                "TargetResourceName":  "V-HOST1",
-                                "TargetResourceType":  "ValidatedRecipe",
-                                "Timestamp":  "\/Date(1759362825653)\/",
-                                "AdditionalData":  {
-                                                       "Detail":  "Checking version of Azure Stack HCI stamp on host [V-HOST1]. Got services version [10.2508.0.21]. We cannot start upgrade.The services version is not supported in this pnu. Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion",
-                                                       "Status":  "FAILURE",
-                                                       "TimeStamp":  "10/01/2025 23:53:45",
-                                                       "Resource":  "Validated Assembly Recipe",
-                                                       "Source":  "V-HOST1"
-                                                   },
-                                "HealthCheckSource":  "Manual\\Standard\\Medium\\ValidatedRecipe\\7a4ba847"```
-
+         },
+"Title":  "Test Azure Local Services Version",
+"Status":  1,
+"Severity":  2,
+"Description":  "Validating that the services version is supported.",
+"Remediation":  "Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion",
+"TargetResourceID":  "V-HOST1",
+"TargetResourceName":  "V-HOST1",
+"TargetResourceType":  "ValidatedRecipe",
+"Timestamp":  "\/Date(1759362825653)\/",
+"AdditionalData":  {
+                       "Detail":  "Checking version of Azure Stack HCI stamp on host [V-HOST1]. Got services version [10.2508.0.21]. We cannot start upgrade.The services version is not supported in this pnu. Please follow this TSG to correct the stamp version: https://aka.ms/azhci-tsg-stampversion",
+                       "Status":  "FAILURE",
+                       "TimeStamp":  "10/01/2025 23:53:45",
+                       "Resource":  "Validated Assembly Recipe",
+                       "Source":  "V-HOST1"
+                   },
+"HealthCheckSource":  "Manual\\Standard\\Medium\\ValidatedRecipe\\7a4ba847"```
+```
 # Issue Validation
 
 The validation can be run manually to verify and give us more information. Note: you can pass PsSession array to this cmdlet, the example just focusses on running locally.
