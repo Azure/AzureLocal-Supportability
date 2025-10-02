@@ -39,7 +39,7 @@ Reveals the following failure:
 The validation can be run manually to verify and give us more information. Note: you can pass PsSession array to this cmdlet, the example just focusses on running locally.
 
 ```
-$result = Invoke-AzStackHciValidatedRecipeValidation -PassThru -Include Test-StampVersion
+$result = Invoke-AzStackHciValidatedRecipeValidation -PassThru -Include Test-ServicesVersion
 ```
 
 The output can be viewed to confirm a failure state:
