@@ -38,13 +38,13 @@ Reveals the following failure:
 
 The validation can be run manually to verify and give us more information. Note: you can pass PsSession array to this cmdlet, the example just focusses on running locally.
 
-```
+``` PowerShell
 $result = Invoke-AzStackHciValidatedRecipeValidation -PassThru -Include Test-ServicesVersion
 ```
 
 The output can be viewed to confirm a failure state:
 
-```
+``` PowerShell
 PS C:\> $result
 
 HealthCheckSource  : Manual\Standard\Medium\ValidatedRecipe\5e289cab
@@ -74,7 +74,7 @@ There is an issue with timing in 2509 release that can cause 2509 stamp version 
 
 We will need to run this command
 
-```
+``` PowerShell
 Import-Module ECEClient
 $eceClient = Create-ECEClusterServiceClient
 $stampInformation = Get-StampInformation
@@ -124,3 +124,32 @@ if ("Upgrade" -ne $stampInformation.InstallationMethod) {
     }
 }
 ```
+
+Then you will need to do the following: 
+
+``` PowerShell
+# Confirm that the StampInformation is now correct
+$stampInformation = Get-StampInformation
+$stampInformation.StampVersion # This should show either 12.2508.1001.52 or 11.2508.1001.51
+```
+
+Check Get-SolutionUpdateEnvironment (This may take a bit of time to reflect, please allow couple minutes if this is not updated yet)
+
+```
+$sle = Get-SolutionUpdateEnvironment
+$sle.CurrentVersion # This should show same as above
+```
+
+Check Get-SolutionUpdate
+```
+(Get-SolutionUpdate).ResourceId
+```
+
+You should see either redmond/Solution12.2509.1001.22 or redmond/Solution11.2509.1001.21 now and should start pnu to 2509 instead of 2510. 
+Below command will start the download process and health check of the 2509 pnu package and can follow same guidelines as regular pnu from now on. https://learn.microsoft.com/en-us/azure/azure-local/update/about-updates-23h2?view=azloc-2509
+
+```
+$resourceId = "[Replace with either redmond/Solution12.2509.1001.22 or redmond/Solution11.2509.1001.21 depending on above]"
+Get-SolutionUpdate -id $resourceId | Start-SolutionUpdate -PrepareOnly
+```
+
