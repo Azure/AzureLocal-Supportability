@@ -98,3 +98,20 @@ if ("Upgrade" -ne $stampInformation.InstallationMethod) {
     }
 }
 ```
+
+Then you will need to do the following: 
+
+``` PowerShell
+# Confirm that the StampInformation is now correct
+$stampInformation = Get-StampInformation
+$stampInformation.StampVersion # This should show either 12.2508.1001.52 or 11.2508.1001.51
+```
+
+Check Get-SolutionUpdateEnvironment (This may take a bit of time to reflect, please allow couple minutes if this is not updated yet)
+
+```
+$sle = Get-SolutionUpdateEnvironment
+$sle.CurrentVersion # This should show same as above
+```
+
+Once $sle.CurrentVersion shows the right 2508 version then we have fixed the issue.
