@@ -97,7 +97,7 @@ Depending on what operation triggered the re-creation of the VM Switch, we need 
     ```
     - Install the feature if not installed.
       ```powershell
-      Add-WindowsFeature NetworkVirtualization -IncludeAllSubFeature -IncludeManagementTools
+      Add-WindowsFeature -Name 'NetworkVirtualization' -IncludeAllSubFeature -IncludeManagementTools
       ```
 1. Ensure that `Azure VFP Extension` is enabled on the VM Switch
    ```powershell
@@ -160,3 +160,11 @@ This operation is required as Network Controller may have already learned the VM
    ```
 
 ## Validate health
+1. Ensure that you have established connectivity from NcHostAgent to Network Controller ApiService. State should report as `Connected`.
+   ```powershell
+   Get-NetTCPConnection -RemotePort 6640
+   ```
+   - If showing as not connected, ensure:
+     - Ensure you have remove the firewall rule blocking communications over 6640.
+     - Ensure that NcHostAgent service is started. 
+     - Certificates are present between Network Controller and Server.
