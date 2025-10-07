@@ -95,7 +95,7 @@ Depending on what operation triggered the re-creation of the VM Switch, we need 
     ```
 
 ### Ensure NetworkVirtualization enabled
-1. Ensure that `NetworkVirtualization` Windows Feature is installed
+Ensure that `NetworkVirtualization` Windows Feature is installed. This is the required role that brings in NcHostAgent and Azure VFP Extension.
     ```powershell
     Get-WindowsFeature -Name 'NetworkVirtualization'
     ```
@@ -105,7 +105,7 @@ Depending on what operation triggered the re-creation of the VM Switch, we need 
       ```
 
 ### Ensure Azure VFP Extension enabled
-1. Ensure that `Azure VFP Extension` is enabled on the VM Switch
+Ensure that `Azure VFP Extension` is enabled on the VM Switch that is used for Compute.
    ```powershell
    # update the name of switch to match your environment
    $switch = Get-VMSwitch -Name 'ConvergedSwitch(mgmtcomp)';
@@ -122,8 +122,8 @@ Depending on what operation triggered the re-creation of the VM Switch, we need 
 This operation is required as Network Controller may have already learned the VMSwitchID and it's blocked from updating the configuration. 
 
 1. Suspend the cluster node to put node into maintenence.
-> [!IMPORTANT]
-> If you have combined your Storage and Compute intents, ensure that your Virtual Disks have successfully been put into maintenance mode and no active storage jobs are running before proceeding.
+  > [!IMPORTANT]
+  > If you have combined your Storage and Compute intents, ensure that your Virtual Disks have successfully been put into maintenance mode and no active storage jobs are running before proceeding.
 1. Enable firewall rule on server and stop NcHostAgent service.
     ```powershell
     New-NetFirewallRule -Name "NC_BLOCK_OUTBOUND" -DisplayName "NC_BLOCK_OUTBOUND" -Profile Any -RemotePort 6640 -Direction Outbound -Protocol TCP -Action Block;
@@ -146,7 +146,7 @@ This operation is required as Network Controller may have already learned the VM
 1. Now that we have re-created the switch, we can create a new server resource.
     ```powershell
     $newResourceId = $switch.Id.Guid;
-    $nodeToRepair.resourceId = $newResourceId ;
+    $nodeToRepair.resourceId = $newResourceId;
     $nodeToRepair.resourceRef = '/servers/$newResourceId';
     $nodeToRepair.instanceId = (New-Guid).Guid # this will change once we put to NC which is expected;
 
