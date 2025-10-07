@@ -143,7 +143,8 @@ This operation is required as Network Controller may have already learned the VM
 1. Follow steps [Ensure Azure VFP Extension enabled](#ensure-azure-vfp-extension-enabled).
 
 ## Create server resource
-1. Now that we have re-created the switch, we can create a new server resource.
+Now that we have re-created the switch, we can create a new server resource.
+1. Update the `$nodeToRepair` variable with new values and then create the resource against Network Controller.
     ```powershell
     $newResourceId = $switch.Id.Guid;
     $nodeToRepair.resourceId = $newResourceId;
