@@ -3,15 +3,15 @@
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr>
     <th style="text-align:left; width: 180px;">Component</th>
-    <td><strong>Networking</strong></td>
+    <td>Networking, NetworkController, SDN</td>
   </tr>
   <tr>
     <th style="text-align:left; width: 180px;">Topic</th>
-    <td><strong>{Topic Name}</strong>: {Brief description of the how to}</td>
+    <td>Recreate a Network Controller Server Resource</td>
   </tr>
   <tr>
     <th style="text-align:left; width: 180px;">Applicable Scenarios</th>
-    <td><strong>{Applicable Scenarios}</strong>: Re-deploy SDN Server resource in event that vSwitchID has changed. </td>
+    <td>Fixes issue if VMSwitchID has been re-created with new Switch ID.</td>
   </tr>
 </table>
 
@@ -19,9 +19,11 @@
 - [Overview](#overview)
 - [What and Why](#what-and-why)
 - [Prerequisites](#prerequisites)
-- [{Section 1 Title}](#section-1-title)
-- [Verification](#verification)
-- [Troubleshooting](#troubleshooting)
+- [Locate server resource](#locate-server-resource)
+- [Delete server resource](#delete-server-resource)
+- [Recreate the vSwitch](#recreate-the-vswitch)
+- [Create server resource](#create-server-resource)
+- [Validate health](#validate-health)
 
 ## Overview
 
@@ -44,7 +46,7 @@ The steps below are expected to be executed directly on the Hyper-V host that yo
 - {Prerequisite 1}
 - {Prerequisite 2}
 
-## Locate the server resource to delete
+## Locate server resource
 1. Isolate the Server resource within Network Controller.
     ```powershell
     $nodeFqdn = '<NODE_NAME>'
@@ -56,7 +58,7 @@ The steps below are expected to be executed directly on the Hyper-V host that yo
     $nodeToRemove = Get-SdnServer -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceID 'RESOURCE_ID'
     ```
 
-## Delete the existing server resource
+## Delete server resource
 1. Take a backup of current server resource. We want to save a backup just in case something goes wrong and need to restore existing configuration, or if need to reload the .json to re-populate variables referenced later.
     ```powershell
     $nodeToRepair | ConvertTo-Json -Depth 10 | Out-File -FilePath (Join-Path -Path (Get-SdnWorkingDirectory) -ChildPath "$($nodeToRepair.InstanceID).json")
@@ -89,7 +91,7 @@ This operation is required as Network Controller may have already learned the vS
     $switch.Id
     ```
 
-## Create the Server Resource
+## Create server resource
 1. Now that we have re-created the switch, we can create a new server resource.
     ```powershell
     $switchID = '<ID_FROM_PREVIOUS_STEP>'
@@ -110,3 +112,5 @@ This operation is required as Network Controller may have already learned the vS
 
    Remove-NetFirewallRule -Name "NC_BLOCK_OUTBOUND"
    ```
+
+## Validate health
