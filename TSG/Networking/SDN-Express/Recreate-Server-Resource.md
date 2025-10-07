@@ -22,7 +22,7 @@
 - [Locate server resource](#locate-server-resource)
 - [Delete server resource](#delete-server-resource)
 - [Configure server settings](#configure-server-settings)
-  - [Recreate the vSwitch](#recreate-the-vswitch)
+  - [Recreate the VMSwitch](#recreate-the-vmswitch-optional)
 - [Create server resource](#create-server-resource)
 - [Validate health](#validate-health)
 
@@ -67,7 +67,7 @@ The steps below are expected to be executed directly on the Hyper-V host that yo
 1. Isolate the Server resource within Network Controller.
     ```powershell
     $nodeFqdn = '<NODE_NAME>'
-    Get-SdnEnvironmentInfo -NetworkController <NC_VM_NAME>
+    Get-SdnEnvironmentInfo -NetworkController 'NC_VM_NAME';
     Get-SdnServer -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl | Where-Object { $_.properties.connections.managementaddresses -match $nodeFqdn }
     ```
 2. Once you have located the server resource, assign to variable.
@@ -102,13 +102,13 @@ Depending on what operation triggered the re-creation of the VM Switch, we need 
 1. Ensure that `Azure VFP Extension` is enabled on the VM Switch
    ```powershell
    # update the name of switch to match your environment
-   $switch = Get-VMSwitch -Name 'ConvergedSwitch(mgmtcomp)'
+   $switch = Get-VMSwitch -Name 'ConvergedSwitch(mgmtcomp)';
 
    Get-VMSwitchExtension -VMSwitchName $switch.Name -Name "Microsoft Azure VFP Switch Extension" 
    ```
    - If the feature is disabled, enable the feature.
      ```powershell
-     Disable-VmSwitchExtension -VMSwitchName $switch.Name -Name "Microsoft Windows Filtering Platform"
+     Disable-VmSwitchExtension -VMSwitchName $switch.Name -Name "Microsoft Windows Filtering Platform";
      Enable-VmSwitchExtension -VMSwitchName $switch.Name -Name "Microsoft Azure VFP Switch Extension" 
      ```
 
@@ -120,7 +120,7 @@ This operation is required as Network Controller may have already learned the VM
 > If you have combined your Storage and Compute intents, ensure that your Virtual Disks have successfully been put into maintenance mode and no active storage jobs are running before proceeding.
 1. Enable firewall rule on server and stop NcHostAgent service.
     ```powershell
-    New-NetFirewallRule -Name "NC_BLOCK_OUTBOUND" -DisplayName "NC_BLOCK_OUTBOUND" -Profile Any -RemotePort 6640 -Direction Outbound -Protocol TCP -Action Block
+    New-NetFirewallRule -Name "NC_BLOCK_OUTBOUND" -DisplayName "NC_BLOCK_OUTBOUND" -Profile Any -RemotePort 6640 -Direction Outbound -Protocol TCP -Action Block;
     Stop-Service -Name NcHostAgent -Force
     ```
 1. Delete the existing VM Switch. We want NetworkATC to re-create the switch for us and apply the configuration intents.
@@ -131,29 +131,30 @@ This operation is required as Network Controller may have already learned the VM
 1. Monitor NetworkATC to ensure that it's able to provision/configure a new vSwitch. Once NetworkATC is able to re-create the switch properly, retrieve the new switch ID.
     ```powershell
     # update the name of switch to match your environment
-    $switch = Get-VMSwitch -Name 'ConvergedSwitch(mgmtcomp)'
+    $switch = Get-VMSwitch -Name 'ConvergedSwitch(mgmtcomp)';
     $switch.Id
     ```
 
 ## Create server resource
 1. Now that we have re-created the switch, we can create a new server resource.
     ```powershell
-    $newResourceId = $switch.Id.Guid
-    $nodeToRepair.resourceId = $newResourceId 
-    $nodeToRepair.resourceRef = '/servers/$newResourceId'
-    $nodeToRepair.instanceId = (New-Guid).Guid # this will change once we put to NC which is expected
+    $newResourceId = $switch.Id.Guid;
+    $nodeToRepair.resourceId = $newResourceId ;
+    $nodeToRepair.resourceRef = '/servers/$newResourceId';
+    $nodeToRepair.instanceId = (New-Guid).Guid # this will change once we put to NC which is expected;
 
     Set-SdnResource -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.resourceRef -OperationType Add -Object $nodeToRepair
     ```
 1. Update the HostID registry on the host now that the resource has been re-created.
     ```powershell
-    $updatedServer = Get-SdnServer -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.ResourceRef
+    $updatedServer = Get-SdnServer -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.ResourceRef;
     Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Services\NcHostAgent\Parameters' -Name 'HostId' -Value $updatedServer.InstanceID -Force -ErrorAction Stop
     ```
 1. Start the appropriate services and remove firewall rule
    ```powershell
-   Start-Service -Name 'NCHostAgent'
-   Start-Service -Name 'SlbHostAgent'
+   Set-Service -Name NCHostAgent -StartupType Automatic;
+   Start-Service -Name 'NCHostAgent';
+   Start-Service -Name 'SlbHostAgent';
 
    Remove-NetFirewallRule -Name "NC_BLOCK_OUTBOUND"
    ```
