@@ -11,7 +11,7 @@
   </tr>
   <tr>
     <th style="text-align:left; width: 180px;">Applicable Scenarios</th>
-    <td>Fixes issue if VMSwitchID has been re-created with new Switch ID.</td>
+    <td>Fixes issue if VMSwitch has been re-created with new Switch ID.</td>
   </tr>
 </table>
 
@@ -43,8 +43,24 @@ SDN takes a dependency with the vSwitchID on the Host, and if this is re-created
 ## Prerequisites
 The steps below are expected to be executed directly on the Hyper-V host that you are attempting to repair.
 
-- {Prerequisite 1}
-- {Prerequisite 2}
+- Ensure you have installed the latest version of [SdnDiagnostics](https://learn.microsoft.com/en-us/azure/azure-local/manage/sdn-log-collection#install-the-sdn-diagnostics-powershell-module-on-the-client-computer) on the Hyper-V host we performing the operation from.
+    ```powershell
+    # check to see if module is installed and if none available, install from PSGallery
+    # if module is installed, then update to ensure we have latest version
+    if ($null -ieq (Get-Module -ListAvailable -Name SdnDiagnostics)) {
+        Install-Module -Name SdnDiagnostics
+    } else {
+        Update-Module -Name SdnDiagnostics
+    }
+    
+    # check if module is already imported into runspace
+    # if it it, remove from runspace and re-import to ensure we have the latest version loaded
+    if (Get-Module -Name SdnDiagnostics) {
+        Remove-Module -Name SdnDiagnostics
+    } else {
+        Import-Module -Name SdnDiagnostics
+    }
+    ```
 
 ## Locate server resource
 1. Isolate the Server resource within Network Controller.
