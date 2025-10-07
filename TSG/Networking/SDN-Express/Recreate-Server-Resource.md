@@ -22,6 +22,8 @@
 - [Locate server resource](#locate-server-resource)
 - [Delete server resource](#delete-server-resource)
 - [Configure server settings](#configure-server-settings)
+  - [Ensure NetworkVirtualization enabled](#ensure-networkvirtualization-enabled)
+  - [Ensure Azure VFP Extension enabled](#ensure-azure-vfp-extension-enabled)
   - [Recreate the VMSwitch](#recreate-the-vmswitch-optional)
 - [Create server resource](#create-server-resource)
 - [Validate health](#validate-health)
@@ -91,6 +93,8 @@ Depending on what operation triggered the re-creation of the VM Switch, we need 
     ```powershell
     New-NetFirewallRule -Name "NC_BLOCK_OUTBOUND" -DisplayName "NC_BLOCK_OUTBOUND" -Profile Any -RemotePort 6640 -Direction Outbound -Protocol TCP -Action Block
     ```
+
+### Ensure NetworkVirtualization enabled
 1. Ensure that `NetworkVirtualization` Windows Feature is installed
     ```powershell
     Get-WindowsFeature -Name 'NetworkVirtualization'
@@ -99,6 +103,8 @@ Depending on what operation triggered the re-creation of the VM Switch, we need 
       ```powershell
       Add-WindowsFeature -Name 'NetworkVirtualization' -IncludeAllSubFeature -IncludeManagementTools
       ```
+
+### Ensure Azure VFP Extension enabled
 1. Ensure that `Azure VFP Extension` is enabled on the VM Switch
    ```powershell
    # update the name of switch to match your environment
@@ -134,6 +140,7 @@ This operation is required as Network Controller may have already learned the VM
     $switch = Get-VMSwitch -Name 'ConvergedSwitch(mgmtcomp)';
     $switch.Id
     ```
+1. Follow steps [Ensure Azure VFP Extension enabled](#ensure-azure-vfp-extension-enabled).
 
 ## Create server resource
 1. Now that we have re-created the switch, we can create a new server resource.
