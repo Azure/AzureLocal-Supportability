@@ -21,7 +21,8 @@
 - [Prerequisites](#prerequisites)
 - [Locate server resource](#locate-server-resource)
 - [Delete server resource](#delete-server-resource)
-- [Recreate the vSwitch](#recreate-the-vswitch)
+- [Configure server settings](#configure-server-settings)
+  - [Recreate the vSwitch](#recreate-the-vswitch)
 - [Create server resource](#create-server-resource)
 - [Validate health](#validate-health)
 
@@ -71,7 +72,7 @@ The steps below are expected to be executed directly on the Hyper-V host that yo
     ```
 2. Once you have located the server resource, assign to variable.
     ```powershell
-    $nodeToRemove = Get-SdnServer -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceID 'RESOURCE_ID'
+    $nodeToRepair = Get-SdnServer -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceID 'RESOURCE_ID'
     ```
 
 ## Delete server resource
@@ -84,8 +85,35 @@ The steps below are expected to be executed directly on the Hyper-V host that yo
     Set-SdnResource -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.ResourceRef -OperationType Delete
     ```
 
-## Recreate the vSwitch
-This operation is required as Network Controller may have already learned the vSwitchID and it's blocked from updating the configuration.
+## Configure server settings 
+Depending on what operation triggered the re-creation of the VM Switch, we need to evaluate what the state of the server settings are. In order to check this, we want to see if `NetworkVirtualization` role is present, and if the `Azure VFP Extension` is enabled on the VMSwitch.
+1. Create firewall rule to block all communications between NcHostAgent and Network Controller. 
+    ```powershell
+    New-NetFirewallRule -Name "NC_BLOCK_OUTBOUND" -DisplayName "NC_BLOCK_OUTBOUND" -Profile Any -RemotePort 6640 -Direction Outbound -Protocol TCP -Action Block
+    ```
+1. Ensure that `NetworkVirtualization` Windows Feature is installed
+    ```powershell
+    Get-WindowsFeature -Name 'NetworkVirtualization'
+    ```
+    - Install the feature if not installed.
+      ```powershell
+      Add-WindowsFeature NetworkVirtualization -IncludeAllSubFeature -IncludeManagementTools
+      ```
+1. Ensure that `Azure VFP Extension` is enabled on the VM Switch
+   ```powershell
+   # update the name of switch to match your environment
+   $switch = Get-VMSwitch -Name 'ConvergedSwitch(mgmtcomp)'
+
+   Get-VMSwitchExtension -VMSwitchName $switch.Name -Name "Microsoft Azure VFP Switch Extension" 
+   ```
+   - If the feature is disabled, enable the feature.
+     ```powershell
+     Disable-VmSwitchExtension -VMSwitchName $switch.Name -Name "Microsoft Windows Filtering Platform"
+     Enable-VmSwitchExtension -VMSwitchName $switch.Name -Name "Microsoft Azure VFP Switch Extension" 
+     ```
+
+### Recreate the VMSwitch (optional)
+This operation is required as Network Controller may have already learned the VMSwitchID and it's blocked from updating the configuration. 
 
 1. Suspend the cluster node to put node into maintenence.
 > [!IMPORTANT]
@@ -110,16 +138,17 @@ This operation is required as Network Controller may have already learned the vS
 ## Create server resource
 1. Now that we have re-created the switch, we can create a new server resource.
     ```powershell
-    $switchID = '<ID_FROM_PREVIOUS_STEP>'
-    $nodeToRepair.resourceId = $switchID
-    $updatedEndpoint = Get-SdnApiEndPoint -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef "/servers/$($nodeToRepair.resourceID)"
-    
-    Set-SdnResource -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.ResourceRef -OperationType Add
+    $newResourceId = $switch.Id.Guid
+    $nodeToRepair.resourceId = $newResourceId 
+    $nodeToRepair.resourceRef = '/servers/$newResourceId'
+    $nodeToRepair.instanceId = (New-Guid).Guid # this will change once we put to NC which is expected
+
+    Set-SdnResource -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.resourceRef -OperationType Add -Object $nodeToRepair
     ```
 1. Update the HostID registry on the host now that the resource has been re-created.
     ```powershell
-    $updatedSdnResource = -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.ResourceRef
-    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Services\NcHostAgent\Parameters' -Name 'HostId' -Value $updatedSdnResource.InstanceID -Force -ErrorAction Stop
+    $updatedServer = Get-SdnServer -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.ResourceRef
+    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Services\NcHostAgent\Parameters' -Name 'HostId' -Value $updatedServer.InstanceID -Force -ErrorAction Stop
     ```
 1. Start the appropriate services and remove firewall rule
    ```powershell
