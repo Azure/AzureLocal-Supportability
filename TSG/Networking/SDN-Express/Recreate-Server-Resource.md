@@ -68,7 +68,7 @@ The steps below are expected to be executed directly on the Hyper-V host that yo
 ## Locate server resource
 1. Isolate the Server resource within Network Controller.
     ```powershell
-    $nodeFqdn = '<NODE_NAME>'
+    $nodeFqdn = "{0}.{1}" -f $env:COMPUTERNAME, $env:USERDNSDOMAIN
     Get-SdnEnvironmentInfo -NetworkController 'NC_VM_NAME';
     Get-SdnServer -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl | Where-Object { $_.properties.connections.managementaddresses -match $nodeFqdn }
     ```
