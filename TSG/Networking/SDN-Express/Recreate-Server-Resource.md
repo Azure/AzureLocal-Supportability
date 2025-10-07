@@ -167,6 +167,8 @@ This operation is required as Network Controller may have already learned the VM
    ```
 
 ## Validate health
+As part of the post validation steps, you will want to migrate a VM back onto the node and check several settings to ensure that Network Controller is able to program and configure policies on the host successfully. After deploying workloads to the server, perform the following validation steps.
+
 1. Ensure that you have established connectivity from NcHostAgent to Network Controller ApiService. State should report as `Connected`.
    ```powershell
    Get-NetTCPConnection -RemotePort 6640
@@ -175,3 +177,13 @@ This operation is required as Network Controller may have already learned the VM
      - Ensure you have remove the firewall rule blocking communications over 6640.
      - Ensure that NcHostAgent service is started. 
      - Certificates are present between Network Controller and Server.
+1. Ensure that resource configurationState is success.
+   ```powershell
+   $updatedServer = Get-SdnServer -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.ResourceRef;
+   $updateServer.properties.configurationState | ConvertTo-Json -Depth 10
+   ```
+   - If showing any warnings, then:
+     - Move the vSwitch primary replica to clear any stale configurations and wait a few minutes. Re-run the command to check health state.
+       ```powershell
+       Move-SdnServiceFabricReplica -NetworkController 'NC_VM_NAME' -ServiceTypeName VSwitchService
+       ```
