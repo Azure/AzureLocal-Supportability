@@ -12,6 +12,21 @@ If Get-SolutionUpdate returns an update object, then the mitigation details belo
 The update service can occasionally take an unusually long time to resolve content from its dependencies. When this happens, combined with frequent polling of the update progress via requests to the service, it can cause the service process to become unresponsive due to resource contention between threads in the process.
 
 # Mitigation Details
+## Prerequisite
+The Orchestrator service is the main dependenct for the Update service, as it contains the source of truth for action plan information. Before addressing the Update service, it is important to also ensure the Orchestrator service is healthy and responsive. The following command can be used for this test, and it should respond fairly quickly.
+
+```powershell
+Get-ActionPlanInstances | where { $_.RuntimeParameters.updateId -ne $null } | sort LastModifiedDateTime | ft InstanceId, StartDateTime, EndDateTime, Status, ActionPlanName, RuntimeParameters
+```
+
+If `Get-ActionPlanInstances` fails, times out, or takes a long time to respond (e.g. 30 seconds+), the first thing to address is to restart the Orchestrator service using the command below.
+
+```powershell
+Get-ClusterGroup "Azure Stack HCI Orchestrator Service Cluster Group" | Move-ClusterGroup
+```
+
+## Update service mitigation
+
 The mitigation is to terminate the running update service process and restart the service.
 
 This can be done by moving the Failover Cluster group for the update service to a different node.
