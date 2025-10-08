@@ -13,7 +13,7 @@ The update service can occasionally take an unusually long time to resolve conte
 
 # Mitigation Details
 ## Prerequisite
-The Orchestrator service is the main dependenct for the Update service, as it contains the source of truth for action plan information. Before addressing the Update service, it is important to also ensure the Orchestrator service is healthy and responsive. The following command can be used for this test, and it should respond fairly quickly.
+The Orchestrator service is the main dependency for the Update service, as it contains the source of truth for action plan information. Before addressing the Update service, it is important to also ensure the Orchestrator service is healthy and responsive. The following command can be used for this test, and it should respond fairly quickly.
 
 ```powershell
 Get-ActionPlanInstances | where { $_.RuntimeParameters.updateId -ne $null } | sort LastModifiedDateTime | ft InstanceId, StartDateTime, EndDateTime, Status, ActionPlanName, RuntimeParameters
