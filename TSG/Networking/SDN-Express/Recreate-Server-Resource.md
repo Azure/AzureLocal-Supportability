@@ -3,7 +3,7 @@
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr>
     <th style="text-align:left; width: 180px;">Component</th>
-    <td>Networking, NetworkController, SDN</td>
+    <td>Networking</td>
   </tr>
   <tr>
     <th style="text-align:left; width: 180px;">Topic</th>
