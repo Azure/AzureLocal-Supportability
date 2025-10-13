@@ -46,7 +46,7 @@ SDN takes a dependency with the vSwitchID on the Host, and if this is re-created
 ## Prerequisites
 The steps below are expected to be executed directly on the Hyper-V host that you are attempting to repair.
 
-- Ensure you have installed the latest version of [SdnDiagnostics](https://learn.microsoft.com/en-us/azure/azure-local/manage/sdn-log-collection#install-the-sdn-diagnostics-powershell-module-on-the-client-computer) on the Hyper-V host we performing the operation from.
+- Ensure you have installed the latest version of [SdnDiagnostics](https://learn.microsoft.com/en-us/azure/azure-local/manage/sdn-log-collection#install-the-sdn-diagnostics-powershell-module-on-the-client-computer) on the Hyper-V host we are performing the operation from.
     ```powershell
     # check to see if module is installed and if none available, install from PSGallery
     # if module is installed, then update to ensure we have latest version
