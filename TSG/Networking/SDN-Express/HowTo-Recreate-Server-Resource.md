@@ -121,7 +121,7 @@ Ensure that `Azure VFP Extension` is enabled on the VM Switch that is used for C
 ### Recreate the VMSwitch (optional)
 This operation is required as Network Controller may have already learned the VMSwitchID and it's blocked from updating the configuration. 
 
-1. Suspend the cluster node to put node into maintenence.
+1. Suspend the cluster node to put node into maintenance.
    > [!IMPORTANT]
    > If you have combined your Storage and Compute intents, ensure that your Virtual Disks have successfully been put into maintenance mode and no active storage jobs are running before proceeding.
 1. Enable firewall rule on server and stop NcHostAgent service.
