@@ -181,7 +181,7 @@ As part of the post validation steps, you will want to migrate a VM back onto th
 1. Ensure that resource configurationState is success.
    ```powershell
    $updatedServer = Get-SdnServer -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.ResourceRef;
-   $updateServer.properties.configurationState | ConvertTo-Json -Depth 10
+   $updatedServer.properties.configurationState | ConvertTo-Json -Depth 10
    ```
    - If showing any warnings, then:
      - Move the vSwitch primary replica to clear any stale configurations and wait a few minutes. Re-run the command to check health state.
