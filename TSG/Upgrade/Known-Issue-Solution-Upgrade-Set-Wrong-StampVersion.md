@@ -4,6 +4,8 @@ Solution Upgrade during the 2508/2509 timeframe has a known issue where stamp ve
 
 # Issue Validation
 
+First, please ensure that there is no admin action that is currently in progress (Solution Update / PnU, Add Server / Add Node, Repair Server / Repair Node). We should not run this TSG if any are in progress / in failed state.
+
 The validation can be run manually on any one node to verify. 
 
 ```
