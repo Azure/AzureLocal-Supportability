@@ -1,10 +1,10 @@
 # Overview
 
-Solution Upgrade during the 2508/2509 timeframe has a known issue where stamp version is set incorrectly to 2509 stamp version even though the actual bits on the device is 2508. 
+Solution Upgrade during the 2508/2509 timeframe has a known issue where stamp version is set incorrectly to 2509 solution version even though the actual components on the device is 2508. 
 
 # Issue Validation
 
-The validation can be run manually on one of the node to verify. 
+The validation can be run manually on any one node to verify. 
 
 ```
 Import-Module ECEClient
@@ -42,7 +42,7 @@ Issue exist of mismatched version. Please continue with the mitigation in the TS
 
 # Cause
 
-There is an issue with timing in 2509 release that can cause 2509 stamp version to be incorrectly set on a 2508 services version that is running 2508 components.
+There is an issue with timing in 2509 release that can cause 2509 solution version to be incorrectly set on 2508 components.
 
 # Mitigation Details
 
