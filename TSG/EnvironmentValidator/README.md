@@ -8,6 +8,9 @@ This folder contains the TSG's related to Environment Validators.
 * [Troubleshooting TestPowerShell Module Version](./Troubleshooting-Test-PowerShell-Module-Version.md)
 * [Troubleshooting Module Versions](Troubleshooting-Module-Versions.md)
 
+* [Known Issue High Disk Space Usage in TEMP](Known-Issue-High-Disk-Space-usage-in-TEMP.md)
+* [Known Issue Known Issue WinRM cannot process the configuration request](Known-Issue-WinRM-cannot-process-the-configuration-request.md)
+
 ## Networking
 
 For Network Environment Validator TSGs, see [Networking/README.md](Networking/README.md).
