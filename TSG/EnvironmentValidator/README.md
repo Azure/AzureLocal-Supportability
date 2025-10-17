@@ -7,6 +7,7 @@ This folder contains the TSG's related to Environment Validators.
 * [Troubleshooting Test PhysicalDisk API Failure](./Troubleshooting-Test-PhysicalDisk-API.md)
 * [Troubleshooting TestPowerShell Module Version](./Troubleshooting-Test-PowerShell-Module-Version.md)
 * [Troubleshooting Module Versions](Troubleshooting-Module-Versions.md)
+* [Troubleshooting Services Version Failure](../Update/Test-ServicesVersion-Failure-Mitigation-In-HealthCheck.md)
 
 ## Networking
 
