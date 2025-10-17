@@ -116,7 +116,7 @@ If you have confirmed this is a case of scenario 3 you can use the following ste
       * The path to the mentioned SolutionExtension directory includes `SBECache`.  For example, if the HealthCheckResult failure mentions a path like this (where x.xxxx.xx are replaced with a SBE version value) then this IS scenario 3:
       'C:\CloudContent\Microsoft_Reserved\Update\SBECache\4.x.xxxx.xx\Configuration\SolutionExtension'
 
-If the path mentioned in the HealtCheckResult does NOT mention `SBECache` this is NOT scenario 3.
+If the path mentioned in the HealthCheckResult does NOT mention `SBECache` this is NOT scenario 3.
 
 **IMPORTANT - Do NOT run the below script unless you match ALL the criteria above**
 
