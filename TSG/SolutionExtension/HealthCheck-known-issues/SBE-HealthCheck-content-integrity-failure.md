@@ -123,6 +123,22 @@ If the path mentioned in the HealthCheckResult does NOT mention `SBECache` this 
 1. Run the script below on any cluster node to reset the environment variable to the default value on all nodes. Specify the normal AD deployment user (the LCM user as prompted during the cloud deployment process).
 
 ```Powershell
+[array]$failedHealthCheckUpdates = Get-SolutionUpdateEnvironment | ?{$_.State -eq "HealthCheckFailed"}
+$scenario3Updates = @()
+foreach ($update in $failedHealthCheckUpdates) {
+    $healthCheckResult = $update.HealthCheckResult
+    $failedSBETest = $healthCheckResult | ?{$_.Status -eq "FAILURE" -and $_.Name -like "*Test-SolutionExtensionModule*"}
+    $scenario3Failure = $failedSBETest | ?{($_.AdditionalData | ConvertTo-Json) -match "(?s)content failed integrity check.*SBECache"}
+    if ($null -ne $scenario3Failure) {
+        Write-Host "It appears the following update experienced scearnio 3:`n$update.ResourceId"
+        $scenario3Updates += $update
+    }
+}
+
+if ($null -eq $scenario3Updates -or $scenario3Updates.Count -eq 0) {
+    throw "No scenario 3 update failures - abandoning mitigation"
+}
+
 $cred = Get-Credential
 Invoke-Command -Credential $cred -ComputerName (Get-ClusterNode).Name -ScriptBlock {
     $defaultPath = "C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\CloudMedia\SBE\Installed\metadata"
