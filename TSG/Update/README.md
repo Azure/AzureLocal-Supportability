@@ -26,3 +26,4 @@
 * [ValidateDotNetUpdatesOnCluster wusa.exe process completed with exit code](./ValidateDotNetUpdatesOnCluster-wusa-exit-code.md)
 * [Update service crash or UpdateBootstrap ResetOverrideDiscoveryUri failure](./UpdateService-Crash-on-non-en-US.md)
 * [Resumed update fails immediately](./Resumed-update-fails-immediately.md)
+* [Solution Update CAU Run fails due to Windows Defender blocking WMI commands](./Solution-Update-CAU-Run-fails-due-to-Windows-Defender-blocking-WMI-commands.md)
