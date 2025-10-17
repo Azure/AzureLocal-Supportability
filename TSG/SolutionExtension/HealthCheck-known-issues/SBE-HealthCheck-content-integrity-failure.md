@@ -100,7 +100,7 @@ If this is **Scenario 2** you should just ignore the failure.  As soon as the ne
 **DO NOT RUN THE SCRIPT** below as it may cause the current update to fail!
 
 # Mitagation Details for Scenario 3
-If you have confirmed this a a case of scenario 3 you can use the following steps to correct the bad environment variable value.
+If you have confirmed this is a case of scenario 3 you can use the following steps to correct the bad environment variable value.
 
 **IMPORTANT - You should only use this script if ALL of the following are true:**
 * The installed version of Azure Local is 10.2503.x or older
