@@ -66,8 +66,7 @@ AdditionalData:
 Key   : Detail
 Value : The SolutionExtension module could not be validated. An exception occurred while validating the
         SolutionExtension module:  + SolutionExtension content failed integrity check in
-        'C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Clou
-        dMedia\SBE\Installed\Content\Configuration\SolutionExtension'
+        'C:\CloudContent\Microsoft_Reserved\Update\SBECache\4.x.xxxx.xx\Configuration\SolutionExtension'
         At
         C:\NugetStore\Microsoft.AzureStack.Role.SBE.10.2411.0.2017\content\Helpers\SBESolutionExtensionHelper.psm1:150
         char:13
@@ -78,6 +77,10 @@ Value : The SolutionExtension module could not be validated. An exception occurr
             + FullyQualifiedErrorId : SolutionExtension content failed integrity check in
         'C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\CloudMedia\SBE\Installed\Content\Configuration\SolutionExtension'
 ```
+
+Note: The path to the `SolutionExtension` directory listed just after `SolutionExtension content failed integrity check in` in the above message can be used to confirm the scenario.
+* Scenario 1 and 2 - The path will start with `C:\ClusterStorage`
+* Scenario 3 - The path will contain `SBECache\4.x.xxxx.xx` where the x.xxxx.xx part is the version of the SBE included in update A (and not update B). Note: for this scenario the path can start with a `D:\` path if your systems have a D drive.
 
 # Cause
 Start-SolutionUpdate health checks were supposed to **temporarily modify** the `SBEStagedMetadata` machine environment variable to reflect the location of the metadata for the new, to be installed, SBE update. This allows the pre-update health checks to run using the newer SBE logic.
@@ -99,7 +102,23 @@ If this is **Scenario 2** you should just ignore the failure.  As soon as the ne
 # Mitagation Details for Scenario 3
 If you have confirmed this a a case of scenario 3 you can use the following steps to correct the bad environment variable value.
 
-**Scenario 3 should only be happening on 10.2503.x and older!**  Please double check the scenario details before applying the scenario if you have a newer version installed.
+**IMPORTANT - You should only use this script if ALL of the following are true:**
+* The installed version of Azure Local is 10.2503.x or older
+* You are ABSOLUTELY SURE this is scenario 3 as described above
+   * There should be no update that has actually been started (e.g. `Get-SolutionUpdate` does not list any update with a status of `Installing` or `InstallationFailed`)
+   * The cluster started to prepare (download or health check) update A and then there was a change to instead try to install update B BEFORE ever starting to actually install update A.
+   * The second update you have attempted to start (update B in this scenario), is reporting the State of `HealthCheckFailed` when `Get-SolutionUpdate -Id redmond/<update b value>` is called
+   (e.g. `Get-SolutionUpdate -Id redmond/Solution12.2510.1002.83`)
+   * The `HealthCheckResult` of that `Get-SolutionUpdate` matches the Issue Validation described above.
+   For example:
+   `(Get-SolutionUpdate -Id redmond/Solution12.2510.1002.83).HealthCheckResult | ?{$_.Status -eq "FAILURE"}` contains the result that mentions both:
+      * `SolutionExtension content failed integrity check in`
+      * The path to the mentioned SolutionExtension directory includes `SBECache`.  For example, if the HealthCheckResult failure mentions a path like this (where x.xxxx.xx are replaced with a SBE version value) then this IS scenario 3:
+      'C:\CloudContent\Microsoft_Reserved\Update\SBECache\4.x.xxxx.xx\Configuration\SolutionExtension'
+
+If the path mentioned in the HealtCheckResult does NOT mention `SBECache` this is NOT scenario 3.
+
+**IMPORTANT - Do NOT run the below script unless you match ALL the criteria above**
 
 1. Run the script below on any cluster node to reset the environment variable to the default value on all nodes. Specify the normal AD deployment user (the LCM user as prompted during the cloud deployment process).
 
