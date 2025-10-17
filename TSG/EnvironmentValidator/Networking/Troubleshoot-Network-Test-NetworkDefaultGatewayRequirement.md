@@ -100,5 +100,5 @@ No default gateway defined on any adapter(s) on MACHINENAME.
 It might not have any information returned. You need to make sure your route table contains at least 1 default gateway for your management subnet.
 Below is an example on how to add a new route in your system's route table. Please adjust based on your network requirement.
 ```powershell
-New-NetRoute -DestinationPrefix "0.0.0.0/0" -InterfaceAlias <MGMT_ADAPTER_ALIAS> -AddressFamily IPv4 -NextHop <GATEWAY_IP_YOU_DO_NOT_NEED>
+New-NetRoute -DestinationPrefix "0.0.0.0/0" -InterfaceAlias <MGMT_ADAPTER_ALIAS> -AddressFamily IPv4 -NextHop <GATEWAY_IP>
 ```
