@@ -40,7 +40,7 @@ This should output `TrustedHosts setting on node1 is ''`
 
 # Cause
 
-Cluster validation must update the TrustedHosts entries with IP, NodeName and cluster name in order to perform cluster validation. If '*' is present already in the TrustedHosts list, WSMAN does not allow updating the list with IP as it considers the '.' as a . special pattern.
+Cluster validation must update the TrustedHosts entries with IP, NodeName and cluster name in order to perform cluster validation. If '*' is present already in the TrustedHosts list, WSMAN does not allow updating the list with IP as it considers the '.' as a special pattern.
 
 # Next action
 
