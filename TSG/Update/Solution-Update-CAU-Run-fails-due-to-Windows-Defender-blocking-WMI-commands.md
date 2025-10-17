@@ -1,22 +1,3 @@
-<!--
-Troubleshoot Template
-- Focus on providing systematic troubleshooting guidance for specific issues
-- Replace all {placeholders} with relevant content
-- This template provides a suggested structure - adapt sections as needed for your specific issue
-- Skip optional sections if they don't add value
-
-Styling
-- Images should be placed in the `./images` folder and referenced
-- Any code block should be wrapped in triple backticks (```) with language identifier
-- Use numbered lists for sequential steps and bullet points for symptoms/options
-
-Coding Standards
-- All code snippets MUST be safe to execute in a production environment
-- Check that the environment is in the expected state before performing mitigation
-
-You can use this regex to find placeholders that need to be replaced (search by Regex in your editor): \{([^}]+)\}
--->
-
 # Solution Update CAU Run fails due to Windows Defender blocking WMI commands
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
