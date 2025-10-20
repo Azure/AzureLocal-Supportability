@@ -117,7 +117,7 @@ You can enable attack surface reduction rules by using any of the following meth
 <date> <time>, Info         DISM   DISM Manager: PID=13912 TID=14268 No Sandbox was created, DISM running in-place. - CDISMManager::CreateImageSessionFromLocation
 <date> <time>, Error        DISM   DismHostLib: PID=13912 TID=14268 Failed to create dismhost.exe servicing process. - DismCreateObjectInHostFromCLSID(hr:0x80070005)
 <date> <time>, Error        DISM   DISM Manager: PID=13912 TID=14268 Failed to create Dism Image Session in host. - CDISMManager::LoadRemoteImageSession(hr:0x80070005)
-<date> <time>, Warning      DISM   DISM Manager: PID=13912 TID=14268 A problem ocurred loading the image session. Retrying...  - CDISMManager::CreateImageSession(hr:0x80070005)
+<date> <time>, Warning      DISM   DISM Manager: PID=13912 TID=14268 A problem occurred loading the image session. Retrying...  - CDISMManager::CreateImageSession(hr:0x80070005)
 <date> <time>, Info         DISM   DISM Manager: PID=13912 TID=14268 Copying DISM from "C:\Windows\System32\Dism" - CDISMManager::CreateImageSessionFromLocation
 <date> <time>, Info         DISM   DISM Manager: PID=13912 TID=14268 No Sandbox was created, DISM running in-place. - CDISMManager::CreateImageSessionFromLocation
 <date> <time>, Error        DISM   DismHostLib: PID=13912 TID=14268 Failed to create dismhost.exe servicing process. - DismCreateObjectInHostFromCLSID(hr:0x80070005)
