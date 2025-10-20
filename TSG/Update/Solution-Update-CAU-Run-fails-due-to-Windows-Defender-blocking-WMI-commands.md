@@ -58,7 +58,7 @@ Get-WinEvent -LogName "Microsoft-Windows-Windows Defender/Operational" -Filt
 # Cause
 A Windows Defender attack surface reduction rule named: **Block Process Creations originating from PSExec & WMI commands** has been enabled and set to Block (value 1).  It has a rule ID: D1E49AAC-8F56-4280-B9BA-993A6D77406C .
 
-The [Azure Local security baseline default](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-baseline?view=azloc-2508#view-and-download-security-settings) is Audit (value 2) for this rule.
+The [Azure Local security baseline default](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-baseline#view-and-download-security-settings) is Audit (value 2) for this rule.
 
 A table mapping rule names to rule GUIDs is also available [here](https://learn.microsoft.com/defender-endpoint/defender-endpoint-demonstration-attack-surface-reduction-rules#test-files)
 
