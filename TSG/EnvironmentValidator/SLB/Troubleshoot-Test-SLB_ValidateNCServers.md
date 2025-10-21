@@ -63,10 +63,31 @@ This configuration meets all validation requirements for SLB and BGP properties.
 - Run the validator and review the result object:
 - Look for failures related to `Test-SLB_ValidateNCServers`.
 - Example output:
-    ```powershell
-    $ncServerResults = Test-SLB_ValidateNCServers
-    $ncServerResults
-    ```
+
+```json
+{
+    "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidateNCServers",
+    "DisplayName":  "All Network Controller (NC) server state",
+    "Tags":  {},
+    "Title":  "All Network Controller (NC) server state",
+    "Status":  0,
+    "Severity":  2,
+    "Description":  "Test if all NC servers configuration and provisioning state are healthy.",
+    "Remediation":  "NC server configuration and provisioning state are not healthy.",
+    "TargetResourceID":  "NC server: v-Host1, Host is Connected.",
+    "TargetResourceName":  "Success",
+    "TargetResourceType":  "SoftwareLoadBalancerManager",
+    "Timestamp":  "\/Date(1761019789100)\/",
+    "AdditionalData":  {
+                            "Detail":  "\"NC server provisioning and configuration state are healthy.\"",
+                            "Status":  "SUCCESS",
+                            "TimeStamp":  "10/21/2025 04:09:49",
+                            "Resource":  "SoftwareLoadBalancerManager",
+                            "Source":  "192.168.200.93"
+                        },
+    "HealthCheckSource":  "ScaleSLB\\Standard\\Medium\\NetworkSLB\\c2440959"
+}
+```
 
 ## Failure Return Results
 

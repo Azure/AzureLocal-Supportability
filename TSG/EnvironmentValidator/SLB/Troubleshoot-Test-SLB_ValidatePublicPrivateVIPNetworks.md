@@ -78,10 +78,31 @@ To use this validator, ensure the following prerequisites:
 - Run the validator and review the result object:
 - Look for failures related to `Test-SLB_ValidatePublicPrivateVIPNetworks`.
 - Example output:
-    ```powershell
-    $SLBNodesValidRstObject = Test-SLB_ValidatePublicPrivateVIPNetworks
-    $SLBNodesValidRstObject
-    ```
+
+```json
+{
+    "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidatePublicPrivateVIPNetworks",
+    "DisplayName":  "Check public and private Virtual IP (VIP) addresses",
+    "Tags":  {},
+    "Title":  "Check public and private Virtual IP (VIP) addresses",
+    "Status":  1,
+    "Severity":  2,
+    "Description":  "Test if we have valid public and/or private VIP addresses",
+    "Remediation":  "Please check public and/or private VIP addresses",
+    "TargetResourceID":  "Property name: IPPools, value: 192.168.200.119 \u003e= 192.168.200.110",
+    "TargetResourceName":  "IPPools",
+    "TargetResourceType":  "PrivateVIP",
+    "Timestamp":  "\/Date(1761012664074)\/",
+    "AdditionalData":  {
+                            "Detail":  "\"The property \u0027IPPools\u0027 on the \u0027PrivateVIP\u0027 network has an invalid format. Start IP address \u0027192.168.200.119\u0027  is bigger than End IP address \u0027192.168.200.110\u0027.\"",
+                            "Status":  "FAILURE",
+                            "TimeStamp":  "10/21/2025 02:11:04",
+                            "Resource":  "PrivateVIP",
+                            "Source":  "Networks"
+                        },
+    "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\22e52eb5"
+}
+```
 
 ## Failure Return Results
 

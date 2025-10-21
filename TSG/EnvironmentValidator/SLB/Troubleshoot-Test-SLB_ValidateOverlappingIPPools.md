@@ -106,11 +106,33 @@ This configuration meets all validation requirements for SLB and BGP properties.
 ### Review Environment Validator Output
 
 - Run the validator and inspect the result object:
-    ```powershell
-    $SLBNodesValidRstObject = Test-SLB_ValidateSoftwareLoadBalancer
-    $SLBNodesValidRstObject
-    ```
 - Look for failures related to `Test-SLB_ValidateOverlappingIPPools`.
+- Example output:
+
+```json
+{
+    "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidateOverlappingIPPools",
+    "DisplayName":  "Validate overlapping IP Pools",
+    "Tags":  {},
+    "Title":  "Validate overlapping IP Pools",
+    "Status":  1,
+    "Severity":  2,
+    "Description":  "Test if all IP pools are not overlapping each other",
+    "Remediation":  "Ensure that all IP pools are properly configured and do not overlap.",
+    "TargetResourceID":  "Property name: IPPools, value: [192.168.102.18, 192.168.102.25] overlaps with [192.168.102.10, 192.168.102.19]",
+    "TargetResourceName":  "IPPools",
+    "TargetResourceType":  "IPPools",
+    "Timestamp":  "\/Date(1761012664145)\/",
+    "AdditionalData":  {
+                            "Detail":  "\"IPPools 192.168.102.18-192.168.102.25 has overlapping with IPPools 192.168.102.10-192.168.102.19. Please ensure IP pools do not overlap.\"",
+                            "Status":  "FAILURE",
+                            "TimeStamp":  "10/21/2025 02:11:04",
+                            "Resource":  "IPPools",
+                            "Source":  "Networks"
+                        },
+    "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\22e52eb5"
+}
+```
 
 ## Failure Return Results
 

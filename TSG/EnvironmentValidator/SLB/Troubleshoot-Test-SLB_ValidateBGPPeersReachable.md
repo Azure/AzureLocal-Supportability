@@ -94,10 +94,31 @@ This configuration meets all validation requirements for SLB and BGP properties.
 - Run the validator and review the result object:
 - Look for failures related to `Test-SLB_ValidateSoftwareLoadBalancer`.
 - Example output:
-    ```powershell
-    $SLBNodesValidRstObject = Test-SLB_ValidateSoftwareLoadBalancer
-    $SLBNodesValidRstObject
-    ```
+
+```json
+{
+    "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidateBGPPeersReachable",
+    "DisplayName":  "Border Gateway Protocol (BGP) Peers Reachable",
+    "Tags":  {},
+    "Title":  "Border Gateway Protocol (BGP) Peers Reachable",
+    "Status":  1,
+    "Severity":  2,
+    "Description":  "Test if BGP Peers are reachable",
+    "Remediation":  "Ensure BGP Peer  is reachable.",
+    "TargetResourceID":  "Property name: RouterIPAddress, value: ",
+    "TargetResourceName":  "PeerRouterConfigurations",
+    "TargetResourceType":  "BGPInfo",
+    "Timestamp":  "\/Date(1761004300036)\/",
+    "AdditionalData":  {
+                        "Detail":  "\"BGP Peer \u0027\u0027 is not reachable. Please check the network connectivity.\"",
+                        "Status":  "FAILURE",
+                        "TimeStamp":  "10/20/2025 23:51:40",
+                        "Resource":  "BGPInfo",
+                        "Source":  "192.168.200.93"
+                        },
+    "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\073ad76b"
+}
+```
 
 ## Failure Return Results
 

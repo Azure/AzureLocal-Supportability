@@ -96,10 +96,31 @@ This configuration meets all validation requirements for SLB and BGP properties.
 - Run the validator and review the result object:
 - Look for failures related to `Test-SLB_ValidateSoftwareLoadBalancer`.
 - Example output:
-    ```powershell
-    $SLBNodesValidRstObject = Test-SLB_ValidateSoftwareLoadBalancer
-    $SLBNodesValidRstObject
-    ```
+
+```json
+{
+    "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidateHNVPANetwork",
+    "DisplayName":  "Validate the Hyper-V Network Virtualization Provider Address (HNVPA) network configuration for the Software Load Balancer (SLB)",
+    "Tags":  {},
+    "Title":  "Validate the Hyper-V Network Virtualization Provider Address (HNVPA) network configuration for the Software Load Balancer (SLB)",
+    "Status":  1,
+    "Severity":  2,
+    "Description":  "Execute comprehensive validation of HNVPA network configuration to ensure it meets the requirements for proper SLB deployment in Azure Local environments. This function is critical for validating the network infrastructure before deploying SLB components.",
+    "Remediation":  "Need to update URL here",
+    "TargetResourceID":  "Property name: DefaultGateways, value: 192.168.100.1",
+    "TargetResourceName":  "DefaultGateways",
+    "TargetResourceType":  "HNVPA",
+    "Timestamp":  "\/Date(1761004281844)\/",
+    "AdditionalData":  {
+                        "Detail":  "\"The property \u0027DefaultGateways\u0027 \u0027192.168.100.1\u0027 is not in the subnet \u0027192.168.200.0/24\u0027\"",
+                        "Status":  "FAILURE",
+                        "TimeStamp":  "10/20/2025 23:51:21",
+                        "Resource":  "HNVPA",
+                        "Source":  "Networks"
+                        },
+    "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\073ad76b"
+}
+```
 
 ## Failure Return Results
 

@@ -66,10 +66,31 @@ This configuration meets all validation requirements for SLB and BGP properties.
 - Run the validator and review the result object:
 - Look for failures related to `Test-SLB_ValidateNCLoadBalancerManager`.
 - Example output:
-    ```powershell
-    $SLBManagerValidRstObject = Test-SLB_ValidateNCLoadBalancerManager
-    $SLBManagerValidRstObject
-    ```
+
+```json
+{
+    "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidateNCLoadBalancerManager",
+    "DisplayName":  "Network Controller (NC) load balancer manager state",
+    "Tags":  {},
+    "Title":  "Network Controller (NC) load balancer manager state",
+    "Status":  0,
+    "Severity":  2,
+    "Description":  "Test if all NC load balancer manager provisioning state are healthy.",
+    "Remediation":  "NC load balancer manager provisioning state are not healthy.",
+    "TargetResourceID":  "NCLoadBalancerManager",
+    "TargetResourceName":  "NCLoadBalancerManager",
+    "TargetResourceType":  "Network Controller load balancer manager",
+    "Timestamp":  "\/Date(1761019775518)\/",
+    "AdditionalData":  {
+                            "Detail":  "\"Load balancer manager provisioning state are healthy.\"",
+                            "Status":  "SUCCESS",
+                            "TimeStamp":  "10/21/2025 04:09:35",
+                            "Resource":  "Network Controller load balancer manager",
+                            "Source":  "192.168.200.93"
+                        },
+    "HealthCheckSource":  "ScaleSLB\\Standard\\Medium\\NetworkSLB\\c2440959"
+}
+```
 
 ## Failure Return Results
 

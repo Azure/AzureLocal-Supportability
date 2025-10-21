@@ -34,9 +34,33 @@ This validator checks whether the Failover Cluster Network Controller (FCNC) is 
 - Run the environment validator as described in the deployment documentation.
 - Look for failures related to `Test-SLB_ValidateFCNCInstalled`.
 - Example output:
-    ```
-    [Critical] FCNC is not installed on node 'Node01'.
-    ```
+
+```json
+{
+    "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidateFCNCInstalled",
+    "DisplayName":  "FCNC is installed on all cluster nodes",
+    "Tags":  {
+
+            },
+    "Title":  "FCNC (Failover Cluster Network Controller) component is installed on all cluster nodes",
+    "Status":  0,
+    "Severity":  2,
+    "Description":  "Verifies that the FCNC is properly installed and configured on each node in the cluster",
+    "Remediation":  "FCNC (Failover Cluster Network Controller) must be installed prior to deploying SLB",
+    "TargetResourceID":  "Node: 192.168.200.92, service: NC API service",
+    "TargetResourceName":  "FCNC API Service",
+    "TargetResourceType":  "FCNC installation",
+    "Timestamp":  "\/Date(1761012662827)\/",
+    "AdditionalData":  {
+                            "Detail":  "\"Failover Cluster Network Controller (FCNC) is installed and operational on host \u0027192.168.200.92\u0027.\"",
+                            "Status":  "SUCCESS",
+                            "TimeStamp":  "10/21/2025 02:11:02",
+                            "Resource":  "FCNC installation",
+                            "Source":  "192.168.200.92"
+                        },
+    "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\22e52eb5"
+}
+```
 
 ## Failure Return Results
 

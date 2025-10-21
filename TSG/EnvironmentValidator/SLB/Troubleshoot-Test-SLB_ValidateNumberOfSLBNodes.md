@@ -30,12 +30,33 @@ This function verifies that the number of Software Load Balancer (SLB) nodes in 
 ### Review Environment Validator Output
 
 - Run the validator and review the result object:
-- Look for failures related to `Test-SLB_ValidateFCNCInstalled`.
+- Look for failures related to `Test-SLB_ValidateNumberOfSLBNodes`.
 - Example output:
-    ```powershell
-    $SLBNodesValidRstObject = Test-SLB_ValidateNumberOfSLBNodes
-    $SLBNodesValidRstObject
-    ```
+
+```json
+{
+    "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidateNumberOfSLBNodes",
+    "DisplayName":  "The number of Software Load Balancer (SLB) Multiplexer (MUX) is appropriate for the number of available hosts in an Azure Local deployment.",
+    "Tags":  {},
+    "Title":  "The number of Software Load Balancer (SLB) Multiplexer (MUX) is appropriate for the number of available hosts in an Azure Local deployment.",
+    "Status":  1,
+    "Severity":  2,
+    "Description":  "Execute critical validation of the SLB node count configuration to ensure proper load balancer deployment in Azure Local environments.",
+    "Remediation":  "The number of SLB MUX is not valid with the number of available hosts",
+    "TargetResourceID":  "SoftwareLoadBalancer - Mux:3, Hosts:2",
+    "TargetResourceName":  "NumberOfMuxes",
+    "TargetResourceType":  "SoftwareLoadBalancer",
+    "Timestamp":  "\/Date(1761018802931)\/",
+    "AdditionalData":  {
+                            "Detail":  "\"The number of Multiplexer (MUX) instances (3) exceeds the number of available hosts (2). Please adjust the configuration.\"",
+                            "Status":  "FAILURE",
+                            "TimeStamp":  "10/21/2025 03:53:22",
+                            "Resource":  "SoftwareLoadBalancer",
+                            "Source":  "SDNIntegration"
+                        },
+    "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\aedb3032"
+}
+```
 
 ## Failure Return Results
 

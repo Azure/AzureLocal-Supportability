@@ -63,10 +63,31 @@ This configuration meets all validation requirements for SLB and BGP properties.
 - Run the validator and review the result object:
 - Look for failures related to `Test-SLB_ValidateSoftwareLoadBalancer`.
 - Example output:
-    ```powershell
-    $SLBNodesValidRstObject = Test-SLB_ValidateSoftwareLoadBalancer
-    $SLBNodesValidRstObject
-    ```
+
+```json
+{
+    "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidateSoftwareLoadBalancer",
+    "DisplayName":  "Check Software Load Balancer (SLB) configuration is present and valid",
+    "Tags":  {},
+    "Title":  "Check Software Load Balancer (SLB) configuration is present and valid",
+    "Status":  1,
+    "Severity":  2,
+    "Description":  "Test if we have valid SoftwareLoadBalancer configuration",
+    "Remediation":  null,
+    "TargetResourceID":  "Property name: RouterIPAddress, value: ",
+    "TargetResourceName":  "RouterIPAddress",
+    "TargetResourceType":  "SoftwareLoadBalancer",
+    "Timestamp":  "\/Date(1761004281682)\/",
+    "AdditionalData":  {
+                        "Detail":  "\"SoftwareLoadBalancer does not have a valid \u0027RouterIPAddress = \u0027 defined. Please ensure a valid \u0027RouterIPAddress\u0027 is configured for the SoftwareLoadBalancer.\"",
+                        "Status":  "FAILURE",
+                        "TimeStamp":  "10/20/2025 23:51:21",
+                        "Resource":  "SoftwareLoadBalancer",
+                        "Source":  "SDNIntegration"
+                        },
+    "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\073ad76b"
+}
+```
 
 ## Failure Return Results
 

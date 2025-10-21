@@ -62,10 +62,31 @@ This configuration meets all validation requirements for SLB and BGP properties.
 - Run the validator and review the result object.
 - Look for failures related to `SLBValidator_ValidateNCLoadBalancerMux`.
 - Example output:
-        ```powershell
-        $SLBManagerValidRstObject = Test-SLB_ValidateNCLoadBalancerMux
-        $SLBManagerValidRstObject
-        ```
+
+```json
+{
+    "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidateNCLoadBalancerMux",
+    "DisplayName":  "All Software Load Balancer (SLB) Multiplexer (MUX) state on Network Controller (NC)",
+    "Tags":  {},
+    "Title":  "All Software Load Balancer (SLB) Multiplexer (MUX) state on Network Controller (NC)",
+    "Status":  0,
+    "Severity":  2,
+    "Description":  "Test if all SLB MUX configuration and provisioning state are healthy.",
+    "Remediation":  "SLB MUX configuration and provisioning state are not healthy.",
+    "TargetResourceID":  "SLB MUX: v-SLB01, Loadbalancer Mux is Healthy.",
+    "TargetResourceName":  "Success",
+    "TargetResourceType":  "SoftwareLoadBalancerManager",
+    "Timestamp":  "\/Date(1761019761682)\/",
+    "AdditionalData":  {
+                            "Detail":  "\"Load balancer Mux state is healthy and operational.\"",
+                            "Status":  "SUCCESS",
+                            "TimeStamp":  "10/21/2025 04:09:21",
+                            "Resource":  "SoftwareLoadBalancerManager",
+                            "Source":  "192.168.200.93"
+                        },
+    "HealthCheckSource":  "ScaleSLB\\Standard\\Medium\\NetworkSLB\\c2440959"
+}
+```
 
 ## Failure Return Results
 
