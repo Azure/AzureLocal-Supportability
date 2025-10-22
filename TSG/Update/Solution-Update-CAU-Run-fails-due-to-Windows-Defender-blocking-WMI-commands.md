@@ -1,27 +1,8 @@
 # Solution Update CAU Run fails due to Windows Defender blocking WMI commands
 
-<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
-  <tr>
-    <th style="text-align:left; width: 180px;">Component</th>
-    <td><strong>{Component Name}</strong></td>
-  </tr>
-  <tr>
-    <th style="text-align:left; width: 180px;">Severity</th>
-    <td><strong>{Critical/High/Medium/Low}</strong></td>
-  </tr>
-  <tr>
-    <th style="text-align:left;">Applicable Scenarios</th>
-    <td><strong>{Deployment/Update/AddNode/etc.}</strong></td>
-  </tr>
-  <tr>
-    <th style="text-align:left;">Affected Versions</th>
-    <td><strong>{Version ranges or "All versions"}</strong></td>
-  </tr>
-</table>
-
 ## Overview
 
-{Brief description of the issue, what causes it, and when it typically occurs}
+If the Windows Defender attack surface reduction rule **Block Process Creations originating from PSExec & WMI commands** is configured to Block, the Azure Local Solution Update will fail to run.
 
 ## Symptoms
 
@@ -29,7 +10,7 @@ Azure Local Solution Update fails in CAU.  The error reported is:
 
 CAU Run failed. The latest cluster update status is ‘Failed’. The overall FullyQualifiedErrorId is ‘MaxFailedNodesExceeded’. The node ‘NODENAME’ failed to update.
 
-# Issue Validation
+## Issue Validation
 To confirm the scenario that you are encountering is the issue documented in this article, confirm you are seeing the following behavior(s):
 
 Check the Microsoft-Windows-Windows Defender/Operational event log for any event ID 1121 like below to see if a Defender rule is blocking a WmiPrvSE.exe process from CAU in the Azure Local Solution Update process.
@@ -55,14 +36,14 @@ You can use this Powershell command to check:
 Get-WinEvent -LogName "Microsoft-Windows-Windows Defender/Operational" -FilterXPath "*[System[(EventID=1121)]]" -MaxEvents 5 | Format-List
 ```
 
-# Cause
+## Cause
 A Windows Defender attack surface reduction rule named: **Block Process Creations originating from PSExec & WMI commands** has been enabled and set to Block (value 1).  It has a rule ID: D1E49AAC-8F56-4280-B9BA-993A6D77406C .
 
 The [Azure Local security baseline default](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-baseline#view-and-download-security-settings) is Audit (value 2) for this rule.
 
 A table mapping rule names to rule GUIDs is also available [here](https://learn.microsoft.com/defender-endpoint/defender-endpoint-demonstration-attack-surface-reduction-rules#test-files)
 
-# Mitigation Details
+## Mitigation Details
 
 1. Modify the rule from block (value 1) to audit (value 2) to prevent it from blocking Azure Local Solution Update installer with this powershell command:
 
