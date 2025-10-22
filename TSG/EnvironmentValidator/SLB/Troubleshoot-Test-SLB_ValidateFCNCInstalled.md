@@ -31,19 +31,17 @@ This validator checks whether the Failover Cluster Network Controller (FCNC) is 
 
 ### Review Environment Validator Output
 
-- Run the environment validator as described in the deployment documentation.
-- Look for failures related to `Test-SLB_ValidateFCNCInstalled`.
-- Example output:
+- Execute the validator and inspect the returned result object.
+- Carefully review the output for any failures related to `Test-SLB_ValidateFCNCInstalled`. Pay particular attention to the `AdditionalData` section—especially the `Detail` field—which provides specific details about the FCNC installation status on each cluster node.
+- For reference, see the example output below:
 
 ```json
 {
     "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidateFCNCInstalled",
     "DisplayName":  "FCNC is installed on all cluster nodes",
-    "Tags":  {
-
-            },
+    "Tags":  {},
     "Title":  "FCNC (Failover Cluster Network Controller) component is installed on all cluster nodes",
-    "Status":  0,
+    "Status":  1,
     "Severity":  2,
     "Description":  "Verifies that the FCNC is properly installed and configured on each node in the cluster",
     "Remediation":  "FCNC (Failover Cluster Network Controller) must be installed prior to deploying SLB",
@@ -52,8 +50,8 @@ This validator checks whether the Failover Cluster Network Controller (FCNC) is 
     "TargetResourceType":  "FCNC installation",
     "Timestamp":  "\/Date(1761012662827)\/",
     "AdditionalData":  {
-                            "Detail":  "\"Failover Cluster Network Controller (FCNC) is installed and operational on host \u0027192.168.200.92\u0027.\"",
-                            "Status":  "SUCCESS",
+                            "Detail":  "Failover Cluster Network Controller (FCNC) is not installed or not operational on host [192.168.200.92]. Please verify the installation and configuration.",
+                            "Status":  "FAILURE",
                             "TimeStamp":  "10/21/2025 02:11:02",
                             "Resource":  "FCNC installation",
                             "Source":  "192.168.200.92"
@@ -62,82 +60,82 @@ This validator checks whether the Failover Cluster Network Controller (FCNC) is 
 }
 ```
 
-## Failure Return Results
+### Failure Results
 
-Below are possible failure return results from `$FCNCInstalledResults`, with example messages and recommended remediation steps.
+Below are common failure scenarios returned by `Test-SLB_ValidateFCNCInstalled`. For each scenario, example messages from the `AdditionalData` field are shown, along with step-by-step remediation guidance to address the issue.
 
-### Failure: FCNC Not Installed
+#### Failure: FCNC Not Installed
 
 **Description:**  
 The Failover Clustering Network Controller (FCNC) is considered not installed when the FCNC API service is not running on one or more nodes.
 
-**Example Failure:**  
-- `FCNC is not installed on node 'Node01'.`
+**Example Failure:**
+
+```text
+Detail    : Failover Cluster Network Controller (FCNC) is not installed or not operational on host [IP Address]. Please verify the installation and configuration.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : FCNC installation
+Source    : <Host IP Address>
+```
 
 **Remediation Steps:**
+
 1. On the affected node, check if the FCNC API service is present and running:
+
     ```powershell
     $apiService = Get-ClusterResource ApiService -ErrorAction SilentlyContinue
     $null -ne $apiService
     ```
+
 2. If the FCNC API service is present but offline, attempt to online it:
+
     ```powershell
    Start-ClusterResource -Name ApiService -Wait 30
    ```
-3. List all other FCNC-related microservices and verify their status:
-    (This will exclude ohter HIC and MOC services)
+
+3. List all FCNC-related microservices and check their status:  
+    (This command lists all cluster services related to FCNC, excluding HCI and MOC services.)
+
     ```powershell
-    Get-ClusterResource | Where-Object { $_.ResourceType -eq 'Generic Service' -and $_.Name -notlike "*HCI*" -and $_.Name -notlike "*MOC*"}
+    Get-ClusterResource | Where-Object {
+         $_.ResourceType -eq 'Generic Service' -and
+         $_.Name -notlike "*HCI*" -and
+         $_.Name -notlike "*MOC*"
+    }
     ```
+
+    Review the output to confirm that all expected FCNC microservices are present and in the `Online` state. If any required FCNC service is missing or offline, further investigation is needed. The output should resemble the following example:
+
+    ```text
+    Name              State  OwnerGroup        ResourceType   
+    ----              -----  ----------        ------------   
+    ApiService        Online ApiService        Generic Service
+    ControllerService Online ControllerService Generic Service
+    FirewallService   Online FirewallService   Generic Service
+    FnmService        Online FnmService        Generic Service
+    GatewayManager    Online GatewayManager    Generic Service
+    ServiceInsertion  Online ServiceInsertion  Generic Service
+    SlbManagerService Online SlbManagerService Generic Service
+    VSwitchService    Online VSwitchService    Generic Service
+    ```
+
     If no FCNC-related microservices are listed, FCNC is not installed on this cluster.
-4. Re-run the validator to confirm resolution.
 
----
+4. If the `ApiService` is offline, restart it safely:
 
-### Failure: Unable to Verify FCNC Installation Status
-
-**Description:**  
-The validator could not determine the FCNC installation status, possibly due to connectivity or permission issues.
-
-**Example Failure:**  
-- `Unable to verify FCNC installation status on node 'Node02'.`
-
-**Remediation Steps:**
-1. Ensure PowerShell remoting is enabled and accessible between nodes.
-2. Verify administrative privileges on the affected node.
-3. Check network connectivity and firewall settings.
-4. Retry the validator after resolving connectivity or permission issues.
-
----
-
-### Failure: FCNC Feature Installation Failed
-
-**Description:**  
-An attempt to install the FCNC feature failed.
-
-**Example Failure:**  
-- `Failed to install FCNC on node 'Node03'.`
-
-**Remediation Steps:**
-1. Review the event logs for installation errors:
     ```powershell
-    Get-EventLog -LogName System -Source 'Microsoft-Windows-FailoverClustering' -Newest 20
+    # Check if ApiService is offline
+    $apiService = Get-ClusterResource -Name ApiService -ErrorAction SilentlyContinue
+    if ($apiService.State -eq 'Offline') {
+        # Attempt to bring the service online
+        Start-ClusterResource -Name ApiService
+    }
     ```
-2. Address any reported issues (e.g., missing prerequisites, pending reboots).
-3. Retry the installation and validation steps.
+
+    After restarting, verify the service is online before proceeding.
+
+5. Rerun the validator to confirm resolution.
+6. If the issue persists, consult Microsoft documentation or support for further troubleshooting.
 
 ---
-
-### Failure: FCNC Not Present After Installation
-
-**Description:**  
-The FCNC component is still missing after installation steps.
-
-**Example Failure:**  
-- `FCNC component not present on node 'Node04' after installation.`
-
-**Remediation Steps:**
-1. Confirm the installation completed successfully and no errors were reported.
-2. Ensure the node was rebooted if prompted.
-3. If the issue persists, consult Microsoft documentation or support for further troubleshooting.
-

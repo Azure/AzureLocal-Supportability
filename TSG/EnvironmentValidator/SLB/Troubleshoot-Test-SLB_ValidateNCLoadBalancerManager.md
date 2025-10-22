@@ -11,45 +11,13 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Deployment, Add Node, Pre-Update</strong></td>
+        <td><strong>Pre-Update, Post-Update, Add Node, Scale-In, Scale-Out</strong></td>
     </tr>
 </table>
 
 ## Overview
 The `Test-SLB_ValidateNCLoadBalancerManager` function validates the provisioning state of the Network Controller (NC) Load Balancer Manager in your Azure Local environment. It connects to the NC using the appropriate certificate, retrieves the load balancer manager resource, and checks if its provisioning state is healthy (`Succeeded`). If the state is not healthy or missing, the function returns a failure result with details for remediation. Use this validator to proactively detect and resolve issues with the NC Load Balancer Manager before they impact your environment.
 
----
-
-## Example Configuration
-
-Below is an example of a valid `loadBalancerManager` resource from NC:
-
-```json
-{
-    {
-        "resourceRef":  "/loadBalancerManager/config",
-        "resourceId":  "config",
-        "etag":  "<GUID>",
-        "instanceId":  "<GUID>",
-        "properties":  {
-                        "provisioningState":  "Succeeded",
-                        "loadBalancerManagerIPAddress":  "10.10.10.10",
-                        "outboundNatIPExemptions":  [
-                                                        "100.100.100.100/32",
-                                                    ],
-                        "vipIpPools":  [
-                                            {
-                                                "resourceRef":  "<Reference to IP pools>"
-                                            }
-                                        ]
-                    }
-    }
-}
-```
-
-This configuration meets all validation requirements for SLB and BGP properties.
-
----
 ## Requirements
 
 - Azure Local environment is deployed and accessible.
@@ -63,9 +31,9 @@ This configuration meets all validation requirements for SLB and BGP properties.
 
 ### Review Environment Validator Output
 
-- Run the validator and review the result object:
-- Look for failures related to `Test-SLB_ValidateNCLoadBalancerManager`.
-- Example output:
+- Run the `Test-SLB_ValidateNCLoadBalancerManager` validator and review the result object it returns.
+- Pay close attention to any failure indicators, especially within the `AdditionalData` section. The `Detail` field provides specific information about the current status and any issues affecting the Load Balancer Manager.
+- For reference, see the example output below:
 
 ```json
 {
@@ -73,7 +41,7 @@ This configuration meets all validation requirements for SLB and BGP properties.
     "DisplayName":  "Network Controller (NC) load balancer manager state",
     "Tags":  {},
     "Title":  "Network Controller (NC) load balancer manager state",
-    "Status":  0,
+    "Status":  1,
     "Severity":  2,
     "Description":  "Test if all NC load balancer manager provisioning state are healthy.",
     "Remediation":  "NC load balancer manager provisioning state are not healthy.",
@@ -82,8 +50,8 @@ This configuration meets all validation requirements for SLB and BGP properties.
     "TargetResourceType":  "Network Controller load balancer manager",
     "Timestamp":  "\/Date(1761019775518)\/",
     "AdditionalData":  {
-                            "Detail":  "\"Load balancer manager provisioning state are healthy.\"",
-                            "Status":  "SUCCESS",
+                            "Detail":  "Load balancer manager provisioning state are not healthy. Please investigate provisioning state [Failed] and resolve the issue.",
+                            "Status":  "FAILURE",
                             "TimeStamp":  "10/21/2025 04:09:35",
                             "Resource":  "Network Controller load balancer manager",
                             "Source":  "192.168.200.93"
@@ -92,42 +60,94 @@ This configuration meets all validation requirements for SLB and BGP properties.
 }
 ```
 
-## Failure Return Results
+### Failure Results
 
-Below are possible failure return results from `$SLBManagerValidRstObject`, including example messages and recommended remediation steps.
-
-
-### Failure and Warning Results
+Below are possible failure return results from `Test-SLB_ValidateNCLoadBalancerManager`, including example messages and recommended remediation steps.
 
 ---
 
-### Failure: Provisioning State Not Succeeded
+#### Failure: Provisioning State Not Succeeded
+
 **Description:**  
 The provisioning state of the NC Load Balancer Manager is not `"Succeeded"`. This indicates that the resource is not healthy and may block further operations.
 
 **Example Failure:**  
-```
-{
-    "Valid": false,
-    "Provisioning": "Failed"
-}
-```
-or
-```
-{
-    "Valid": false,
-    "Provisioning": "Updating"
-}
+
+```text
+Detail    : Load balancer manager provisioning state are not healthy. Please investigate provisioning state [Failed] and resolve the issue.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : Network Controller load balancer manager
+Source    : <Host IP Address>
 ```
 
 **Remediation Steps:**  
 - Review the NC Load Balancer Manager resource in the Azure Local environment.
 - Check for errors in the NC logs and event viewer on the affected node.
-- Ensure all required services are running and network connectivity is healthy.
-- Retry the provisioning operation or redeploy the Load Balancer Manager if necessary.
+- To manually verify the Load Balancer Manager resource on the host, run the PowerShell script below. The output should match the example shown above.
+
+```powershell
+$packagePath = Get-ASArtifactPath -NugetName "Microsoft.AS.Network.Deploy.NC" -Verbose:$false 3>$null 4>$null
+Import-Module "$packagePath\content\Powershell\Roles\NC\Common.psm1" -Force -DisableNameChecking
+$subjectCN = "$($env:USERDOMAIN)-nc.$($env:USERDNSDOMAIN)"
+$certs = Get-ChildItem "Cert:\localmachine\my"
+$clientCert = Get-CertificateByHostName -certs $certs -hostName $subjectCN -isServer $false
+Set-NCConnection -RestName "$($env:USERDOMAIN)-nc.$($env:USERDNSDOMAIN)" -NCCertificate $clientCert
+Get-NCLoadbalancerManager
+```
+
+- List all FCNC-related microservices and check their status:  
+    (This command lists all cluster services related to FCNC, excluding HCI and MOC services.)
+
+```powershell
+Get-ClusterResource | Where-Object {
+        $_.ResourceType -eq 'Generic Service' -and
+        $_.Name -notlike "*HCI*" -and
+        $_.Name -notlike "*MOC*"
+}
+```
+
+- If the `SlbManagerService` is offline, restart it safely:
+
+```powershell
+# Check if SlbManagerService is offline
+$slbmService = Get-ClusterResource -Name SlbManagerService -ErrorAction SilentlyContinue
+if ($slbmService.State -eq 'Offline') {
+    # Attempt to bring the service online
+    Start-ClusterResource -Name SlbManagerService
+}
+```
 
 ---
 
+### Example NC Load Balancer Manager resource
+
+Below is a sample of a healthy `loadBalancerManager` resource retrieved from the Network Controller. Use this as a reference when validating your environment.
+
+```json
+{
+    "resourceRef":  "/loadBalancerManager/config",
+    "resourceId":  "config",
+    "properties":  {
+                        "provisioningState":  "Succeeded",
+                        "loadBalancerManagerIPAddress":  "192.168.200.116",
+                        "outboundNatIPExemptions":  ["192.168.200.116/32"],
+                        "vipIpPools":  [ { "resourceRef":  "<Reference to IP pools>" } ],
+                        "loadBalancerMuxMode": "BgpPeering"
+    }
+    // ... more
+}
+```
+
+#### Validation Criteria
+
+- `provisioningState` is `Succeeded`
+
+If your output matches this structure and values, the Load Balancer Manager is considered healthy.
+
+---
+
+<!--
 ### Failure: No NC Load Balancer Manager Found
 **Description:**  
 The validator could not retrieve the NC Load Balancer Manager resource. This may indicate a misconfiguration or that the resource is missing.
@@ -187,3 +207,4 @@ or
 - Restore or redeploy the resource if necessary.
 
 ---
+-->

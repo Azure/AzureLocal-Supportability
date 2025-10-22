@@ -17,39 +17,14 @@
 
 ## Overview
 
-The `Test-SLB_ValidateBGPPeersReachable` function checks whether all Border Gateway Protocol (BGP) peers defined in your Software Load Balancer (SLB) configuration are reachable from each SLB node in your Azure Local environment. It attempts a TCP connection to port 179 (BGP) for each peer router IP address from every node session provided. If a peer is unreachable, the function returns a critical failure result with details and remediation guidance. This validator helps ensure BGP connectivity for high availability and network reliability, allowing you to proactively detect and resolve reachability issues before they impact SLB operations.
+The `Test-SLB_ValidateBGPPeersReachable` function checks whether all Border Gateway Protocol (BGP) peers defined in your Software Load Balancer (SLB) configuration are reachable from each node in your Azure Local environment. It attempts a TCP connection to port 179 (BGP) for each peer router IP address from every node session provided. If a peer is unreachable, the function returns a critical failure result with details and remediation guidance. This validator helps ensure BGP connectivity for high availability and network reliability, allowing you to proactively detect and resolve reachability issues before they impact SLB operations.
 
 **Input:**  
-The function expects a `SoftwareLoadBalancer` configuration object (as shown below) and a set of PowerShell sessions to the SLB nodes. The configuration must include `BackendNetworkMode`, `NumberOfMuxes`, and a `BGPInfo` section with `LocalASN` and an array of `PeerRouterConfigurations` (each specifying `PeerASN` and `RouterIPAddress`).
-
-**Example Input:**
-```json
-{
-    "SoftwareLoadBalancer": {
-        "BackendNetworkMode": "VirtualNetwork",
-        "NumberOfMuxes": 2,
-        "BGPInfo": {
-            "LocalASN": 60001,
-            "PeerRouterConfigurations": [
-                {
-                    "PeerASN": 61001,
-                    "RouterIPAddress": "100.10.20.110"
-                },
-                {
-                    "PeerASN": 61002,
-                    "RouterIPAddress": "100.10.20.111"
-                }
-            ]
-        }
-    }
-}
-```
-
----
+The function expects a `SoftwareLoadBalancer` configuration object (as shown below) and a set of PowerShell sessions to the nodes. The configuration must include `BackendNetworkMode`, `NumberOfMuxes`, and a `BGPInfo` section with `LocalASN` and an array of `PeerRouterConfigurations` (each specifying `PeerASN` and `RouterIPAddress`).
 
 ## Example Configuration
 
-Below is an example of a valid `SoftwareLoadBalancer` configuration object:
+Below is an example of a valid `SoftwareLoadBalancer` configuration object. To specify BGP peers, update the `PeerRouterConfigurations` array under the `BGPInfo` section with the appropriate `PeerASN` and `RouterIPAddress` values.
 
 ```json
 {
@@ -60,12 +35,12 @@ Below is an example of a valid `SoftwareLoadBalancer` configuration object:
             "LocalASN": 60001,
             "PeerRouterConfigurations": [
                 {
-                    "PeerASN": 61001,
-                    "RouterIPAddress": "100.10.20.110"
+                    "PeerASN": 60002,
+                    "RouterIPAddress": "192.168.100.2"
                 },
                 {
-                    "PeerASN": 61002,
-                    "RouterIPAddress": "100.10.20.111"
+                    "PeerASN": 60003,
+                    "RouterIPAddress": "192.168.100.3"
                 }
             ]
         }
@@ -73,27 +48,25 @@ Below is an example of a valid `SoftwareLoadBalancer` configuration object:
 }
 ```
 
-This configuration meets all validation requirements for SLB and BGP properties.
-
----
+This configuration satisfies all necessary validation criteria for Software Load Balancer Multiplexer (SLB MUX) and Border Gateway Protocol (BGP) settings.
 
 ## Requirements
 
 - Azure Local environment is deployed and accessible.
 - **Failover Cluster Network Controller (FCNC)** component must be installed.
 - The `AzStackHci` PowerShell module is installed and imported.
-- The `Test-SLB_ValidateSoftwareLoadBalancer` function is available in your environment.
+- The `Test-SLB_ValidateBGPPeersReachable` function is available in your environment.
 - All target hosts are online and reachable from the management system.
 - Administrative privileges on both the management system and all target hosts.
-- (remove)Sufficient permissions to query and modify Software Load Balancer (SLB) nodes and Multiplexer (MUX) instances.
+- Sufficient permissions to query and modify nodes.
 
 ## Troubleshooting Steps
 
 ### Review Environment Validator Output
 
-- Run the validator and review the result object:
-- Look for failures related to `Test-SLB_ValidateSoftwareLoadBalancer`.
-- Example output:
+- Execute the `Test-SLB_ValidateBGPPeersReachable` validator and examine the returned result object.
+- Carefully review the output for any entries indicating failures associated with BGP peer reachability. Focus on the `AdditionalData` section, especially the `Detail` field, which highlights specific BGP peers that could not be reached and describes the nature of the connectivity issue.
+- Refer to the example output below to understand how unreachable peers are reported and use this information to guide your troubleshooting efforts.
 
 ```json
 {
@@ -110,7 +83,7 @@ This configuration meets all validation requirements for SLB and BGP properties.
     "TargetResourceType":  "BGPInfo",
     "Timestamp":  "\/Date(1761004300036)\/",
     "AdditionalData":  {
-                        "Detail":  "\"BGP Peer \u0027\u0027 is not reachable. Please check the network connectivity.\"",
+                        "Detail":  "\"BGP Peer [] is not reachable. Please check the network connectivity.\"",
                         "Status":  "FAILURE",
                         "TimeStamp":  "10/20/2025 23:51:40",
                         "Resource":  "BGPInfo",
@@ -120,58 +93,62 @@ This configuration meets all validation requirements for SLB and BGP properties.
 }
 ```
 
-## Failure Return Results
+### Failure Results
 
-Below are all possible failure return results from `$SLBResultObject`, including example messages and recommended remediation steps.
-
-
-### Failure and Warning Results
+Below are all possible failure and warning results produced by `Test-SLB_ValidateBGPPeersReachable`. For each result, example detail messages from the `AdditionalData` field are provided, along with recommended remediation steps to resolve the issue.
 
 ---
 
-### Failure: BGP Peer Unreachable
+#### Failure: BGP Peer Unreachable
 
 **Description:**  
-The validator was unable to establish a TCP connection to port 179 (BGP) on one or more configured BGP peer router IP addresses from one or more SLB nodes. This indicates that the BGP peer is not reachable from the SLB node, which may disrupt BGP route advertisement and high availability.
+The validator could not establish a TCP connection to port 179 (BGP) on one or more configured BGP peer router IP addresses from one or more nodes. This means the node cannot reach the BGP peer, which may impact BGP route advertisement and high availability. Review the `Source` field in the output to identify the node where the connectivity check failed—this helps pinpoint where to begin troubleshooting.
 
-**Example Failure:**  
-```
-Status    : Failure
-Detail    : BGP Peer 100.10.20.110 is not reachable. Please check the network connectivity.
-Source    : slbnode01
+**Example Failure:**
+
+```text
+Detail    : BGP Peer <BGP Peer IP address> is not reachable. Please check the network connectivity.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
 Resource  : BGPInfo
-TimeStamp : 2024-06-01T12:34:56Z
+Source    : <Host IP Address>
 ```
 
 **Remediation Steps:**
 
 - Verify network connectivity between the node and the BGP peer router.
 - Confirm that the BGP peer router is powered on and listening on port 179.
+
     ```powershell
     Test-NetConnection -ComputerName <Peer IP Address> -port 179 -InformationLevel Detailed
     ```
-- Check routing configurations and ensure the correct IP address is specified in the configuration.
-- Review SLB and router logs for additional connectivity errors.
 
----
+- Verify routing configurations and confirm that the correct IP addresses are specified for each BGP peer.
+- Examine router logs for detailed connectivity error messages.
+- Refer to switch configuration best practices and review the [BGP configuration guidance for Azure Local SDN SLB](https://github.com/Azure/AzureLocal-Supportability/blob/main/TSG/Networking/SDN-Express/HowTo-SDNExpress-SDN-Layer3-Gateway-Configuration.md) for additional troubleshooting steps.
 
-### Warning: No BGP Peers Configured
+#### BGP Configuration Guidance for SLB Integration
 
-**Description:**  
-The validator did not find any BGP peer router configurations in the provided `SoftwareLoadBalancer` configuration. Without BGP peers, dynamic routing will not function as expected.
+To ensure successful BGP integration with Software Load Balancer (SLB) in your Azure Local environment, follow these configuration best practices:
 
-**Example Failure:**  
-```
-Status    : Warning
-Detail    : No BGP peers are configured in the SoftwareLoadBalancer BGPInfo section.
-Source    : slbnode01
-Resource  : BGPInfo
-TimeStamp : 2024-06-01T12:34:56Z
-```
+- **Define Peer Routers:**  
+    In your SLB configuration, specify each BGP peer under the `PeerRouterConfigurations` array, including accurate `PeerASN` and `RouterIPAddress` values.
 
-**Remediation Steps:**
-- Add at least one valid BGP peer configuration under `PeerRouterConfigurations` in the `SoftwareLoadBalancer` configuration.
-- Ensure each peer entry includes a valid `PeerASN` and `RouterIPAddress`.
-- Rerun the validator after updating the configuration.
+- **Validate Local ASN:**  
+    Confirm that the `LocalASN` value in the `BGPInfo` section matches your network design and does not conflict with peer ASNs.
+
+- **Network Connectivity:**  
+    Ensure all nodes can reach each BGP peer router on port 179. Use `Test-NetConnection` to verify connectivity from each node.
+
+- **Firewall and Routing:**  
+    Allow TCP traffic on port 179 between nodes and peer routers. Review firewall rules and routing tables to prevent connectivity issues.
+
+- **Consistent Configuration:**  
+    Apply identical BGP settings across all nodes to avoid mismatches and ensure high availability.
+
+- **Documentation:**  
+    Maintain up-to-date records of all BGP peers, ASNs, and router IP addresses for troubleshooting and future changes.
+
+By following these steps, you can minimize BGP connectivity issues and support reliable SLB operations in your Azure Local deployment.
 
 ---

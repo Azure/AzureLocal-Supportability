@@ -16,7 +16,8 @@
 </table>
 
 ## Overview
-The `Test-SLB_ValidateHNVPANetwork` function validates the Hyper-V Network Virtualization Provider Address (HNVPA) network configuration required for the Software Load Balancer (SLB) in Azure Stack HCI. It checks that the HNVPA network is defined, contains exactly one instance, and that each subnet within it has valid properties such as `AddressPrefix`, `VlanId`, `DefaultGateways`, and `IPPools`. The validator ensures:
+
+The `Test-SLB_ValidateHNVPANetwork` function validates the Hyper-V Network Virtualization Provider Address (HNVPA) network configuration required for the Software Load Balancer (SLB) in Azure Local. It checks that the HNVPA network is defined, contains exactly one instance, and that each subnet within it has valid properties such as `AddressPrefix`, `VlanId`, `DefaultGateways`, and `IPPools`. The validator ensures:
 
 - Each subnet's `AddressPrefix` is a valid IPv4 CIDR and does not overlap with others.
 - `VlanId` is within the supported range (0–4095).
@@ -26,64 +27,76 @@ The `Test-SLB_ValidateHNVPANetwork` function validates the Hyper-V Network Virtu
 
 If any property is missing, invalid, or duplicated, the function returns a failure result with details for remediation. Use this validator to proactively detect and resolve HNVPA network configuration issues before they impact SLB deployment or operation.
 
+**Input:**  
+The function expects two inputs:
+
+1. **NetworksConfiguration**  
+    A configuration object containing the network definitions for HNVPA, PublicVIP, and PrivateVIP. This object must follow the structure shown in the example configuration below, with all required properties for each subnet (`AddressPrefix`, `VlanId`, `DefaultGateways`, and `IPPools`).
+
+2. **PowerShell Sessions**  
+    An array of active PowerShell session objects (`PSSession`) to each target host in the environment. These sessions are used to query host state and validate network configuration remotely.
+
+**Example Usage:**
+
+```powershell
+$networksConfig = Get-Content -Path "C:\path\to\networks.json" | ConvertFrom-Json
+$sessions = New-PSSession -ComputerName $HostList
+Test-SLB_ValidateHNVPANetwork -NetworksConfiguration $networksConfig -Sessions $sessions
+```
+
 ---
 
 ## Example Configuration
 
-Below is an example of a valid `SoftwareLoadBalancer` configuration object:
+Below is an example of a valid `Networks` configuration object:
 
 ```json
 {
-    "HNVPA": [
-        {
-            "Subnets": [
-                {
-                    "AddressPrefix": "100.71.149.0/24",
-                    "VlanId": 6,
-                    "DefaultGateways": [
-                        "100.71.149.1", "100.71.149.2"
-                    ],
-                    "IPPools": [
-                        {
-                            "StartIPAddress": "100.71.149.125",
-                            "EndIPAddress": "100.71.149.127"
-                        },
-                        {
-                            "StartIPAddress": "100.71.149.135",
-                            "EndIPAddress": "100.71.149.137"
-                        }
-                    ]
-                },
-                {
-                    "AddressPrefix": "100.71.148.0/24",
-                    "VlanId": 6,
-                    "DefaultGateways": [
-                        "100.71.148.1"
-                    ],
-                    "IPPools": [
-                        {
-                            "StartIPAddress": "100.71.148.125",
-                            "EndIPAddress": "100.71.148.127"
-                        }
-                    ]
-                }
-            ]
-        }
-    ]
+    "Networks": {
+        "HNVPA": [
+            {
+                "Subnets": [
+                    {
+                        "AddressPrefix":  "192.168.200.0/24",
+                        "VlanId": 0,
+                        "DefaultGateways": [
+                            "192.168.200.1"
+                        ],
+                        "IPPools": [
+                            {
+                                "StartIPAddress":  "192.168.200.120",
+                                "EndIPAddress":  "192.168.200.135"
+                            },
+                            {
+                                "StartIPAddress":  "192.168.200.150",
+                                "EndIPAddress":  "192.168.200.165"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "PublicVIP": [
+            /* ... public VIP networks */
+        ],
+        "PrivateVIP": [
+            /* ... private VIP networks */
+        ]
+    }
 }
 ```
 
-This configuration meets all validation requirements for SLB and BGP properties.
+This sample configuration satisfies all HNVPA property validation checks, including valid address prefixes, VLAN IDs, default gateways, and IP pool definitions.
 
 ---
 ## Requirements
 
-- Azure Stack HCI is deployed and operational.
+- Azure Local is deployed and operational.
 - The `AzStackHci` PowerShell module is installed and imported.
 - You have administrative privileges on the management system and all target hosts.
 - The `Test-SLB_ValidateHNVPANetwork` function is available.
 - All target hosts are online and reachable from the management system.
-- You have permissions to query and modify SLB nodes and Multiplexer (MUX) instances.
+- You have permissions to query and modify nodes.
 - The HNVPA network configuration is accessible and contains at least one subnet.
 - Each subnet must specify `AddressPrefix`, `VlanId`, `DefaultGateways`, and `IPPools`.
 - The total number of available IP addresses in all HNVPA IP pools must be at least double the number of hosts plus the number of MUXes.
@@ -93,9 +106,10 @@ This configuration meets all validation requirements for SLB and BGP properties.
 
 ### Review Environment Validator Output
 
-- Run the validator and review the result object:
-- Look for failures related to `Test-SLB_ValidateSoftwareLoadBalancer`.
-- Example output:
+- Execute the `Test-SLB_ValidateHNVPANetwork` validator and examine the returned result object.
+- Identify any failure entries specifically associated with the HNVPA network validation.
+- Review the output details to understand which configuration properties failed validation and why.
+- Refer to the example output below to understand how issues are reported and what information to look for when troubleshooting.
 
 ```json
 {
@@ -112,7 +126,7 @@ This configuration meets all validation requirements for SLB and BGP properties.
     "TargetResourceType":  "HNVPA",
     "Timestamp":  "\/Date(1761004281844)\/",
     "AdditionalData":  {
-                        "Detail":  "\"The property \u0027DefaultGateways\u0027 \u0027192.168.100.1\u0027 is not in the subnet \u0027192.168.200.0/24\u0027\"",
+                        "Detail":  "The property [DefaultGateways] [192.168.100.1] is not in the subnet [192.168.200.0/24]",
                         "Status":  "FAILURE",
                         "TimeStamp":  "10/20/2025 23:51:21",
                         "Resource":  "HNVPA",
@@ -122,183 +136,309 @@ This configuration meets all validation requirements for SLB and BGP properties.
 }
 ```
 
-## Failure Return Results
+### Failure Results
 
-Below are all possible failure return results from `$SLBResultObject`, including example messages and recommended remediation steps.
-
-### Failure and Warning Results
-
-#### 1. HNVPA Network Not Defined
-- **Failure:** HNVPA network configuration is missing.
-- **Description:** The validator did not find the `HNVPA` property in the supplied configuration.  
-    **Error Message:** `HNVPA network not found in configuration.`
-- **Example Failure:**  
-    ```
-    HNVPA network not found in configuration.
-    ```
-- **Remediation Steps:**  
-    Ensure the configuration object contains a valid `HNVPA` property with at least one subnet defined.
+Below are all possible failure return results from `Test-SLB_ValidateHNVPANetwork`. For each result, example detail messages from the `AdditionalData` field are provided, along with recommended remediation steps to resolve the issue.
 
 ---
 
-#### 2. Multiple HNVPA Networks Defined
-- **Failure:** More than one HNVPA network instance found.
-- **Description:** The configuration contains multiple `HNVPA` network objects, but only one is supported.  
-    **Error Message:** `Multiple HNVPA networks found. Only one is supported.`
-- **Example Failure:**  
-    ```
-    Multiple HNVPA networks found. Only one is supported.
-    ```
-- **Remediation Steps:**  
-    Remove additional HNVPA network objects so only one remains in the configuration.
+#### Failure: HNVPA Network Not Defined
+
+**Description:**
+
+The validator did not find the `HNVPA` property in the supplied configuration.
+
+**Additional Data Example:**
+
+```text
+Detail    : No HNVPA network found in configuration. Please ensure HNVPA network is defined.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Ensure the `HNVPA` network is present.
 
 ---
 
-#### 3. No Subnets Defined in HNVPA
-- **Failure:** No subnets defined for HNVPA network.
-- **Description:** The `Subnets` property is missing or empty in the HNVPA configuration.  
-    **Error Message:** `HNVPA network is missing required property: Subnets.`
-- **Example Failure:**  
-    ```
-    HNVPA network is missing required property: Subnets.
-    ```
-- **Remediation Steps:**  
-    Add at least one valid subnet to the `Subnets` array in the HNVPA configuration.
+#### Failure: Multiple HNVPA Networks Defined
+
+**Description:**  
+The configuration contains multiple `HNVPA` network objects, but only one is supported.
+
+**Additional Data Example:**
+
+```text
+Detail    : Multiple HNVPA networks found in ECE NetworksConfiguration. Please ensure only one HNVPA network is defined.
+Status    : FAILURE
+TimeStamp : 2025-06-01T15:56:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Remove additional HNVPA network objects so only one remains in the configuration.
 
 ---
 
-#### 4. Missing or Invalid AddressPrefix
-- **Failure:** Subnet is missing or has an invalid `AddressPrefix`.
-- **Description:** The subnet does not specify a valid IPv4 CIDR for `AddressPrefix`.  
-    **Error Message:** `HNVPA subnet is missing required property: AddressPrefix.`  
-    or  
-    `AddressPrefix for HNVPA subnet is not a valid IPv4 CIDR.`
-- **Example Failure:**  
-    ```
-    HNVPA subnet is missing required property: AddressPrefix.
-    ```
-    or
-    ```
-    AddressPrefix for HNVPA subnet is not a valid IPv4 CIDR.
-    ```
-- **Remediation Steps:**  
-    Specify a valid IPv4 CIDR (e.g., `100.71.149.0/24`) for each subnet's `AddressPrefix`.
+#### Failure: No Subnets Defined in HNVPA
+
+**Description:**  
+The `Subnets` property is missing or empty in the HNVPA configuration.
+
+**Additional Data Example:**
+
+```text
+Detail    : [HNVPA] network does not have a valid [Subnets] defined. Please ensure a valid [Subnets] is configured for the [HNVPA] network.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Add at least one valid subnet to the `Subnets` array in the HNVPA configuration.
 
 ---
 
-#### 5. Invalid or Missing VlanId
-- **Failure:** Subnet is missing or has an invalid `VlanId`.
-- **Description:** The subnet does not specify a VLAN ID, or the value is outside the supported range (0–4095).  
-    **Error Message:** `HNVPA subnet is missing required property: VlanId.`
-- **Example Failure:**  
-    ```
-    HNVPA subnet is missing required property: VlanId.
-    ```
-- **Remediation Steps:**  
-    Specify a valid integer value for `VlanId` between 0 and 4095 for each subnet.
+#### Failure: Missing AddressPrefix in Subnet
+
+**Description:**  
+A subnet in the HNVPA network is missing the required `AddressPrefix` property.
+
+**Additional Data Example:**
+
+```text
+Detail    : [HNVPA] network does not have a valid [AddressPrefix] defined. Please ensure a valid [AddressPrefix] is configured for the [HNVPA] network.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Add a valid `AddressPrefix` (in IPv4 CIDR format, e.g., `192.168.200.0/24`) to each subnet in the HNVPA configuration.
 
 ---
 
-#### 6. Missing or Invalid IPPools
-- **Failure:** Subnet is missing or has invalid `IPPools`.
-- **Description:** The subnet does not define any IP pools, or the pool definitions are invalid.  
-    **Error Message:** `HNVPA subnet is missing required property: IPPools.`
-- **Example Failure:**  
-    ```
-    HNVPA subnet is missing required property: IPPools.
-    ```
-- **Remediation Steps:**  
-    Define at least one valid IP pool for each subnet, specifying both `StartIPAddress` and `EndIPAddress`.
+#### Failure: Invalid AddressPrefix format
+
+**Description:**  
+The subnet does not specify a valid IPv4 CIDR for `AddressPrefix`.
+
+**Additional Data Example:**
+
+```text
+Detail    : The property [AddressPrefix] on the [HNVPA] network has an invalid format. Please verify the value matches the required format and try again.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Specify a valid IPv4 CIDR (e.g., `100.71.149.0/24`) for each subnet's `AddressPrefix`.
 
 ---
 
-#### 7. Missing or Invalid DefaultGateways
-- **Failure:** Subnet is missing or has invalid `DefaultGateways`.
-- **Description:** The subnet does not define any default gateways, or the gateways are not valid IP addresses.  
-    **Error Message:** `HNVPA subnet is missing required property: DefaultGateways.`
-- **Example Failure:**  
-    ```
-    HNVPA subnet is missing required property: DefaultGateways.
-    ```
-- **Remediation Steps:**  
-    Specify at least one valid IPv4 address in the `DefaultGateways` array for each subnet.
+#### Failure: Invalid or Missing VlanId
+
+**Description:**  
+The subnet does not specify a VLAN ID, or the value is outside the supported range (0–4095).
+
+**Additional Data Example:**
+
+```text
+Detail    : [HNVPA] network does not have a valid [VlanId] defined. Please ensure a valid [VlanId] is configured for the [HNVPA] network.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Specify a valid integer value for `VlanId` between 0 and 4095 for each subnet.
 
 ---
 
-#### 8. DefaultGateway Not in Subnet
-- **Failure:** Default gateway is not within the subnet's address prefix.
-- **Description:** One or more default gateways are not part of the subnet's address range.  
-    **Error Message:** `DefaultGateways value 100.71.149.254 is not in subnet 100.71.149.0/24.`
-- **Example Failure:**  
-    ```
-    DefaultGateways value 100.71.149.254 is not in subnet 100.71.148.0/24.
-    ```
-- **Remediation Steps:**  
-    Ensure all default gateways are valid IP addresses within the subnet's `AddressPrefix`.
+#### Failure: Missing or Invalid IPPools
+
+**Description:**  
+The subnet does not define any IP pools, or the pool definitions are invalid.
+
+**Additional Data Example:**
+
+```text
+Detail    : [HNVPA] network does not have a valid [IPPools] defined. Please ensure a valid [IPPools] is configured for the [HNVPA] network.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Define at least one valid IP pool for each subnet, specifying both `StartIPAddress` and `EndIPAddress`.
 
 ---
 
-#### 9. IP Pool Start/End Not in Subnet
-- **Failure:** IP pool start or end address is not within the subnet.
-- **Description:** The `StartIPAddress` or `EndIPAddress` of an IP pool is not in the subnet's address range.  
-    **Error Message:** `StartIPAddress 100.71.150.10 not in 100.71.149.0/24.`
-- **Example Failure:**  
-    ```
-    StartIPAddress 100.71.150.10 not in 100.71.149.0/24.
-    ```
-- **Remediation Steps:**  
-    Ensure all IP pool addresses are within the subnet's `AddressPrefix`.
+#### Failure: Missing DefaultGateways
+
+**Description:**  
+No default gateways are defined for the subnet. The `DefaultGateways` property is either missing or contains no entries.
+
+**Additional Data Example:**
+
+```text
+Detail    : [HNVPA] network does not have a valid [DefaultGateways] defined. Please ensure a valid [DefaultGateways] is configured for the [HNVPA] network.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Add at least one valid IPv4 address to the `DefaultGateways` array in every subnet configuration.
 
 ---
 
-#### 10. IP Pool Start Greater Than or Equal to End
-- **Failure:** IP pool start address is greater than or equal to end address.
-- **Description:** The `StartIPAddress` must be less than the `EndIPAddress` in each pool.  
-    **Error Message:** `StartIPAddress >= EndIPAddress for IPPools in HNVPA.`
-- **Example Failure:**  
-    ```
-    StartIPAddress >= EndIPAddress for IPPools in HNVPA: 100.71.149.130 >= 100.71.149.129
-    ```
-- **Remediation Steps:**  
-    Correct the IP pool so that `StartIPAddress` is less than `EndIPAddress`.
+#### Failure: Invalid DefaultGateways Format
+
+**Description:**  
+The `DefaultGateways` property contains values that are not valid IPv4 addresses.
+
+**Additional Data Example:**
+
+```text
+Detail    : The property [DefaultGateways] on the [HNVPA] network has an invalid format. Please verify the value matches the required format and try again.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Ensure each subnet's `DefaultGateways` array includes at least one valid IPv4 address (e.g., `192.168.200.1`), and that all entries are properly formatted.
 
 ---
 
-#### 11. DefaultGateway Included in IP Pool
-- **Failure:** Default gateway address is included in an IP pool range.
-- **Description:** One or more default gateways are part of an IP pool, which is not allowed.  
-    **Error Message:** `DefaultGateway 100.71.149.1 is included in IP pool [100.71.149.1, 100.71.149.10].`
-- **Example Failure:**  
-    ```
-    DefaultGateway 100.71.149.1 is included in IP pool [100.71.149.1, 100.71.149.10].
-    ```
-- **Remediation Steps:**  
-    Adjust the IP pool ranges to exclude all default gateway addresses.
+#### Failure: DefaultGateway Not in Subnet
+
+**Description:**  
+One or more default gateways are not part of the subnet's address range.
+
+**Additional Data Example:**
+
+```text
+Detail    : The property [DefaultGateways] [192.168.100.1] is not in the subnet [192.168.200.0/24].
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Ensure all default gateways are valid IP addresses within the subnet's `AddressPrefix`.
 
 ---
 
-#### 12. Overlapping Address Prefixes
-- **Failure:** Subnet address prefixes overlap.
-- **Description:** Two or more subnets have overlapping `AddressPrefix` ranges.  
-    **Error Message:** `AddressPrefix 100.71.149.0/24 overlaps with 100.71.149.0/25.`
-- **Example Failure:**  
-    ```
-    AddressPrefix 100.71.149.0/24 overlaps with 100.71.149.0/25.
-    ```
-- **Remediation Steps:**  
-    Ensure all subnet `AddressPrefix` values are unique and do not overlap.
+#### Failure: IP Pool Start/End IP address Not in Subnet
+
+**Description:**  
+The `StartIPAddress` or `EndIPAddress` of an IP pool is not in the subnet's address range.
+
+**Additional Data Example:**
+
+```text
+Detail    : The property [EndIPAddress] [100.71.150.10] is not in the subnet [100.71.149.0/24]
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Ensure all IP pool addresses are within the subnet's `AddressPrefix`.
 
 ---
 
-#### 13. Not Enough Available IPs in IP Pools
-- **Failure:** Total available IP addresses in all IP pools is less than required.
-- **Description:** The sum of all available IPs in the HNVPA IP pools is less than double the number of hosts plus the number of MUXes.  
-    **Error Message:** `Not enough available IPs in HNVPA IPPools. Available: 5, Required: 7 (Hosts: 3, MUXes: 1).`
-- **Example Failure:**  
-    ```
-    Not enough available IPs in HNVPA IPPools. Available: 5, Required: 7 (Hosts: 3, MUXes: 1).
-    ```
-- **Remediation Steps:**  
-    Increase the size or number of IP pools so the total available IPs meet or exceed the required count.
+#### Failure: IP Pool Start IP address Greater Than or Equal to End
+
+**Description:**  
+The `StartIPAddress` in an IP pool is greater than or equal to the `EndIPAddress`, which is invalid.
+
+**Additional Data Example:**
+
+```text
+Detail    : The property [IPPools] on the [HNVPA] network has an invalid format. Start IP address [100.71.149.130]  is bigger than End IP address [100.71.149.129].
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Update the IP pool so that `StartIPAddress` is less than `EndIPAddress` for each pool.
+
+---
+
+#### Failure: DefaultGateway Included in IP Pool
+
+**Description:**  
+One or more default gateways are part of an IP pool, which is not allowed.
+
+**Additional Data Example:**
+
+```text
+Detail    : DefaultGateway 100.71.149.1 is included in IP pool [100.71.149.1, 100.71.149.10].
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Adjust the IP pool ranges to exclude all default gateway addresses.
+
+---
+
+#### Failure: Overlapping Address Prefixes
+
+**Description:**  
+Two or more subnets have overlapping `AddressPrefix` ranges.
+
+**Additional Data Example:**
+
+```text
+[AddressPrefix] [100.71.149.0/24] has overlapping with [AddressPrefix] [100.71.149.0/25]. Please ensure address prefix do not overlap.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Ensure all subnet `AddressPrefix` values are unique and do not overlap.
+
+---
+
+#### Failure: Not Enough Available IPs in IP Pools
+
+**Description:**  
+The sum of all available IPs in the HNVPA IP pools is less than double the number of hosts plus the number of MUXes.
+
+**Additional Data Example:**
+
+```text
+Detail    : HNVPA network has [5] available IPs but requires minimum [6] IP addresses (2 * 2 hosts + 2 muxes)
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : HNVPA
+Source    : Networks
+```
+
+**Remediation Steps:**  
+Increase the size or number of IP pools so the total available IPs meet or exceed the required count.
 
 ---

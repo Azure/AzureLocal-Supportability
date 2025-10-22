@@ -11,38 +11,13 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Deployment, Add Node, Pre-Update</strong></td>
+        <td><strong>Pre-Update, Post-Update, Add Node, Scale-In, Scale-Out</strong></td>
     </tr>
 </table>
 
 ## Overview
 
 The `Test-SLB_ValidateNCLoadBalancerMux` function validates the configuration and provisioning state of all Software Load Balancer (SLB) Multiplexer (MUX) instances managed by the Network Controller (NC) in your Azure Local environment. It connects to the NC, retrieves all SLB MUX resources, and checks their health by evaluating both provisioning and configuration states. If any MUX is not healthy, the validator returns a failure result with detailed information and remediation guidance. Use this validator to proactively detect and resolve SLB MUX issues to maintain network reliability and high availability.
-
----
-
-## Example Configuration
-
-Below is an example of a valid `loadBalancerManager` resource from the Network Controller:
-
-```json
-{
-    "name": "slb-mux-01",
-    "properties": {
-        "provisioningState": "Succeeded",
-        "configurationState": {
-            "code": "Success",
-            "message": "Configuration applied successfully."
-        },
-        "bgpSettings": {
-            "asn": 65001,
-            "peerIp": "10.0.0.1"
-        }
-    }
-}
-```
-
-This configuration meets all validation requirements for SLB and BGP properties.
 
 ---
 
@@ -60,8 +35,8 @@ This configuration meets all validation requirements for SLB and BGP properties.
 ### Review Environment Validator Output
 
 - Run the validator and review the result object.
-- Look for failures related to `SLBValidator_ValidateNCLoadBalancerMux`.
-- Example output:
+- Look for failures related to `SLBValidator_ValidateNCLoadBalancerMux` in the validator output. Pay particular attention to the `AdditionalData` section, especially the `Detail` field, which provides specific information about the state of each Load Balancer Mux. This field will highlight which MUX instances are unhealthy and describe the exact issue detected, helping you target your troubleshooting efforts.
+- Example output: The following is a sample of the expected output when you run this command. Use it to verify that your results match the documented behavior.
 
 ```json
 {
@@ -69,17 +44,17 @@ This configuration meets all validation requirements for SLB and BGP properties.
     "DisplayName":  "All Software Load Balancer (SLB) Multiplexer (MUX) state on Network Controller (NC)",
     "Tags":  {},
     "Title":  "All Software Load Balancer (SLB) Multiplexer (MUX) state on Network Controller (NC)",
-    "Status":  0,
+    "Status":  1,
     "Severity":  2,
     "Description":  "Test if all SLB MUX configuration and provisioning state are healthy.",
     "Remediation":  "SLB MUX configuration and provisioning state are not healthy.",
-    "TargetResourceID":  "SLB MUX: v-SLB01, Loadbalancer Mux is Healthy.",
-    "TargetResourceName":  "Success",
+    "TargetResourceID":  "SLB MUX: v-SLB01, Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.",
+    "TargetResourceName":  "VirtualServerUnreachable",
     "TargetResourceType":  "SoftwareLoadBalancerManager",
     "Timestamp":  "\/Date(1761019761682)\/",
     "AdditionalData":  {
-                            "Detail":  "\"Load balancer Mux state is healthy and operational.\"",
-                            "Status":  "SUCCESS",
+                            "Detail":  "Load balancer Mux state is not healthy. Please investigate Loadbalancer Mux ID [v-SLB01], provisioning state [Succeeded], configuration state [Failure] and resolve the issue [Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.].",
+                            "Status":  "FAILURE",
                             "TimeStamp":  "10/21/2025 04:09:21",
                             "Resource":  "SoftwareLoadBalancerManager",
                             "Source":  "192.168.200.93"
@@ -88,75 +63,117 @@ This configuration meets all validation requirements for SLB and BGP properties.
 }
 ```
 
-## Failure Return Results
+### Failure Results
 
-Below are possible failure return results from `$ncSlbMuxResults`, including example messages and recommended remediation steps.
+Below are possible failure return results from `SLBValidator_ValidateNCLoadBalancerMux`. For each result, example detail messages from the `AdditionalData` field are provided, along with recommended remediation steps to resolve the issue.
 
+#### Failure: SLB MUX Provisioning or Configuration State Not Healthy
 
-### Failure and Warning Results
-
----
-
-#### Failure: SLB MUX Provisioning State Not Healthy
 **Description:**  
-The validator detected that one or more SLB Multiplexer (MUX) instances managed by the Network Controller are not in a healthy provisioning state. This typically means the MUX is not fully deployed, is stuck in a transitional state, or has failed to initialize.
+The validator has identified that one or more SLB Multiplexer (MUX) instances managed by the Network Controller are not in a healthy provisioning or configuration state. This may indicate that a MUX is not fully deployed, is stuck in a transitional state (such as 'Updating' or 'Deleting'), or has failed to initialize. Additionally, unhealthy configuration states can result from misconfiguration, missing parameters, or unsuccessful application of settings.
 
 **Example Failure:**  
-```
-SLB MUX [mux-01] provisioning state is 'Failed'. The configuration state has code [ProvisioningFailed]: The MUX failed to complete provisioning due to a configuration error.
+
+```text
+Detail    : Load balancer Mux state is not healthy. Please investigate Loadbalancer Mux ID [v-SLB01], provisioning state [Succeeded], configuration state [Failure] and resolve the issue [Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.].
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : SoftwareLoadBalancerManager
+Source    : <Host IP Address>
 ```
 
 **Remediation Steps:**
+
 - Review the detailed error message for the affected MUX.
 - Check the Network Controller and SLB MUX event logs for related errors.
 - Ensure all required network and infrastructure dependencies are available.
 - Retry the operation or redeploy the affected MUX if necessary.
+- Correct any invalid or missing settings (e.g., BGP router configuration).
+- To manually verify the Load Balancer MUX resource on the host, run the PowerShell script below. The output should match the example shown below.
+
+```powershell
+$packagePath = Get-ASArtifactPath -NugetName "Microsoft.AS.Network.Deploy.NC" -Verbose:$false 3>$null 4>$null
+Import-Module "$packagePath\content\Powershell\Roles\NC\Common.psm1" -Force -DisableNameChecking
+$subjectCN = "$($env:USERDOMAIN)-nc.$($env:USERDNSDOMAIN)"
+$certs = Get-ChildItem "Cert:\localmachine\my"
+$clientCert = Get-CertificateByHostName -certs $certs -hostName $subjectCN -isServer $false
+Set-NCConnection -RestName "$($env:USERDOMAIN)-nc.$($env:USERDNSDOMAIN)" -NCCertificate $clientCert
+Get-NCLoadBalancerMux
+```
+
+- List all FCNC-related microservices and check their status:  
+    (This command lists all cluster services related to FCNC, excluding HCI and MOC services.)
+
+```powershell
+Get-ClusterResource | Where-Object {
+        $_.ResourceType -eq 'Generic Service' -and
+        $_.Name -notlike "*HCI*" -and
+        $_.Name -notlike "*MOC*"
+}
+```
+
+- If the `SlbManagerService` is offline, restart it safely:
+
+```powershell
+# Check if SlbManagerService is offline
+$slbmService = Get-ClusterResource -Name SlbManagerService -ErrorAction SilentlyContinue
+if ($slbmService.State -eq 'Offline') {
+    # Attempt to bring the service online
+    Start-ClusterResource -Name SlbManagerService
+}
+```
 
 ---
 
-#### Failure: SLB MUX Configuration State Not Healthy
-**Description:**  
-The validator found that the configuration state of one or more SLB MUX instances is not healthy. This may indicate misconfiguration, missing parameters, or failed application of settings.
+### Example NC Load Balancer MUX resource
 
-**Example Failure:**  
+Below is a sample of a healthy `loadBalancerMuxes` resource retrieved from the Network Controller. Use this as a reference when validating your environment.
+
+```json
+[
+    {
+        "resourceRef":  "/loadBalancerMuxes/<Mux-01 name>",
+        "resourceId":  "<Mux-01 name>",
+        "properties": {
+            "provisioningState": "Succeeded",
+            "routerConfiguration": {
+                "localASN": 64000,
+                "peerRouterConfigurations": [
+                    {
+                        "localIPAddress": "192.168.200.120",
+                        "routerName": "BGPGateway-64000-64001",
+                        "routerIPAddress": "192.168.200.1",
+                        "peerASN": 64001,
+                    }
+                ]
+            },
+            "configurationState": {
+                "status": "Success",
+                "detailedInfo": [
+                    {
+                    "source": "SoftwareLoadBalancerManager",
+                    "message": "Loadbalancer Mux is Healthy.",
+                    "code": "Success"
+                    }
+                ]
+            }
+            // ... more
+        }
+    },
+    {
+        "resourceRef":  "/loadBalancerMuxes/<Mux-02 name>",
+        "resourceId":  "<Mux-02 name>",
+        // ... more
+    }
+]
 ```
-SLB MUX [mux-02] configuration state is 'Error'. The configuration state has code [ConfigApplyError]: Failed to apply configuration due to invalid BGP settings.
-```
 
-**Remediation Steps:**
-- Verify the configuration parameters for the affected MUX.
-- Correct any invalid or missing settings (e.g., BGP configuration).
-- Apply the configuration again and re-run the validator.
+#### Validation Criteria
 
----
+- `provisioningState` is `Succeeded`
+- `configurationState.status` is `Success`
+- BGP router configuration parameters are present and correct
 
-#### Failure: No SLB MUX Instances Found
-**Description:**  
-The validator could not find any SLB MUX resources managed by the Network Controller. This may indicate a deployment issue or a problem with the Network Controller connection.
-
-**Example Failure:**  
-```
-No NC load balancer MUXes found
-```
-
-**Remediation Steps:**
-- Confirm that SLB MUX instances are deployed and registered with the Network Controller.
-- Check connectivity and credentials for accessing the Network Controller.
-- Redeploy SLB MUX resources if necessary.
-
----
-
-#### Warning: SLB MUX in Transitional State
-**Description:**  
-One or more SLB MUX instances are in a transitional state (e.g., 'Updating', 'Provisioning'). This may be expected during deployment or configuration changes, but prolonged transitional states may indicate issues.
-
-**Example Failure:**  
-```
-SLB MUX [mux-03] provisioning state is 'Updating'. The configuration state has code [ConfigInProgress]: Configuration update is in progress.
-```
-
-**Remediation Steps:**
-- Wait for the operation to complete and re-run the validator.
-- If the state does not change after a reasonable period, investigate logs and consider restarting the affected MUX.
+If your output matches this structure and values, the SLB MUX is considered healthy.
 
 ---

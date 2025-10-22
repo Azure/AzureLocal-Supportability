@@ -11,12 +11,13 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Deployment, Add Node, Pre-Update</strong></td>
+        <td><strong>Deployment</strong></td>
     </tr>
 </table>
 
 ## Overview
-The `Test-SLB_ValidateOverlappingIPPools` function checks for overlapping IP address pools in your Azure Stack HCI Software Load Balancer (SLB) network configuration. It analyzes all IP pools defined under `HNVPA`, `PublicVIP`, and `PrivateVIP` network sections, ensuring that no IP ranges overlap across any subnet or network type. If overlapping IP pools are detected, the function returns a failure result with details about the conflicting ranges and guidance for remediation. Use this validator to proactively identify and resolve IP pool overlaps, which can prevent network assignment issues and service disruptions.
+
+The `Test-SLB_ValidateOverlappingIPPools` function checks for overlapping IP address pools in your Azure Local Software Load Balancer (SLB) network configuration. It analyzes all IP pools defined under `HNVPA`, `PublicVIP`, and `PrivateVIP` network sections, ensuring that no IP ranges overlap across any subnet or network type. If overlapping IP pools are detected, the function returns a failure result with details about the conflicting ranges and guidance for remediation. Use this validator to proactively identify and resolve IP pool overlaps, which can prevent network assignment issues and service disruptions.
 
 ---
 
@@ -31,20 +32,15 @@ Below is an example of a valid `NetworksConfiguration` object:
             {
                 "Subnets": [
                     {
-                        "AddressPrefix": "100.71.149.0/24",
-                        "VlanId": 6,
+                        "AddressPrefix":  "192.168.200.0/24",
+                        "VlanId": 0,
                         "DefaultGateways": [
-                            "100.71.149.1",
-                            "100.71.149.2"
+                            "192.168.200.1"
                         ],
                         "IPPools": [
                             {
-                                "StartIPAddress": "100.71.149.125",
-                                "EndIPAddress": "100.71.149.127"
-                            },
-                            {
-                                "StartIPAddress": "100.71.149.135",
-                                "EndIPAddress": "100.71.149.137"
+                                "StartIPAddress":  "192.168.200.134",
+                                "EndIPAddress":  "192.168.200.135"
                             }
                         ]
                     }
@@ -56,12 +52,12 @@ Below is an example of a valid `NetworksConfiguration` object:
                 "Name": "PublicVIPNetwork1",
                 "Subnets": [
                     {
-                        "AddressPrefix": "100.72.20.0/24",
+                        "AddressPrefix":  "192.168.102.0/24",
                         "VlanId": 0,
                         "IPPools": [
                             {
-                                "StartIPAddress": "100.72.20.61",
-                                "EndIPAddress": "100.72.20.250"
+                                "StartIPAddress":  "192.168.102.10",
+                                "EndIPAddress":  "192.168.102.19"
                             }
                         ]
                     }
@@ -73,12 +69,12 @@ Below is an example of a valid `NetworksConfiguration` object:
                 "Name": "PrivateVIPNetwork1",
                 "Subnets": [
                     {
-                        "AddressPrefix": "100.73.30.0/26",
+                        "AddressPrefix":  "192.168.200.0/24",
                         "VlanId": 0,
                         "IPPools": [
                             {
-                                "StartIPAddress": "100.73.30.1",
-                                "EndIPAddress": "100.73.30.62"
+                                "StartIPAddress":  "192.168.200.116",
+                                "EndIPAddress":  "192.168.200.119"
                             }
                         ]
                     }
@@ -89,14 +85,11 @@ Below is an example of a valid `NetworksConfiguration` object:
 }
 ```
 
-This configuration meets all validation requirements for SLB and BGP properties.
-
----
 ## Requirements
 
-- Azure Stack HCI environment is deployed and accessible.
+- Azure Local environment is deployed and accessible.
 - `AzStackHci` PowerShell module is installed and imported.
-- Sufficient permissions to query and modify SLB nodes and MUX instances.
+- Sufficient permissions to query and modify nodes.
 - `Test-SLB_ValidateOverlappingIPPools` function is available.
 - All target hosts are online and reachable from the management system.
 - Administrative privileges on both the management system and all target hosts.
@@ -105,9 +98,12 @@ This configuration meets all validation requirements for SLB and BGP properties.
 
 ### Review Environment Validator Output
 
-- Run the validator and inspect the result object:
-- Look for failures related to `Test-SLB_ValidateOverlappingIPPools`.
-- Example output:
+- Run the validator and examine the returned result object.
+- Filter results for the `Test-SLB_ValidateOverlappingIPPools` validator (by Name or DisplayName) and check for a failure status.
+- Inspect the `AdditionalData` block and especially the `Detail` field — it contains the exact overlapping IP ranges and context needed to locate the conflict.
+- Also review `TargetResourceID` / `TargetResourceName` to identify the affected resource and Timestamp to correlate when the issue was detected.
+- Use the information above to identify which subnet or pool definitions to adjust, then re-run the validator to confirm remediation.
+- Refer to the example output below for guidance on interpreting the results.
 
 ```json
 {
@@ -134,25 +130,53 @@ This configuration meets all validation requirements for SLB and BGP properties.
 }
 ```
 
-## Failure Return Results
+### Failure Results
 
-Below are possible failure return results from `$overlappingReturn`, with example messages and recommended remediation steps.
+The following subsections list common failure outcomes from `Test-SLB_ValidateOverlappingIPPools`. Each includes: what failed (failure title), a sample `AdditionalData.Detail` message, and minimal, actionable remediation guidance.
 
+#### Failure: Overlapping IP Pools Detected
 
-### Failure and Warning Results
+**Description:**
+
+The validator detected overlapping IP pool address ranges; this can lead to IP assignment conflicts and disrupt Software Load Balancer (SLB) operations.
+
+**Additional Data Example:**
+
+```text
+Detail    : IPPools [192.168.102.18-192.168.102.25] has overlapping with IPPools [192.168.102.10-192.168.102.19]. Please ensure IP pools do not overlap.
+Status    : FAILURE
+TimeStamp : 2025-06-01T12:34:56Z
+Resource  : SoftwareLoadBalancerManager
+Source    : SDNIntegration
+```
+
+**Remediation Steps:**
+
+1. Backup the current NetworksConfiguration file before making changes.
+
+2. Create an inventory of all IPPools across HNVPA, PublicVIP, and PrivateVIP (Networks -> <`NetworkType`> -> Subnets -> IPPools). Record each pool’s StartIPAddress, EndIPAddress, and parent subnet.
+
+3. Validate each pool:
+    - Confirm StartIPAddress and EndIPAddress are valid IPv4 addresses and Start <= End.
+    - Confirm the pool lies within the subnet AddressPrefix where it’s defined.
+
+4. Identify overlaps:
+    - For every pair of pools, ensure neither Start nor End addresses fall inside the other pool’s range.
+    - Pay attention to pools in different network types that share the same subnet range.
+
+5. Remediate overlaps:
+    - Adjust StartIPAddress and/or EndIPAddress so ranges do not intersect, or move pools to non‑overlapping subnets.
+    - Preserve required reserved addresses and gateway addresses when choosing new ranges.
+    - Document any changes and update the source configuration file (use placeholders like `<StartIPAddress>` and `<EndIPAddress>`).
+
+6. Verify changes:
+    - Re-run Test-SLB_ValidateOverlappingIPPools.
+    - Confirm the validator returns a success status and AdditionalData.Detail no longer reports overlapping ranges.
+    - If failures persist, review the reported TargetResourceID/AdditionalData.Detail to locate remaining conflicts and repeat remediation.
 
 ---
-### Failure: Overlapping IP Pools Detected  
-Description: The validator has detected that two or more IP pools have overlapping address ranges. This can cause IP assignment conflicts and disrupt SLB operations.  
-Example Failure:  
-```
-Test-SLB_ValidateOverlappingIPPools: IPPools [100.72.21.1, 100.72.21.126] overlaps with [100.72.20.61, 100.72.20.250]
-```
-Remediation Steps:  
-- Review all IP pool ranges in your configuration.
-- Ensure that no IP pool's start or end address falls within the range of another pool, even across different network types (HNVPA, PublicVIP, PrivateVIP).
-- Adjust the start and end addresses to eliminate overlaps.
-- Re-run the validator to confirm resolution.
+
+<!--
 
 ### Failure: Null or Missing IP Pool Properties  
 Description: The validator could not find valid IP pool properties in the configuration, or the IP pool object is missing required fields.  
@@ -179,3 +203,4 @@ Remediation Steps:
 ---
 
 If you encounter any of these failures or warnings, follow the remediation steps to resolve configuration issues and ensure reliable SLB network operations.
+-->
