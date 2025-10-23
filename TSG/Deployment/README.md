@@ -8,3 +8,4 @@
 * [Azure Local missing SPN during deployment 2411.3](./TSG-Azure-LOCAL-HCI-missing-spn.md)
 * [Type 'DeployPreRequisites' of Role 'MocArb' raised an exception: ERROR: An error occurred. Pip failed with status code 1. Use --debug for more information.](./Type-DeployPreRequisites-of-Role-MocArb-raised-an-exception-ERROR-An-error-occurred-Pip-failed-with-status-code11.md)
 * [24H2 Deployment or ScaleOut failure at EncryptClusterSharedVolumes of AzureStackBitlocker](./Deployment-or-ScaleOut-failure-at-EncryptClusterSharedVolumes-of-AzureStackBitlocker.md)
+* [Troubleshooting MSI Does Not Have Access to Subscription](../EnvironmentValidator/Troubleshooting-MSI-Does-Not-Have-Access-To-Subscription.md)

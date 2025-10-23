@@ -9,3 +9,4 @@
 * [Solution upgrade failed at "SetTrustedHost" step](./Known-issue-Solution-upgrade-failed-at-SetTrustedHost-step.md)
 * ["ScopeLocked" error during ARB upgrade](./Known-issue-ScopeLockedError-ARB-Upgrade.md)
 * [Solution upgrade failed at 'CleanUpDeploymentPackageAndNugetStoreOnNonSeedNodes' step](./Known-issue-Solution-upgrade-failed-at-CleanUpDeploymentPackageAndNugetStoreOnNonSeedNodes-step.md)
+* [Troubleshooting MSI Does Not Have Access to Subscription](../EnvironmentValidator/Troubleshooting-MSI-Does-Not-Have-Access-To-Subscription.md)
