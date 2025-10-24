@@ -24,6 +24,9 @@ For Network Environment Validator Resources, see [TSG/EnvironmentValidator/Netwo
 - [Troubleshoot: Outbound Connectivity Issues with NAT](SDN-Express/Troubleshoot-SDNExpress-Outbound-Connectivity-Issues-When-Using-Outbound-NAT.md)
 - [Troubleshoot: Recreate Intent Without SR-IOV](SDN-Express/Troubleshoot-SDNExpress-Recreate-Intent-No-SRIOV.md)
 
+### Diagnostics
+- [How to collect SDN or Networking related logs](Diagnostics/HowTo-Diagnostic-SendNetworkingLogs.md)
+
 ---
 
 ## Contributing
