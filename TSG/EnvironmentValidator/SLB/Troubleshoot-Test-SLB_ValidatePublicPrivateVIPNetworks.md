@@ -21,21 +21,44 @@ This function validates the configuration of public and private Virtual IP (VIP)
 
 ## Example Configuration
 
+This example describes the configuration for HNVPA, Public VIP, and Private VIP networks in Azure Local environments. Here’s a breakdown of each part:
+
+```text
+- HNVPA: Placeholder for HNVPA network definitions.
+- PublicVIP: The main object representing public VIP network configuration.
+    - Name: The name of the public VIP network.
+    - Subnets: An array of subnet objects.
+        - AddressPrefix: The subnet's address range in IPv4 CIDR format.
+        - VlanId: The VLAN ID for the subnet (0-4095).
+        - IPPools: Array of IP pool objects for dynamic allocation.
+            - StartIPAddress: Starting IP address for allocation.
+            - EndIPAddress: Ending IP address for allocation.
+- PrivateVIP: The main object representing private VIP network configuration.
+    - Name: The name of the private VIP network.
+    - Subnets: An array of subnet objects.
+        - AddressPrefix: The subnet's address range in IPv4 CIDR format.
+        - VlanId: The VLAN ID for the subnet (0-4095).
+        - IPPools: Array of IP pool objects for dynamic allocation.
+            - StartIPAddress: Starting IP address for allocation.
+            - EndIPAddress: Ending IP address for allocation.
+```
+
 Below is an example of a partial `Networks` configuration, including both public and private VIP networks. This sample demonstrates the required properties and structure for each VIP type.
 
 ```json
 {
+    "HNVPA": [ /* HNVPA networks */ ],
     "PublicVIP": [
         {
             "Name": "PublicVIPNetwork1",
             "Subnets": [
                 {
-                    "AddressPrefix":  "192.168.102.0/24",
-                    "VlanId": 0,
+                    "AddressPrefix":  "<Address Prefix>",
+                    "VlanId": <VlanId>,
                     "IPPools": [
                         {
-                            "StartIPAddress":  "192.168.102.10",
-                            "EndIPAddress":  "192.168.102.19"
+                            "StartIPAddress":  "<Start IP Address>",
+                            "EndIPAddress":  "<End IP Address>"
                         }
                     ]
                 }
@@ -47,16 +70,14 @@ Below is an example of a partial `Networks` configuration, including both public
         {
             "Name": "PrivateVIPNetwork1",
             "Subnets": [
-                {
-                    "AddressPrefix":  "192.168.200.0/24",
-                    "VlanId": 0,
-                    "IPPools": [
-                        {
-                            "StartIPAddress":  "192.168.200.116",
-                            "EndIPAddress":  "192.168.200.119"
-                        }
-                    ]
-                }
+                "AddressPrefix": "<AddressPrefix>",
+                "VlanId": <VlanId>,
+                "IPPools": [
+                    {
+                        "StartIPAddress": "<Start IP Address>",
+                        "EndIPAddress": "<EndIPAddress>"
+                    }
+                ]
             ]
         }
         /* Additional private VIP networks */
@@ -100,12 +121,12 @@ To use this validator, ensure the following prerequisites:
     "Severity":  2,
     "Description":  "Test if we have valid public and/or private VIP addresses",
     "Remediation":  "Please check public and/or private VIP addresses",
-    "TargetResourceID":  "Property name: IPPools, value: 192.168.200.119 \u003e= 192.168.200.110",
+    "TargetResourceID":  "Property name: IPPools, value: x.x.x.x \u003e= y.y.y.y",
     "TargetResourceName":  "IPPools",
     "TargetResourceType":  "PrivateVIP",
     "Timestamp":  "\/Date(1761012664074)\/",
     "AdditionalData":  {
-                            "Detail":  "\"The property [IPPools] on the [PrivateVIP] network has an invalid format. Start IP address [192.168.200.119]  is bigger than End IP address [192.168.200.110].\"",
+                            "Detail":  "\"The property [IPPools] on the [PrivateVIP] network has an invalid format. Start IP address [x.x.x.x]  is bigger than End IP address [y.y.y.y].\"",
                             "Status":  "FAILURE",
                             "TimeStamp":  "10/21/2025 02:11:04",
                             "Resource":  "PrivateVIP",
@@ -172,21 +193,21 @@ Type: PublicVIP
 #### 3. Failure: Invalid AddressPrefix Format
 
 **Description:**
-The `AddressPrefix` property does not match the expected CIDR notation (e.g., `100.72.20.0/24`).
+The `AddressPrefix` property does not match the expected CIDR notation (e.g., `x.x.x.x/24`).
 
 **Example Failure:**
 
 ```text
 Status: Failure
-Message: Invalid format for AddressPrefix in PublicVIP: 100.72.20.0-24
+Message: Invalid format for AddressPrefix in PublicVIP: x.x.x.x-24
 Name: AddressPrefix
-ID: 100.72.20.0-24
+ID: x.x.x.x-24
 Type: PublicVIP
 ```
 
 **Remediation Steps:**
 
-- Use standard CIDR notation for all `AddressPrefix` values (e.g., `x.x.x.x/yy`).
+- Use standard CIDR notation for all `AddressPrefix` values (e.g., `x.x.x.x/24`).
 - Correct any typos or formatting errors.
 
 ---
@@ -264,9 +285,9 @@ The IP pool’s start or end address is not within the subnet’s `AddressPrefix
 
 ```text
 Status: Failure
-Message: StartIPAddress 100.72.21.200 not in subnet 100.72.21.0/25
+Message: StartIPAddress x.x.x.x not in subnet y.y.y.y/25
 Name: IPPools
-ID: 100.72.21.200 not in 100.72.21.0/25
+ID: x.x.x.x not in y.y.y.y/25
 Type: PublicVIP
 ```
 
@@ -276,28 +297,7 @@ Type: PublicVIP
 
 ---
 
-#### 8. Failure: DefaultGateway Address in IP Pool Range
-
-**Description:**  
-A default gateway address is included within the IP pool range, which is not allowed.  
-
-**Example Failure:**  
-
-```text
-Status: Failure
-Message: DefaultGateway 100.72.20.1 is in IP pool range [100.72.20.1, 100.72.20.250]
-Name: DefaultGateways
-ID: 100.72.20.1 in [100.72.20.1, 100.72.20.250]
-Type: PublicVIP
-```
-
-**Remediation Steps:**
-
-- Ensure default gateway addresses are outside all defined IP pool ranges.
-
----
-
-#### 9. Warning: No Private VIP Networks Found
+#### 8. Warning: No Private VIP Networks Found
 
 **Description:**
 No private VIP networks are defined. This is not a failure, but private VIPs will not be validated.

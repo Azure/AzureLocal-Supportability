@@ -17,7 +17,7 @@
 
 ## Overview
 
-The `Test-SLB_ValidateNCLoadBalancerMux` function validates the configuration and provisioning state of all Software Load Balancer (SLB) Multiplexer (MUX) instances managed by the Network Controller (NC) in your Azure Local environment. It connects to the NC, retrieves all SLB MUX resources, and checks their health by evaluating both provisioning and configuration states. If any MUX is not healthy, the validator returns a failure result with detailed information and remediation guidance. Use this validator to proactively detect and resolve SLB MUX issues to maintain network reliability and high availability.
+The `Test-SLB_ValidateNCLoadBalancerMux` function checks the configuration and provisioning state of all Software Load Balancer (SLB) Multiplexer (MUX) instances managed by the Network Controller (NC) in your Azure Local environment. It connects to the NC, retrieves SLB MUX resources, and evaluates their health by inspecting both provisioning and configuration states. Each MUX must be connected to the SLB Manager service (SLBM) of the NC. If any MUX is found unhealthy, the validator returns a failure result with specific details and recommended remediation steps. Running this validator helps you identify and address SLB MUX issues early, supporting network reliability and high availability.
 
 ---
 
@@ -48,16 +48,16 @@ The `Test-SLB_ValidateNCLoadBalancerMux` function validates the configuration an
     "Severity":  2,
     "Description":  "Test if all SLB MUX configuration and provisioning state are healthy.",
     "Remediation":  "SLB MUX configuration and provisioning state are not healthy.",
-    "TargetResourceID":  "SLB MUX: v-SLB01, Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.",
+    "TargetResourceID":  "SLB MUX: <SLB Name>, Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.",
     "TargetResourceName":  "VirtualServerUnreachable",
     "TargetResourceType":  "SoftwareLoadBalancerManager",
     "Timestamp":  "\/Date(1761019761682)\/",
     "AdditionalData":  {
-                            "Detail":  "Load balancer Mux state is not healthy. Please investigate Loadbalancer Mux ID [v-SLB01], provisioning state [Succeeded], configuration state [Failure] and resolve the issue [Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.].",
+                            "Detail":  "Load balancer Mux state is not healthy. Please investigate Loadbalancer Mux ID [<SLB Name>], provisioning state [Succeeded], configuration state [Failure] and resolve the issue [Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.].",
                             "Status":  "FAILURE",
                             "TimeStamp":  "10/21/2025 04:09:21",
                             "Resource":  "SoftwareLoadBalancerManager",
-                            "Source":  "192.168.200.93"
+                            "Source":  "x.x.x.x"
                         },
     "HealthCheckSource":  "ScaleSLB\\Standard\\Medium\\NetworkSLB\\c2440959"
 }
@@ -75,11 +75,11 @@ The validator has identified that one or more SLB Multiplexer (MUX) instances ma
 **Example Failure:**  
 
 ```text
-Detail    : Load balancer Mux state is not healthy. Please investigate Loadbalancer Mux ID [v-SLB01], provisioning state [Succeeded], configuration state [Failure] and resolve the issue [Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.].
+Detail    : Load balancer Mux state is not healthy. Please investigate Loadbalancer Mux ID [<SLB Name>], provisioning state [Succeeded], configuration state [Failure] and resolve the issue [Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.].
 Status    : FAILURE
 TimeStamp : 2025-06-01T12:34:56Z
 Resource  : SoftwareLoadBalancerManager
-Source    : <Host IP Address>
+Source    : <Node IP Address>
 ```
 
 **Remediation Steps:**
@@ -137,15 +137,15 @@ Below is a sample of a healthy `loadBalancerMuxes` resource retrieved from the N
         "properties": {
             "provisioningState": "Succeeded",
             "routerConfiguration": {
-                "localASN": 64000,
-                "peerRouterConfigurations": [
-                    {
-                        "localIPAddress": "192.168.200.120",
-                        "routerName": "BGPGateway-64000-64001",
-                        "routerIPAddress": "192.168.200.1",
-                        "peerASN": 64001,
-                    }
-                ]
+            "localASN": <Local ASN>,
+            "peerRouterConfigurations": [
+                {
+                    "localIPAddress": "<Local IP Address>",
+                    "routerName": "BGPGateway-<Local ASN>-<Peer ASN>",
+                    "routerIPAddress": "<Router IP Address>",
+                    "peerASN": <Peer ASN>
+                }
+            ]
             },
             "configurationState": {
                 "status": "Success",

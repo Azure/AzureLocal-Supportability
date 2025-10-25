@@ -48,7 +48,23 @@ Test-SLB_ValidateHNVPANetwork -NetworksConfiguration $networksConfig -Sessions $
 
 ## Example Configuration
 
-Below is an example of a valid `Networks` configuration object:
+This example describes the configuration for `HNVPA`, `Public VIP`, and `Private VIP` networks in Azure Local environments. Each section is outlined below:
+
+```text
+- Networks: The main object representing the network configuration.
+    - HNVPA: Contains the HNVPA network definition.
+        - Subnets: An array of subnet objects.
+            - AddressPrefix: The subnet's address range in IPv4 CIDR format.
+            - VlanId: The VLAN ID for the subnet (0-4095).
+            - DefaultGateways: Array of default gateway IP addresses within the subnet.
+            - IPPools: Array of IP pool objects for dynamic allocation.
+                - StartIPAddress: Starting IP address for allocation.
+                - EndIPAddress: Ending IP address for allocation.
+    - PublicVIP: Placeholder for public-facing VIP network definitions.
+    - PrivateVIP: Placeholder for internal VIP network definitions.
+```
+
+This example shows a portion of a Networks configuration that includes the `HNVPA` settings. It highlights the essential properties and structure you need to define for a network that uses `HNVPA`. Use this sample as a reference to ensure your configuration includes all required fields and follows the correct format.
 
 ```json
 {
@@ -57,19 +73,19 @@ Below is an example of a valid `Networks` configuration object:
             {
                 "Subnets": [
                     {
-                        "AddressPrefix":  "192.168.200.0/24",
-                        "VlanId": 0,
+                        "AddressPrefix":  "<Address Prefix>",
+                        "VlanId": <VlanId>,
                         "DefaultGateways": [
-                            "192.168.200.1"
+                           "<Default Gateways>"
                         ],
                         "IPPools": [
                             {
-                                "StartIPAddress":  "192.168.200.120",
-                                "EndIPAddress":  "192.168.200.135"
+                                "StartIPAddress":  "<Start IP Address>",
+                                "EndIPAddress":  "<End IP Address>"
                             },
                             {
-                                "StartIPAddress":  "192.168.200.150",
-                                "EndIPAddress":  "192.168.200.165"
+                                "StartIPAddress":  "<Start IP Address>",
+                                "EndIPAddress":  "<End IP Address>"
                             }
                         ]
                     }
@@ -121,12 +137,12 @@ This sample configuration satisfies all HNVPA property validation checks, includ
     "Severity":  2,
     "Description":  "Execute comprehensive validation of HNVPA network configuration to ensure it meets the requirements for proper SLB deployment in Azure Local environments. This function is critical for validating the network infrastructure before deploying SLB components.",
     "Remediation":  "Need to update URL here",
-    "TargetResourceID":  "Property name: DefaultGateways, value: 192.168.100.1",
+    "TargetResourceID":  "Property name: DefaultGateways, value: x.x.x.x",
     "TargetResourceName":  "DefaultGateways",
     "TargetResourceType":  "HNVPA",
     "Timestamp":  "\/Date(1761004281844)\/",
     "AdditionalData":  {
-                        "Detail":  "The property [DefaultGateways] [192.168.100.1] is not in the subnet [192.168.200.0/24]",
+                        "Detail":  "The property [DefaultGateways] [x.x.x.x] is not in the subnet [y.y.y.y/24]",
                         "Status":  "FAILURE",
                         "TimeStamp":  "10/20/2025 23:51:21",
                         "Resource":  "HNVPA",
@@ -219,7 +235,7 @@ Source    : Networks
 ```
 
 **Remediation Steps:**  
-Add a valid `AddressPrefix` (in IPv4 CIDR format, e.g., `192.168.200.0/24`) to each subnet in the HNVPA configuration.
+Add a valid `AddressPrefix` (in IPv4 CIDR format, e.g., `x.x.x.x/24`) to each subnet in the HNVPA configuration.
 
 ---
 
@@ -239,7 +255,7 @@ Source    : Networks
 ```
 
 **Remediation Steps:**  
-Specify a valid IPv4 CIDR (e.g., `100.71.149.0/24`) for each subnet's `AddressPrefix`.
+Specify a valid IPv4 CIDR (e.g., `x.x.x.x/24`) for each subnet's `AddressPrefix`.
 
 ---
 
@@ -319,7 +335,7 @@ Source    : Networks
 ```
 
 **Remediation Steps:**  
-Ensure each subnet's `DefaultGateways` array includes at least one valid IPv4 address (e.g., `192.168.200.1`), and that all entries are properly formatted.
+Ensure each subnet's `DefaultGateways` array includes at least one valid IPv4 address (e.g., `x.x.x.x`), and that all entries are properly formatted.
 
 ---
 
@@ -331,7 +347,7 @@ One or more default gateways are not part of the subnet's address range.
 **Additional Data Example:**
 
 ```text
-Detail    : The property [DefaultGateways] [192.168.100.1] is not in the subnet [192.168.200.0/24].
+Detail    : The property [DefaultGateways] [x.x.x.x] is not in the subnet [y.y.y.y/24].
 Status    : FAILURE
 TimeStamp : 2025-06-01T12:34:56Z
 Resource  : HNVPA
@@ -351,7 +367,7 @@ The `StartIPAddress` or `EndIPAddress` of an IP pool is not in the subnet's addr
 **Additional Data Example:**
 
 ```text
-Detail    : The property [EndIPAddress] [100.71.150.10] is not in the subnet [100.71.149.0/24]
+Detail    : The property [EndIPAddress] [x.x.x.x] is not in the subnet [y.y.y.y/24]
 Status    : FAILURE
 TimeStamp : 2025-06-01T12:34:56Z
 Resource  : HNVPA
@@ -371,7 +387,7 @@ The `StartIPAddress` in an IP pool is greater than or equal to the `EndIPAddress
 **Additional Data Example:**
 
 ```text
-Detail    : The property [IPPools] on the [HNVPA] network has an invalid format. Start IP address [100.71.149.130]  is bigger than End IP address [100.71.149.129].
+Detail    : The property [IPPools] on the [HNVPA] network has an invalid format. Start IP address [x.x.x.x]  is bigger than End IP address [y.y.y.y].
 Status    : FAILURE
 TimeStamp : 2025-06-01T12:34:56Z
 Resource  : HNVPA
@@ -391,7 +407,7 @@ One or more default gateways are part of an IP pool, which is not allowed.
 **Additional Data Example:**
 
 ```text
-Detail    : DefaultGateway 100.71.149.1 is included in IP pool [100.71.149.1, 100.71.149.10].
+Detail    : DefaultGateway x.x.x.x is included in IP pool [x.x.x.x, y.y.y.y].
 Status    : FAILURE
 TimeStamp : 2025-06-01T12:34:56Z
 Resource  : HNVPA
@@ -411,7 +427,7 @@ Two or more subnets have overlapping `AddressPrefix` ranges.
 **Additional Data Example:**
 
 ```text
-[AddressPrefix] [100.71.149.0/24] has overlapping with [AddressPrefix] [100.71.149.0/25]. Please ensure address prefix do not overlap.
+[AddressPrefix] [x.x.x.x/24] has overlapping with [AddressPrefix] [y.y.y.y/25]. Please ensure address prefix do not overlap.
 Status    : FAILURE
 TimeStamp : 2025-06-01T12:34:56Z
 Resource  : HNVPA

@@ -23,7 +23,37 @@ The `Test-SLB_ValidateOverlappingIPPools` function checks for overlapping IP add
 
 ## Example Configuration
 
-Below is an example of a valid `NetworksConfiguration` object:
+This example describes the configuration for HNVPA, Public VIP, and Private VIP networks in Azure Local environments. Each section is outlined below:
+
+```text
+- Networks: The main object representing the network configuration.
+    - HNVPA: Contains the HNVPA network definition.
+        - Subnets: An array of subnet objects.
+            - AddressPrefix: The subnet's address range in IPv4 CIDR format.
+            - VlanId: The VLAN ID for the subnet (0-4095).
+            - DefaultGateways: Array of default gateway IP addresses within the subnet.
+            - IPPools: Array of IP pool objects for dynamic allocation.
+                - StartIPAddress: Starting IP address for allocation.
+                - EndIPAddress: Ending IP address for allocation.
+    - PublicVIP: The main object representing public VIP network configuration.
+        - Name: The name of the public VIP network.
+        - Subnets: An array of subnet objects.
+            - AddressPrefix: The subnet's address range in IPv4 CIDR format.
+            - VlanId: The VLAN ID for the subnet (0-4095).
+            - IPPools: Array of IP pool objects for dynamic allocation.
+                - StartIPAddress: Starting IP address for allocation.
+                - EndIPAddress: Ending IP address for allocation.
+    - PrivateVIP: The main object representing private VIP network configuration.
+        - Name: The name of the private VIP network.
+        - Subnets: An array of subnet objects.
+            - AddressPrefix: The subnet's address range in IPv4 CIDR format.
+            - VlanId: The VLAN ID for the subnet (0-4095).
+            - IPPools: Array of IP pool objects for dynamic allocation.
+                - StartIPAddress: Starting IP address for allocation.
+                - EndIPAddress: Ending IP address for allocation.
+```
+
+This example demonstrates a valid Networks configuration for `HNVPA`, `PublicVIP`, and `PrivateVIP` network types. It outlines the required properties and structure for each section, ensuring your configuration file includes all necessary fields and follows the recommended format. Use this sample as a template to verify your network definitions are complete and correctly organized.
 
 ```json
 {
@@ -32,15 +62,19 @@ Below is an example of a valid `NetworksConfiguration` object:
             {
                 "Subnets": [
                     {
-                        "AddressPrefix":  "192.168.200.0/24",
-                        "VlanId": 0,
+                        "AddressPrefix":  "<Address Prefix>",
+                        "VlanId": <VlanId>,
                         "DefaultGateways": [
-                            "192.168.200.1"
+                           "<Default Gateways>"
                         ],
                         "IPPools": [
                             {
-                                "StartIPAddress":  "192.168.200.134",
-                                "EndIPAddress":  "192.168.200.135"
+                                "StartIPAddress":  "<Start IP Address>",
+                                "EndIPAddress":  "<End IP Address>"
+                            },
+                            {
+                                "StartIPAddress":  "<Start IP Address>",
+                                "EndIPAddress":  "<End IP Address>"
                             }
                         ]
                     }
@@ -52,12 +86,12 @@ Below is an example of a valid `NetworksConfiguration` object:
                 "Name": "PublicVIPNetwork1",
                 "Subnets": [
                     {
-                        "AddressPrefix":  "192.168.102.0/24",
-                        "VlanId": 0,
+                        "AddressPrefix":  "<Address Prefix>",
+                        "VlanId": <VlanId>,
                         "IPPools": [
                             {
-                                "StartIPAddress":  "192.168.102.10",
-                                "EndIPAddress":  "192.168.102.19"
+                                "StartIPAddress":  "<Start IP Address>",
+                                "EndIPAddress":  "<End IP Address>"
                             }
                         ]
                     }
@@ -68,16 +102,14 @@ Below is an example of a valid `NetworksConfiguration` object:
             {
                 "Name": "PrivateVIPNetwork1",
                 "Subnets": [
-                    {
-                        "AddressPrefix":  "192.168.200.0/24",
-                        "VlanId": 0,
-                        "IPPools": [
-                            {
-                                "StartIPAddress":  "192.168.200.116",
-                                "EndIPAddress":  "192.168.200.119"
-                            }
-                        ]
-                    }
+                    "AddressPrefix": "<AddressPrefix>",
+                    "VlanId": <VlanId>,
+                    "IPPools": [
+                        {
+                            "StartIPAddress": "<Start IP Address>",
+                            "EndIPAddress": "<EndIPAddress>"
+                        }
+                    ]
                 ]
             }
         ]
@@ -115,12 +147,12 @@ Below is an example of a valid `NetworksConfiguration` object:
     "Severity":  2,
     "Description":  "Test if all IP pools are not overlapping each other",
     "Remediation":  "Ensure that all IP pools are properly configured and do not overlap.",
-    "TargetResourceID":  "Property name: IPPools, value: [192.168.102.18, 192.168.102.25] overlaps with [192.168.102.10, 192.168.102.19]",
+    "TargetResourceID":  "Property name: IPPools, value: [x.x.x.x, y.y.y.y] overlaps with [x.x.x.x, z.z.z.z]",
     "TargetResourceName":  "IPPools",
     "TargetResourceType":  "IPPools",
     "Timestamp":  "\/Date(1761012664145)\/",
     "AdditionalData":  {
-                            "Detail":  "\"IPPools 192.168.102.18-192.168.102.25 has overlapping with IPPools 192.168.102.10-192.168.102.19. Please ensure IP pools do not overlap.\"",
+                            "Detail":  "\"IPPools x.x.x.x-y.y.y.y has overlapping with IPPools x.x.x.x-z.z.z.z. Please ensure IP pools do not overlap.\"",
                             "Status":  "FAILURE",
                             "TimeStamp":  "10/21/2025 02:11:04",
                             "Resource":  "IPPools",
@@ -143,7 +175,7 @@ The validator detected overlapping IP pool address ranges; this can lead to IP a
 **Additional Data Example:**
 
 ```text
-Detail    : IPPools [192.168.102.18-192.168.102.25] has overlapping with IPPools [192.168.102.10-192.168.102.19]. Please ensure IP pools do not overlap.
+Detail    : IPPools [x.x.x.x-y.y.y.y] has overlapping with IPPools [x.x.x.x-z.z.z.z]. Please ensure IP pools do not overlap.
 Status    : FAILURE
 TimeStamp : 2025-06-01T12:34:56Z
 Resource  : SoftwareLoadBalancerManager
@@ -193,7 +225,7 @@ Remediation Steps:
 Description: The validator found IP pool ranges that are not in the expected format, which may prevent proper validation.  
 Example Failure:  
 ```
-Test-SLB_ValidateOverlappingIPPools: IPPools [100.74.40.1, 100.74.41.250] has an invalid address format.
+Test-SLB_ValidateOverlappingIPPools: IPPools [x.x.x.x, y.y.y.y] has an invalid address format.
 ```
 Remediation Steps:  
 - Confirm that all IP addresses are valid IPv4 addresses.

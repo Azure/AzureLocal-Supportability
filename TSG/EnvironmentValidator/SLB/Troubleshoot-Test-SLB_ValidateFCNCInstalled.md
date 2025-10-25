@@ -45,16 +45,16 @@ This validator checks whether the Failover Cluster Network Controller (FCNC) is 
     "Severity":  2,
     "Description":  "Verifies that the FCNC is properly installed and configured on each node in the cluster",
     "Remediation":  "FCNC (Failover Cluster Network Controller) must be installed prior to deploying SLB",
-    "TargetResourceID":  "Node: 192.168.200.92, service: NC API service",
+    "TargetResourceID":  "Node: <Node IP Address>, service: NC API service",
     "TargetResourceName":  "FCNC API Service",
     "TargetResourceType":  "FCNC installation",
     "Timestamp":  "\/Date(1761012662827)\/",
     "AdditionalData":  {
-                            "Detail":  "Failover Cluster Network Controller (FCNC) is not installed or not operational on host [192.168.200.92]. Please verify the installation and configuration.",
+                            "Detail":  "Failover Cluster Network Controller (FCNC) is not installed or not operational on host [<Node IP Address>]. Please verify the installation and configuration.",
                             "Status":  "FAILURE",
                             "TimeStamp":  "10/21/2025 02:11:02",
                             "Resource":  "FCNC installation",
-                            "Source":  "192.168.200.92"
+                            "Source":  "<Node IP Address>"
                         },
     "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\22e52eb5"
 }
@@ -72,11 +72,11 @@ The Failover Clustering Network Controller (FCNC) is considered not installed wh
 **Example Failure:**
 
 ```text
-Detail    : Failover Cluster Network Controller (FCNC) is not installed or not operational on host [IP Address]. Please verify the installation and configuration.
+Detail    : Failover Cluster Network Controller (FCNC) is not installed or not operational on host [<Node IP Address>]. Please verify the installation and configuration.
 Status    : FAILURE
 TimeStamp : 2025-06-01T12:34:56Z
 Resource  : FCNC installation
-Source    : <Host IP Address>
+Source    : <Node IP Address>
 ```
 
 **Remediation Steps:**

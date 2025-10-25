@@ -17,27 +17,39 @@
 
 ## Overview
 
-The `Test-SLB_ValidateSoftwareLoadBalancer` function validates the Software Load Balancer (SLB) configuration in your Azure Local environment. It checks that required properties such as `BackendNetworkMode`, `NumberOfMuxes`, and `BGPInfo` (including `LocalASN` and `PeerRouterConfigurations`) are present and set to supported values. The validator ensures the configuration meets criteria for load balancing, high availability, and network reliability. If any property is missing, invalid, or duplicated, the function returns a failure result with details for remediation. Use this validator to proactively detect and resolve SLB configuration issues before they impact your environment.
+The `Test-SLB_ValidateSoftwareLoadBalancer` function checks the Software Load Balancer (SLB) configuration in your Azure Local environment for completeness and correctness. It verifies that all required properties—such as `NumberOfMuxes` and `BGPInfo` (including `LocalASN` and `PeerRouterConfigurations`) are present and set to valid values. Within the Border Gateway Protocol(BGP) section, both the local and peer Autonomous System Numbers (ASN) must be valid, and each peer router must have a unique, properly formatted IPv4 address. The validator ensures the configuration meets criteria for load balancing, high availability, and network reliability. If any property is missing, invalid, or duplicated, the function returns a failure result with details for remediation. Use this validator to proactively detect and resolve SLB configuration issues before they impact your environment.
 
 ## Example Configuration
 
-Below is an example of a valid `SoftwareLoadBalancer` configuration object:
+This following describes the BGP (Border Gateway Protocol) configuration for a Software Load Balancer (SLB) in Azure Local environments. Here’s a breakdown of each part:
+
+```text
+- SoftwareLoadBalancer: The main object representing the SLB.
+    - NumberOfMuxes: Placeholder for the number of MUX (multiplexer) instances in your SLB deployment.
+    - BGPInfo: Contains BGP-specific settings.
+        - LocalASN: Placeholder for the Autonomous System Number (ASN) assigned to the SLB itself.
+        - PeerRouterConfigurations: An array listing each BGP peer router.
+            - PeerASN: The ASN of the peer router.
+            - RouterIPAddress: The IP address of the peer router.
+
+```
+
+This example illustrates a 'SoftwareLoadBalancer' configuration, emphasizing the key properties and structure required for a network utilizing SoftwareLoadBalancer. Refer to this sample to confirm your configuration contains all mandatory fields and adheres to the expected format.
 
 ```json
 {
     "SoftwareLoadBalancer": {
-        "BackendNetworkMode": "VirtualNetwork",
-        "NumberOfMuxes": 2,
+        "NumberOfMuxes": <Specify the total number of MUX instances>,
         "BGPInfo": {
-            "LocalASN": 60001,
+            "LocalASN": <Enter the local ASN for the SLB>,
             "PeerRouterConfigurations": [
                 {
-                    "PeerASN": 60002,
-                    "RouterIPAddress": "192.168.100.1"
+                    "PeerASN": <Enter ASN for Peer 1>,
+                    "RouterIPAddress": "<Enter IP address for Peer 1 router>"
                 },
                 {
-                    "PeerASN": 60003,
-                    "RouterIPAddress": "192.168.100.2"
+                    "PeerASN": <Enter ASN for Peer 2>,
+                    "RouterIPAddress": "<Enter IP address for Peer 2 router>"
                 }
             ]
         }
@@ -47,13 +59,14 @@ Below is an example of a valid `SoftwareLoadBalancer` configuration object:
 
 Ensure all required properties in your `SoftwareLoadBalancer` configuration object are present and correctly formatted. Specifically, verify that:
 
-- `BackendNetworkMode` is set to `"VirtualNetwork"`.
+```text
 - `NumberOfMuxes` is an integer between 1 and 3.
 - `BGPInfo` is present and includes:
     - `LocalASN` (integer between 0 and 4294967295)
     - `PeerRouterConfigurations` (array with at least one entry), and for each entry:
         - `PeerASN` (integer between 0 and 4294967295)
         - `RouterIPAddress` (valid IPv4 address, unique per entry)
+```
 
 ---
 ## Requirements
@@ -102,44 +115,6 @@ Ensure all required properties in your `SoftwareLoadBalancer` configuration obje
 ### Failure Results
 
 The following section lists all potential failure results returned by `Test-SLB_ValidateSoftwareLoadBalancer`. For each failure type, you will find example messages from the `AdditionalData.Detail` field and specific remediation steps to address the issue.
-
-#### Failure: BackendNetworkMode is missing or invalid
-
-**Description:**  
-The `BackendNetworkMode` property is either missing, empty, or set to an unsupported value.  
-
-**Additional Data Example:**
-
-```text
-Detail    : SoftwareLoadBalancer does not have a valid [BackendNetworkMode = ] defined. Please ensure a valid [BackendNetworkMode] is configured for the SoftwareLoadBalancer.
-Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
-Resource  : SoftwareLoadBalancer
-Source    : SDNIntegration
-```
-
-**Remediation Steps:**  
-Ensure the `BackendNetworkMode` property is present.
-
----
-
-#### Failure: BackendNetworkMode must be 'VirtualNetwork'
-
-**Description:**  
-The `BackendNetworkMode` property is missing, empty, or set to a value other than `VirtualNetwork`.
-
-**Additional Data Example:**
-
-```text
-Detail    : The [BackendNetworkMode] of SoftwareLoadBalancer supports [VirtualNetwork] only.
-Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
-Resource  : SoftwareLoadBalancer
-Source    : SDNIntegration
-```
-
-**Remediation Steps:**  
-Set the `BackendNetworkMode` property to `VirtualNetwork` in your Software Load Balancer configuration.
 
 ---
 
@@ -282,7 +257,7 @@ Multiple entries in `PeerRouterConfigurations` have the same `RouterIPAddress`.
 **Additional Data Example:**
 
 ```text
-Detail    : The [RouterIPAddress] of SoftwareLoadBalancer has duplicated IP address [192.168.200.1].
+Detail    : The [RouterIPAddress] of SoftwareLoadBalancer has duplicated IP address [x.x.x.x].
 Status    : FAILURE
 TimeStamp : 2025-06-01T12:34:56Z
 Resource  : SoftwareLoadBalancer

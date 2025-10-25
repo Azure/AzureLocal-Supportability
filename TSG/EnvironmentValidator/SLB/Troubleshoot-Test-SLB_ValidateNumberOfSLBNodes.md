@@ -32,18 +32,17 @@ Below is an example of a valid `SoftwareLoadBalancer` configuration object. You 
 ```json
 {
     "SoftwareLoadBalancer": {
-        "BackendNetworkMode": "VirtualNetwork",
-        "NumberOfMuxes": 2,
+        "NumberOfMuxes": <Specify the total number of MUX instances>,
         "BGPInfo": {
-            "LocalASN": 60001,
+            "LocalASN": <Enter the local Autonomous System Number (ASN) for the SLB>,
             "PeerRouterConfigurations": [
                 {
-                    "PeerASN": 60002,
-                    "RouterIPAddress": "100.10.20.110"
+                    "PeerASN": <Enter ASN for Peer 1>,
+                    "RouterIPAddress": "<Enter IP address for Peer 1 router>"
                 },
                 {
-                    "PeerASN": 60003,
-                    "RouterIPAddress": "100.10.20.111"
+                    "PeerASN": <Enter ASN for Peer 2>,
+                    "RouterIPAddress": "<Enter IP address for Peer 2 router>"
                 }
             ]
         }

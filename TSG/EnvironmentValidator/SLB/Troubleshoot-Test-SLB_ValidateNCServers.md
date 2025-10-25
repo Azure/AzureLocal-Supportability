@@ -50,16 +50,16 @@ The `Test-SLB_ValidateNCServers` function validates the health and configuration
     "Severity":  2,
     "Description":  "Test if all NC servers configuration and provisioning state are healthy.",
     "Remediation":  "NC server configuration and provisioning state are not healthy.",
-    "TargetResourceID":  "NC server: v-Host1, Host is not Connected.",
+    "TargetResourceID":  "NC server: <Node Name>, Host is not Connected.",
     "TargetResourceName":  "HostNotConnectedToController",
     "TargetResourceType":  "SoftwareLoadBalancerManager",
     "Timestamp":  "\/Date(1761019789100)\/",
     "AdditionalData":  {
-                            "Detail":  "\"NC server provisioning and configuration state are not healthy. Please investigate NC server id [v-Host1], provisioning state [Succeeded], configuration state [Warning] and resolve the issue [Host is not Connected.]\"",
+                            "Detail":  "\"NC server provisioning and configuration state are not healthy. Please investigate NC server id [<Node Name>], provisioning state [Succeeded], configuration state [Warning] and resolve the issue [Host is not Connected.]\"",
                             "Status":  "FAILURE",
                             "TimeStamp":  "10/21/2025 04:09:49",
                             "Resource":  "SoftwareLoadBalancerManager",
-                            "Source":  "192.168.200.93"
+                            "Source":  "<Node IP Address>"
                         },
     "HealthCheckSource":  "ScaleSLB\\Standard\\Medium\\NetworkSLB\\c2440959"
 }
@@ -77,11 +77,11 @@ The NC server's `provisioningState` is not `Succeeded` or its `configurationStat
 **Example Failure:**  
 
 ```text
-Detail    : NC server provisioning and configuration state are not healthy. Please investigate NC server id [v-Host1], provisioning state [Succeeded], configuration state [Warning] and resolve the issue [Host is not Connected.].
+Detail    : NC server provisioning and configuration state are not healthy. Please investigate NC server id [<Node Name>], provisioning state [Succeeded], configuration state [Warning] and resolve the issue [Host is not Connected.].
 Status    : FAILURE
 TimeStamp : 2025-06-01T12:34:56Z
 Resource  : SoftwareLoadBalancerManager
-Source    : <Host IP Address>
+Source    : <Node IP Address>
 ```
 
 **Remediation Steps:**
@@ -130,7 +130,7 @@ Below is a sample of a healthy `Servers` resource retrieved from the Network Con
 ```json
 [
     {
-        "resourceId": "node-01",
+        "resourceId": "Node-01",
         "properties": {
             "provisioningState": "Succeeded",
             "configurationState":  {
@@ -147,7 +147,7 @@ Below is a sample of a healthy `Servers` resource retrieved from the Network Con
         }
     },
     {
-        "resourceId": "node-02",
+        "resourceId": "Node-02",
         "properties": {
               "provisioningState": "Succeeded",
               "configurationState": {
@@ -155,7 +155,7 @@ Below is a sample of a healthy `Servers` resource retrieved from the Network Con
                   "detailedInfo": [
                       {
                           "source": "SoftwareLoadBalancerManager",
-                          "message": "Host is Connected and configuration is healthy.",
+                          "message": "Host is Connected.",
                           "code": "Success"
                       }
                   ]

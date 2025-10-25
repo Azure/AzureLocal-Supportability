@@ -54,7 +54,7 @@ The `Test-SLB_ValidateNCLoadBalancerManager` function validates the provisioning
                             "Status":  "FAILURE",
                             "TimeStamp":  "10/21/2025 04:09:35",
                             "Resource":  "Network Controller load balancer manager",
-                            "Source":  "192.168.200.93"
+                            "Source":  "<Node IP Address>"
                         },
     "HealthCheckSource":  "ScaleSLB\\Standard\\Medium\\NetworkSLB\\c2440959"
 }
@@ -78,10 +78,11 @@ Detail    : Load balancer manager provisioning state are not healthy. Please inv
 Status    : FAILURE
 TimeStamp : 2025-06-01T12:34:56Z
 Resource  : Network Controller load balancer manager
-Source    : <Host IP Address>
+Source    : <Node IP Address>
 ```
 
 **Remediation Steps:**  
+
 - Review the NC Load Balancer Manager resource in the Azure Local environment.
 - Check for errors in the NC logs and event viewer on the affected node.
 - To manually verify the Load Balancer Manager resource on the host, run the PowerShell script below. The output should match the example shown above.
@@ -129,11 +130,10 @@ Below is a sample of a healthy `loadBalancerManager` resource retrieved from the
     "resourceRef":  "/loadBalancerManager/config",
     "resourceId":  "config",
     "properties":  {
-                        "provisioningState":  "Succeeded",
-                        "loadBalancerManagerIPAddress":  "192.168.200.116",
-                        "outboundNatIPExemptions":  ["192.168.200.116/32"],
-                        "vipIpPools":  [ { "resourceRef":  "<Reference to IP pools>" } ],
-                        "loadBalancerMuxMode": "BgpPeering"
+                    "loadBalancerManagerIPAddress":  "<LB manager IP address>",
+                    "outboundNatIPExemptions":  ["<IP address>/32"],
+                    "vipIpPools":  [ { "resourceRef":  "<Reference to IP pools>" } ],
+                    "loadBalancerMuxMode": "BgpPeering"
     }
     // ... more
 }

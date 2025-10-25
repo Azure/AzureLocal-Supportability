@@ -20,35 +20,45 @@
 The `Test-SLB_ValidateBGPPeersReachable` function checks whether all Border Gateway Protocol (BGP) peers defined in your Software Load Balancer (SLB) configuration are reachable from each node in your Azure Local environment. It attempts a TCP connection to port 179 (BGP) for each peer router IP address from every node session provided. If a peer is unreachable, the function returns a critical failure result with details and remediation guidance. This validator helps ensure BGP connectivity for high availability and network reliability, allowing you to proactively detect and resolve reachability issues before they impact SLB operations.
 
 **Input:**  
-The function expects a `SoftwareLoadBalancer` configuration object (as shown below) and a set of PowerShell sessions to the nodes. The configuration must include `BackendNetworkMode`, `NumberOfMuxes`, and a `BGPInfo` section with `LocalASN` and an array of `PeerRouterConfigurations` (each specifying `PeerASN` and `RouterIPAddress`).
+The function expects a `SoftwareLoadBalancer` configuration object (as shown below) and a set of PowerShell sessions to the nodes. The configuration must include `NumberOfMuxes` and a `BGPInfo` section with `LocalASN` and an array of `PeerRouterConfigurations` (each specifying `PeerASN` and `RouterIPAddress`).
 
 ## Example Configuration
+
+This following describes the BGP (Border Gateway Protocol) configuration for a Software Load Balancer (SLB) in Azure Local environments. Here’s a breakdown of each part:
+
+```text
+- SoftwareLoadBalancer: The main object representing the SLB.
+    - NumberOfMuxes: Placeholder for the number of MUX (multiplexer) instances in your SLB deployment.
+    - BGPInfo: Contains BGP-specific settings.
+        - LocalASN: Placeholder for the Autonomous System Number (ASN) assigned to the SLB itself.
+        - PeerRouterConfigurations: An array listing each BGP peer router.
+            - PeerASN: The ASN of the peer router.
+            - RouterIPAddress: The IP address of the peer router.
+
+```
 
 Below is an example of a valid `SoftwareLoadBalancer` configuration object. To specify BGP peers, update the `PeerRouterConfigurations` array under the `BGPInfo` section with the appropriate `PeerASN` and `RouterIPAddress` values.
 
 ```json
 {
     "SoftwareLoadBalancer": {
-        "BackendNetworkMode": "VirtualNetwork",
-        "NumberOfMuxes": 2,
+        "NumberOfMuxes": <Specify the total number of MUX instances>,
         "BGPInfo": {
-            "LocalASN": 60001,
+            "LocalASN": <Enter the local ASN for the SLB>,
             "PeerRouterConfigurations": [
                 {
-                    "PeerASN": 60002,
-                    "RouterIPAddress": "192.168.100.2"
+                    "PeerASN": <Enter ASN for Peer 1>,
+                    "RouterIPAddress": "<Enter IP address for Peer 1 router>"
                 },
                 {
-                    "PeerASN": 60003,
-                    "RouterIPAddress": "192.168.100.3"
+                    "PeerASN": <Enter ASN for Peer 2>,
+                    "RouterIPAddress": "<Enter IP address for Peer 2 router>"
                 }
             ]
         }
     }
 }
 ```
-
-This configuration satisfies all necessary validation criteria for Software Load Balancer Multiplexer (SLB MUX) and Border Gateway Protocol (BGP) settings.
 
 ## Requirements
 
@@ -87,7 +97,7 @@ This configuration satisfies all necessary validation criteria for Software Load
                         "Status":  "FAILURE",
                         "TimeStamp":  "10/20/2025 23:51:40",
                         "Resource":  "BGPInfo",
-                        "Source":  "192.168.200.93"
+                        "Source":  "<Node IP Address>"
                         },
     "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\073ad76b"
 }
@@ -111,7 +121,7 @@ Detail    : BGP Peer <BGP Peer IP address> is not reachable. Please check the ne
 Status    : FAILURE
 TimeStamp : 2025-06-01T12:34:56Z
 Resource  : BGPInfo
-Source    : <Host IP Address>
+Source    : <Node IP Address>
 ```
 
 **Remediation Steps:**
