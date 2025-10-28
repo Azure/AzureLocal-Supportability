@@ -23,7 +23,7 @@ This validator is run per-node and checks that the Host Network Configuration is
 
 The validator enforces the following requirements on each node:
 
-1. Each Adapter defined in the intent must have a DNS Client Configuration.
+1. Each Adapter defined in the intent must have a DNS Client Configuration (excluding storage adapters).
 2. Hyper-V must be running on the host node.
 3. The Management VM Network Adapter must be connected to the Management VMSwitch.
 4. All adapters defined in any intent must be physical NICs and in the "Up" state.
@@ -202,3 +202,4 @@ ERROR: The following adapter(s) are not physical adapter or not Up in the system
    ```powershell
    Enable-NetAdapter -Name "ethernet" # <-- Replace with the adapter name from the error message
    ```
+
