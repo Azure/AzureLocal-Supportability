@@ -3,7 +3,7 @@
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
     <tr>
         <th style="text-align:left; width: 180px;">Name</th>
-        <td><strong>SLBValidator_ValidateHNVPANetwork</strong></td>
+        <td><strong>SLB_ValidateHNVPANetwork</strong></td>
     </tr>
     <tr>
         <th style="text-align:left; width: 180px;">Severity</th>
@@ -26,23 +26,6 @@ The `Test-SLB_ValidateHNVPANetwork` function validates the Hyper-V Network Virtu
 - The total number of available IP addresses across all pools is at least double the number of hosts plus the number of MUXes.
 
 If any property is missing, invalid, or duplicated, the function returns a failure result with details for remediation. Use this validator to proactively detect and resolve HNVPA network configuration issues before they impact SLB deployment or operation.
-
-**Input:**  
-The function expects two inputs:
-
-1. **NetworksConfiguration**  
-    A configuration object containing the network definitions for HNVPA, PublicVIP, and PrivateVIP. This object must follow the structure shown in the example configuration below, with all required properties for each subnet (`AddressPrefix`, `VlanId`, `DefaultGateways`, and `IPPools`).
-
-2. **PowerShell Sessions**  
-    An array of active PowerShell session objects (`PSSession`) to each target host in the environment. These sessions are used to query host state and validate network configuration remotely.
-
-**Example Usage:**
-
-```powershell
-$networksConfig = Get-Content -Path "C:\path\to\networks.json" | ConvertFrom-Json
-$sessions = New-PSSession -ComputerName $HostList
-Test-SLB_ValidateHNVPANetwork -NetworksConfiguration $networksConfig -Sessions $sessions
-```
 
 ---
 
@@ -74,7 +57,7 @@ This example shows a portion of a Networks configuration that includes the `HNVP
                 "Subnets": [
                     {
                         "AddressPrefix":  "<Address Prefix>",
-                        "VlanId": <VlanId>,
+                        "VlanId": <VLAN ID>,
                         "DefaultGateways": [
                            "<Default Gateways>"
                         ],
@@ -169,7 +152,7 @@ The validator did not find the `HNVPA` property in the supplied configuration.
 ```text
 Detail    : No HNVPA network found in configuration. Please ensure HNVPA network is defined.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -209,7 +192,7 @@ The `Subnets` property is missing or empty in the HNVPA configuration.
 ```text
 Detail    : [HNVPA] network does not have a valid [Subnets] defined. Please ensure a valid [Subnets] is configured for the [HNVPA] network.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -229,7 +212,7 @@ A subnet in the HNVPA network is missing the required `AddressPrefix` property.
 ```text
 Detail    : [HNVPA] network does not have a valid [AddressPrefix] defined. Please ensure a valid [AddressPrefix] is configured for the [HNVPA] network.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -249,7 +232,7 @@ The subnet does not specify a valid IPv4 CIDR for `AddressPrefix`.
 ```text
 Detail    : The property [AddressPrefix] on the [HNVPA] network has an invalid format. Please verify the value matches the required format and try again.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -269,7 +252,7 @@ The subnet does not specify a VLAN ID, or the value is outside the supported ran
 ```text
 Detail    : [HNVPA] network does not have a valid [VlanId] defined. Please ensure a valid [VlanId] is configured for the [HNVPA] network.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -289,7 +272,7 @@ The subnet does not define any IP pools, or the pool definitions are invalid.
 ```text
 Detail    : [HNVPA] network does not have a valid [IPPools] defined. Please ensure a valid [IPPools] is configured for the [HNVPA] network.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -309,7 +292,7 @@ No default gateways are defined for the subnet. The `DefaultGateways` property i
 ```text
 Detail    : [HNVPA] network does not have a valid [DefaultGateways] defined. Please ensure a valid [DefaultGateways] is configured for the [HNVPA] network.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -329,7 +312,7 @@ The `DefaultGateways` property contains values that are not valid IPv4 addresses
 ```text
 Detail    : The property [DefaultGateways] on the [HNVPA] network has an invalid format. Please verify the value matches the required format and try again.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -349,7 +332,7 @@ One or more default gateways are not part of the subnet's address range.
 ```text
 Detail    : The property [DefaultGateways] [x.x.x.x] is not in the subnet [y.y.y.y/24].
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -369,7 +352,7 @@ The `StartIPAddress` or `EndIPAddress` of an IP pool is not in the subnet's addr
 ```text
 Detail    : The property [EndIPAddress] [x.x.x.x] is not in the subnet [y.y.y.y/24]
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -389,7 +372,7 @@ The `StartIPAddress` in an IP pool is greater than or equal to the `EndIPAddress
 ```text
 Detail    : The property [IPPools] on the [HNVPA] network has an invalid format. Start IP address [x.x.x.x]  is bigger than End IP address [y.y.y.y].
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -409,7 +392,7 @@ One or more default gateways are part of an IP pool, which is not allowed.
 ```text
 Detail    : DefaultGateway x.x.x.x is included in IP pool [x.x.x.x, y.y.y.y].
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -429,7 +412,7 @@ Two or more subnets have overlapping `AddressPrefix` ranges.
 ```text
 [AddressPrefix] [x.x.x.x/24] has overlapping with [AddressPrefix] [y.y.y.y/25]. Please ensure address prefix do not overlap.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -449,7 +432,7 @@ The sum of all available IPs in the HNVPA IP pools is less than double the numbe
 ```text
 Detail    : HNVPA network has [5] available IPs but requires minimum [6] IP addresses (2 * 2 hosts + 2 muxes)
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : HNVPA
 Source    : Networks
 ```
@@ -458,3 +441,23 @@ Source    : Networks
 Increase the size or number of IP pools so the total available IPs meet or exceed the required count.
 
 ---
+
+
+<!--
+**Input:**  
+The function expects two inputs:
+
+1. **NetworksConfiguration**  
+    A configuration object containing the network definitions for HNVPA, PublicVIP, and PrivateVIP. This object must follow the structure shown in the example configuration below, with all required properties for each subnet (`AddressPrefix`, `VlanId`, `DefaultGateways`, and `IPPools`).
+
+2. **PowerShell Sessions**  
+    An array of active PowerShell session objects (`PSSession`) to each target host in the environment. These sessions are used to query host state and validate network configuration remotely.
+
+**Example Usage:**
+
+```powershell
+$networksConfig = Get-Content -Path "C:\path\to\networks.json" | ConvertFrom-Json
+$sessions = New-PSSession -ComputerName $HostList
+Test-SLB_ValidateHNVPANetwork -NetworksConfiguration $networksConfig -Sessions $sessions
+```
+--!>

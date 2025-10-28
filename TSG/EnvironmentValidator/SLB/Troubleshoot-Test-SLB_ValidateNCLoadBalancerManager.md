@@ -3,7 +3,7 @@
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
     <tr>
         <th style="text-align:left; width: 180px;">Name</th>
-        <td><strong>SLBValidator_ValidateNCLoadBalancerManager</strong></td>
+        <td><strong>SLB_ValidateNCLoadBalancerManager</strong></td>
     </tr>
     <tr>
         <th style="text-align:left; width: 180px;">Severity</th>
@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Pre-Update, Post-Update, Add Node, Scale-In, Scale-Out</strong></td>
+        <td><strong>Pre-Update, Post-Update, Add Node, SLBS scale-In, SLB scale-Out</strong></td>
     </tr>
 </table>
 
@@ -50,7 +50,7 @@ The `Test-SLB_ValidateNCLoadBalancerManager` function validates the provisioning
     "TargetResourceType":  "Network Controller load balancer manager",
     "Timestamp":  "\/Date(1761019775518)\/",
     "AdditionalData":  {
-                            "Detail":  "Load balancer manager provisioning state are not healthy. Please investigate provisioning state [Failed] and resolve the issue.",
+                            "Detail":  "Network Controller (NC) load balancer manager provisioning state are not healthy. Please investigate provisioning state [Failed] and resolve the issue.",
                             "Status":  "FAILURE",
                             "TimeStamp":  "10/21/2025 04:09:35",
                             "Resource":  "Network Controller load balancer manager",
@@ -74,9 +74,9 @@ The provisioning state of the NC Load Balancer Manager is not `"Succeeded"`. Thi
 **Example Failure:**  
 
 ```text
-Detail    : Load balancer manager provisioning state are not healthy. Please investigate provisioning state [Failed] and resolve the issue.
+Detail    : Network Controller (NC) load balancer manager provisioning state are not healthy. Please investigate provisioning state [Failed] and resolve the issue.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : Network Controller load balancer manager
 Source    : <Node IP Address>
 ```
@@ -118,6 +118,8 @@ if ($slbmService.State -eq 'Offline') {
     Start-ClusterResource -Name SlbManagerService
 }
 ```
+
+- If the issue persists, you can collect an SDN trace for further analysis. [Learn how to collect an SDN trace](https://github.com/Azure/AzureLocal-Supportability/blob/main/TSG/Networking/Diagnostics/HowTo-Diagnostic-SendNetworkingLogs.md)
 
 ---
 

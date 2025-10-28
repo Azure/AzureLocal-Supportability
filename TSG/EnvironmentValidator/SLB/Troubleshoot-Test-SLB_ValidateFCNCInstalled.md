@@ -1,4 +1,4 @@
-# AzStackHci_NetworkSLB_Test_SLBValidator_ValidateFCNCInstalled
+# AzStackHci_NetworkSLB_Test_SLB_ValidateFCNCInstalled
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
     <tr>
@@ -74,7 +74,7 @@ The Failover Clustering Network Controller (FCNC) is considered not installed wh
 ```text
 Detail    : Failover Cluster Network Controller (FCNC) is not installed or not operational on host [<Node IP Address>]. Please verify the installation and configuration.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : FCNC installation
 Source    : <Node IP Address>
 ```

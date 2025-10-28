@@ -7,6 +7,7 @@ For Azure Local Software Load Balancer (SLB) resources not related to Environmen
 - [Troubleshoot: Border Gateway Protocol (BGP) Peers Connectivity Check](Troubleshoot-Test-SLB_ValidateBGPPeersReachable.md)
 - [Troubleshoot: Failover Cluster Network Controller (FCNC) Installation](Troubleshoot-Test-SLB_ValidateFCNCInstalled.md)
 - [Troubleshoot: Hyper-V Network Virtualization Provider Address (HNVPA) Configuration](Troubleshoot-Test-SLB_ValidateHNVPANetwork.md)
+- [Troubleshoot: Hyper-V Network Virtualization Provider Address (HNVPA) IP Pools](Troubleshoot-Test-SLB_ValidateNCHNVPAIPPools.md)
 - [Troubleshoot: Network Controller (NC) Load Balancer Manager](Troubleshoot-Test-SLB_ValidateNCLoadBalancerManager.md)
 - [Troubleshoot: Network Controller (NC) Load Balancer Multiplexer (MUX)](Troubleshoot-Test-SLB_ValidateNCLoadBalancerMux.md)
 - [Troubleshoot: Network Controller (NC) Servers](Troubleshoot-Test-SLB_ValidateNCServers.md)

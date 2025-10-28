@@ -3,7 +3,7 @@
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
     <tr>
         <th style="text-align:left; width: 180px;">Name</th>
-        <td><strong>SLBValidator_ValidateSoftwareLoadBalancer</strong></td>
+        <td><strong>SLB_ValidateSoftwareLoadBalancer</strong></td>
     </tr>
     <tr>
         <th style="text-align:left; width: 180px;">Severity</th>
@@ -129,7 +129,7 @@ The `NumberOfMuxes` property is missing, empty, less than 1, or greater than 3.
 ```text
 Detail    : SoftwareLoadBalancer does not have a valid [NumberOfMuxes = 0] defined. Please ensure a valid [NumberOfMuxes] is configured for the SoftwareLoadBalancer.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancer
 Source    : SDNIntegration
 ```
@@ -151,7 +151,7 @@ The `BGPInfo` property is missing or empty.
 ```text
 Detail    : SoftwareLoadBalancer does not have a valid [BGPInfo = <NULL>] defined. Please ensure a valid [BGPInfo] is configured for the SoftwareLoadBalancer.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancer
 Source    : SDNIntegration
 ```
@@ -171,7 +171,7 @@ The `LocalASN` property in `BGPInfo` is missing, empty, or not within the valid 
 ```text
 Detail    : SoftwareLoadBalancer does not have a valid [LocalASN = -1] defined. Please ensure a valid [LocalASN] is configured for the SoftwareLoadBalancer.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancer
 Source    : SDNIntegration
 ```
@@ -193,7 +193,7 @@ The `PeerRouterConfigurations` array in `BGPInfo` is missing or contains no entr
 ```text
 Detail    : SoftwareLoadBalancer does not have a valid [PeerRouterConfigurations = <NULL>] defined. Please ensure a valid [PeerRouterConfigurations] is configured for the SoftwareLoadBalancer.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancer
 Source    : SDNIntegration
 ```
@@ -215,7 +215,7 @@ A `PeerASN` value in `PeerRouterConfigurations` is missing, empty, or not within
 ```text
 Detail    : SoftwareLoadBalancer does not have a valid [PeerASN = -1] defined. Please ensure a valid [PeerASN] is configured for the SoftwareLoadBalancer.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancer
 Source    : SDNIntegration
 ```
@@ -237,7 +237,7 @@ A `RouterIPAddress` value in `PeerRouterConfigurations` is missing, empty, or no
 ```text
 Detail    : SoftwareLoadBalancer does not have a valid [RouterIPAddress = <NULL>] defined. Please ensure a valid [RouterIPAddress] is configured for the SoftwareLoadBalancer.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancer
 Source    : SDNIntegration
 ```
@@ -259,7 +259,7 @@ Multiple entries in `PeerRouterConfigurations` have the same `RouterIPAddress`.
 ```text
 Detail    : The [RouterIPAddress] of SoftwareLoadBalancer has duplicated IP address [x.x.x.x].
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancer
 Source    : SDNIntegration
 ```

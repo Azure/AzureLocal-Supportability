@@ -3,7 +3,7 @@
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
     <tr>
         <th style="text-align:left; width: 180px;">Name</th>
-        <td><strong>SLBValidator_ValidateNCLoadBalancerMux</strong></td>
+        <td><strong>SLB_ValidateNCLoadBalancerMux</strong></td>
     </tr>
     <tr>
         <th style="text-align:left; width: 180px;">Severity</th>
@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Pre-Update, Post-Update, Add Node, Scale-In, Scale-Out</strong></td>
+        <td><strong>Pre-Update, Post-Update, Add Node, SLBS scale-In, SLB scale-Out</strong></td>
     </tr>
 </table>
 
@@ -26,7 +26,7 @@ The `Test-SLB_ValidateNCLoadBalancerMux` function checks the configuration and p
 - Azure Local environment is deployed and accessible.
 - The `AzStackHci` PowerShell module is installed and imported.
 - You have permissions to query and modify Software Load Balancer (SLB) nodes and Multiplexer (MUX) instances.
-- The `SLBValidator_ValidateNCLoadBalancerMux` function is available in your environment.
+- The `SLB_ValidateNCLoadBalancerMux` function is available in your environment.
 - All target hosts are online and reachable from the management system.
 - You have administrative privileges on both the management system and all target hosts.
 
@@ -35,7 +35,7 @@ The `Test-SLB_ValidateNCLoadBalancerMux` function checks the configuration and p
 ### Review Environment Validator Output
 
 - Run the validator and review the result object.
-- Look for failures related to `SLBValidator_ValidateNCLoadBalancerMux` in the validator output. Pay particular attention to the `AdditionalData` section, especially the `Detail` field, which provides specific information about the state of each Load Balancer Mux. This field will highlight which MUX instances are unhealthy and describe the exact issue detected, helping you target your troubleshooting efforts.
+- Look for failures related to `SLB_ValidateNCLoadBalancerMux` in the validator output. Pay particular attention to the `AdditionalData` section, especially the `Detail` field, which provides specific information about the state of each Load Balancer Mux. This field will highlight which MUX instances are unhealthy and describe the exact issue detected, helping you target your troubleshooting efforts.
 - Example output: The following is a sample of the expected output when you run this command. Use it to verify that your results match the documented behavior.
 
 ```json
@@ -53,7 +53,7 @@ The `Test-SLB_ValidateNCLoadBalancerMux` function checks the configuration and p
     "TargetResourceType":  "SoftwareLoadBalancerManager",
     "Timestamp":  "\/Date(1761019761682)\/",
     "AdditionalData":  {
-                            "Detail":  "Load balancer Mux state is not healthy. Please investigate Loadbalancer Mux ID [<SLB Name>], provisioning state [Succeeded], configuration state [Failure] and resolve the issue [Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.].",
+                            "Detail":  "Network Controller (NC) load balancer MUX state is not healthy. Please investigate Loadbalancer Mux ID [<SLB Name>], provisioning state [Succeeded], configuration state [Failure] and resolve the issue [Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.].",
                             "Status":  "FAILURE",
                             "TimeStamp":  "10/21/2025 04:09:21",
                             "Resource":  "SoftwareLoadBalancerManager",
@@ -65,7 +65,7 @@ The `Test-SLB_ValidateNCLoadBalancerMux` function checks the configuration and p
 
 ### Failure Results
 
-Below are possible failure return results from `SLBValidator_ValidateNCLoadBalancerMux`. For each result, example detail messages from the `AdditionalData` field are provided, along with recommended remediation steps to resolve the issue.
+Below are possible failure return results from `SLB_ValidateNCLoadBalancerMux`. For each result, example detail messages from the `AdditionalData` field are provided, along with recommended remediation steps to resolve the issue.
 
 #### Failure: SLB MUX Provisioning or Configuration State Not Healthy
 
@@ -75,9 +75,9 @@ The validator has identified that one or more SLB Multiplexer (MUX) instances ma
 **Example Failure:**  
 
 ```text
-Detail    : Load balancer Mux state is not healthy. Please investigate Loadbalancer Mux ID [<SLB Name>], provisioning state [Succeeded], configuration state [Failure] and resolve the issue [Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.].
+Detail    : Network Controller (NC) load balancer MUX state is not healthy. Please investigate load balancer MUX ID [<SLB Name>], provisioning state [Succeeded], configuration state [Failure] and resolve the issue [Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.].
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancerManager
 Source    : <Node IP Address>
 ```
@@ -122,6 +122,8 @@ if ($slbmService.State -eq 'Offline') {
     Start-ClusterResource -Name SlbManagerService
 }
 ```
+
+- If the issue persists, you can collect an SDN trace for further analysis. [Learn how to collect an SDN trace](https://github.com/Azure/AzureLocal-Supportability/blob/main/TSG/Networking/Diagnostics/HowTo-Diagnostic-SendNetworkingLogs.md)
 
 ---
 

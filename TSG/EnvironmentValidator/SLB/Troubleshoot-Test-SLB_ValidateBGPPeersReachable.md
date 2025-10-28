@@ -3,7 +3,7 @@
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
     <tr>
         <th style="text-align:left; width: 180px;">Name</th>
-        <td><strong>SLBValidator_ValidateBGPPeersReachable</strong></td>
+        <td><strong>SLB_ValidateBGPPeersReachable</strong></td>
     </tr>
     <tr>
         <th style="text-align:left; width: 180px;">Severity</th>
@@ -88,12 +88,12 @@ Below is an example of a valid `SoftwareLoadBalancer` configuration object. To s
     "Severity":  2,
     "Description":  "Test if BGP Peers are reachable",
     "Remediation":  "Ensure BGP Peer  is reachable.",
-    "TargetResourceID":  "Property name: RouterIPAddress, value: ",
+    "TargetResourceID":  "Property name: RouterIPAddress, value: x.x.x.x",
     "TargetResourceName":  "PeerRouterConfigurations",
     "TargetResourceType":  "BGPInfo",
     "Timestamp":  "\/Date(1761004300036)\/",
     "AdditionalData":  {
-                        "Detail":  "\"BGP Peer [] is not reachable. Please check the network connectivity.\"",
+                        "Detail":  "\"BGP Peer [x.x.x.x] is not reachable. Please check the network connectivity.\"",
                         "Status":  "FAILURE",
                         "TimeStamp":  "10/20/2025 23:51:40",
                         "Resource":  "BGPInfo",
@@ -119,7 +119,7 @@ The validator could not establish a TCP connection to port 179 (BGP) on one or m
 ```text
 Detail    : BGP Peer <BGP Peer IP address> is not reachable. Please check the network connectivity.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : BGPInfo
 Source    : <Node IP Address>
 ```

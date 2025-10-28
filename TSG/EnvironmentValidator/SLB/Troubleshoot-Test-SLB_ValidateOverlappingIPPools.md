@@ -3,7 +3,7 @@
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
     <tr>
         <th style="text-align:left; width: 180px;">Name</th>
-        <td><strong>SLBValidator_ValidateOverlappingIPPools</strong></td>
+        <td><strong>SLB_ValidateOverlappingIPPools</strong></td>
     </tr>
     <tr>
         <th style="text-align:left; width: 180px;">Severity</th>
@@ -177,7 +177,7 @@ The validator detected overlapping IP pool address ranges; this can lead to IP a
 ```text
 Detail    : IPPools [x.x.x.x-y.y.y.y] has overlapping with IPPools [x.x.x.x-z.z.z.z]. Please ensure IP pools do not overlap.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancerManager
 Source    : SDNIntegration
 ```

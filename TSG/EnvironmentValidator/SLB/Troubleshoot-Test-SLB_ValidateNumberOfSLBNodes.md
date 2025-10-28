@@ -3,7 +3,7 @@
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
     <tr>
         <th style="text-align:left; width: 180px;">Name</th>
-        <td><strong>SLBValidator_ValidateNumberOfSLBNodes</strong></td>
+        <td><strong>SLB_ValidateNumberOfSLBNodes</strong></td>
     </tr>
     <tr>
         <th style="text-align:left; width: 180px;">Severity</th>
@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Deployment, Add Node, Scale-In, Scale-Out</strong></td>
+        <td><strong>Deployment, SLB scale-In, SLB scale-Out</strong></td>
     </tr>
 </table>
 
@@ -116,7 +116,7 @@ No hosts are detected in the environment, preventing the validator from performi
 ```text
 Detail    : No hosts found in the deployment. Please ensure the hosts are properly configured.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancerManager
 Source    : SDNIntegration
 ```
@@ -140,7 +140,7 @@ A single host is configured with more than one MUX instance, which is unsupporte
 ```text
 Detail    : Single host with multiple Multiplexer (MUX) configurations is not supported. Please adjust the configuration.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancerManager
 Source    : SDNIntegration
 ```
@@ -162,7 +162,7 @@ The number of MUX instances exceeds the supported maximum (typically 3), which c
 ```text
 Detail    : The maximum number of Multiplexer (MUX) instances [3] has been exceeded. Please reduce the number of MUX instances.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancerManager
 Source    : SDNIntegration
 ```
@@ -186,7 +186,7 @@ More MUX instances are configured than there are available hosts, which is not s
 ```text
 Detail    : The number of Multiplexer (MUX) instances [3] exceeds the number of available hosts [2]. Please adjust the configuration.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancerManager
 Source    : SDNIntegration
 ```
@@ -209,7 +209,7 @@ In a multiple node environments, fewer than the recommended minimum number of MU
 ```text
 Detail    : The minimum number of Multiplexer (MUX) instances [2] required for the multiple node deployment is not met. This is not recommended and please increase the number of MUX instances.
 Status    : FAILURE
-TimeStamp : 2025-06-01T12:34:56Z
+TimeStamp : <timestamp>
 Resource  : SoftwareLoadBalancerManager
 Source    : SDNIntegration
 ```

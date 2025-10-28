@@ -3,7 +3,7 @@
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
     <tr>
         <th style="text-align:left; width: 180px;">Name</th>
-        <td><strong>SLBValidator_ValidatePublicPrivateVIPNetworks</strong></td>
+        <td><strong>SLB_ValidatePublicPrivateVIPNetworks</strong></td>
     </tr>
     <tr>
         <th style="text-align:left; width: 180px;">Severity</th>

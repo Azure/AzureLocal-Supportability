@@ -63,7 +63,7 @@ Here is an example:
 
 ```json
 {
-    "Name":  "AzStackHci_NetworkSLB_Test_SLBValidator_SLBNodesValid",
+    "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidateNumberOfSLBNodes,
     "DisplayName":  "The number of Software Load Balancer (SLB) Multiplexer (MUX) is appropriate for the number of available hosts in an Azure Local deployment.",
     "Tags":  {},
     "Title":  "The number of Software Load Balancer (SLB) Multiplexer (MUX) is appropriate for the number of available hosts in an Azure Local deployment.",
