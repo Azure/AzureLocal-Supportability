@@ -86,6 +86,10 @@ The steps below are expected to be executed directly on the Hyper-V host that yo
     ```powershell
     Set-SdnResource -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.ResourceRef -OperationType Delete
     ```
+1. Ensure that the resource has been deleted. The command should return a 404 not found.
+   ```powershell
+   Get-SdnResource -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.ResourceRef
+   ```
 
 ## Configure server settings 
 Depending on what operation triggered the re-creation of the VM Switch, we need to evaluate what the state of the server settings are. In order to check this, we want to see if `NetworkVirtualization` role is present, and if the `Azure VFP Extension` is enabled on the VMSwitch.
@@ -148,7 +152,7 @@ Now that we have re-created the switch, we can create a new server resource.
     ```powershell
     $newResourceId = $switch.Id.Guid;
     $nodeToRepair.resourceId = $newResourceId;
-    $nodeToRepair.resourceRef = '/servers/$newResourceId';
+    $nodeToRepair.resourceRef = "/servers/$newResourceId";
     $nodeToRepair.instanceId = (New-Guid).Guid # this will change once we put to NC which is expected;
 
     Set-SdnResource -NcUri $Global:SdnDiagnostics.EnvironmentInfo.NcUrl -ResourceRef $nodeToRepair.resourceRef -OperationType Add -Object $nodeToRepair
