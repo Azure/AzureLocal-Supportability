@@ -1,9 +1,16 @@
-TSG: Registry path 'SYSTEM\CurrentControlSet\Services\VSR' not found during AfterOSPlatformUpdate
+# TSG | 23H2 | 11.2510.1002.87 update fails at 'SYSTEM\CurrentControlSet\Services\VSR' not found during AfterOSPlatformUpdate
 
-**Issue:**
+# Symptoms
+Customers would encounter an update failure with an error similar to:
+
+```
 Type 'AfterOSPlatformUpdate' of Role 'ComposedImageUpdate' raised an exception: Exception calling 'OnAfterOSSolutionUpdate' with '1' argument(s): 'Registry path 'SYSTEM\\CurrentControlSet\\Services\\VSR' not found.' at AfterOSPlatformUpdate.
+```
+  
+# Issue Validation
+To confirm the scenario that you are encountering is the issue documented in this article, confirm that you are seeing the error message above in the update portal.
 
-**Mitigation:**
+# Mitigation Details
 Please run these commands in PowerShell on all the nodes of your cluster and then retry update:
 
 ```powershell
