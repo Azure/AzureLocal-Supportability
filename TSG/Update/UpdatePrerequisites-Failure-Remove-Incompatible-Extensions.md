@@ -20,7 +20,7 @@ Below is the list of AzCli extensions which are expected to be installed for 10.
 | customlocation | 0.1.3 |
 | stack-hci-vm | 1.4.2 |
 
-If the customer has any extensions installed that are not in the above list, it could be causing the failures described in this TSG.
+If are any extensions installed that are not in the above list, it could be causing the failures described in this TSG.
 
 Run the following command on all nodes to verify the Azure CLI extensions installed on each node:
 
@@ -31,5 +31,5 @@ Example for az version output (we are only focusing on the "extensions" section)
 
 # Mitigation Details
 
-If the customer has any extensions installed that are not in the list, run below command on all nodes to remove the unexpected extension:
+If there are any extensions installed that are not in the list, run below command on all nodes to remove the unexpected extension:
 `az extension remove --name "<extension name>"`
