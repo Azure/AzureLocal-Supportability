@@ -20,7 +20,7 @@ Below is the list of AzCli extensions which are expected to be installed for 10.
 | customlocation | 0.1.3 |
 | stack-hci-vm | 1.4.2 |
 
-If are any extensions installed that are not in the above list, it could be causing the failures described in this TSG.
+If there are any extensions installed that are not in the above list, it could be causing the failures described in this TSG.
 
 Run the following command on all nodes to verify the Azure CLI extensions installed on each node:
 
