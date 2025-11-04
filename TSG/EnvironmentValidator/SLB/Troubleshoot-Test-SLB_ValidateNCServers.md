@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Pre-Update, Post-Update, Add Node, SLBS scale-In, SLB scale-Out</strong></td>
+        <td><strong>Pre-Update, Post-Update, Add Node, SLB Scale-in, SLB Scale-out</strong></td>
     </tr>
 </table>
 
@@ -49,7 +49,7 @@ The `Test-SLB_ValidateNCServers` function validates the health and configuration
     "Status":  1,
     "Severity":  2,
     "Description":  "Test if all NC servers configuration and provisioning state are healthy.",
-    "Remediation":  "NC server configuration and provisioning state are not healthy.",
+    "Remediation": "<Remediation URL>",
     "TargetResourceID":  "NC server: <Node Name>, Host is not Connected.",
     "TargetResourceName":  "HostNotConnectedToController",
     "TargetResourceType":  "SoftwareLoadBalancerManager",
@@ -180,111 +180,3 @@ To consider an NC server healthy, ensure the following conditions are met:
 If both criteria are satisfied in your output, the NC server meets the health requirements and no further remediation is needed.
 
 ---
-
-<!--
-#### Failure: Configuration State Not Success
-**Description:** The NC server's `configurationState.status` is not `Success`. This means the server is not configured properly and may impact SLB functionality.
-**Example Failure:**  
-```json
-"configurationState": {
-    "status": "Error",
-    "detailedInfo": [
-        {
-            "source": "SoftwareLoadBalancerManager",
-            "message": "Host is Disconnected.",
-            "code": "Error"
-        }
-    ]
-}
-```
-**Remediation Steps:**  
-- Review the detailedInfo message for specific errors.
-- Verify the NC server's configuration and connectivity.
-- Restart the NC server and re-apply configuration.
-
----
-
-#### Warning: Configuration State Warning
-**Description:** The NC server's `configurationState.status` is `Warning`. This may indicate a non-critical issue that could become a failure if not addressed.
-**Example Failure:**  
-```json
-"configurationState": {
-    "status": "Warning",
-    "detailedInfo": [
-        {
-            "source": "SoftwareLoadBalancerManager",
-            "message": "Host is reachable but configuration is incomplete.",
-            "code": "Warning"
-        }
-    ]
-}
-```
-**Remediation Steps:**  
-- Investigate the warning message in `detailedInfo`.
-- Complete any pending configuration steps.
-- Monitor the server for further issues.
-
----
-
-#### Failure: No NC Servers Found
-**Description:** The validator could not retrieve any NC servers. This usually means a connectivity or configuration issue.
-**Example Failure:**  
-```
-No NC servers found
-```
-**Remediation Steps:**  
-- Ensure NC servers are deployed and accessible.
-- Check network connectivity and firewall settings.
-- Validate NC server registration in the environment.
-
----
-
-#### Failure: Unable to Set NC Connection
-**Description:** The validator failed to establish a connection to the NC REST API, possibly due to certificate or DNS issues.
-**Example Failure:**  
-```
-Unable to set connection to NC
-```
-**Remediation Steps:**  
-- Verify the NC REST API FQDN and certificate.
-- Ensure the client has access to the required certificate.
-- Check DNS resolution and network connectivity.
-
----
-
-#### Failure: DetailedInfo Code Indicates Error
-**Description:** The `detailedInfo.code` in the configuration state is `Error`, indicating a specific issue reported by the NC server.
-**Example Failure:**  
-```json
-"detailedInfo": [
-    {
-        "source": "SoftwareLoadBalancerManager",
-        "message": "Host is unreachable.",
-        "code": "Error"
-    }
-]
-```
-**Remediation Steps:**  
-- Review the error message for actionable details.
-- Check host connectivity and status.
-- Resolve any reported issues and re-run the validator.
-
----
-
-#### Warning: DetailedInfo Code Indicates Warning
-**Description:** The `detailedInfo.code` is `Warning`, which may indicate a potential issue that should be monitored.
-**Example Failure:**  
-```json
-"detailedInfo": [
-    {
-        "source": "SoftwareLoadBalancerManager",
-        "message": "Host is running with degraded performance.",
-        "code": "Warning"
-    }
-]
-```
-**Remediation Steps:**  
-- Investigate the warning for root cause.
-- Monitor server health and performance.
-- Address any underlying issues to prevent escalation.
--->

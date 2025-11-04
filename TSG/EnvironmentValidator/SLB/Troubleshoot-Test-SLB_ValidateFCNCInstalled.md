@@ -1,4 +1,4 @@
-# AzStackHci_NetworkSLB_Test_SLB_ValidateFCNCInstalled
+# Troubleshoot_Test-SLB_ValidateFCNCInstalled
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
     <tr>
@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Deployment</strong></td>
+        <td><strong>SLB Deployment</strong></td>
     </tr>
 </table>
 
@@ -44,7 +44,7 @@ This validator checks whether the Failover Cluster Network Controller (FCNC) is 
     "Status":  1,
     "Severity":  2,
     "Description":  "Verifies that the FCNC is properly installed and configured on each node in the cluster",
-    "Remediation":  "FCNC (Failover Cluster Network Controller) must be installed prior to deploying SLB",
+    "Remediation": "<Remediation URL>",
     "TargetResourceID":  "Node: <Node IP Address>, service: NC API service",
     "TargetResourceName":  "FCNC API Service",
     "TargetResourceType":  "FCNC installation",
@@ -56,7 +56,7 @@ This validator checks whether the Failover Cluster Network Controller (FCNC) is 
                             "Resource":  "FCNC installation",
                             "Source":  "<Node IP Address>"
                         },
-    "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\22e52eb5"
+    "HealthCheckSource":  "DeploySLB\\Standard\\Medium\\NetworkSLB\\22e52eb5"
 }
 ```
 

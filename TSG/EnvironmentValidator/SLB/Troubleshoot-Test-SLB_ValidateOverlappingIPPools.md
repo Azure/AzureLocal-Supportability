@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Deployment</strong></td>
+        <td><strong>SLB Deployment</strong></td>
     </tr>
 </table>
 
@@ -63,7 +63,7 @@ This example demonstrates a valid Networks configuration for `HNVPA`, `PublicVIP
                 "Subnets": [
                     {
                         "AddressPrefix":  "<Address Prefix>",
-                        "VlanId": <VlanId>,
+                        "VlanId": <VLAN ID>,
                         "DefaultGateways": [
                            "<Default Gateways>"
                         ],
@@ -87,7 +87,7 @@ This example demonstrates a valid Networks configuration for `HNVPA`, `PublicVIP
                 "Subnets": [
                     {
                         "AddressPrefix":  "<Address Prefix>",
-                        "VlanId": <VlanId>,
+                        "VlanId": <VLAN ID>,
                         "IPPools": [
                             {
                                 "StartIPAddress":  "<Start IP Address>",
@@ -102,14 +102,16 @@ This example demonstrates a valid Networks configuration for `HNVPA`, `PublicVIP
             {
                 "Name": "PrivateVIPNetwork1",
                 "Subnets": [
-                    "AddressPrefix": "<AddressPrefix>",
-                    "VlanId": <VlanId>,
-                    "IPPools": [
-                        {
-                            "StartIPAddress": "<Start IP Address>",
-                            "EndIPAddress": "<EndIPAddress>"
-                        }
-                    ]
+                    {
+                        "AddressPrefix": "<AddressPrefix>",
+                        "VlanId": <VLAN ID>,
+                        "IPPools": [
+                            {
+                                "StartIPAddress": "<Start IP Address>",
+                                "EndIPAddress": "<EndIPAddress>"
+                            }
+                        ]
+                    }
                 ]
             }
         ]
@@ -146,7 +148,7 @@ This example demonstrates a valid Networks configuration for `HNVPA`, `PublicVIP
     "Status":  1,
     "Severity":  2,
     "Description":  "Test if all IP pools are not overlapping each other",
-    "Remediation":  "Ensure that all IP pools are properly configured and do not overlap.",
+    "Remediation": "<Remediation URL>",
     "TargetResourceID":  "Property name: IPPools, value: [x.x.x.x, y.y.y.y] overlaps with [x.x.x.x, z.z.z.z]",
     "TargetResourceName":  "IPPools",
     "TargetResourceType":  "IPPools",
@@ -158,7 +160,7 @@ This example demonstrates a valid Networks configuration for `HNVPA`, `PublicVIP
                             "Resource":  "IPPools",
                             "Source":  "Networks"
                         },
-    "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\22e52eb5"
+    "HealthCheckSource":  "DeploySLB\\Standard\\Medium\\NetworkSLB\\22e52eb5"
 }
 ```
 
@@ -207,32 +209,3 @@ Source    : SDNIntegration
     - If failures persist, review the reported TargetResourceID/AdditionalData.Detail to locate remaining conflicts and repeat remediation.
 
 ---
-
-<!--
-
-### Failure: Null or Missing IP Pool Properties  
-Description: The validator could not find valid IP pool properties in the configuration, or the IP pool object is missing required fields.  
-Example Failure:  
-```
-Test-SLB_ValidateOverlappingIPPools: IPPools property is null or missing required values.
-```
-Remediation Steps:  
-- Ensure all subnets have properly defined IPPools with both StartIPAddress and EndIPAddress.
-- Validate the configuration file for completeness and correct syntax.
-- Add missing IP pool definitions and re-run the validator.
-
-### Warning: IP Pool Range Format Issues  
-Description: The validator found IP pool ranges that are not in the expected format, which may prevent proper validation.  
-Example Failure:  
-```
-Test-SLB_ValidateOverlappingIPPools: IPPools [x.x.x.x, y.y.y.y] has an invalid address format.
-```
-Remediation Steps:  
-- Confirm that all IP addresses are valid IPv4 addresses.
-- Correct any formatting errors in the IP pool definitions.
-- Re-run the validator to ensure all ranges are properly recognized.
-
----
-
-If you encounter any of these failures or warnings, follow the remediation steps to resolve configuration issues and ensure reliable SLB network operations.
--->

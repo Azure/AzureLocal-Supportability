@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Pre-Update, Post-Update, Add Node, SLBS scale-In, SLB scale-Out</strong></td>
+        <td><strong>Pre-Update, Post-Update, Add Node, SLB Scale-in, SLB Scale-out</strong></td>
     </tr>
 </table>
 
@@ -47,7 +47,7 @@ The `Test-SLB_ValidateNCLoadBalancerMux` function checks the configuration and p
     "Status":  1,
     "Severity":  2,
     "Description":  "Test if all SLB MUX configuration and provisioning state are healthy.",
-    "Remediation":  "SLB MUX configuration and provisioning state are not healthy.",
+    "Remediation": "<Remediation URL>",
     "TargetResourceID":  "SLB MUX: <SLB Name>, Loadbalancer Mux is not connected to SLBM. Network Error Code: 10054, Error Message: An existing connection was forcibly closed by the remote host.",
     "TargetResourceName":  "VirtualServerUnreachable",
     "TargetResourceType":  "SoftwareLoadBalancerManager",

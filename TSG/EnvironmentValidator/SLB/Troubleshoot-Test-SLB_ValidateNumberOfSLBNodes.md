@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Deployment, SLB scale-In, SLB scale-Out</strong></td>
+        <td><strong>SLB Deployment, SLB Scale-in, SLB Scale-out</strong></td>
     </tr>
 </table>
 
@@ -37,12 +37,12 @@ Below is an example of a valid `SoftwareLoadBalancer` configuration object. You 
             "LocalASN": <Enter the local Autonomous System Number (ASN) for the SLB>,
             "PeerRouterConfigurations": [
                 {
-                    "PeerASN": <Enter ASN for Peer 1>,
-                    "RouterIPAddress": "<Enter IP address for Peer 1 router>"
+                    "PeerASN": <Enter ASN for first Peer>,
+                    "RouterIPAddress": "<Enter IP address for first Peer router>"
                 },
                 {
-                    "PeerASN": <Enter ASN for Peer 2>,
-                    "RouterIPAddress": "<Enter IP address for Peer 2 router>"
+                    "PeerASN": <Enter ASN for second Peer>,
+                    "RouterIPAddress": "<Enter IP address for second Peer router>"
                 }
             ]
         }
@@ -76,7 +76,7 @@ To troubleshoot SLB node count issues, follow these steps:
     "Status":  1,
     "Severity":  2,
     "Description":  "Execute critical validation of the SLB node count configuration to ensure proper load balancer deployment in Azure Local environments.",
-    "Remediation":  "The number of SLB MUX is not valid with the number of available hosts",
+    "Remediation": "<Remediation URL>",
     "TargetResourceID":  "SoftwareLoadBalancer - Mux:3, Hosts:2",
     "TargetResourceName":  "NumberOfMuxes",
     "TargetResourceType":  "SoftwareLoadBalancer",
@@ -88,7 +88,7 @@ To troubleshoot SLB node count issues, follow these steps:
                             "Resource":  "SoftwareLoadBalancer",
                             "Source":  "SDNIntegration"
                         },
-    "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\aedb3032"
+    "HealthCheckSource":  "DeploySLB\\Standard\\Medium\\NetworkSLB\\aedb3032"
 }
 ```
 
@@ -97,6 +97,7 @@ To troubleshoot SLB node count issues, follow these steps:
 Below are the possible failure results returned by `Test-SLB_ValidateNumberOfSLBNodes`. For each failure type, you will find example messages from the `AdditionalData` field and recommended remediation steps to address the issue.
 
 Use this sample SoftwareLoadBalancer object as a baseline. Adjust NumberOfMuxes to meet these rules:
+
 - Single‑host deployment: NumberOfMuxes = 1
 - Multi‑node deployment (recommended): NumberOfMuxes = 2 (for redundancy)
 - Do not exceed the number of available hosts

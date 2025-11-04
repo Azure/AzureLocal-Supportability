@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Deployment</strong></td>
+        <td><strong>SLB Deployment</strong></td>
     </tr>
 </table>
 
@@ -96,7 +96,7 @@ Ensure all required properties in your `SoftwareLoadBalancer` configuration obje
     "Status":  1,
     "Severity":  2,
     "Description":  "Test if we have valid SoftwareLoadBalancer configuration",
-    "Remediation":  "https://github.com/kybeak/AzureLocal-Supportability/blob/user/kybeak/first/TSG/EnvironmentValidator/SLB/Troubleshoot-Test-SLB_ValidateSoftwareLoadBalancer.md",
+    "Remediation":  "<Remediation URL>",
     "TargetResourceID":  "Property name: RouterIPAddress, value: ",
     "TargetResourceName":  "RouterIPAddress",
     "TargetResourceType":  "SoftwareLoadBalancer",

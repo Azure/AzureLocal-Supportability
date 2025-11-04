@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Deployment</strong></td>
+        <td><strong>SLB Deployment</strong></td>
     </tr>
 </table>
 
@@ -119,7 +119,7 @@ This sample configuration satisfies all HNVPA property validation checks, includ
     "Status":  1,
     "Severity":  2,
     "Description":  "Execute comprehensive validation of HNVPA network configuration to ensure it meets the requirements for proper SLB deployment in Azure Local environments. This function is critical for validating the network infrastructure before deploying SLB components.",
-    "Remediation":  "Need to update URL here",
+    "Remediation": "<Remediation URL>",
     "TargetResourceID":  "Property name: DefaultGateways, value: x.x.x.x",
     "TargetResourceName":  "DefaultGateways",
     "TargetResourceType":  "HNVPA",
@@ -131,7 +131,7 @@ This sample configuration satisfies all HNVPA property validation checks, includ
                         "Resource":  "HNVPA",
                         "Source":  "Networks"
                         },
-    "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\073ad76b"
+    "HealthCheckSource":  "DeploySLB\\Standard\\Medium\\NetworkSLB\\073ad76b"
 }
 ```
 
@@ -441,23 +441,3 @@ Source    : Networks
 Increase the size or number of IP pools so the total available IPs meet or exceed the required count.
 
 ---
-
-
-<!--
-**Input:**  
-The function expects two inputs:
-
-1. **NetworksConfiguration**  
-    A configuration object containing the network definitions for HNVPA, PublicVIP, and PrivateVIP. This object must follow the structure shown in the example configuration below, with all required properties for each subnet (`AddressPrefix`, `VlanId`, `DefaultGateways`, and `IPPools`).
-
-2. **PowerShell Sessions**  
-    An array of active PowerShell session objects (`PSSession`) to each target host in the environment. These sessions are used to query host state and validate network configuration remotely.
-
-**Example Usage:**
-
-```powershell
-$networksConfig = Get-Content -Path "C:\path\to\networks.json" | ConvertFrom-Json
-$sessions = New-PSSession -ComputerName $HostList
-Test-SLB_ValidateHNVPANetwork -NetworksConfiguration $networksConfig -Sessions $sessions
-```
---!>

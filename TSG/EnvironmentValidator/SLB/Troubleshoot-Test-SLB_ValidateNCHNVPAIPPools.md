@@ -44,7 +44,6 @@ To review the output of `Test-SLB_ValidateNCHNVPAIPPools`:
 
 Example output:
 
-
 ```json
 {
     "Name":  "AzStackHci_NetworkSLB_Test-SLB_ValidateNCHNVPAIPPools",
@@ -54,7 +53,7 @@ Example output:
     "Status":  1,
     "Severity":  2,
     "Description":  "Test if HNVPA IP pools have sufficient IP addresses.",
-    "Remediation":  "",
+    "Remediation": "<Remediation URL>",
     "TargetResourceID":  "NC HNVPA Available IP Addresses: [$totalAvailableIP], Required: [$requiredIPs]",
     "TargetResourceName":  "IPPools",
     "TargetResourceType":  "HNVPA",
@@ -129,108 +128,3 @@ Source: IPPools
 - Re-run the validator after remediation.
 
 ---
-
-
-<!--
-#### Failure: Missing Usage Information for HNVPA Subnet
-
-**Description:**  
-The validator found a subnet in the HNVPA logical network that lacks usage details, preventing calculation of available IP addresses.
-
-**Example Failure:**
-
-```text
-Detail: No usage detailed information found for HNVPA subnet
-Status: FAILURE
-TimeStamp: <timestamp>
-Resource: HNVPA
-Source: IPPools
-```
-
-**Remediation Steps:**
-
-- Review the subnet configuration in Network Controller for completeness.
-- Ensure all subnets have usage properties defined.
-- Update or recreate subnets as needed to include usage information.
-- Re-run the validator after remediation.
-
----
-
-#### Failure: No Subnets Found for HNVPA
-
-**Description:**  
-The validator could not find any subnets associated with the HNVPA logical network, which is required for IP pool validation.
-
-**Example Failure:**
-
-```text
-Detail: No subnets found for HNVPA
-Status: FAILURE
-TimeStamp: <timestamp>
-Resource: HNVPA
-Source: IPPools
-```
-
-**Remediation Steps:**
-
-- Confirm that HNVPA logical networks are properly configured with subnets.
-- Add or correct subnets in Network Controller as needed.
-- Re-run the validator after remediation.
-
----
-
-#### Failure: No NC Logical Networks Found for HNVPA
-
-**Description:**  
-The validator could not locate any logical networks of type HNVPA in the Network Controller.
-
-**Example Failure:**
-
-```text
-Detail: No NC logical networks found for HNVPA
-Status: FAILURE
-TimeStamp: <timestamp>
-Resource: HNVPA
-Source: IPPools
-```
-
-**Remediation Steps:**
-
-- Verify that HNVPA logical networks exist in Network Controller.
-- Create or restore logical networks as needed.
-- Re-run the validator after remediation.
-
----
-
-#### Failure: No NC Load Balancer Multiplexers Found
-
-**Description:**  
-The validator was unable to find any load balancer multiplexers in the Network Controller, which may indicate a configuration issue.
-
-**Example Failure:**
-
-```text
-Detail: No NC load balancer multiplexers found
-Status: FAILURE
-TimeStamp: <timestamp>
-Resource: HNVPA
-Source: IPPools
-```
-
-**Remediation Steps:**
-
-- Ensure SLB MUXes are deployed and registered in Network Controller.
-- Check for connectivity or configuration issues with SLB MUXes.
-- Re-run the validator after remediation.
-
-
--->
-<!--
-    - If available IP addresses are sufficient, you will see:  
-        `"Available HNVPA IP addresses are sufficient for all nodes and SLB MUXes."`
-    - If insufficient, you will see:  
-        `"Detected not enough HNVPA IP addresses for all nodes and SLB MUXes. There are [{0}] available IPs but [{1}] are required."`
-    - If the Network Controller returns null or unexpected results:  
-        `"Network Controller (NC) returned null or unexpected results."`
-
--->

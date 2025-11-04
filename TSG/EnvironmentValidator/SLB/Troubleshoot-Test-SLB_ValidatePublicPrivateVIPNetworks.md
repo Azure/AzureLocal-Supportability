@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Deployment</strong></td>
+        <td><strong>SLB Deployment</strong></td>
     </tr>
 </table>
 
@@ -54,7 +54,7 @@ Below is an example of a partial `Networks` configuration, including both public
             "Subnets": [
                 {
                     "AddressPrefix":  "<Address Prefix>",
-                    "VlanId": <VlanId>,
+                    "VlanId": <VLAN ID>,
                     "IPPools": [
                         {
                             "StartIPAddress":  "<Start IP Address>",
@@ -70,14 +70,16 @@ Below is an example of a partial `Networks` configuration, including both public
         {
             "Name": "PrivateVIPNetwork1",
             "Subnets": [
-                "AddressPrefix": "<AddressPrefix>",
-                "VlanId": <VlanId>,
-                "IPPools": [
-                    {
-                        "StartIPAddress": "<Start IP Address>",
-                        "EndIPAddress": "<EndIPAddress>"
-                    }
-                ]
+                {
+                    "AddressPrefix": "<AddressPrefix>",
+                    "VlanId": <VLAN ID>,
+                    "IPPools": [
+                        {
+                            "StartIPAddress": "<Start IP Address>",
+                            "EndIPAddress": "<EndIPAddress>"
+                        }
+                    ]
+                }
             ]
         }
         /* Additional private VIP networks */
@@ -120,7 +122,7 @@ To use this validator, ensure the following prerequisites:
     "Status":  1,
     "Severity":  2,
     "Description":  "Test if we have valid public and/or private VIP addresses",
-    "Remediation":  "Please check public and/or private VIP addresses",
+    "Remediation": "<Remediation URL>",
     "TargetResourceID":  "Property name: IPPools, value: x.x.x.x \u003e= y.y.y.y",
     "TargetResourceName":  "IPPools",
     "TargetResourceType":  "PrivateVIP",
@@ -317,8 +319,3 @@ Type: PrivateVIP
 - If private VIPs are required for your scenario, add them to the configuration.
 
 ---
-
-<!--
-> **Note:**  
-All failures include a `Status: Failure` and a descriptive message. Remediate according to the message and re-run the validator to confirm resolution.
--->

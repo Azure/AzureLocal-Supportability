@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Deployment</strong></td>
+        <td><strong>SLB Deployment</strong></td>
     </tr>
 </table>
 
@@ -87,7 +87,7 @@ Below is an example of a valid `SoftwareLoadBalancer` configuration object. To s
     "Status":  1,
     "Severity":  2,
     "Description":  "Test if BGP Peers are reachable",
-    "Remediation":  "Ensure BGP Peer  is reachable.",
+    "Remediation": "<Remediation URL>",
     "TargetResourceID":  "Property name: RouterIPAddress, value: x.x.x.x",
     "TargetResourceName":  "PeerRouterConfigurations",
     "TargetResourceType":  "BGPInfo",
@@ -99,7 +99,7 @@ Below is an example of a valid `SoftwareLoadBalancer` configuration object. To s
                         "Resource":  "BGPInfo",
                         "Source":  "<Node IP Address>"
                         },
-    "HealthCheckSource":  "Deployment\\Standard\\Medium\\NetworkSLB\\073ad76b"
+    "HealthCheckSource":  "DeploySLB\\Standard\\Medium\\NetworkSLB\\073ad76b"
 }
 ```
 
