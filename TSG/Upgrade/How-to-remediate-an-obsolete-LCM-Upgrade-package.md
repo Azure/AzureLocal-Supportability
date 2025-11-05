@@ -33,7 +33,8 @@ if ($actionDeployExists -or $actionUpgradeExists) { throw "An action started do 
 
 Note: If you hit a file locking issue of file ... cannot be deleted because it is in used, please close all PowerShell sessions and open file. Then re-do the above script block.
 
-4. Reboot the Node and Start LCM Controller Service (Optional, only do this if LCMController version in Portal is less than 30.2502 version, else continue to 5) ```
+4. Reboot the Node and Start LCM Controller Service (Optional, only do this if LCMController version in Portal is less than 30.2502 version, else continue to 5)
+```
 a) Suspend-ClusterNode -Name "MachineName" -Drain
 b) Restart-Computer -Force
 c) Resume-ClusterNode -Name "MachineName"
