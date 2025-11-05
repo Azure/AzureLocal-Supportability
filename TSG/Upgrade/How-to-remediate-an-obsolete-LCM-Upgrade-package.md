@@ -33,20 +33,8 @@ if ($actionDeployExists -or $actionUpgradeExists) { throw "An action started do 
 
 Note: If you hit a file locking issue of file ... cannot be deleted because it is in used, please close all PowerShell sessions and open file. Then re-do the above script block.
 
-4. Reboot the Node and Start LCM Controller Service (Optional, only do this if LCMController version in Portal is less than 30.2502 version, else continue to 5)
-```
-a) Suspend-ClusterNode -Name "MachineName" -Drain
-b) Restart-Computer -Force
-c) Resume-ClusterNode -Name "MachineName"
-d) Verify storage pool health: Get-StoragePool -FriendlyName "StoragePoolName"
-```
- Wait until LCM initialization completes. You can use the script below to poll the completion of the initialization. This action takes about 15-20 minutes to complete
- ```
- $ErrorActionPreference = "stop";$endTime = $(Get-Date).AddHours(1);while ($endTime.CompareTo($(get-date)) -ne -1) {    try    {        $key = 'HKLM:\Software\Microsoft\LCMAzureStackStampInformation';        $status = Get-ItemProperty -Path $key -Name InitializationComplete ;        Write-Host "Key found";        if ($status.InitializationComplete -eq "Complete")        {            return "Initialization complete please proceed";        }    }    catch    {        Write-Host "Initialization not complete please wait";        Start-Sleep -Seconds 30;    }}Write-Error "Initialization did not complete in one hour. This usually mean there was a problem please contact support";
- ```
-
-5. Run the command ```Start-Service LCMController```
+4. Run the command ```Start-Service LCMController```
 
 ## Wait until all nodes have finished running initialization
-6. Re-run environment validation from portal
+5. Re-run environment validation from portal
 
