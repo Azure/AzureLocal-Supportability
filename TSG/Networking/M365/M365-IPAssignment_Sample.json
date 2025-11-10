@@ -1,0 +1,271 @@
+[
+  {
+    "network": "192.168.100.0/27",
+    "subnets": [
+      {
+        "name": "Loopback-TOR1-Switch",
+        "vlan": 0,
+        "cidr": 32,
+        "IPAssignments": [{ "Name": "TOR1", "Position": 0 }]
+      },
+      {
+        "name": "Loopback-TOR2-Switch",
+        "vlan": 0,
+        "cidr": 32,
+        "IPAssignments": [{ "Name": "TOR2", "Position": 0 }]
+      },
+      {
+        "name": "iBGP_Point_to_Point-Switch",
+        "vlan": 400,
+        "cidr": 30,
+        "IPAssignments": [
+          { "Name": "TOR1-to-TOR2-Compute", "Position": 1 },
+          { "Name": "TOR2-to-TOR1-Compute", "Position": 2 }
+        ]
+      },
+      {
+        "name": "DMZ-LoadBalancer-to-Firewall",
+        "vlan": 500,
+        "cidr": 28,
+        "IPAssignments": [
+          { "Name": "Firewall", "Position": 1 },
+          { "Name": "TOR1-Switch", "Position": 2 },
+          { "Name": "TOR2-Switch", "Position": 3 },
+          { "Name": "Reserved", "Position": 4 },
+          { "Name": "MailboxVIP", "Position": 5 },
+          { "Name": "EdgeTransportVIP", "Position": 6 },
+          { "Name": "MSUVIP", "Position": 7 },
+          { "Name": "Reserved", "Position": 8 },
+          { "Name": "Reserved", "Position": 9 },
+          { "Name": "Reserved", "Position": 10 }
+        ]
+      }
+    ]
+  },
+  {
+    "network": "192.168.0.0/24",
+    "subnets": [
+      {
+        "name": "csu-edge-transport-compute",
+        "vlan": 203,
+        "cidr": 26,
+        "IPAssignments": [
+          { "Name": "Gateway", "Position": 1 },
+          { "Name": "TOR1-Switch", "Position": 2 },
+          { "Name": "TOR2-Switch", "Position": 3 },
+          { "Name": "LoadBalancerVIP", "Position": 4 },
+          { "Name": "Reserved", "Position": 5 },
+          { "Name": "Reserved", "Position": 6 },
+          { "Name": "Reserved", "Position": 7 },
+          { "Name": "Reserved", "Position": 8 },
+          { "Name": "EdgeTransportServer1", "Position": 9 },
+          { "Name": "Reserved", "Position": 10 },
+          { "Name": "EdgeTransportServer2", "Position": 11 },
+          { "Name": "Reserved", "Position": 12 }
+        ]
+      },
+      {
+        "name": "csu-exchange-compute",
+        "vlan": 102,
+        "cidr": 26,
+        "IPAssignments": [
+          { "Name": "Gateway", "Position": 1 },
+          { "Name": "TOR1-Switch", "Position": 2 },
+          { "Name": "TOR2-Switch", "Position": 3 },
+          { "Name": "LoadBalancerVIP", "Position": 4 },
+          { "Name": "Reserved", "Position": 5 },
+          { "Name": "Reserved", "Position": 6 },
+          { "Name": "Reserved", "Position": 7 },
+          { "Name": "Reserved", "Position": 8 },
+          { "Name": "Mailbox1", "Position": 9 },
+          { "Name": "Reserved", "Position": 10 },
+          { "Name": "Mailbox2", "Position": 11 },
+          { "Name": "Reserved", "Position": 12 },
+          { "Name": "Mailbox3", "Position": 13 },
+          { "Name": "Reserved", "Position": 14 },
+          { "Name": "Mailbox4", "Position": 15 },
+          { "Name": "Reserved", "Position": 16 }
+        ]
+      },
+      {
+        "name": "msu-compute",
+        "vlan": 302,
+        "cidr": 26,
+        "IPAssignments": [
+          { "Name": "Gateway", "Position": 1 },
+          { "Name": "TOR1-Switch", "Position": 2 },
+          { "Name": "TOR2-Switch", "Position": 3 },
+          { "Name": "SharePointVIP1", "Position": 4 },
+          { "Name": "SkypeVIP", "Position": 5 },
+          { "Name": "SharePointVIP2", "Position": 6 },
+          { "Name": "Reserved", "Position": 7 },
+          { "Name": "Reserved", "Position": 8 },
+          { "Name": "SQLFailover", "Position": 9 },
+          { "Name": "SQLServer1", "Position": 10 },
+          { "Name": "SQLServer2", "Position": 11 },
+          { "Name": "Cluster", "Position": 12 },
+          { "Name": "OfficeOnelineCluster", "Position": 13 },
+          { "Name": "Witness", "Position": 14 },
+          { "Name": "SharePointFE1", "Position": 15 },
+          { "Name": "SharePointFE2", "Position": 16 },
+          { "Name": "OfficeOnlineServer1", "Position": 17 },
+          { "Name": "OfficeOnlineServer2", "Position": 18 },
+          { "Name": "SkypeFE1", "Position": 19 },
+          { "Name": "SkypeFE2", "Position": 20 },
+          { "Name": "SkypeFE3", "Position": 21 },
+          { "Name": "SharePointApp1", "Position": 22 },
+          { "Name": "SharePointApp2", "Position": 23 },
+          { "Name": "SQLServer1Skype", "Position": 24 },
+          { "Name": "SQLServer2Skype", "Position": 25 },
+          { "Name": "SQLSkypeClusterIP", "Position": 26 },
+          { "Name": "IPForClusterSQLSkype", "Position": 27 }
+        ]
+      }
+    ]
+  },
+  {
+    "network": "172.22.56.0/25",
+    "subnets": [
+      {
+        "name": "csu-edge-transport-management",
+        "vlan": 101,
+        "cidr": 27,
+        "IPAssignments": [
+          { "Name": "Gateway", "Position": 1 },
+          { "Name": "TOR1-Switch", "Position": 2 },
+          { "Name": "TOR2-Switch", "Position": 3 },
+          { "Name": "EdgeTransportNode1", "Position": 4 },
+          { "Name": "EdgeTransportNode2", "Position": 5 },
+          { "Name": "Host1Management1", "Position": 6 },
+          { "Name": "Host1Management2", "Position": 7 },
+          { "Name": "Host1Management3", "Position": 8 },
+          { "Name": "Host1Management4", "Position": 9 },
+          { "Name": "Host1Management5", "Position": 10 },
+          { "Name": "Host1Management6", "Position": 11 },
+          { "Name": "Host2Management1", "Position": 12 },
+          { "Name": "Host2Management2", "Position": 13 },
+          { "Name": "Host2Management3", "Position": 14 },
+          { "Name": "Host2Management4", "Position": 15 },
+          { "Name": "Host2Management5", "Position": 16 },
+          { "Name": "Host2Management6", "Position": 17 }
+        ]
+      },
+      {
+        "name": "msu-management",
+        "vlan": 201,
+        "cidr": 27,
+        "IPAssignments": [
+          { "Name": "Gateway", "Position": 1 },
+          { "Name": "TOR1-Switch", "Position": 2 },
+          { "Name": "TOR2-Switch", "Position": 3 },
+          { "Name": "MSUNode1", "Position": 4 },
+          { "Name": "MSUNode2", "Position": 5 },
+          { "Name": "MSUNode3", "Position": 6 },
+          { "Name": "MSUNode4", "Position": 7 },
+          { "Name": "MSUNode5", "Position": 8 },
+          { "Name": "MSUNode6", "Position": 9 },
+          { "Name": "MSUNode7", "Position": 10 },
+          { "Name": "MSUNode8", "Position": 11 },
+          { "Name": "Management1", "Position": 12 },
+          { "Name": "Management2", "Position": 13 },
+          { "Name": "Management3", "Position": 14 },
+          { "Name": "Management4", "Position": 15 },
+          { "Name": "Management5", "Position": 16 },
+          { "Name": "Management6", "Position": 17 }
+        ]
+      },
+      {
+        "name": "csu-exchange-management",
+        "vlan": 301,
+        "cidr": 26,
+        "IPAssignments": [
+          { "Name": "Gateway", "Position": 1 },
+          { "Name": "TOR1-Switch", "Position": 2 },
+          { "Name": "TOR2-Switch", "Position": 3 },
+          { "Name": "ExchangeNode1", "Position": 4 },
+          { "Name": "ExchangeNode2", "Position": 5 },
+          { "Name": "ExchangeNode3", "Position": 6 },
+          { "Name": "ExchangeNode4", "Position": 7 },
+          { "Name": "Host1Management1", "Position": 8 },
+          { "Name": "Host1Management2", "Position": 9 },
+          { "Name": "Host1Management3", "Position": 10 },
+          { "Name": "Host1Management4", "Position": 11 },
+          { "Name": "Host1Management5", "Position": 12 },
+          { "Name": "Host1Management6", "Position": 13 },
+          { "Name": "Host2Management1", "Position": 14 },
+          { "Name": "Host2Management2", "Position": 15 },
+          { "Name": "Host2Management3", "Position": 16 },
+          { "Name": "Host2Management4", "Position": 17 },
+          { "Name": "Host2Management5", "Position": 18 },
+          { "Name": "Host2Management6", "Position": 19 },
+          { "Name": "Host3Management1", "Position": 20 },
+          { "Name": "Host3Management2", "Position": 21 },
+          { "Name": "Host3Management3", "Position": 22 },
+          { "Name": "Host3Management4", "Position": 23 },
+          { "Name": "Host3Management5", "Position": 24 },
+          { "Name": "Host3Management6", "Position": 25 },
+          { "Name": "Host4Management1", "Position": 26 },
+          { "Name": "Host4Management2", "Position": 27 },
+          { "Name": "Host4Management3", "Position": 28 },
+          { "Name": "Host4Management4", "Position": 29 },
+          { "Name": "Host4Management5", "Position": 30 },
+          { "Name": "Host4Management6", "Position": 31 }
+        ]
+      }
+    ]
+  },
+  {
+    "network": "172.22.57.0/24",
+    "subnets": [
+      {
+        "name": "Optional-Infrastructure-Management",
+        "vlan": 402,
+        "cidr": 28,
+        "IPAssignments": [
+          { "Name": "Gateway", "Position": 1 },
+          { "Name": "TOR1-Switch", "Position": 2 },
+          { "Name": "TOR2-Switch", "Position": 3 },
+          { "Name": "Optional-AD", "Position": 4 },
+          { "Name": "RDP-JumpBox", "Position": 5 }
+        ]
+      }
+    ]
+  },
+  {
+    "network": "10.60.48.128/26",
+    "subnets": [
+      {
+        "name": "BMC-Management",
+        "vlan": 125,
+        "cidr": 26,
+        "IPAssignments": [
+          { "Name": "Gateway", "Position": 1 },
+          { "Name": "BMC-Switch", "Position": 2 },
+          { "Name": "TOR1-Switch", "Position": 3 },
+          { "Name": "TOR2-Switch", "Position": 4 },
+          { "Name": "Node1-BMC", "Position": 5 },
+          { "Name": "Node2-BMC", "Position": 6 },
+          { "Name": "Node3-BMC", "Position": 7 },
+          { "Name": "Node4-BMC", "Position": 8 },
+          { "Name": "Node5-BMC", "Position": 9 },
+          { "Name": "Node6-BMC", "Position": 10 },
+          { "Name": "Node7-BMC", "Position": 11 },
+          { "Name": "Node8-BMC", "Position": 12 },
+          { "Name": "Node9-BMC", "Position": 13 },
+          { "Name": "Node10-BMC", "Position": 14 },
+          { "Name": "Node11-BMC", "Position": 15 },
+          { "Name": "Node12-BMC", "Position": 16 },
+          { "Name": "Node13-BMC", "Position": 17 },
+          { "Name": "Node14-BMC", "Position": 18 },
+          { "Name": "Node15-BMC", "Position": 19 },
+          { "Name": "HyperV-Host-Firewall", "Position": 20 },
+          { "Name": "HyperV-Host-LB", "Position": 21 },
+          { "Name": "Firewall1-Management", "Position": -5 },
+          { "Name": "Firewall2-Management", "Position": -4 },
+          { "Name": "LoadBalancer1-Management", "Position": -3 },
+          { "Name": "LoadBalancer2-Management", "Position": -2 }
+        ]
+      }
+    ]
+  }
+]
