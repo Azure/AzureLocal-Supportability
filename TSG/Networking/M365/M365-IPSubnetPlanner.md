@@ -29,7 +29,7 @@ The IP assignment JSON provides a structured framework for:
 
 ## ⚡ Quick Start
 
-1. **Clone Configuration**: Copy the JSON file as a template for your environment: [Sample Json File](./M365-IPAssignment_Sample.json)
+1. **Clone Configuration**: Copy the JSON file as a template for your environment: [Sample Json File](./sample_config/M365-IPAssignment_Sample.json)
 2. **Update Network Ranges**: Modify supernet addresses to match your allocation
 3. **Assign VLANs**: Update VLAN IDs according to your network design
 4. **Validate Format**: Ensure VLAN and CIDR values are integers
