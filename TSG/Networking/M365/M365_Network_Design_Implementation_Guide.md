@@ -149,17 +149,7 @@ flowchart TD
     Port33 -->|VLAN Trunk<br/>Port 3.3| vSwitch
     PA_DMZ <-.->|Layer 2 VLAN 500<br/>Same Host Virtual Switch| F5_DMZ
     F5_102 & F5_203 & F5_302 -->|Production VLANs<br/>via Port 3.3 Trunk| Servers
-    
-    style Internet fill:#ffcccc
-    style TOR fill:#e1f5ff
-    style HyperV fill:#fff4e1
-    style PAVM fill:#ffe1e1
-    style F5VM fill:#e1ffe1
-    style vSwitch fill:#f0f0f0
-    style PA_WAN fill:#ffdddd
-    style PA_DMZ fill:#ffeecc
-    style F5_DMZ fill:#ffeecc
-    style TORUplink fill:#cce5ff
+
 ```
 
 #### Network Backbone Connectivity
@@ -453,11 +443,6 @@ flowchart TB
     VIP1 -.->|Health Check<br/>Load Balance| Mailbox
     VIP2 -.->|Health Check<br/>Load Balance| Edge
     VIP3 -.->|Health Check<br/>Load Balance| SP
-    
-    style Firewall fill:#ff9999
-    style DMZ fill:#ffcc99
-    style Internal fill:#99ccff
-    style FW_Threat fill:#ff6666
 ```
 
 ### 4.3. NAT Configuration
@@ -616,12 +601,6 @@ flowchart TB
     
     Pool -->|4. Apply Algorithm| Algo
     Algo -->|5. Select Server<br/>Lowest Connections| MB2
-    
-    style MB4 fill:#ffcccc
-    style MB1 fill:#ccffcc
-    style MB2 fill:#ccffcc
-    style MB3 fill:#ccffcc
-    style Health fill:#ffffcc
 ```
 
 #### Virtual Server Design Concept
