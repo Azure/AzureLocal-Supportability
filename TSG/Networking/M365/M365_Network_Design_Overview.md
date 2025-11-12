@@ -25,13 +25,6 @@ flowchart LR
     LoadBalancer -->|Internal Network| Exchange
     LoadBalancer -->|Internal Network| EdgeTransport
     LoadBalancer -->|Internal Network| SharePoint
-    
-    style Internet fill:#e1f5fe
-    style Firewall fill:#fff3e0
-    style LoadBalancer fill:#f3e5f5
-    style Exchange fill:#e8f5e8
-    style EdgeTransport fill:#e8f5e8
-    style SharePoint fill:#e8f5e8
 ```
 
 ### Core Components
