@@ -1,15 +1,22 @@
 # Overview
-Update of the Azure Local cluster may fail due to ARB VM goes offline unexpected by the orchestration sequence. The following update error message may be used to identify and match the issue (note the part "[ResourceBridge Status = Offline]"). 
+Update of the Azure Local cluster may fail due to ARB VM goes offline unexpected by the orchestration sequence. The following update error message may be used to identify and match the issue. 
 
 You may also use this TSG to preemptively detect and mitigate the issue before starting an update. 
 
 **Example error message:**
+
+ (The following example applies to all versions of Azure Local, note the part "[ResourceBridge Status = Offline]")
 ```
 Type 'UpdateArbAndExtensions' of Role 'MocArb' raised an exception:
 
 [UpgradeArbAndExtensions :VMSS extension upgrade] Get-ArcHciMgmt returned components that are in failure state before upgrading VMSS extension. Failed component status checks [ResourceBridge Status  = Offline]
 ```
-
+(The following example applies to Update version 2510 and later)
+```
+Type 'EnsureArbVmResourceState' of Role 'MocArb' raised an exception:
+ 
+A positional parameter cannot be found that accepts argument '...'.
+```
 ---
 
 # Cause
