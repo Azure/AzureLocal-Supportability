@@ -196,8 +196,6 @@ Separate management and compute VLANs enable independent scaling and easier trou
 | **125** | BMC-Management | Server OOB management (BMC/iDRAC) | 10.60.48.128/26 | 10.60.48.129 |
 | **402** | Infrastructure-Management | Infrastructure in-band management (AD, DNS, Jump) | 172.22.57.0/28 | 172.22.57.1 |
 | **500** | DMZ-LoadBalancer-to-Firewall | DMZ security boundary | 192.168.100.0/28 | 192.168.100.1 |
-| **400** | iBGP_Point_to_Point_Compute | BGP peering between TORs (Compute) | 192.168.0.192/30 | - |
-| **401** | iBGP_Point_to_Point_Default | BGP peering between TORs (Default) | 172.22.56.192/30 | - |
 
 #### Supernet: `192.168.0.0/24` — Production Compute
 **Purpose**: This block is dedicated to all production server traffic for the M365 services. It is segmented into subnets for each service type.
