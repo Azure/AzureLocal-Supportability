@@ -60,7 +60,7 @@ It will indicate which modules should be in place and which should not.
 
 # Mitigation Details
 
-Clear powershell environment leaving on the required module. For each module that failed in the above output run the following:
+Clear the PowerShell environment, leaving only the required modules. For each module that failed in the above output, run the following:
 
 ## Az.StackHCI
 
