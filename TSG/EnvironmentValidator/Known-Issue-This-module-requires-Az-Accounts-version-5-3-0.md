@@ -72,7 +72,7 @@ Get-InstalledModule -Name $RequiredModuleName -AllVersions
 
 #Uninstall all but the required version
 Get-InstalledModule -Name $RequiredModuleName -AllVersions | Where-Object { $_.Version -ne $RequiredModuleVersion } | ForEach-Object { 
-    Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version -Force
+    Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version
 }
 
 # if the required version was not present in the first command's output, install it.
@@ -91,7 +91,7 @@ Get-InstalledModule -Name $RequiredModuleName -AllVersions
 
 #Uninstall all but the required version
 Get-InstalledModule -Name $RequiredModuleName -AllVersions | Where-Object { $_.Version -ne $RequiredModuleVersion } | ForEach-Object { 
-    Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version -Force
+    Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version
 }
 
 # if the required version was not present in the first command's output, install it.
@@ -110,7 +110,7 @@ Get-InstalledModule -Name $RequiredModuleName -AllVersions
 
 #Uninstall all but the required version
 Get-InstalledModule -Name $RequiredModuleName -AllVersions | Where-Object { $_.Version -ne $RequiredModuleVersion } | ForEach-Object { 
-    Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version -Force
+    Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version
 }
 
 # if the required version was not present in the first command's output, install it.
@@ -129,7 +129,7 @@ Get-InstalledModule -Name $RequiredModuleName -AllVersions
 
 #Uninstall all but the required version
 Get-InstalledModule -Name $RequiredModuleName -AllVersions | Where-Object { $_.Version -ne $RequiredModuleVersion } | ForEach-Object { 
-    Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version -Force
+    Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version
 }
 
 # if the required version was not present in the first command's output, install it.
