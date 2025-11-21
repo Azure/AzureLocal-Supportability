@@ -67,7 +67,7 @@ Clear powershell environment leaving on the required module. For each module tha
 ```PowerShell
 $RequiredModuleName = 'Az.StackHCI'
 $RequiredModuleVersion = '2.5.0'
-# Get all versions of the required module, this should look the same as as above
+# Get all versions of the required module, this should look the same as above
 Get-InstalledModule -Name $RequiredModuleName -AllVersions
 
 #Uninstall all but the required version
@@ -86,7 +86,7 @@ Get-InstalledModule -Name $RequiredModuleName -AllVersions
 ```PowerShell
 $RequiredModuleName = 'Az.Accounts'
 $RequiredModuleVersion = '4.0.2'
-# Get all versions of the required module, this should look the same as as above
+# Get all versions of the required module, this should look the same as above
 Get-InstalledModule -Name $RequiredModuleName -AllVersions
 
 #Uninstall all but the required version
@@ -105,7 +105,7 @@ Get-InstalledModule -Name $RequiredModuleName -AllVersions
 ```PowerShell
 $RequiredModuleName = 'Az.Resources'
 $RequiredModuleVersion = '7.8.0'
-# Get all versions of the required module, this should look the same as as above
+# Get all versions of the required module, this should look the same as above
 Get-InstalledModule -Name $RequiredModuleName -AllVersions
 
 #Uninstall all but the required version
@@ -124,7 +124,7 @@ Get-InstalledModule -Name $RequiredModuleName -AllVersions
 ```PowerShell
 $RequiredModuleName = 'Az.Storage'
 $RequiredModuleVersion = '8.1.0'
-# Get all versions of the required module, this should look the same as as above
+# Get all versions of the required module, this should look the same as above
 Get-InstalledModule -Name $RequiredModuleName -AllVersions
 
 #Uninstall all but the required version
