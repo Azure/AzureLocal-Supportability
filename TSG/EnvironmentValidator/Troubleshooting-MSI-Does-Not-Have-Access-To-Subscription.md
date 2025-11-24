@@ -67,7 +67,7 @@ Get-InstalledModule -Name $RequiredModuleName -AllVersions
 #Uninstall all but the required version
 Get-InstalledModule -Name $RequiredModuleName -AllVersions | Where-Object { $_.Version -ne $RequiredModuleVersion } | ForEach-Object { Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version -Force }
 
-# if the required version was not present in the first command's output, install it.
+# If the required version was not present in the first command's output, install it.
 Install-Module -Name $RequiredModuleName -RequiredVersion $RequiredModuleVersion -Force
 
 # Verify only the required version is installed
