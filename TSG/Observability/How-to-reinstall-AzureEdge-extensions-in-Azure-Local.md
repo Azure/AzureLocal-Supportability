@@ -1,7 +1,7 @@
 This article describes the proper steps to reinstall extensions in Azure Local 23H2 and later.
 
 # Overview
-Extensions are initially installed as part of the deployment workflow and should not be manually installed prior.  However, there are times when extensions may fail or reinstalling the extension post-deployment may be required.  In these scenarios, the use of the AzConnectedMachineExtension cmdlets is now discouraged and we should use the automated remediation steps so the correct extension versions are installed.
+Extensions are initially installed as part of the deployment workflow and should not be manually installed prior. However, there are times when extensions may fail or reinstalling the extension post-deployment may be required. In these scenarios, the use of the AzConnectedMachineExtension cmdlets is now discouraged. Instead, use the automated remediation steps to ensure the correct extension versions are installed.
 
 # Affected extensions
 The following extensions are included in this process.
