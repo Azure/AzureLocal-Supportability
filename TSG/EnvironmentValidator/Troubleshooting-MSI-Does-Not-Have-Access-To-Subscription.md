@@ -56,12 +56,24 @@ There are two possible issues that can cause this:
 2) Role Assignment for Azure Stack HCI Device Management Role is not correct.
 
 ## If any other version of Az.Accounts apart from 4.0.2 is installed on the nodes follow the below steps:
-***
-1. Uninstall all the versions of az.accounts on all nodes
+
 ```
-Uninstall-Module az.accounts  -allversions
+$RequiredModuleName = 'Az.Accounts'
+$RequiredModuleVersion = '4.0.2'
+
+# Get all versions of the module
+Get-InstalledModule -Name $RequiredModuleName -AllVersions
+
+# Uninstall all but the required version.
+Get-InstalledModule -Name $RequiredModuleName -AllVersions | Where-Object { $_.Version -ne $RequiredModuleVersion } | ForEach-Object { Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version -Force }
+
+# If the required version was not present in the first command's output, install it.
+Install-Module -Name $RequiredModuleName -RequiredVersion $RequiredModuleVersion -Force
+
+# Verify only the required version is installed
+Get-InstalledModule -Name $RequiredModuleName -AllVersions
 ```
-3. Retry update from portal
+
 
 ## If the only version of Az.Accounts is 4.0.2 on the system, check access control
 ***
