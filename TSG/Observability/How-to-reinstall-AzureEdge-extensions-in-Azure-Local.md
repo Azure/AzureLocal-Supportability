@@ -16,7 +16,7 @@ The following extensions are included in this process.
 > Extensions that are not listed here are not reinstalled using this method.  Please consult the documentation for the extension for information on troubleshooting or reinstalling the extension.
 
 # Reinstalling extensions using the automated remediation
-To correctly re-install any of the extensions listed above to an Azure Local node, follow the steps below.
+To correctly reinstall any of the extensions listed above to an Azure Local node, follow the steps below.
 
 1. From within the Azure portal, navigate to the node with the failed extension.  
    a. Expand 'Settings' in the left menu column and select 'Locks'.  Make a note of any locks present (as you should recreate them after).  Delete any locks present on the node as these will prevent deleting a failed extension.
