@@ -13,7 +13,7 @@ The following extensions are included in this process.
 
 > :ledger: **NOTE**
 >
-> Extensions that are not listed here are not re-installed using this method.  Please consult the documentation for the extension for information on troubleshooting or reinstalling the extension.
+> Extensions that are not listed here are not reinstalled using this method.  Please consult the documentation for the extension for information on troubleshooting or reinstalling the extension.
 
 # Reinstalling extensions using the automated remediation
 To correctly re-install any of the extensions listed above to an Azure Local node, follow the steps below.
