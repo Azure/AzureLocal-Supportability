@@ -61,7 +61,7 @@ There are two possible issues that can cause this:
 $RequiredModuleName = 'Az.Accounts'
 $RequiredModuleVersion = '4.0.2'
 
-# Get all versions of the 
+# Get all versions of the module
 Get-InstalledModule -Name $RequiredModuleName -AllVersions
 
 #Uninstall all but the required version
