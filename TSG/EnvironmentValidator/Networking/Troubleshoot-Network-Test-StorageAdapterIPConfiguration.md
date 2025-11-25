@@ -27,7 +27,7 @@ _This validator only applies to Azure Local update with a Storage Network Intent
 
 ### Requirements
 
-After Storage Network Intent configured in the cluster, each Storage Adapter on every node in the cluster must:
+After the Storage Network Intent configured in the cluster, each Storage Adapter on every node in the cluster must:
 
 - Have only 1 valid IPv4 address configured on the adapter, or
 - If multiple IP addresses are configured on the adapter, they must be in the same subnet
@@ -36,7 +36,7 @@ After Storage Network Intent configured in the cluster, each Storage Adapter on 
 
 ### Review Environment Validator Output
 
-Review the Environment Validator output JSON. It might shown as a failure on the cloud health check result. Here is an example:
+Review the Environment Validator output JSON. It might be shown as a failure on the cloud health check result. Here is an example:
 
 ```json
 {
@@ -83,9 +83,9 @@ Adapter `storage2` on node `AZLOC-NODE1` has 1 issue: It does not have a valid I
 
 The Storage Adapter does not have a valid IP address configured on it.
 
-If user choose to use AutoIP for storage adapters, there is an issue in Windows that might cause the storage adapter ends up using an APIPA address (from 169.254.0.0/16 subnet). This APIPA address is not a valid configuration for the storage adapters.
+If the user chooses to use AutoIP for storage adapters, there is an issue in Windows that might cause the storage adapter ends up using an APIPA address (from 169.254.0.0/16 subnet). This APIPA address is not a valid configuration for the storage adapters.
 
-If user choose to not use AutoIP for storage adapters (but using a customized IP provided during Azure Local deployment time), then it is possible that the IP configured on the adapter is not in Preferred state.
+If the user chooses to not use AutoIP for storage adapters (but using a customized IP provided during Azure Local deployment time), then it is possible that the IP configured on the adapter is not in Preferred state.
 
 #### Verification and Remediation Steps
 
@@ -127,7 +127,7 @@ If user choose to not use AutoIP for storage adapters (but using a customized IP
    ```powershell
    Get-WinEvent -ProviderName "Microsoft-Windows-Networking-NetworkAtc" | Where-Object { $_.Message -like "*.255*"} | Format-List Id, Message
    ```
-   You might found event like below in the output:
+   You might find event(s) like the one below in the output:
    ```
    Id             : 52
    Message        : Network ATC made the following configuration changes when provisioning intent (INTENTNAME)
@@ -136,20 +136,20 @@ If user choose to not use AutoIP for storage adapters (but using a customized IP
 
    This indicates that NetworkATC is trying to allocate IP `.255` (which is not a valid IP in subnet `10.71.2.0/24`) to storage adapter `storage2`.
 
-3. If you found the the above event 52, you could run below to mitigate:
+3. If you found the above event 52, you could run below to mitigate:
 
    ```powershell
    Remove-Netintent -Name <StorageIntentName>
    Add-NetIntent -Wait -Name <StorageIntentName> <Other parameters...>
    ```
 
-    NOTE: Please make sure you are using right parameters while trying to run `Add-NetIntent`, like `-StorageVlan`, `-AdapterName`, `-AdapterRssPropertyOverrides`, etc. Check [Add-NetIntent](https://learn.microsoft.com/en-us/powershell/module/networkatc/add-netintent?view=windowsserver2025-ps) for detailed information on how to run this command.
+    NOTE: Please make sure you are using right parameters while trying to run `Add-NetIntent`, like `-StorageVlan`, `-AdapterName`, `-AdapterRssPropertyOverrides`, etc. Check [Add-NetIntent](https://learn.microsoft.com/en-us/powershell/module/networkatc/add-netintent) for detailed information on how to run this command.
 
 4. After `Add-NetIntent` finished, run `ipconfig /all` and make sure that the storage adapter is getting valid IP address configured on it.
 
    If the storage adapter still has APIPA IP configured on it, you might want to try step 3 above again.
 
-### Failure: Expect all IP address on storage adapter [ $($expectedAdapter) ] to be in same subnet.
+### Failure: Expect all IP address on storage adapter [ ADAPTER NAME ] to be in same subnet.
 
 The Storage Adapter has multiple IP addresses configured on the adapter, but those IP addresses are not in the same subnet. This is not supported.
 
@@ -157,7 +157,7 @@ The Storage Adapter has multiple IP addresses configured on the adapter, but tho
 #### Remediation Steps
 
 1. Please check what storage adapter the system is using:
-    ```
+    ```powershell
     Get-NetAdapter | ft InterfaceAlias, Status, LinkSpeed
     ```
     * For separate storage configuration, it should be physical adapter(s);
@@ -165,19 +165,19 @@ The Storage Adapter has multiple IP addresses configured on the adapter, but tho
 
     Will use `<STORAGE Adapter Name>` in below to refer the storage adapters.
 2. You could check the current IP of the storage adapters using below cmdlet call on all nodes:
-    ```
+    ```powershell
     Get-NetIPAddress -InterfaceAlias "<STORAGE Adapter Name>" | ft InterfaceAlias, IPAddress, PrefixLength
     ```
 3. Verify the storage adapter IP configuration on __all nodes of the cluster__:
     * Please check the IP of the storage adapter and then remove only the IP that you do NOT need anymore.
       Make sure to run this on __all the nodes__.
-      ```
+      ```powershell
       Remove-NetIPAddress -InterfaceAlias "<STORAGE Adapter Name>" -AddressFamily IPv4 -IPAddress "<IP TO REMOVE>" -Confirm:$false
       ```
     Also, make sure you run this "Remove-NetIPAddress" cmdlet for __all the storage adapters__ in the system.
 
-4. Run below script to make sure the storage intent is back to healthy state. This need to be run only once on __one node of the cluster__:
-    ```
+4. Run below script to make sure the storage intent is back to healthy state. This needs to be run only once on __one node of the cluster__:
+    ```powershell
     [System.String] $currentCluster = (Get-Cluster).Name
     [System.String[]] $allNodes = (Get-ClusterNode).Name
     $storageIntent = Get-NetIntent | Where-Object {$_.IsStorageIntentSet -eq $true}
@@ -189,7 +189,7 @@ The Storage Adapter has multiple IP addresses configured on the adapter, but tho
 
 5. Now try to run "Get-NetIPAddress" again, if you find multiple IP for one storage adapter again, then most likely you are using AutoIP
    * Verify the storage intent automatic IP generation setting on __one node of the cluster__:
-     ```
+     ```powershell
      $storageIntent = Get-NetIntent | Where-Object {$_.IsStorageIntentSet -eq $true}
      Write-Host "### AutoIP? [ $($storageIntent.IPOverride.EnableAutomaticIPGeneration) ] ###"
      ```
