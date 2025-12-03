@@ -287,7 +287,7 @@ This scenario occurs when the Cloud Management cluster group exists but repeated
 Invoke-Command (Get-ClusterNode) {Get-AzureStackHCI} | ft PSComputerName, ConnectionStatus, RegistrationStatus
 
 # Step 2: Repair registration to add Cloud Management support and MSI
-Repair-AzureStackHCIRegistration
+Register-AzStackHCI -SubscriptionId <SubscriptionId> -TenantId <TenantId> -Region <region> -RepairRegistration -UseDeviceAuthentication
 
 # Step 3: Start the Cloud Management cluster group
 Start-ClusterGroup "Cloud Management"
@@ -298,7 +298,7 @@ Get-ClusterGroup "Cloud Management" | Get-ClusterResource | ft Name, State, Owne
 # Expected: Azure Stack HCI Cloud Management showing State = Online
 ```
 
-### What Repair-AzureStackHCIRegistration Does
+### What Register-AzStackHCI -RepairRegistration Does
 
 The repair registration process:
 
