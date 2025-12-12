@@ -443,13 +443,13 @@ From the jumpbox / DC check ClusterName's SPN for WSMAN/\<ClusterName\>
 ```Powershell
 setspn -L <ClusterName>
 ```
-You should see a bunch of entries including HOST/\<Clustername\> and HOST/\<ClusterName\>.\<FQDN\>
+You should see a bunch of entries including `HOST/<Clustername>` and `HOST/<ClusterName>.<FQDN>`
 
-If you see entries for either wsman/\<ClusterName\> or wsman/\<ClusterName\>.\<FQDN\> follow the mitigation
+If you see entries for either `wsman/<ClusterName>` or `wsman/<ClusterName>.<FQDN>` follow the mitigation
 
 `Note - this issue is only for the Cluster's SPN. Nodes with SPN's of HOST\<HostName> is expected`
 ### Mitigation
-Remove the entries for wsman/\<ClusterName\> and wsman/\<ClusterName\>.\<FQDN\>
+Remove the entries for `wsman/<ClusterName>` and `wsman/<ClusterName>.<FQDN>`
 ```Powershell
 setspn -D wsman/<ClusterName> <ClusterName>
 setspn -D wsman/<ClusterName><FQDN> <ClusterName>
