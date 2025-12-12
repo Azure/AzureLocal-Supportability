@@ -439,7 +439,7 @@ The following scenarios still work:
 - Invoke-Command to \<ClusterName\> without Credssp
 - Invoke-Command to \<HostName\> with Credssp
 ### Issue Validation
-From the jumpbox / DC check ClusterName's SPN for WSMAN/\<ClusterName\>
+From any host node check ClusterName's SPN for WSMAN/\<ClusterName\>
 ```Powershell
 setspn -L <ClusterName>
 ```
@@ -447,7 +447,7 @@ You should see a bunch of entries including `HOST/<Clustername>` and `HOST/<Clus
 
 If you see entries for either `wsman/<ClusterName>` or `wsman/<ClusterName>.<FQDN>` follow the mitigation
 
-`Note - this issue is only for the Cluster's SPN. Nodes with SPN's of HOST\<HostName> is expected`
+`Note - this issue is only for the Cluster's SPN. Nodes with SPN's of wsman/<HostName> is expected`
 ### Mitigation
 Remove the entries for `wsman/<ClusterName>` and `wsman/<ClusterName>.<FQDN>`
 ```Powershell
