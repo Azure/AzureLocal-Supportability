@@ -18,12 +18,17 @@ During update download stage, you may see:
 update package download failure with details similar to "Action plan GetCauDeviceInfo ID xxx failed with state: Failed".
 ```
 
+During any action plan, if you see the following, go to "Known Causes" #6
+```
+Connecting to remote server <ClusterName> failed with the following error message : An unknown security error occured
+```
 # Known Causes
 1. The LCM (deployment user) credentials were not updated properly using the [Set-AzureStackLCMUserPassword](https://learn.microsoft.com/en-us/azure/azure-local/manage/manage-secrets-rotation?view=azloc-24112#run-set-azurestacklcmuserpassword-cmdlet) cmdlet. This cmdlet is responsible for updating the password in Active Directory as well as updating it in the ECE Store. Both of these should be in sync, otherwise there will be access denied issues.
 2. The LCM user does not have sufficient permissions on the Organization Unit (OU) in Active Directory (AD).
 3. The NTLM policy, configured via Group Policy, may be blocking remote operations such as Invoke-Command. This can occur if NTLM is restricted either at the OU level or on the individual nodes or the domain controller via applied Group Policy Objects (GPOs).
 4. The WinRM trusted hosts configuration is set up incorrectly.
 5. The LCM user is part of the "Protected Users" group (See Protected Users heading below).
+6. Cluster's SPN is misconfigured (See Unknown Security Error heading below)
 
 # Issue Validation
 
@@ -417,3 +422,35 @@ Get-ADUser -Identity <LCMUser> -Properties MemberOf | Select-Object -ExpandPrope
 If the output has something similar to `CN="...protectedusers..."` the LCM user is part of the "Protected Users" group. If both validations passed, follow the mitigation below.
 ### Mitigation
 The LCM user must be removed from the "Protected Users" group.
+
+
+## Invoke-Command fails with with Unknown Security Error
+`Note this section applies to errors with Invoke-Command to the <ClusterName> only, not to the <HostName>`
+### Symptoms
+Invoke-Command from any host node to the \<ClusterName\> fails with:
+```
+Connecting to remote server <ClusterName> failed with the following error message : An unknown security error occured
+```
+The issue can be manually repro'd with the following:
+```Powershell
+Invoke-Command -ComputerName <ClusterName> -Credential <LCMUserCreds> -Authentication Credssp -ScriptBlock { hostname }
+```
+The following scenarios still work:
+- Invoke-Command to \<ClusterName\> without Credssp
+- Invoke-Command to \<HostName\> with Credssp
+### Issue Validation
+From any host node check ClusterName's SPN for WSMAN/\<ClusterName\>
+```Powershell
+setspn -L <ClusterName>
+```
+You should see a bunch of entries including `HOST/<Clustername>` and `HOST/<ClusterName>.<FQDN>`
+
+If you see entries for either `wsman/<ClusterName>` or `wsman/<ClusterName>.<FQDN>` follow the mitigation
+
+`Note - this issue is only for the Cluster's SPN. Nodes with SPN's of wsman/<HostName> is expected`
+### Mitigation
+Remove the entries for `wsman/<ClusterName>` and `wsman/<ClusterName>.<FQDN>`
+```Powershell
+setspn -D wsman/<ClusterName> <ClusterName>
+setspn -D wsman/<ClusterName><FQDN> <ClusterName>
+```
