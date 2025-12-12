@@ -432,7 +432,7 @@ Invoke-Command from any host node to the \<ClusterName\> fails with:
 Connecting to remote server <ClusterName> failed with the following error message : An unknown security error occured
 ```
 The issue can be manually repro'd with the following:
-```
+```Powershell
 Invoke-Command -ComputerName <ClusterName> -Credential <LCMUserCreds> -Authentication Credssp -ScriptBlock { hostname }
 ```
 The following scenarios still work:
@@ -440,7 +440,7 @@ The following scenarios still work:
 - Invoke-Command to \<HostName\> with Credssp
 ### Issue Validation
 From the jumpbox / DC check ClusterName's SPN for WSMAN/\<ClusterName\>
-```
+```Powershell
 setspn -L <ClusterName>
 ```
 You should see a bunch of entries including HOST/\<Clustername\> and HOST/\<ClusterName\>.\<FQDN\>
@@ -450,7 +450,7 @@ If you see entries for either wsman/\<ClusterName\> or wsman/\<ClusterName\>.\<F
 `Note - this issue is only for the Cluster's SPN. Nodes with SPN's of HOST\<HostName> is expected`
 ### Mitigation
 Remove the entries for wsman/\<ClusterName\> and wsman/\<ClusterName\>.\<FQDN\>
-```
+```Powershell
 setspn -D wsman/<ClusterName> <ClusterName>
 setspn -D wsman/<ClusterName><FQDN> <ClusterName>
 ```
