@@ -2,7 +2,7 @@
 
 ## Overview
 
-Virtual Machines (VMs) may fail to start on all cluster nodes in Azure Local environments due to insufficient local memory resources. This is caused by excessive memory consumption by the MonitoringPlatformAgent (AzureEMP service), which leaves inadequate memory for VM startup operations.
+Virtual Machines (VMs) may fail to start on all cluster nodes in Azure Local environments due to insufficient local memory resources. This is caused by excessive memory consumption by the MonitoringPlatformAgent (AzureEMP service), which leaves inadequate memory for VM startup operations. AzureEMP was introduced in the Microsoft.AzureStack.Observability.TelemetryAndDiagnostics extension version 2.0.31.0.
 
 ## Symptoms
 
@@ -81,10 +81,3 @@ if ($config -and $config.PrometheusPlugin -and $config.PrometheusPlugin.EnableAz
 }
 
 ```
----
-
-### Reference
-
-1. [ICM 721487739: [Azure Local][B:#.####.#.##][O: ][C: ][AzureReg: ] VM failing to start](https://portal.microsofticm.com/imp/v3/incidents/details/721487739) – Incident summary and mitigation steps for VM startup failure due to AzureEMP service memory consumption.
-
----
