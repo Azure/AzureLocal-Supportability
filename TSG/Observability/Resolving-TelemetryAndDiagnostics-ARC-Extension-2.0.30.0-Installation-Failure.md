@@ -2,7 +2,7 @@
  
 ### Issue Description
 
-Due to a [memory leak](./MonitoringPlatformAgent-MemoryLeak.md) identified in **TelemetryAndDiagnostics extension version 2.0.31.0**, the extension is being rolled back to **version 2.0.30.0**. During the rollback process, the extension downgrade may fail and become stuck in one of the following states:
+Due to a [high memory consumption issue](./MonitoringPlatformAgent-MemoryConsumption.md) identified in **TelemetryAndDiagnostics extension version 2.0.31.0**, the extension is being rolled back to **version 2.0.30.0**. During the rollback process, the extension downgrade may fail and become stuck in one of the following states:
  
 - **Uninstalling** — while attempting to remove version **2.0.31.0**
 - **Installing** — while attempting to install version **2.0.30.0**
@@ -70,3 +70,5 @@ New-AzConnectedMachineExtension `
 ```Powershell
 Get-AzConnectedMachineExtension -ResourceGroupName $rgName -SubscriptionId $subscriptionId -MachineName $($env:COMPUTERNAME) -Name "AzureEdgeTelemetryAndDiagnostics"
 ```
+
+<font color='red'>**If the Remove-AzConnectedMachineExtension command fails, please follow the [Excessive Memory Consumption by MonitoringPlatformAgent](./MonitoringPlatformAgent-MemoryConsumption.md) TSG to ensure you do not encounter issues with excessive Memory consumption.** </font>
