@@ -1,4 +1,4 @@
-# TSG | Resolving TelemetryAndDiagnostics ARC Extension 2.0.30.0 Installation Failure 
+# TSG | Resolving TelemetryAndDiagnostics ARC Extension 2.0.31.0 Uninstallation Failure 
  
 ### Issue Description
 
