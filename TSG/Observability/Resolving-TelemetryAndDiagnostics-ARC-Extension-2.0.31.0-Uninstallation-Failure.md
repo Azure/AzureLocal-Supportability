@@ -71,4 +71,4 @@ New-AzConnectedMachineExtension `
 Get-AzConnectedMachineExtension -ResourceGroupName $rgName -SubscriptionId $subscriptionId -MachineName $($env:COMPUTERNAME) -Name "AzureEdgeTelemetryAndDiagnostics"
 ```
 
-<font color='red'>**If the Remove-AzConnectedMachineExtension command fails, please follow the [Excessive Memory Consumption by MonitoringPlatformAgent](./MonitoringPlatformAgent-MemoryConsumption.md) TSG to ensure you do not encounter issues with excessive Memory consumption.** </font>
+<font color='red'>**If the Remove-AzConnectedMachineExtension command fails, please follow the [Excessive Memory Consumption by MonitoringPlatformAgent](./MonitoringPlatformAgent-MemoryConsumption.md) TSG to ensure you do not encounter issues with excessive Memory consumption.** </font> If step 7 succeeds, no need to do this.
