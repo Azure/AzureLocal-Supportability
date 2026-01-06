@@ -57,8 +57,7 @@ To mitigate the issue and restore VM creation capability, disable the metrics pi
 
 After performing these steps, CPU and memory usage should decrease, allowing VM creation and startup to proceed.
 
-
-If you wish to switch back to the old metrics pipeline in order to get metrics to monitor your stamp run the following:
+4. If you wish to switch back to the old metrics pipeline in order to get metrics to monitor your stamp run the following:
 
 ```powershell
 $svc = Get-WmiObject Win32_Service -Filter "Name='healthagent'"
