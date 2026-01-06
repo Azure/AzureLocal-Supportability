@@ -71,4 +71,7 @@ New-AzConnectedMachineExtension `
 Get-AzConnectedMachineExtension -ResourceGroupName $rgName -SubscriptionId $subscriptionId -MachineName $($env:COMPUTERNAME) -Name "AzureEdgeTelemetryAndDiagnostics"
 ```
 
-<font color='red'>**If the Remove-AzConnectedMachineExtension command fails, please follow the [Excessive Memory Consumption by MonitoringPlatformAgent](./MonitoringPlatformAgent-MemoryConsumption.md) TSG to ensure you do not encounter issues with excessive Memory consumption.** </font> If step 7 succeeds, no need to do this.
+## Restoring the Metrics Pipeline
+After step 7 succeeds, your issue is resolved. However, rolling back from extension version 2.0.31.0 to 2.0.30.0 will leave your node without an existing Metrics pipeline. In order to restore Metrics, please run the commands in step 4 of this guide:
+    
+**[Excessive Memory Consumption by MonitoringPlatformAgent](./MonitoringPlatformAgent-MemoryConsumption.md)**
