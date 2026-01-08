@@ -17,10 +17,12 @@ This issue is caused by **lingering process handles** on extension folders or bi
 # Mitigation Details
 In order to mitigate this issue, we must close these lingering process handles and manually trigger extension downgrade. The most straightforward way to do so is to reboot the node. If that is doable, then after rebooting, skip to step 5. However, for scenarios where the node cannot be rebooted, proceed through the mitigation steps starting from step 1.
  
-1. Copy the following script somewhere onto the node: [Close-ProcessHandles.ps1](https://supportability.visualstudio.com/302ca1dd-50d9-463d-bfbc-88998bd9d1e3/_apis/git/repositories/91d6a157-e801-46e6-853a-c964171c84bd/Items?path=/.attachments/Close-ProcessHandles-ed2b075c-d138-464f-b492-884f0f9ec237.ps1&download=false&resolveLfs=true&%24format=octetStream&api-version=5.0-preview.1&sanitize=true&includeContentMetadata=true&versionDescriptor.version=wikiMaster) (You may need to rename it to "Close-ProcessHandles.ps1" if it is downloaded with a guid suffix)
-2. Open a new PowerShell session to the node and navigate to the above path.
+1. Create a new file somewhere on the node.
+```Powershell
+New-Item "Close-ProcessHandles.ps1"
+```
+2. Copy the contents of the code block in **[this file](./Close-ProcessHandles.md)** into the file you created.
 3. Unblock Close-ProcessHandles.ps1 (we need to run this command because the script is not signed):
- 
 ```PowerShell
 Unblock-File -Path ".\Close-ProcessHandles.ps1"
 ```
