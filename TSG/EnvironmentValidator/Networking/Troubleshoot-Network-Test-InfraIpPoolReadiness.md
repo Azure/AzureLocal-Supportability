@@ -282,10 +282,12 @@ The total number of IP addresses across all pools is either:
 2. Adjust your IP pools to provide between 6 and 255 IP addresses total:
    ```powershell
    # Example: Single pool with 10 IPs
-   $IpPool = @{
-       StartingAddress = "192.168.1.10"
-       EndingAddress = "192.168.1.19"
-   }
+    "IPPools": [
+        {
+        "StartingAddress": "192.168.1.10",
+        "EndingAddress": "192.168.1.19"
+        }
+    ]
    ```
 
 3. Re-run the Environment Validator
