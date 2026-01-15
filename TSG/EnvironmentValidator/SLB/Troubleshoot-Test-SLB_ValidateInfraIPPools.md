@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>SLB Deployment, SLB Scale-in, SLB Scale-out</strong></td>
+        <td><strong>SLB Deployment, SLB Scale-In, SLB Scale-Out</strong></td>
     </tr>
 </table>
 
@@ -78,7 +78,7 @@ Below are the possible failure results returned by `Test-SLB_ValidateInfraIPPool
 #### Failure: Insufficient Management IPs (Infrastructure IP Addresses)
 
 **Description:**
-There are not enough management IP addresses available in the pool to support SLB deployment or scaling operations.
+There are not enough management IP addresses available in the pool to support SLB deployment or scaling operations. The required number of IPs is calculated based on the number of MUXes (1 for single-node, 2 for multi-node by default) plus 1 additional IP for SLBM during new deployments.
 
 **Additional Data Example:**
 
@@ -94,6 +94,101 @@ Source    : x.x.x.x
 
 - Add additional management IP addresses to the pool until the available count meets or exceeds the required number.
 - For new deployments, ensure one extra IP is reserved for SLBM.
-- If multiple management subnets are detected, update configuration to ensure only one subnet is present.
+- Calculate required IPs: Single-node = 1 MUX + 1 SLBM (if new deployment); Multi-node = 2 MUXes + 1 SLBM (if new deployment).
+
+---
+
+#### Failure: No Management Subnets Found
+
+**Description:**
+The validator could not find any management subnet configuration in the ECE store. This indicates a configuration issue with the cluster deployment.
+
+**Additional Data Example:**
+
+```text
+Detail    : No management subnets found
+Status    : FAILURE
+TimeStamp : <timestamp>
+Resource  : ManagementIPAddresses
+Source    : x.x.x.x
+```
+
+**Remediation Steps:**
+
+- Verify that the cluster deployment completed successfully and the ECE configuration is intact.
+- Check that management network configuration exists in the deployment parameters.
+- If this is a new deployment, review your deployment configuration to ensure management subnet ranges are properly defined.
+- Contact Microsoft Support if the management subnet configuration is missing after a successful deployment.
+
+---
+
+#### Failure: No Allocatable IPs Found for Management Subnet
+
+**Description:**
+The management subnet exists in the configuration, but it has no allocatable IP addresses available. All IPs in the pool may already be allocated to other resources.
+
+**Additional Data Example:**
+
+```text
+Detail    : No allocatable IPs found for management subnet
+Status    : FAILURE
+TimeStamp : <timestamp>
+Resource  : ManagementIPAddresses
+Source    : x.x.x.x
+```
+
+**Remediation Steps:**
+
+- Review the current IP allocations in the management subnet to identify which resources are using the available IPs.
+- Expand the management subnet IP range to include additional IP addresses.
+- Ensure the IP range in your configuration has sufficient addresses for cluster nodes, Network Controller VMs, SLB MUX VMs, and SLBM.
+
+---
+
+#### Failure: Multiple Management Subnets Found
+
+**Description:**
+The validator detected more than one management subnet in the ECE configuration. The validator expects exactly one management subnet to determine available IP addresses.
+
+**Additional Data Example:**
+
+```text
+Detail    : Multiple management subnets found, unable to determine available IPs
+Status    : FAILURE
+TimeStamp : <timestamp>
+Resource  : ManagementIPAddresses
+Source    : x.x.x.x
+```
+
+**Remediation Steps:**
+
+- Review your deployment configuration to identify why multiple management subnets exist.
+- Consolidate to a single management subnet configuration if multiple were defined unintentionally.
+- Contact Microsoft Support for guidance if multiple management subnets are required for your environment.
+
+---
+
+#### Failure: Failed to Retrieve Management IP Pool Information
+
+**Description:**
+The validator was unable to query the ECE store for management subnet information. This could be due to connectivity issues, permission problems, or ECE service issues.
+
+**Additional Data Example:**
+
+```text
+Detail    : Failed to retrieve management IP pool information
+Status    : FAILURE
+TimeStamp : <timestamp>
+Resource  : ManagementIPAddresses
+Source    : x.x.x.x
+```
+
+**Remediation Steps:**
+
+- Verify that the ECE cluster service is running and accessible.
+- Check that you have administrative privileges on the cluster.
+- Verify connectivity to the cluster nodes where ECE is running.
+- Review the Windows Event Log for any ECE-related errors.
+- If the ECE service is not responding, try restarting the ECE cluster resource (with caution in production environments).
 
 ---

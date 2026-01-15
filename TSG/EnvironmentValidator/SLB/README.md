@@ -16,6 +16,7 @@ For Azure Local Software Load Balancer (SLB) resources not related to Environmen
 - [Troubleshoot: Public and Private Virtual IP Address (VIP) Check](Troubleshoot-Test-SLB_ValidatePublicPrivateVIPNetworks.md)
 - [Troubleshoot: Software Load Balancer (SLB) Configuration](Troubleshoot-Test-SLB_ValidateSoftwareLoadBalancer.md)
 - [Troubleshoot: Management IP Pools (Infrastructure IP Addresses)](Troubleshoot-Test-SLB_ValidateInfraIPPools.md)
+- [Troubleshoot: DNS Name Resolution for SLB](Troubleshoot-Test-SLB_ValidateDNSName.md)
 
 ---
 

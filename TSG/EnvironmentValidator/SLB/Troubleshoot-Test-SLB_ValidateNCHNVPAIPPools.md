@@ -83,7 +83,7 @@ Start by reviewing the `AdditionalData.Detail` field in your validator output fo
 #### Failure: Insufficient Available IP Addresses
 
 **Description:**  
-The validator detected that the number of available IP addresses in the HNVPA pools is less than the required amount to support all current nodes, new hosts, and SLB MUXes. This blocks further operations until remediated.
+The validator detected that the number of available IP addresses in the HNVPA pools is less than the required amount to support all new hosts. Each new host requires 2 IP addresses (CA and PA addresses in SDN). This blocks further operations until remediated.
 
 **Example Failure:**
 
@@ -97,9 +97,106 @@ Source: IPPools
 
 **Remediation Steps:**
 
+- Calculate required IPs: 2 IPs × number of new hosts being added.
 - Increase the size of the HNVPA IP pool in Network Controller to ensure sufficient IPs.
 - Remove unused or stale IP allocations if possible.
 - Verify that all subnets are correctly configured and not over-allocated.
+- Re-run the validator after remediation.
+
+---
+
+#### Failure: No NC Logical Networks Found for HNVPA
+
+**Description:**  
+The validator could not find any HNVPA logical network configured in Network Controller. This indicates that the HNVPA logical network has not been created or is misconfigured.
+
+**Example Failure:**
+
+```text
+Detail: No NC logical networks found for HNVPA
+Status: FAILURE
+TimeStamp: <timestamp>
+Resource: HNVPA
+Source: IPPools
+```
+
+**Remediation Steps:**
+
+- Verify that the HNVPA logical network is configured in Network Controller.
+- Check Network Controller configuration for the "HNVPA" resource ID.
+- If HNVPA logical network is missing, review your SDN deployment configuration and redeploy if necessary.
+- Re-run the validator after remediation.
+
+---
+
+#### Failure: No Properties or Subnets Found for HNVPA
+
+**Description:**  
+The HNVPA logical network exists but does not have any subnets or properties configured. This indicates an incomplete or corrupted HNVPA configuration.
+
+**Example Failure:**
+
+```text
+Detail: No properties or subnets found for HNVPA
+Status: FAILURE
+TimeStamp: <timestamp>
+Resource: HNVPA
+Source: IPPools
+```
+
+**Remediation Steps:**
+
+- Verify that HNVPA subnets are properly configured in Network Controller.
+- Review the HNVPA logical network configuration for missing subnet definitions.
+- If subnets are missing, add the required HNVPA subnet configuration through Network Controller.
+- Re-run the validator after remediation.
+
+---
+
+#### Failure: No Properties Found for HNVPA Subnet
+
+**Description:**  
+An HNVPA subnet exists but lacks the required properties configuration. This prevents the validator from determining IP availability.
+
+**Example Failure:**
+
+```text
+Detail: No properties found for HNVPA subnet
+Status: FAILURE
+TimeStamp: <timestamp>
+Resource: HNVPA
+Source: IPPools
+```
+
+**Remediation Steps:**
+
+- Review the HNVPA subnet configuration in Network Controller.
+- Ensure the subnet has valid properties including IP pool and usage information.
+- Reconfigure the HNVPA subnet if properties are missing or corrupted.
+- Re-run the validator after remediation.
+
+---
+
+#### Failure: No Usage Detailed Information Found for HNVPA Subnet
+
+**Description:**  
+The HNVPA subnet exists and has properties, but the IP usage information (numberOfIPAddresses and numberOfIPAddressesInTransition) is missing. This prevents calculating available IPs.
+
+**Example Failure:**
+
+```text
+Detail: No usage detailed information found for HNVPA subnet
+Status: FAILURE
+TimeStamp: <timestamp>
+Resource: HNVPA
+Source: IPPools
+```
+
+**Remediation Steps:**
+
+- Verify that the HNVPA subnet has valid IP pool configuration with usage tracking enabled.
+- Check Network Controller health and ensure it is correctly tracking IP allocations.
+- If usage information is missing, review and reconfigure the HNVPA subnet IP pools.
 - Re-run the validator after remediation.
 
 ---
@@ -122,7 +219,9 @@ Source: IPPools
 **Remediation Steps:**
 
 - Verify Network Controller health and connectivity.
+- Check that the NC client certificate is valid and accessible in the local machine certificate store.
 - Ensure the required PowerShell modules are installed and imported on target nodes.
+- Verify the NcHostAgent registry configuration at `HKLM:\SYSTEM\CurrentControlSet\Services\NcHostAgent\Parameters`.
 - Check for configuration or permission issues in Network Controller.
 - Review logs for errors and resolve any detected issues.
 - Re-run the validator after remediation.

@@ -7,11 +7,11 @@
     </tr>
     <tr>
         <th style="text-align:left; width: 180px;">Severity</th>
-        <td><strong>Critical</strong>: This validator will block operations until remediated.</td>
+        <td><strong>Informational</strong>: This validator provides informational output and does not block operations.</td>
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>Pre-Update, Post-Update, Add Node, SLB Scale-in, SLB Scale-out</strong></td>
+        <td><strong>Pre-Update, Post-Update, Add Node, SLB Scale-In, SLB Scale-Out, Post-SLB</strong></td>
     </tr>
 </table>
 

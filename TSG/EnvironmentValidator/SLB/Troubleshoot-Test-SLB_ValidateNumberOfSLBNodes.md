@@ -11,7 +11,7 @@
     </tr>
     <tr>
         <th style="text-align:left;width: 180px;">Applicable Scenarios</th>
-        <td><strong>SLB Deployment, SLB Scale-in, SLB Scale-out</strong></td>
+        <td><strong>SLB Deployment, SLB Scale-In, SLB Scale-Out</strong></td>
     </tr>
 </table>
 
