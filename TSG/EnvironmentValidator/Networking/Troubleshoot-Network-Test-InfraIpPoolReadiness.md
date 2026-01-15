@@ -26,7 +26,7 @@ The Infrastructure IP Pool must meet the following requirements:
 1. **No Duplicate IPs**: IP addresses must not be repeated across different pools
 2. **Subnet Alignment**: All IP addresses in pools must be within the specified Management Subnet
 3. **No Active Hosts**: IP addresses in the pool must not respond to ping or have services listening on ports 5986, 5985, or 22
-4. **Range Size**: The total number of IP addresses across all pools must be between 6 and 255
+4. **Range Size**: The total number of IP addresses across all pools must be between 6 and 16
 5. **Pool Count**: Must have 1 or 2 IP pools. If 2 pools are provided, the first pool must contain exactly 1 IP address
 
 ## Troubleshooting Steps
