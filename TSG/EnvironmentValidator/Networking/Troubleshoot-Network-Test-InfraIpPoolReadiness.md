@@ -311,7 +311,7 @@ The total number of IP addresses across all pools is either:
   "TargetResourceName": "ManagementIPRange",
   "TargetResourceType": "Network Range",
   "AdditionalData": {
-    "Detail": "Found 3 pools. Expected 1 or 2 pools. If 2 pools, first pool must have 5 or fewer IPs.",
+    "Detail": "Found 3 pools. Expected 1 or 2 pools. If 2 pools, first pool must contain exactly 1 IP address.",
     "Status": "FAILURE"
   }
 }
