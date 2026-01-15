@@ -72,7 +72,7 @@ One or more of the following issues exists:
 ### Remediation Steps
 
 1. Review your IP pool configuration and ensure no IP addresses are repeated:
-   ```json
+   ```text
    # Example: Check your IP pool configuration, below is a wrong configuration as IP 192.168.1.10 is duplicated.
             "IPPools": [
               {
