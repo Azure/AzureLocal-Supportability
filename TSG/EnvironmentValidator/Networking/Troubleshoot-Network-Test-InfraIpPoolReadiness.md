@@ -26,7 +26,7 @@ The Infrastructure IP Pool must meet the following requirements:
 1. **No Duplicate IPs**: IP addresses must not be repeated across different pools
 2. **Subnet Alignment**: All IP addresses in pools must be within the specified Management Subnet
 3. **No Active Hosts**: IP addresses in the pool must not respond to ping or have services listening on ports 5986, 5985, or 22
-4. **Range Size**: The total number of IP addresses across all pools must be between 6 and 16
+4. **Range Size**: The total number of IP addresses across all pools must be between 6 and 255
 5. **Pool Count**: Must have 1 or 2 IP pools. If 2 pools are provided, the first pool must contain exactly 1 IP address
 
 ## Troubleshooting Steps
@@ -87,7 +87,7 @@ One or more of the following issues exists:
    ```
 
 2. Verify all IP addresses are within the Management Subnet:
-   ```json
+   ```PowerShell
    # Verify IPs are in subnet
     "InfrastructureNetwork": [
         {
@@ -142,7 +142,7 @@ The starting or ending IP address in a pool is not within the specified Manageme
 ### Remediation Steps
 
 1. Verify the Management Subnet CIDR notation is correct:
-   ```json
+   ```PowerShell
    # Verify IPs are in subnet
     "InfrastructureNetwork": [
         {
@@ -156,18 +156,18 @@ The starting or ending IP address in a pool is not within the specified Manageme
    # Ensure all IPs from pools fall within this subnet range
 
 2. Ensure both starting and ending addresses are within the subnet:
-   ```json
+   ```PowerShell
    # Example: Check your IP pool configuration, below is a wrong configuration as IP 192.168.2.10 is not in subnet 192.168.1.0/24
-            "IPPools": [
-              {
-                "StartingAddress": "192.168.2.10",
-                "EndingAddress": "192.168.2.10"
-              },
-              {
-                "StartingAddress": "192.168.1.12",
-                "EndingAddress": "192.168.1.20"
-              }
-            ],
+    "IPPools": [
+        {
+        "StartingAddress": "192.168.2.10",
+        "EndingAddress": "192.168.2.10"
+        },
+        {
+        "StartingAddress": "192.168.1.12",
+        "EndingAddress": "192.168.1.20"
+        }
+    ],
    ```
 
 3. Update your IP pool configuration with valid addresses from the subnet defined by "SubnetMask".
@@ -251,7 +251,7 @@ An IP address in the pool is currently in use. The `AdditionalData.Detail` field
   "DisplayName": "Test Management IP Range Size of all the pools. 4 ips found.",
   "Status": 1,
   "Severity": 2,
-  "Description": "Checking management IP range size is between 6-255",
+  "Description": "Checking management IP range size is between 6-16",
   "Remediation": "https://aka.ms/hci-envch",
   "TargetResourceID": "Size:4",
   "TargetResourceName": "ManagementIPRange",
@@ -267,7 +267,7 @@ An IP address in the pool is currently in use. The `AdditionalData.Detail` field
 
 The total number of IP addresses across all pools is either:
 - Less than 6 (insufficient IPs for deployment)
-- Greater than 16 (exceeds maximum supported range)
+- Greater than 255 (exceeds maximum supported range)
 
 ### Remediation Steps
 
@@ -279,7 +279,7 @@ The total number of IP addresses across all pools is either:
    # Total: 12 IPs
    ```
 
-2. Adjust your IP pools to provide between 6 and 16 IP addresses total:
+2. Adjust your IP pools to provide between 6 and 255 IP addresses total:
    ```powershell
    # Example: Single pool with 10 IPs
    $IpPool = @{
@@ -333,19 +333,27 @@ One of the following pool configuration issues exists:
    # Pool 3: 192.168.1.30-192.168.1.32
 
    # Use 1 consolidated pool:
-   $IpPool = @{
-       StartingAddress = "192.168.1.10"
-       EndingAddress = "192.168.1.25"
-   }
+    "IPPools": [
+        {
+        "StartingAddress": "192.168.1.10",
+        "EndingAddress": "192.168.1.30"
+        }
+    ]
    ```
 
 2. **If you have 2 pools**, ensure the first pool contains exactly 1 IP:
    ```powershell
    # Correct configuration with 2 pools
-   $IpPools = @(
-       @{StartingAddress = "192.168.1.10"; EndingAddress = "192.168.1.10"}  # First pool: 1 IP
-       @{StartingAddress = "192.168.1.20"; EndingAddress = "192.168.1.30"}  # Second pool: 11 IPs
-   )
+    "IPPools": [
+        {
+        "StartingAddress": "192.168.1.10",
+        "EndingAddress": "192.168.1.10"
+        }, # First pool: 1 IP
+        {
+        "StartingAddress": "192.168.1.12",
+        "EndingAddress": "192.168.1.20"
+        } # Second pool: more IPs
+    ]
    ```
 
 3. Re-run the Environment Validator
