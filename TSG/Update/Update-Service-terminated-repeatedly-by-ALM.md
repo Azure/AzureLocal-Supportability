@@ -102,6 +102,9 @@ If the problem is still occurring, the final thing to do is to temporarily incre
 
 This can be done by changing the configured value for the memory limit in the update service agent manifest on each node and restarting the ALM agent. To do so, set the expected values at the top of this script in MB (existing suggested values are warning: 5.5GB and error: 6GB) and run this script **on every cluster node**.
 
+<div style="border: 2px solid; padding: 10px;  margin: 20px 0; border-radius: 8px;">
+<strong>NOTE:</strong> The maximum value allowed by ALM resource governance is <strong>8GB (8192 MB)</strong>. If the configured error limit exceeds this, the next Solution update will fail at patching the update service. If the error limit is configured higher than 8GB temporarily, it must be reset down to 8192 or lower before taking the next Solution update.</div>
+
 ```powershell
 $ErrorActionPreference = "Stop"
 
