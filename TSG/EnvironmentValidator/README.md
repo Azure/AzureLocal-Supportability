@@ -16,3 +16,9 @@ This folder contains the TSG's related to Environment Validators.
 ## Networking
 
 For Network Environment Validator TSGs, see [Networking/README.md](Networking/README.md).
+
+## Software
+
+For Software Environment Validator TSGs, see [Software/README.md](Software/README.md).
+
+* [Troubleshoot Software NTP Server Consistency](./Software/Troubleshoot-Software-NTP-Server-Consistency.md)
