@@ -49,7 +49,7 @@ if (-not ($eceParamsXml.SelectSingleNode("//Category[@Name='Domain']//Parameter[
 "@
     $null = $eceClient.UpdateCloudParameters($parametersUpdateDefinition).GetAwaiter().GetResult()
     Write-Output "Validating add DeployADLess parameter"
-    $null = $ececlient.InvalidateCloudDefinitionCache().GetAwaiter().GetResult()
+    $null = $eceClient.InvalidateCloudDefinitionCache().GetAwaiter().GetResult()
     $eceParamsXml = [XML]($eceClient.GetCloudParameters().getAwaiter().GetResult().CloudDefinitionAsXmlString)
     if (-not ($eceParamsXml.SelectSingleNode("//Category[@Name='Domain']//Parameter[@Name='DeployADLess']")))
     {
