@@ -265,7 +265,4 @@ Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | ForEach-Object {
 
 ### Related Documentation
 
-- [Plan host networking for switchless deployments](https://learn.microsoft.com/azure-stack/hci/plan/two-node-switchless)
 - [Network reference patterns](https://learn.microsoft.com/azure-stack/hci/plan/network-patterns-overview)
-- [Storage Spaces Direct networking](https://learn.microsoft.com/azure-stack/hci/concepts/storage-spaces-direct-networking)
-- [Network ATC overview](https://learn.microsoft.com/azure-stack/hci/deploy/network-atc-overview)

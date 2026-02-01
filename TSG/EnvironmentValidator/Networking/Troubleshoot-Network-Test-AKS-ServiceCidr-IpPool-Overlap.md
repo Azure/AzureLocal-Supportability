@@ -182,4 +182,3 @@ It's best to avoid these overlaps from the start rather than troubleshooting the
 
 - [AKS IP Address Planning](https://learn.microsoft.com/en-us/azure/aks/aksarc/aks-hci-ip-address-planning)
 - [Azure Local Network Requirements](https://learn.microsoft.com/en-us/azure-stack/hci/concepts/host-network-requirements)
-- [Plan host networking for Azure Local](https://learn.microsoft.com/en-us/azure-stack/hci/plan/plan-host-networking)

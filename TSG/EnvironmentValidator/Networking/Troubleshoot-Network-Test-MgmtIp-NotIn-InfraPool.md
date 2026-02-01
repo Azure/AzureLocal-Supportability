@@ -134,4 +134,3 @@ Reconfigure the infrastructure IP pool to exclude the node's management IP addre
 ### Related Documentation
 
 - [Azure Local Network Requirements](https://learn.microsoft.com/azure-stack/hci/concepts/host-network-requirements)
-- [Plan host networking for Azure Local](https://learn.microsoft.com/azure-stack/hci/plan/plan-host-networking)

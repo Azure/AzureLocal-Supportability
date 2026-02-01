@@ -183,5 +183,4 @@ For a 4-node cluster with infrastructure pool:
 ### Related Documentation
 
 - [Azure Local Network Requirements](https://learn.microsoft.com/azure-stack/hci/concepts/host-network-requirements)
-- [Plan host networking for Azure Local](https://learn.microsoft.com/azure-stack/hci/plan/plan-host-networking)
 - [Add servers to an Azure Local cluster](https://learn.microsoft.com/azure-stack/hci/manage/add-server)

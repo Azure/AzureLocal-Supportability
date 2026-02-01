@@ -192,7 +192,4 @@ If you started planning for switchless but need switched:
 
 ### Related Documentation
 
-- [Plan host networking](https://learn.microsoft.com/azure-stack/hci/plan/plan-host-networking)
 - [Network reference patterns](https://learn.microsoft.com/azure-stack/hci/plan/network-patterns-overview)
-- [Rack-aware clusters](https://learn.microsoft.com/azure-stack/hci/concepts/fault-domains)
-- [Storage Spaces Direct networking](https://learn.microsoft.com/azure-stack/hci/concepts/storage-spaces-direct-networking)

@@ -245,7 +245,4 @@ if ($isStorageOnly) {
 
 ### Related Documentation
 
-- [Network ATC overview](https://learn.microsoft.com/azure-stack/hci/deploy/network-atc-overview)
-- [Rack-aware clusters](https://learn.microsoft.com/azure-stack/hci/concepts/fault-domains)
-- [Plan host networking](https://learn.microsoft.com/azure-stack/hci/plan/plan-host-networking)
 - [Manage Network ATC](https://learn.microsoft.com/azure-stack/hci/manage/manage-network-atc)

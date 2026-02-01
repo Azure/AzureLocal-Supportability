@@ -379,7 +379,5 @@ Get-NetIntentStatus | Select-Object IntentName, ProvisioningStatus, Configuratio
 
 ### Related Documentation
 
-- [Network ATC overview](https://learn.microsoft.com/azure-stack/hci/deploy/network-atc-overview)
 - [Manage Network ATC](https://learn.microsoft.com/azure-stack/hci/deploy/network-atc)
 - [Host network requirements](https://learn.microsoft.com/azure-stack/hci/concepts/host-network-requirements)
-- [Troubleshoot Network ATC](https://learn.microsoft.com/azure-stack/hci/manage/troubleshoot-network-atc)

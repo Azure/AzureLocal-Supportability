@@ -165,4 +165,3 @@ For optimal network design, place DNS servers in ranges that do not conflict wit
 
 - [AKS IP Address Planning](https://learn.microsoft.com/en-us/azure/aks/aksarc/aks-hci-ip-address-planning)
 - [Azure Local Network Requirements](https://learn.microsoft.com/en-us/azure-stack/hci/concepts/host-network-requirements)
-- [DNS configuration for Azure Local](https://learn.microsoft.com/en-us/azure-stack/hci/manage/configure-dns)

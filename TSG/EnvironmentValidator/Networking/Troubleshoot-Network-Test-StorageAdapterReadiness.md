@@ -112,5 +112,5 @@ The Storage Adapter should support VLANID, but not have a value configured. Netw
    ```
 
 ### Failure: Adapter does not support VLANID. The Storage adapter should support VLANID.
-
-Storage Adapters must support VLANID. Please see [Select a network adapter](https://learn.microsoft.com/en-us/azure/azure-stack/hci/deploy/azure-stack-hci-network-adapter) for more information on supported network adapters.
+
+Storage Adapters must support VLANID.

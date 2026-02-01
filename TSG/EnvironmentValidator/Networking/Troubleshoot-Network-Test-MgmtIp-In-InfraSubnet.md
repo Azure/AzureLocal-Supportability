@@ -186,5 +186,4 @@ Check [Classless Inter-Domain Routing](https://en.wikipedia.org/wiki/Classless_I
 ### Related Documentation
 
 - [Azure Local Network Requirements](https://learn.microsoft.com/azure-stack/hci/concepts/host-network-requirements)
-- [Plan host networking for Azure Local](https://learn.microsoft.com/azure-stack/hci/plan/plan-host-networking)
 - [IP addressing for Azure Local](https://learn.microsoft.com/azure-stack/hci/plan/network-patterns-overview#ip-addressing)

@@ -252,6 +252,5 @@ Before adding a server to the cluster:
 
 ### Related Documentation
 
-- [Network ATC overview](https://learn.microsoft.com/azure-stack/hci/deploy/network-atc-overview)
 - [Add servers to an Azure Local cluster](https://learn.microsoft.com/azure-stack/hci/manage/add-server)
 - [Manage Network ATC](https://learn.microsoft.com/azure-stack/hci/manage/manage-network-atc)
