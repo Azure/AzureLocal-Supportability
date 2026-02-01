@@ -28,7 +28,7 @@ This guide complements the official Azure Local documentation and provides pract
 - Frequently asked questions about deployment patterns
 
 > [!NOTE]
-> This document focuses specifically on physical network infrastructure design patterns. For troubleshooting procedures and diagnostic guidance, refer to the companion document: **Azure Local – Physical Network Connection Troubleshooting Guide**.
+> This document focuses specifically on physical network infrastructure design patterns. For troubleshooting procedures and diagnostic guidance, refer to the companion document: [Azure Local – Physical Network Connection Troubleshooting Guide](Troubleshoot-TOR-Connectivity-Issues.md).
 
 > [!TIP]  
 > For logical networking, SDN configuration, and advanced operational topics, please refer to the dedicated Azure Local documentation resources listed in the Additional Resources section.
@@ -43,8 +43,8 @@ This section defines essential terms and acronyms used throughout this document:
 | **ToR (Top-of-Rack Switch)** | Physical network switch directly connected to Azure Local nodes, providing Layer 2/3 connectivity |
 | **Management VLAN (M)** | Network segment dedicated to cluster management and administrative traffic |
 | **Compute VLAN (C)** | Network segment for virtual machine workloads and tenant traffic |
-| **Storage VLAN 1 (S1)** | Storage network segment for SMB1 over RDMA traffic |
-| **Storage VLAN 2 (S2)** | Storage network segment for SMB2 over RDMA traffic |
+| **Storage VLAN 1 (S1)** | First storage network segment for SMB over RDMA traffic |
+| **Storage VLAN 2 (S2)** | Second storage network segment for SMB over RDMA traffic |
 | **SET (Switch Embedded Teaming)** | Windows-native NIC aggregation technology providing redundancy without switch-based LACP |
 | **RDMA (Remote Direct Memory Access)** | High-performance networking technology enabling direct memory-to-memory communication |
 | **LLDP (Link Layer Discovery Protocol)** | IEEE 802.1AB standard for network topology discovery and cable verification |
@@ -72,7 +72,7 @@ A high-performance design utilizing dedicated NICs for management/compute and st
 ![Switched with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_Switched.png)
 
 **Fully Converged Deployment**
-A balanced design where all traffic types (management, compute, storage) share the same physical NICs through VLAN segmentation. This pattern minimizes hardware footprint while maintaining high scalability. **Design Consistency**: Follows the same storage VLAN pattern as Switched deployment with "One Storage VLAN per TOR" as the baseline configuration to ensure RDMA traffic utilization and prevent storage traffic cross the ToR peer links.
+A balanced design where all traffic types (management, compute, storage) share the same physical NICs through VLAN segmentation. This pattern minimizes hardware footprint while maintaining high scalability. **Both storage VLANs must be configured on both ToR switches** because SET (Switch Embedded Teaming) may route either storage VLAN through either physical NIC.
 
 ![Fully-Converged with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_FullyConverged.png)
 
@@ -82,11 +82,11 @@ A balanced design where all traffic types (management, compute, storage) share t
 | Deployment Pattern  | Host NIC Configuration | ToR Switch VLAN Configuration | Primary Use Cases |
 |---------------------|------------------------|-------------------------------|-------------------|
 | **Switchless** | 2 NICs to switches (M+C traffic) + (N−1) direct inter-node NICs (S traffic) | Trunk ports with M, C VLANs only; no storage VLANs on ToRs | Edge deployments, remote sites, cost-sensitive environments |
-| **Switched** | 4 NICs per host: 2 for M+C traffic, 2 dedicated for storage | M and C VLANs on both ToRs; S1 VLAN exclusive to ToR1, S2 VLAN exclusive to ToR2 | Enterprise deployments requiring dedicated storage performance and traffic isolation |
-| **Fully Converged** | 2 NICs per host carrying all traffic types (M+C+S) via VLAN segmentation | **Baseline**: One Storage VLAN per TOR (S1→ToR1, S2→ToR2). **Optional**: Both storage VLANs on both ToRs for enhanced resilience | General-purpose deployments balancing performance, simplicity, and hardware efficiency |
+| **Switched** | 4 NICs per host: 2 for M+C traffic, 2 dedicated for storage | M and C VLANs on both ToRs; S1 VLAN on ToR1 only, S2 VLAN on ToR2 only (dedicated storage NICs) | Enterprise deployments requiring dedicated storage performance and traffic isolation |
+| **Fully Converged** | 2 NICs per host carrying all traffic types (M+C+S) via VLAN segmentation | Both storage VLANs (S1, S2) on both ToRs (required for SET) | General-purpose deployments balancing performance, simplicity, and hardware efficiency |
 
 > [!NOTE]
-> **Storage VLAN Configuration**: Customers can configure Storage VLANs as either **Layer 3 (L3) networks with IP subnets** or **Layer 2 (L2) networks without IP subnets**, but **we prefer L2 configuration**. With L2, it's just VLAN tagging, which makes it easy for Azure Local hosts to use any IP addresses without hardcoding subnet configurations on the switch or requiring predefined IP ranges. Since Azure Local nodes handle storage traffic tagging, ensure these VLANs are configured as **tagged VLANs on trunk ports** across all ToR switches.
+> **Storage VLAN Configuration**: Storage VLANs can be configured as either **Layer 3 (L3) networks with IP subnets** or **Layer 2 (L2) networks without IP subnets**. **Layer 2 configuration is recommended** because it simplifies VLAN tagging, allowing Azure Local hosts to use any IP addresses without hardcoding subnet configurations on the switch or requiring predefined IP ranges. Since Azure Local nodes handle storage traffic tagging, ensure these VLANs are configured as **tagged VLANs on trunk ports** across all ToR switches.
 
 
 ---
@@ -98,16 +98,16 @@ A balanced design where all traffic types (management, compute, storage) share t
 Azure Local requires specific capabilities from physical network switches to ensure performance, compatibility, and integration with RDMA, SET, and VLAN-based traffic separation.
 
 You can find the official list of switch requirements here:  
-🔗 [Azure Local – Physical Network Switch Requirements](https://learn.microsoft.com/en-us/azure/azure-local/concepts/physical-network-requirements?view=azloc-2506&tabs=overview%2C24H2reqs#network-switch-requirements)
+[Azure Local – Physical Network Switch Requirements](https://learn.microsoft.com/en-us/azure/azure-local/concepts/physical-network-requirements#network-switch-requirements)
 
 If you're an **OEM** and wish to qualify your switches for Azure Local deployments, Microsoft provides an open-source validation tool:  
-🛠️ [AzureLocal-Network-Switch-Validation](https://github.com/microsoft/AzureLocal-Network-Switch-Validation)
+[AzureLocal-Network-Switch-Validation](https://github.com/microsoft/AzureLocal-Network-Switch-Validation)
 
 
 ### Network Configuration Requirements
 
 The physical network must be configured in alignment with Azure Local's host networking requirements, and details and official configuration guidance are available here:  
-🔗 [Azure Local – Host Network Requirements](https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements)
+[Azure Local – Host Network Requirements](https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements)
 
 
 | Requirement           | Notes                                                                 |
@@ -121,60 +121,37 @@ The physical network must be configured in alignment with Azure Local's host net
 > [!NOTE]
 >  These are high-level requirements. Please refer to the official documentation to ensure full alignment with your specific deployment needs.
 
-This tool is designed to automate the generation of Azure Local switch configurations based on input JSON files. In addition to automation, it includes sample configuration files that can be used as reference. The tool is actively maintained and will continue to evolve in alignment with Azure Local's latest requirements.
-🔗 [AzureStack_Network_Switch_Config_Generator](https://github.com/microsoft/AzureStack_Network_Switch_Config_Generator)
+This tool is designed to automate the generation of Azure Local switch configurations based on input JSON files. In addition to automation, it includes sample configuration files that can be used as reference. The tool is actively maintained and will continue to evolve in alignment with Azure Local's latest requirements.  
+[AzureStack_Network_Switch_Config_Generator](https://github.com/microsoft/AzureStack_Network_Switch_Config_Generator)
 
 ---
 
 ## 4. Frequently Asked Questions
 
-### Q: Why does Azure Local utilize two storage networks in the design architecture, and do Storage VLANs need to be configured across the ToR peer link?
+### Q: How should Storage VLANs be configured across ToR switches?
 
 **A:**  
-Azure Local implements **dual storage VLANs** (typically VLAN 711 and VLAN 712) to ensure **high availability and fault tolerance** for storage traffic. The core design principle follows **"One Storage VLAN per ToR"** architecture for consistency across all deployment patterns.
+Storage VLAN configuration depends on the **deployment pattern**:
 
-**Storage VLANs and Peer Link Configuration:**
-**No, Storage VLANs should not be configured across the ToR peer link** in any deployment pattern. While Management and Compute VLANs are allowed across ToR peer links, Storage VLANs follow a different architecture.
+| Deployment Pattern | ToR VLAN Configuration | Why |
+|-------------------|------------------------|-----|
+| **Switched** | S1 on ToR1 only, S2 on ToR2 only | Dedicated storage NICs connect to specific ToRs |
+| **Fully Converged** | Both S1 & S2 on both ToRs | SET may route either storage VLAN through either physical NIC |
 
-**Key Design Principles:**
-- **ToR Switch Level**: Each ToR switch handles **only one storage VLAN** - no storage traffic crosses the ToR peer link
-- **Host Level**: **Windows SET (Switch Embedded Teaming)** in Fully Converged deployments uses vNIC to pNIC mapping based on adapter order to ensure storage traffic reaches the correct ToR switch
-- **Resilience**: Two storage VLANs provide **host-side resilience** while ToR switches optimize **RDMA performance** to the right destination
+**Switched Deployment (One Storage VLAN per ToR):**
+- Each host has **dedicated storage NICs** (4 NICs total)
+- Storage NIC1 connects to ToR1 → only needs VLAN 711
+- Storage NIC2 connects to ToR2 → only needs VLAN 712
+- This reduces MC-LAG utilization and optimizes RDMA performance
 
-**Architecture Overview:**
+**Fully Converged Deployment (Both Storage VLANs on Both ToRs):**
+- Each host has only **2 NICs** shared for all traffic
+- SET (Switch Embedded Teaming) handles vNIC-to-pNIC mapping
+- SET may route either storage VLAN through either physical NIC
+- **Both ToRs must carry both storage VLANs** to support SET's flexibility
 
-In **both Switched and Fully Converged** deployments:
-- **ToR1**: Handles Storage VLAN 711 exclusively  
-- **ToR2**: Handles Storage VLAN 712 exclusively  
-- **No storage traffic crosses the ToR peer link**
-
-**Deployment Pattern Implementation:**
-
-#### Switched Deployment
-- Uses **dedicated storage NICs** (no SET)
-- Host1 → dedicated NIC1 → Storage VLAN 711 → ToR1  
-- Host1 → dedicated NIC2 → Storage VLAN 712 → ToR2  
-- **Direct NIC-to-ToR mapping** without teaming
-- **No storage VLANs required on the peer link**
-
-#### Fully Converged Deployment
-- Uses **SET (Switch Embedded Teaming)** for all traffic types
-- SET performs **vNIC to pNIC mapping** based on adapter order
-- Host1 → SET maps Storage VLAN 711 → pNIC1 → ToR1  
-- Host1 → SET maps Storage VLAN 712 → pNIC2 → ToR2  
-- **SET ensures correct vNIC to pNIC mapping** based on adapter order
-- **No storage VLANs required on the peer link**
-
-**Why this design works:**
-- **Host-side resilience**: SET (in Fully Converged) or dedicated NICs (in Switched) provide redundancy
-- **ToR-side optimization**: Each ToR switch optimizes RDMA performance for its assigned storage VLAN
-- **Clean separation**: Management and Compute VLANs handle inter-ToR communication needs
-
-#### Summary:
-- ✅ **One Storage VLAN per ToR** - no storage traffic crosses ToR peer links
-- ✅ **SET provides host-side resilience** and correct traffic routing in Fully Converged deployments  
-- ✅ **Dual storage VLANs ensure failover capabilities** while maintaining RDMA performance optimization
-- ✅ **Storage VLANs are not configured on ToR peer links** - unlike Management and Compute VLANs
+> [!IMPORTANT]
+> In Fully Converged deployments, configuring only one storage VLAN per ToR will cause connectivity issues when SET routes a storage vNIC to a physical NIC connected to a ToR that doesn't have that VLAN configured.
 
 
 ### Q: Are **DCB (Data Center Bridging)** features like **PFC** and **ETS** required for RDMA in Azure Local deployments?
