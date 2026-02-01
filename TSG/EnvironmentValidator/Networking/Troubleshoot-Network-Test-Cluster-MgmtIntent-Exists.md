@@ -129,7 +129,7 @@ Get-NetIntent
 
 ### Related Documentation
 
-- [Network ATC overview](hhttps://learn.microsoft.com/en-us/azure/azure-local/concepts/network-atc-overview)
+- [Network ATC overview](https://learn.microsoft.com/en-us/azure/azure-local/concepts/network-atc-overview)
 - [Manage network intents](https://learn.microsoft.com/azure-stack/hci/manage/manage-network-atc)
 - [Host network requirements](https://learn.microsoft.com/azure-stack/hci/concepts/host-network-requirements)
 - [Add servers to an Azure Local cluster](https://learn.microsoft.com/azure-stack/hci/manage/add-server)
