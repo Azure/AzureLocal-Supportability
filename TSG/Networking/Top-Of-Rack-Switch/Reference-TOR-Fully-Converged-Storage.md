@@ -357,7 +357,7 @@ Eth1/3        1,7,711-712
 
 **Step 2: Verify MAC Address Learning**
 
-Check MAC address table entries for storage VLANs. The example below shows one possible state - actual results will vary based on active traffic:
+Check MAC address table entries for storage VLANs. The example below shows one possible state - actual results will vary based on active traffic and SET load balancing decisions:
 
 ```console
 # Check per-VLAN MAC table entries across the ToR
