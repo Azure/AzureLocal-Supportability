@@ -333,38 +333,59 @@ Host4      c$        Administrator Administrator 3.1.1   2
 
 Verify Top-of-Rack switch configuration and MAC address learning to ensure proper connectivity.
 
-**Validation Commands for Cisco NX-OS:**
+> [!NOTE]
+> With Switch Embedded Teaming (SET), storage VLAN traffic load balancing is dynamic. MAC addresses for VLANs 711 and 712 may appear on different ToR switches or ports depending on active traffic patterns and SET's load distribution. You may need to generate storage traffic to observe MAC learning.
+
+**Step 1: Verify VLAN Configuration**
+
+Confirm that storage VLANs 711 and 712 are allowed on the trunk to the host:
 
 ```console
-# On ToR1 - Both storage VLANs should be present
-ToR1# show mac address-table interface ethernet 1/3
-Legend:
-        * - primary entry, G - Gateway MAC, (R) - Routed MAC, O - Overlay MAC
-        age - seconds since last seen,+ - primary entry using vPC Peer-Link,
-        (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
-   VLAN     MAC Address      Type      age     Secure NTFY Ports
----------+-----------------+--------+---------+------+----+------------------
-*    7     0c42.a1f9.694a   dynamic  0         F      F    Eth1/3
-*  711     0015.5dc8.2006   dynamic  0         F      F    Eth1/3
-*  712     0015.5dc8.2007   dynamic  0         F      F    Eth1/3
+# Verify VLANs are allowed on the interface trunk
+ToR1# show interface ethernet 1/3 trunk
 
-# On ToR2 - Both storage VLANs should be present
-ToR2# show mac address-table interface ethernet 1/3
+Port          Native  Status        Port
+              Vlan                  Channel
+---------------------------------------------------------------------------
+Eth1/3        1       trunking      --
+
+Port          Vlans Allowed on Trunk
+---------------------------------------------------------------------------
+Eth1/3        1,7,711-712
+
+```
+
+**Step 2: Verify MAC Address Learning**
+
+Check MAC address table entries for storage VLANs. The example below shows one possible state - actual results will vary based on active traffic:
+
+```console
+# Check per-VLAN MAC table entries across the ToR
+ToR1# show mac address-table vlan 711
 Legend:
         * - primary entry, G - Gateway MAC, (R) - Routed MAC, O - Overlay MAC
         age - seconds since last seen,+ - primary entry using vPC Peer-Link,
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*    7     0c42.a1f9.694b   dynamic  0         F      F    Eth1/3
 *  711     0015.5dc8.2006   dynamic  0         F      F    Eth1/3
+
+ToR1# show mac address-table vlan 712
+Legend:
+        * - primary entry, G - Gateway MAC, (R) - Routed MAC, O - Overlay MAC
+        age - seconds since last seen,+ - primary entry using vPC Peer-Link,
+        (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
+   VLAN     MAC Address      Type      age     Secure NTFY Ports
+---------+-----------------+--------+---------+------+----+------------------
 *  712     0015.5dc8.2007   dynamic  0         F      F    Eth1/3
 
 ```
 
 **Expected Results:**
-- Both ToR switches should show Management VLAN 7 and **both** Storage VLANs (711 and 712) learned MAC addresses
-- This validates that the Fully Converged configuration is working correctly with SET routing traffic at the host level
+- VLANs 711 and 712 must be allowed on the trunk interface
+- MAC addresses for storage VLANs should be learned on the ToR switches when storage traffic is active
+- Due to SET load balancing, MAC addresses may appear on either ToR switch and on different ports depending on traffic distribution
+- If no MACs are visible for a VLAN, generate storage traffic (e.g., copy files between cluster nodes) and recheck
 
 ## Quality of Service (QoS)
 
