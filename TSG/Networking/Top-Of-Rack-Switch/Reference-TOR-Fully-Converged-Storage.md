@@ -170,6 +170,9 @@ This section provides configuration guidance using **Cisco Nexus 93180YC-FX3 (NX
 > [!NOTE]
 > In Fully Converged deployments, **both storage VLANs must be configured on both ToR switches** because SET handles vNIC-to-pNIC mapping at the host level and may route either storage VLAN through either physical NIC.
 
+> [!IMPORTANT]
+> Storage VLANs 711 and 712 should **NOT** be permitted on the ToR-to-ToR peer-link (vPC peer-link, MLAG inter-switch trunk, or any L2 interconnect between ToR switches). Storage traffic must flow directly from host to ToR to destination host to maintain optimal RDMA performance. Allowing storage VLANs on peer links can cause performance degradation.
+
 **Key Configuration Requirements:**
 - Enable Priority Flow Control (PFC) for RDMA support
 - Configure jumbo frames (MTU 9216) for optimal performance
