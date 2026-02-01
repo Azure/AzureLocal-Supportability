@@ -122,7 +122,7 @@ The physical network must be configured in alignment with Azure Local's host net
 >  These are high-level requirements. Please refer to the official documentation to ensure full alignment with your specific deployment needs.
 
 This tool is designed to automate the generation of Azure Local switch configurations based on input JSON files. In addition to automation, it includes sample configuration files that can be used as reference. The tool is actively maintained and will continue to evolve in alignment with Azure Local's latest requirements.  
-[AzureStack_Network_Switch_Config_Generator](https://github.com/microsoft/AzureStack_Network_Switch_Config_Generator)
+[Azure_Local_Physical_Network_Config_Tool](https://github.com/microsoft/Azure_Local_Physical_Network_Config_Tool)
 
 ---
 
