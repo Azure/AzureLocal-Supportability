@@ -83,7 +83,7 @@ Switchless storage connectivity is used for Rack Aware cluster.
    ```json
    {
        "clusterPattern": "RackAware",
-       "storageConnectivity": "switched"  // Changed from "switchless"
+       "storageConnectivity": "switched"
    }
    ```
 
