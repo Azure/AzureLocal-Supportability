@@ -47,7 +47,7 @@ else {
     Write-Host "SecureBoot is enabled. No issue found in SecureBoot setting"
 }
 ```
-Note: if both steps don't detect any issue, this is not the issue addressed by this article. Please refer to [Evaluate the deployment readiness of your environment for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/manage/use-environment-checker?tabs=connectivity)
+Note: if both steps don't detect any issue, this is not the issue addressed by this article. Please refer to [Evaluate the deployment readiness of your environment for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/manage/use-environment-checker?view=azloc-24113&tabs=connectivity)
 # Cause
 "Virtualization Technology" was not enabled on BIOS or SecureBoot is not enabled
 

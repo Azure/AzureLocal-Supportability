@@ -73,7 +73,7 @@ A BGP neighbor is defined using the 10.101.177.0/24 subnet, which corresponds to
 
 ![Layer 3 Forwarding Gateway Diagram](https://learn.microsoft.com/en-us/azure/azure-local/concepts/media/gateway-overview/layer-3-forwarding-example.png)
 
-The recommended approach for [Layer 3 Forwarding Gateways](https://learn.microsoft.com/en-us/azure/azure-local/manage/gateway-connections#create-an-l3-connection) in Azure Local is BGP-based dynamic routing with a required static route to enable BGP session establishment. This approach combines the flexibility of dynamic routing with the precision of targeted static routing.
+The recommended approach for [Layer 3 Forwarding Gateways](https://learn.microsoft.com/en-us/azure/azure-local/manage/gateway-connections?view=azloc-2505#create-an-l3-connection) in Azure Local is BGP-based dynamic routing with a required static route to enable BGP session establishment. This approach combines the flexibility of dynamic routing with the precision of targeted static routing.
 
 With this configuration, the Layer 3 Gateway operates using dual address spaces:
 - **Provider address** (15.0.0.5 in VLAN 10) - The physical-facing IP that connects to the ToR switch

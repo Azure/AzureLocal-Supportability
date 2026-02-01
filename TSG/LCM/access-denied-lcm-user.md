@@ -23,7 +23,7 @@ During any action plan, if you see the following, go to "Known Causes" #6
 Connecting to remote server <ClusterName> failed with the following error message : An unknown security error occured
 ```
 # Known Causes
-1. The LCM (deployment user) credentials were not updated properly using the [Set-AzureStackLCMUserPassword](https://learn.microsoft.com/en-us/azure/azure-local/manage/manage-secrets-rotation#run-set-azurestacklcmuserpassword-cmdlet) cmdlet. This cmdlet is responsible for updating the password in Active Directory as well as updating it in the ECE Store. Both of these should be in sync, otherwise there will be access denied issues.
+1. The LCM (deployment user) credentials were not updated properly using the [Set-AzureStackLCMUserPassword](https://learn.microsoft.com/en-us/azure/azure-local/manage/manage-secrets-rotation?view=azloc-24112#run-set-azurestacklcmuserpassword-cmdlet) cmdlet. This cmdlet is responsible for updating the password in Active Directory as well as updating it in the ECE Store. Both of these should be in sync, otherwise there will be access denied issues.
 2. The LCM user does not have sufficient permissions on the Organization Unit (OU) in Active Directory (AD).
 3. The NTLM policy, configured via Group Policy, may be blocking remote operations such as Invoke-Command. This can occur if NTLM is restricted either at the OU level or on the individual nodes or the domain controller via applied Group Policy Objects (GPOs).
 4. The WinRM trusted hosts configuration is set up incorrectly.
@@ -164,7 +164,7 @@ The user should have the following permissions on the OU:
 * CreateChild 
 * DeleteChild 
  
-If you do not see all of these ActiveDirectoryRights listed for this user, please follow [instructions to prepare active directory](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-prep-active-directory), including running the `AsHciADArtifactsPreCreationTool` listed in the wiki to ensure all permissions are set appropriately for the user. Ensure these same permissions are applied to all OU objects and their descendents.
+If you do not see all of these ActiveDirectoryRights listed for this user, please follow [instructions to prepare active directory](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-prep-active-directory?view=azloc-2503), including running the `AsHciADArtifactsPreCreationTool` listed in the wiki to ensure all permissions are set appropriately for the user. Ensure these same permissions are applied to all OU objects and their descendents.
 
 ### WinRM Trusted Hosts Configuration
 
@@ -182,7 +182,7 @@ Set-Item WSMan:\localhost\Client\TrustedHosts -Value hostname1,hostname2,192.168
 ### Validating LCM (User Deployment) Credentials Match the ECE Store
 
 ### Prerequisites
-Ensure the certificate with subject name CN=RuntimeParameterEncryptionCert, or CN=DscEncryptionCert is not missing or expired. If so, please run [Start-SecretRotation](https://learn.microsoft.com/en-us/azure/azure-local/manage/manage-secrets-rotation) to rotate certificates.
+Ensure the certificate with subject name CN=RuntimeParameterEncryptionCert, or CN=DscEncryptionCert is not missing or expired. If so, please run [Start-SecretRotation](https://learn.microsoft.com/en-us/azure/azure-local/manage/manage-secrets-rotation?view=azloc-24113) to rotate certificates.
 
 Please input your LCM user credentials when prompted. **DO NOT include the domain as part of the username in the credential**.
 

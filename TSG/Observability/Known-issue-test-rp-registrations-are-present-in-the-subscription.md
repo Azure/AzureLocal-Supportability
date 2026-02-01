@@ -71,7 +71,7 @@ Locations         : {}
 ```
 
 # Cause
-Specific resource providers (documented in [Register your Azure Local machines with Azure Arc and assign permissions for deployment - Azure Local | Microsoft Learn](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-arc-register-server-permissions#azure-prerequisites)) have always been required for Azure Local deployments.  However, the `Microsoft.Attestation` RP may not be registered for older clusters or clusters that were upgraded from 22H2.
+Specific resource providers (documented in [Register your Azure Local machines with Azure Arc and assign permissions for deployment - Azure Local | Microsoft Learn](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-arc-register-server-permissions?view=azloc-2507#azure-prerequisites)) have always been required for Azure Local deployments.  However, the `Microsoft.Attestation` RP may not be registered for older clusters or clusters that were upgraded from 22H2.
 
 A change was recently made to the Environment Checker that ensures the `Microsoft.Attestation` RP is registered to the subscription.
 

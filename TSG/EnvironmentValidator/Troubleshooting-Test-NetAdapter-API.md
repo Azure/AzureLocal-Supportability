@@ -73,5 +73,5 @@ Get-NetAdapter -Physical | Format-Table NdisMedium, Status, NdisPhysicalMedium, 
 ```
 
 Common issues:  
-- NdisPhysicalMedium is 0 (Unspecified). Ensure the network adapter being used is qualified. https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements#select-a-network-adapter and the drivers OEM drivers are installed. Inbox drivers are not allowed. 
+- NdisPhysicalMedium is 0 (Unspecified). Ensure the network adapter being used is qualified. https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements?view=azloc-24113#select-a-network-adapter and the drivers OEM drivers are installed. Inbox drivers are not allowed. 
 - Interfaces is down during validation. Ensure the interface is Up.

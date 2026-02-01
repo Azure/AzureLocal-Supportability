@@ -42,13 +42,13 @@ If you see the message "Failed to connect to ...", follow the below mitigation d
 
 # Cause
 
-Installing the extension AzureEdgeLifecycleManager requires to access the CRL sites to validate the packages. When these sites are blocked in the firewall, the installation will fail. You can check the full list of [Required firewall URLs for Azure Local deployments](https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements#:~:text=one%20firewall%20potentially.-,Required%20firewall%20URLs%20for%20Azure%20Local%20deployments,-Azure%20Local%20instances)
+Installing the extension AzureEdgeLifecycleManager requires to access the CRL sites to validate the packages. When these sites are blocked in the firewall, the installation will fail. You can check the full list of [Required firewall URLs for Azure Local deployments](https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements?view=azloc-24113#:~:text=one%20firewall%20potentially.-,Required%20firewall%20URLs%20for%20Azure%20Local%20deployments,-Azure%20Local%20instances)
   
 
 # Mitigation Details
 
 You can follow the below steps to resolve the issue.
-1. Configure your firewall according to [Required firewall URLs for Azure Local deployments](https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements#:~:text=one%20firewall%20potentially.-,Required%20firewall%20URLs%20for%20Azure%20Local%20deployments,-Azure%20Local%20instances) and make sure to allow the access to the three sites: "crl3.digicert.com", "crl4.digicert.com" and "ocsp.digicert.com". After the change, you can run the above issue validation steps to confirm the connectivity to these sites.
+1. Configure your firewall according to [Required firewall URLs for Azure Local deployments](https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements?view=azloc-24113#:~:text=one%20firewall%20potentially.-,Required%20firewall%20URLs%20for%20Azure%20Local%20deployments,-Azure%20Local%20instances) and make sure to allow the access to the three sites: "crl3.digicert.com", "crl4.digicert.com" and "ocsp.digicert.com". After the change, you can run the above issue validation steps to confirm the connectivity to these sites.
 
 2. Log into the Azure Local node where installing the extension failed, and Use the below Powershell cmdlets to remove the failed extension AzureEdgeLifecycleManager and install it again.
 

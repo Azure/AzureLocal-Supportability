@@ -22,7 +22,7 @@ This environment validator fails when the node that runs the MOCStack checks doe
 > **Notes**
 >
 > * This happens during the validation phase before the deployment begins.  
-> * `internetbeacon.msedge.net` is used only by the connectivity probe behavior of `Test-NetConnection`. It is **not** listed among the required Azure Local service endpoints in Microsoft’s Firewall Requirements page for Azure Local: https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements
+> * `internetbeacon.msedge.net` is used only by the connectivity probe behavior of `Test-NetConnection`. It is **not** listed among the required Azure Local service endpoints in Microsoft’s Firewall Requirements page for Azure Local: https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements?view=azloc-2508
 
 ## Requirements
 
@@ -247,7 +247,7 @@ Then run the Environment Validator again. The status for `AzStackHci_MOCStack_Ne
 
 * This validator checks generic internet reachability through `internetbeacon.msedge.net` using the default behavior of `Test-NetConnection`  
 * The requirement applies during validation before deployment  
-* `internetbeacon.msedge.net` is not part of the documented Azure Local firewall allowlist for service endpoints: https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements  
+* `internetbeacon.msedge.net` is not part of the documented Azure Local firewall allowlist for service endpoints: https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements?view=azloc-2508  
 * Document any temporary firewall changes and remove them after validation if they are not needed for ongoing operations
 
 ## Quick summary
