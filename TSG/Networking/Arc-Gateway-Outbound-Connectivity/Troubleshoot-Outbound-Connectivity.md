@@ -49,7 +49,7 @@ Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -KeyVaultURL "https
 
 ```
 
-For the most recent / up to date list of supported Azure regions review the ["Azure requirements" - System requirements for Azure Local](https://learn.microsoft.com/azure/azure-local/concepts/system-requirements-23h2?view=azloc-24113#azure-requirements) article. At the time of publishing this article, the list of valid Azure Region names for Azure Local include:
+For the most recent / up to date list of supported Azure regions review the ["Azure requirements" - System requirements for Azure Local](https://learn.microsoft.com/azure/azure-local/concepts/system-requirements-23h2#azure-requirements) article. At the time of publishing this article, the list of valid Azure Region names for Azure Local include:
 
 * "EastUS", "WestEurope", "AustraliaEast", "CanadaCentral", "CentralIndia", "JapanEast", "SouthCentral", "SouthEastAsia"
 
@@ -69,7 +69,7 @@ Test-Layer7Connectivity -url $url -port 443 -Verbose -Debug
 
 ## Share test results with Microsoft (Optional)
 
-The 'Test-AzureLocalConnectivity' function includes an option to upload the test results to Microsoft, this is controlled by a User Prompt that asks if you would like to **Upload the Transcript file and CSV file to Microsoft**. If you **answer "Y"** to the prompt, the function will automatically upload the output files to Microsoft, the transfer uses the built-in log transfer method that secure protocols, more information on the upload process is available [here](https://learn.microsoft.com/azure/azure-local/manage/collect-logs?view=azloc-24113&tabs=powershell#about-on-demand-log-collection).
+The 'Test-AzureLocalConnectivity' function includes an option to upload the test results to Microsoft, this is controlled by a User Prompt that asks if you would like to **Upload the Transcript file and CSV file to Microsoft**. If you **answer "Y"** to the prompt, the function will automatically upload the output files to Microsoft, the transfer uses the built-in log transfer method that secure protocols, more information on the upload process is available [here](https://learn.microsoft.com/azure/azure-local/manage/collect-logs?tabs=powershell#about-on-demand-log-collection).
 
 If you are working with Microsoft customer service and support (CSS), and have a support request (SR) case open, you could share some of the "Share Test Results" log upload text output that shows your cluster's "AEORegion", "ARODeviceARMResourceUri" and "CorrelationId" with the SR case owner.
 
@@ -159,7 +159,7 @@ Invoke-AzStackHciConnectivityValidation -PassThru | Where-Object -Property Statu
 
 For additional information for how to use Azure Local Environment Checker module, review the [Troubleshooting External Connectivity Failures in Environment Checker](../../EnvironmentValidator/Troubleshooting-External-Connectivity-Failures-in-Environment-Checker.md) article.
 
-And the Microsoft Learn article is here: [Readiness of your environment for Azure Local - "Run readiness checks" section](https://learn.microsoft.com/azure/azure-local/manage/use-environment-checker?view=azloc-24113&tabs=connectivity#run-readiness-checks).
+And the Microsoft Learn article is here: [Readiness of your environment for Azure Local - "Run readiness checks" section](https://learn.microsoft.com/azure/azure-local/manage/use-environment-checker?tabs=connectivity#run-readiness-checks).
 
 ### Solution Update Environment Tests
 
@@ -183,7 +183,7 @@ $Result.HealthCheckResult | ConvertTo-Json -Depth 10 | Out-File "C:\Temp\HealthR
 
 ````
 
-For additional information for how to analyze and understand the **$Results.HealthCheckResult** array, refer to this article: [Solution Update Readiness Checker - "using PowerShell" section](https://learn.microsoft.com//azure/azure-local/update/update-troubleshooting-23h2?view=azloc-24113#using-powershell).
+For additional information for how to analyze and understand the **$Results.HealthCheckResult** array, refer to this article: [Solution Update Readiness Checker - "using PowerShell" section](https://learn.microsoft.com//azure/azure-local/update/update-troubleshooting-23h2#using-powershell).
 
 ## How to get additional support
 

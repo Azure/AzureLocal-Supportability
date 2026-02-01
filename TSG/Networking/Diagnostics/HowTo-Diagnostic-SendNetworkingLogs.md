@@ -28,7 +28,7 @@
 
 
 ## Overview
-See [Collect diagnostic logs from azure local](https://learn.microsoft.com/en-us/azure/azure-local/manage/collect-logs?view=azloc-2509&tabs=azureportal)
+See [Collect diagnostic logs from azure local](https://learn.microsoft.com/en-us/azure/azure-local/manage/collect-logs?tabs=azureportal)
 
 This guide shows how to collect networking and SDN related logs for azure local, and send them to Microsoft. These logs are helpful to identify SDN or networking configuration related problems in the azure local cluster.
 
@@ -43,7 +43,7 @@ You may need to send these logs if you open a support case related to networking
 
 ## How to collect
 
-See [Collect logs from azure local using powershell](https://learn.microsoft.com/en-us/azure/azure-local/manage/collect-logs?view=azloc-2509&tabs=powershell)
+See [Collect logs from azure local using powershell](https://learn.microsoft.com/en-us/azure/azure-local/manage/collect-logs?tabs=powershell)
 
 From any host node of the azure local cluster, run the powershell command `Send-DiagnosticData`. This will collect and parse logs from multiple etl providers, run diagnostic scripts, collect other log files in the stamp and (optionally) send them to Microsoft to be analyzed. 
 
@@ -52,7 +52,7 @@ The `Send-DiagnosticData` commandlet supports multiple parameters to choose what
 These log collections take anywhere from a couple of minutes to more than half an hour (depending on the amount of data collected). Run the command with no parameters if you are unsure of which data you need, or use the parameters to filter only the relevant data if you can.
 
 ### roles
-See [Send diagnostic data for specified roles](https://learn.microsoft.com/en-us/azure/azure-local/manage/collect-logs?view=azloc-2509&tabs=powershell#send-diagnostic-data-for-specified-roles)
+See [Send diagnostic data for specified roles](https://learn.microsoft.com/en-us/azure/azure-local/manage/collect-logs?tabs=powershell#send-diagnostic-data-for-specified-roles)
 
 You may specify the roles using the `-FilterByRole` parameter. Use the role **HostNetwork** for networking data, or **SDN** for any SDN related issue (NEtwork controller, Software load balancers or Gateway).
 

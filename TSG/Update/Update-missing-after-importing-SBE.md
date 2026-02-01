@@ -17,7 +17,7 @@ DisplayName                      PackageType Version      SbeVersion     State
 SBE_Contoso_Gen3_4.1.2412.5      SBE      4.1.2412.5      4.1.2412.5     AdditionalContentRequired
 Azure Local 2411 bundle      Solution   10.2411.0.24      4.1.2412.5     AdditionalContentRequired
 ```
-This is normal and part of the expected flow for SBE updates as discussed at [Solution Builder Extension updates on Azure Local, version 23H2 - Azure Local | Microsoft Learn](https://learn.microsoft.com/en-us/azure/azure-local/update/solution-builder-extension?view=azloc-24113#discover-solution-builder-extension-updates-via-powershell).
+This is normal and part of the expected flow for SBE updates as discussed at [Solution Builder Extension updates on Azure Local, version 23H2 - Azure Local | Microsoft Learn](https://learn.microsoft.com/en-us/azure/azure-local/update/solution-builder-extension#discover-solution-builder-extension-updates-via-powershell).
 
 ## Step 2 - Wrong SBE imported (probably older or wrong family)
 Instead of the requested `4.1.2412.5` SBE that was listed as required, users may mistakenly download and call Add-SolutionUpdate with either:
@@ -102,4 +102,4 @@ Note: that URI will likely be a `https://aka.ms` based redirection address that 
 4. Call `Get-SolutionUpdate` wait ~2 minutes and then call it again.  At this point the missing updates should have returned (in `AdditionalContentRequired` state again)
 
 5. Follow the normal documented process to use `Add-SolutionUpdate` to add the requested SBE (the right one this time):
-https://learn.microsoft.com/en-us/azure/azure-local/update/solution-builder-extension?view=azloc-24113#discover-solution-builder-extension-updates-via-powershell
+https://learn.microsoft.com/en-us/azure/azure-local/update/solution-builder-extension#discover-solution-builder-extension-updates-via-powershell

@@ -317,4 +317,4 @@ Validators that run after this validator:
 ### Related Documentation
 
 - [Create a virtual switch for Hyper-V](https://learn.microsoft.com/windows-server/virtualization/hyper-v/get-started/create-a-virtual-switch-for-hyper-v-virtual-machines)
-- [Azure Local host network requirements](https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements?view=azloc-2601)
+- [Azure Local host network requirements](https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements)

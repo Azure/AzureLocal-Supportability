@@ -145,7 +145,7 @@ Check Get-SolutionUpdate
 ```
 
 You should see either redmond/Solution12.2509.1001.22 or redmond/Solution11.2509.1001.21 now and should start pnu to 2509 instead of 2510. 
-Below command will start the download process and health check of the 2509 pnu package and can follow same guidelines as regular pnu from now on. https://learn.microsoft.com/en-us/azure/azure-local/update/about-updates-23h2?view=azloc-2509
+Below command will start the download process and health check of the 2509 pnu package and can follow same guidelines as regular pnu from now on. https://learn.microsoft.com/en-us/azure/azure-local/update/about-updates-23h2
 
 ```
 $resourceId = "[Replace with either redmond/Solution12.2509.1001.22 or redmond/Solution11.2509.1001.21 depending on above]"

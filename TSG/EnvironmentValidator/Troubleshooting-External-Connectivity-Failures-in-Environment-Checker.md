@@ -8,7 +8,7 @@ The complete solution to fixing connectivity problems is often environment speci
 
 # Issue Validation
 
-There are two ways to receive a failure, standalone invocation on a workstation or Azure local node following [Evaluate the deployment readiness of your environment for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/manage/use-environment-checker?view=azloc-24113&tabs=connectivity) or via an Azure Local fabric operation like Deployment, Update, ScaleOut and Upgrade actions.
+There are two ways to receive a failure, standalone invocation on a workstation or Azure local node following [Evaluate the deployment readiness of your environment for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/manage/use-environment-checker?tabs=connectivity) or via an Azure Local fabric operation like Deployment, Update, ScaleOut and Upgrade actions.
 
 ## Standalone - Running Invoke-AzStackHciConnectivityValidation from PowerShell
 ```

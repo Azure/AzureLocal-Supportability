@@ -61,7 +61,7 @@ All following mitigation steps are applicable to:
 #### Update failure scenario
 If you have already seen and validated the issue using this TSG, you will need to repair every single node.
 
-Please follow the repair node document [here](https://learn.microsoft.com/en-us/azure/azure-local/manage/repair-server?view=azloc-2506) on one of the nodes. Node repair should be done one at a time. Follow the instructions and have document step 2 done (i.e., OS and driver installed). Please do not proceed to document step 3 (i.e., Arc registration) at this time.
+Please follow the repair node document [here](https://learn.microsoft.com/en-us/azure/azure-local/manage/repair-server) on one of the nodes. Node repair should be done one at a time. Follow the instructions and have document step 2 done (i.e., OS and driver installed). Please do not proceed to document step 3 (i.e., Arc registration) at this time.
 
 #### Pre-2411.3 update scenario
 If you are planning to update to Azure Local 2411.3 release and update haven't yet started, please follow the mitigation steps section provided below.

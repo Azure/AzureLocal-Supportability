@@ -10,7 +10,7 @@ Once customers invoke `Start-SolutionUpdate` (either with or without `-PrepareOn
 - The (pre-update) update readiness health check reports the failure - see scenario 3 below.
 
 In either case, the process for viewing and mitigating the failure is similar. The following guide describes how to view both the system and update readiness health checks in the Portal or via PowerShell:
-[Troubleshoot solution updates for Azure Local, version 23H2 - Azure Local | Microsoft Learn](https://learn.microsoft.com/en-us/azure/azure-local/update/update-troubleshooting-23h2?view=azloc-24112#using-azure-portal)
+[Troubleshoot solution updates for Azure Local, version 23H2 - Azure Local | Microsoft Learn](https://learn.microsoft.com/en-us/azure/azure-local/update/update-troubleshooting-23h2#using-azure-portal)
 
 
 ### Scenario 1: exposed by "preparing" before updating
@@ -157,4 +157,4 @@ Write-Host ("Updated 'SBEStagedMetadata' to " + [System.Environment]::GetEnviron
 3. Wait a few minutes to allow the system health check to run and then check the result using `Get-SolutionUpdateEnvironment`
 
 For help viewing the new system health check results see:
-[Troubleshoot solution updates for Azure Local, version 23H2 - Azure Local | Microsoft Learn](https://learn.microsoft.com/en-us/azure/azure-local/update/update-troubleshooting-23h2?view=azloc-24112#using-azure-portal)
+[Troubleshoot solution updates for Azure Local, version 23H2 - Azure Local | Microsoft Learn](https://learn.microsoft.com/en-us/azure/azure-local/update/update-troubleshooting-23h2#using-azure-portal)

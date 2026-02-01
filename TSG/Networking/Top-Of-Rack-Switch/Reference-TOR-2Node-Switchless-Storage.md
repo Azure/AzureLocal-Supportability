@@ -441,7 +441,7 @@ A BGP neighbor is defined using the 10.101.177.0/24 subnet, which corresponds to
 
 ## Layer 3 Forwarding Gateway
 
-There are two primary methods for supporting [Layer 3 Forwarding Gateways](https://learn.microsoft.com/en-us/azure/azure-local/manage/gateway-connections?view=azloc-2505#create-an-l3-connection) in Azure Local configurations: BGP and static routing.
+There are two primary methods for supporting [Layer 3 Forwarding Gateways](https://learn.microsoft.com/en-us/azure/azure-local/manage/gateway-connections#create-an-l3-connection) in Azure Local configurations: BGP and static routing.
 
 With BGP, the Layer 3 Gateway establishes a BGP session with the ToR switch and advertises its V-NET routes directly into the ToR routing table. This dynamic approach allows the routing table to be automatically updated as new networks are added or removed, reducing manual intervention and supporting scalable, automated network operations.
 
@@ -507,4 +507,4 @@ This approach is particularly useful in environments where dynamic routing proto
 - [Network considerations for cloud deployments of Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/plan/cloud-deployment-network-considerations)
 - [Physical network requirements for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/physical-network-requirements)
 - [Teaming in Azure Stack HCI](https://techcommunity.microsoft.com/blog/networkingblog/teaming-in-azure-stack-hci/1070642)
-- [Manage Azure Local gateway connections](https://learn.microsoft.com/en-us/azure/azure-local/manage/gateway-connections?view=azloc-2505#create-an-l3-connection)
+- [Manage Azure Local gateway connections](https://learn.microsoft.com/en-us/azure/azure-local/manage/gateway-connections#create-an-l3-connection)
