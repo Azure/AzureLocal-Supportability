@@ -106,62 +106,67 @@ This can be done by changing the configured value for the memory limit in the up
 > The maximum value allowed by ALM resource governance is **8GB (8192 MB)**. If the configured error limit exceeds this, the next Solution update will fail at patching the update service. If the error limit is configured higher than 8GB temporarily, it must be reset down to 8192 or lower before taking the next Solution update.
 
 ```powershell
-$ErrorActionPreference = "Stop"
+$nodes = Get-ClusterNode | % Name
 
-# Values in MB
-$memoryWarningLimit = 5632
-$memoryErrorLimit = 6144
+Write-Host "Running script block on nodes: $($nodes -join ', ')"
+Invoke-Command -ComputerName $nodes -ScriptBlock {
+    $ErrorActionPreference = "Stop"
 
-if ($memoryErrorLimit -lt 4096)
-{
-    throw "Current memory limit is 4096. If this TSG is being used, the suggested memory limit should be higher."
-}
+    # Values in MB
+    $memoryWarningLimit = 5632
+    $memoryErrorLimit = 6144
 
-if ($memoryErrorLimit -lt $memoryWarningLimit)
-{
-    throw "Warning limit ($memoryWarningLimit) must be lower than the Error limit $($memoryErrorLimit)"
-}
-
-$updateAgentManifestFileName = ls "C:\Agents\AgentManifests\*Update Service*"
-if ($updateAgentManifestFileName.Count -gt 1)
-{
-    throw "Unexpectedly found more than one update service agent manifest in C:\Agents"
-}
-
-if (-not $updateAgentManifestFileName)
-{
-    throw "Unable to find the update agent manifest at C:\Agents\AgentManifests"
-}
-
-Write-Host "Found update agent manifest at $($updateAgentManifestFileName.FullName)"
-$updateAgentManifest = Get-Content $updateAgentManifestFileName.FullName -Raw | ConvertFrom-Json
-
-if ($updateAgentManifest.WindowsServiceInstallationParameters.ResourceGovernanceConfiguration.WarningMemoryLimitMB -ne $memoryWarningLimit -or `
-    $updateAgentManifest.WindowsServiceInstallationParameters.ResourceGovernanceConfiguration.ErrorMemoryLimitMB -ne $memoryErrorLimit)
-{
-    Write-Host "Setting Warning limit to $($memoryWarningLimit)MB and Error limit to $($memoryErrorLimit)MB"
-    $updateAgentManifest.WindowsServiceInstallationParameters.ResourceGovernanceConfiguration.WarningMemoryLimitMB = $memoryWarningLimit
-    $updateAgentManifest.WindowsServiceInstallationParameters.ResourceGovernanceConfiguration.ErrorMemoryLimitMB = $memoryErrorLimit
-
-    Write-Host "Saving edited agent manifest back to $($updateAgentManifestFileName.FullName)"
-    $updateAgentManifest | ConvertTo-Json -Depth 10 | Set-Content -Path $updateAgentManifestFileName.FullName
-
-    Write-Host "Restarting ALM agent to pick up new config."
-    Get-Service "AzureStack Agent Lifecycle Agent" | Restart-Service
-
-    $updateService = Get-Service "Azure Stack HCI Update Service"
-    if ($updateService.Status -eq "Running")
+    if ($memoryErrorLimit -lt 4096)
     {
-        Write-Host "Restarting update service to be monitored with new memory limit values."
-        $updateService | Restart-Service
+        throw "[$($env:ComputerName)] Current memory limit is 4096. If this TSG is being used, the suggested memory limit should be higher."
+    }
+
+    if ($memoryErrorLimit -lt $memoryWarningLimit)
+    {
+        throw "[$($env:ComputerName)] Warning limit ($memoryWarningLimit) must be lower than the Error limit $($memoryErrorLimit)"
+    }
+
+    $updateAgentManifestFileName = ls "C:\Agents\AgentManifests\*Update Service*"
+    if ($updateAgentManifestFileName.Count -gt 1)
+    {
+        throw "[$($env:ComputerName)] Unexpectedly found more than one update service agent manifest in C:\Agents"
+    }
+
+    if (-not $updateAgentManifestFileName)
+    {
+        throw "[$($env:ComputerName)] Unable to find the update agent manifest at C:\Agents\AgentManifests"
+    }
+
+    Write-Host "[$($env:ComputerName)] Found update agent manifest at $($updateAgentManifestFileName.FullName)"
+    $updateAgentManifest = Get-Content $updateAgentManifestFileName.FullName -Raw | ConvertFrom-Json
+
+    if ($updateAgentManifest.WindowsServiceInstallationParameters.ResourceGovernanceConfiguration.WarningMemoryLimitMB -ne $memoryWarningLimit -or `
+        $updateAgentManifest.WindowsServiceInstallationParameters.ResourceGovernanceConfiguration.ErrorMemoryLimitMB -ne $memoryErrorLimit)
+    {
+        Write-Host "[$($env:ComputerName)] Setting Warning limit to $($memoryWarningLimit)MB and Error limit to $($memoryErrorLimit)MB"
+        $updateAgentManifest.WindowsServiceInstallationParameters.ResourceGovernanceConfiguration.WarningMemoryLimitMB = $memoryWarningLimit
+        $updateAgentManifest.WindowsServiceInstallationParameters.ResourceGovernanceConfiguration.ErrorMemoryLimitMB = $memoryErrorLimit
+
+        Write-Host "[$($env:ComputerName)] Saving edited agent manifest back to $($updateAgentManifestFileName.FullName)"
+        $updateAgentManifest | ConvertTo-Json -Depth 10 | Set-Content -Path $updateAgentManifestFileName.FullName
+
+        Write-Host "[$($env:ComputerName)] Restarting ALM agent to pick up new config."
+        Get-Service "AzureStack Agent Lifecycle Agent" | Restart-Service
+
+        $updateService = Get-Service "Azure Stack HCI Update Service"
+        if ($updateService.Status -eq "Running")
+        {
+            Write-Host "[$($env:ComputerName)] Restarting update service to be monitored with new memory limit values."
+            $updateService | Restart-Service
+        }
+        else
+        {
+            Write-Host "[$($env:ComputerName)] Update service is not primary on this node. Current status: $($updateService.Status)"
+        }
     }
     else
     {
-        Write-Host "Update service is not primary on this node. Current status: $($updateService.Status)"
+        Write-Host "[$($env:ComputerName)] No changes needed. Existing limits are already set. Warning limit $($memoryWarningLimit)MB and Error limit $($memoryErrorLimit)MB"
     }
-}
-else
-{
-    Write-Host "No changes needed. Existing limits are already set. Warning limit $($memoryWarningLimit)MB and Error limit $($memoryErrorLimit)MB"
 }
 ```
