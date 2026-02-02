@@ -108,7 +108,7 @@ $instanceIDs = $failedUpdates.InstanceID
 $eceClient = Create-ECEClusterServiceClient
 $deleteActionPlanInstanceDescription = New-Object Microsoft.AzureStack.Solution.Deploy.EnterpriseCloudEngine.Controllers.Models.DeleteActionPlanInstanceDescription
 
-foreach ($actionPlanInstanceId in $instanceIDs) {
+foreach ($actionPlanInstanceID in $instanceIDs) {
     # remove old instance
     $deleteActionPlanInstanceDescription.ActionPlanInstanceID = $actionPlanInstanceID
     $eceClient.DeleteActionPlanInstance($deleteActionPlanInstanceDescription).Wait()
@@ -180,4 +180,5 @@ else
     Write-Host "No changes needed. Existing limits are already set. Warning limit $($memoryWarningLimit)MB and Error limit $($memoryErrorLimit)MB"
 }
 ```
+
 
