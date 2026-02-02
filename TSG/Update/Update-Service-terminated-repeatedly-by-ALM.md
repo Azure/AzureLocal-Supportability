@@ -106,7 +106,7 @@ This can be done by changing the configured value for the memory limit in the up
 > The maximum value allowed by ALM resource governance is **8GB (8192 MB)**. If the configured error limit exceeds this, the next Solution update will fail at patching the update service. If the error limit is configured higher than 8GB temporarily, it must be reset down to 8192 or lower before taking the next Solution update.
 
 ```powershell
-$nodes = Get-ClusterNodes | % Name
+$nodes = Get-ClusterNode | % Name
 
 Write-Host "Running script block on nodes: $($nodes -join ', ')"
 Invoke-Command -ComputerName $nodes -ScriptBlock {
