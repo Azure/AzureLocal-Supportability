@@ -27,7 +27,7 @@ This document provides a comprehensive reference for implementing a fully conver
   - [Quality of Service (QoS)](#quality-of-service-qos)
   - [BGP Routing](#bgp-routing)
   - [Frequently Asked Questions](#frequently-asked-questions)
-    - [Q: Can I configure both Storage VLANs on both TOR switches?](#q-can-i-configure-both-storage-vlans-on-both-tor-switches)
+    - [Q: Why must both Storage VLANs be on both ToR switches in Fully Converged?](#q-why-must-both-storage-vlans-be-on-both-tor-switches-in-fully-converged)
   - [Additional Resources](#additional-resources)
     - [Official Documentation](#official-documentation)
     - [Technical Deep Dives](#technical-deep-dives)
@@ -44,7 +44,7 @@ Azure Local's fully converged network design provides a unified approach to hand
 
 The fully converged physical network architecture integrates **management**, **compute**, and **storage** traffic over the same physical Ethernet interfaces. This design minimizes hardware footprint while maximizing scalability and deployment simplicity.
 
-**Key Design Principle**: The fully converged storage deployment follows the same pattern as switched deployment for consistency: **One Storage VLAN per TOR** is the baseline configuration. This approach ensures storage traffic always uses RDMA instead of falling back to regular TCP traffic, providing reliable high-performance storage connectivity.
+**Key Design Principle**: In Fully Converged deployments, **both storage VLANs must be configured on both ToR switches**. This is because each host has only 2 NICs (shared for all traffic), and SET (Switch Embedded Teaming) may route either storage VLAN through either physical NIC based on its load balancing algorithm.
 
 ## Architecture Components
 
@@ -82,7 +82,7 @@ This section demonstrates a **fully converged Azure Local deployment** where man
 
 ### Design Characteristics
 - **Fully Converged**: All traffic types (Management, Compute, Storage) utilize the same physical links
-- **Redundant Infrastructure**: Each node connects to both TOR1 and TOR2 for high availability
+- **Redundant Infrastructure**: Each node connects to both ToR1 and ToR2 for high availability
 - **Switch Embedded Teaming**: Host-level NIC bonding provides fault tolerance and load balancing
 - **VLAN Segmentation**: Traffic isolation using IEEE 802.1Q VLAN tagging
 
@@ -103,22 +103,22 @@ The following tables demonstrate physical connectivity between Azure Local nodes
 
 | Azure Local Node | Interface | ToR Switch | Interface   |
 |------------------|-----------|------------|-------------|
-| **Host1**        | NIC A     | TOR1       | Ethernet1/1 |
-| **Host1**        | NIC B     | TOR2       | Ethernet1/1 |
+| **Host1**        | NIC A     | ToR1       | Ethernet1/1 |
+| **Host1**        | NIC B     | ToR2       | Ethernet1/1 |
 
 #### Host 2
 
 | Azure Local Node | Interface | ToR Switch | Interface   |
 |------------------|-----------|------------|-------------|
-| **Host2**        | NIC A     | TOR1       | Ethernet1/2 |
-| **Host2**        | NIC B     | TOR2       | Ethernet1/2 |
+| **Host2**        | NIC A     | ToR1       | Ethernet1/2 |
+| **Host2**        | NIC B     | ToR2       | Ethernet1/2 |
 
 #### Host 3
 
 | Azure Local Node | Interface | ToR Switch | Interface   |
 |------------------|-----------|------------|-------------|
-| **Host3**        | NIC A     | TOR1       | Ethernet1/3 |
-| **Host3**        | NIC B     | TOR2       | Ethernet1/3 |
+| **Host3**        | NIC A     | ToR1       | Ethernet1/3 |
+| **Host3**        | NIC B     | ToR2       | Ethernet1/3 |
 
 
 ### VLAN Architecture
@@ -129,15 +129,17 @@ The fully converged design uses VLAN segmentation to isolate different traffic t
 |---------------|-------------------------------------|---------|----------------------------------------|
 | Management    | Cluster and host management traffic | 7       | Native VLAN, L3 routed (SVI)          |
 | Compute       | Virtual machine workload traffic    | 201     | Tagged VLAN, L3 routed (SVI)          |
-| Storage 1     | SMB1 over RDMA       | 711     | Tagged VLAN, L2 only (no SVI)         |
-| Storage 2     | SMB2 over RDMA      | 712     | Tagged VLAN, L2 only (no SVI)         |
+| Storage 1     | SMB storage over RDMA (first path)  | 711     | Tagged VLAN, L2 only (no SVI)         |
+| Storage 2     | SMB storage over RDMA (second path) | 712     | Tagged VLAN, L2 only (no SVI)         |
 
 > [!IMPORTANT]
-> **Storage VLAN Design Pattern**: The fully converged deployment follows the same pattern as switched deployment: **One Storage VLAN per TOR** is the baseline configuration. This design ensures storage traffic always uses RDMA instead of falling back to regular TCP traffic.
+> **Storage VLAN Design Pattern for Fully Converged**: In Fully Converged deployments, **both storage VLANs (711 and 712) must be configured on both ToR switches**. This is because:
 >
-> - **Baseline Approach**: TOR1 carries Storage VLAN 711, TOR2 carries Storage VLAN 712
-> - **Optional Enhancement**: Both storage VLANs can be configured on both switches for additional resilience (not mandatory)
-> - **Primary Goal**: Maintain design consistency and guarantee RDMA connectivity
+> - Each host has only **2 NICs** connecting to both ToRs (no dedicated storage NICs)
+> - **SET (Switch Embedded Teaming)** handles vNIC-to-pNIC mapping at the host level
+> - SET may route either storage VLAN through either physical NIC based on its load balancing algorithm
+>
+> This differs from **Switched** deployments where dedicated storage NICs connect to specific ToRs, allowing one storage VLAN per ToR.
 
 ### Top-of-Rack Switch Configuration
 
@@ -162,8 +164,14 @@ This section provides configuration guidance using **Cisco Nexus 93180YC-FX3 (NX
 **VLAN Configuration Summary:**
 - **VLAN 7 (Management)**: Layer 3 routed VLAN, configured as native VLAN on trunk ports
 - **VLAN 201 (Compute)**: Layer 3 routed VLAN, tagged on trunk ports
-- **VLAN 711 (Storage - TOR1)**: Layer 2 only VLAN (no SVI), tagged on TOR1 trunk ports for RDMA traffic
-- **VLAN 712 (Storage - TOR2)**: Layer 2 only VLAN (no SVI), tagged on TOR2 trunk ports for RDMA traffic
+- **VLAN 711 (Storage 1)**: Layer 2 only VLAN (no SVI), tagged on trunk ports for RDMA traffic
+- **VLAN 712 (Storage 2)**: Layer 2 only VLAN (no SVI), tagged on trunk ports for RDMA traffic
+
+> [!NOTE]
+> In Fully Converged deployments, **both storage VLANs must be configured on both ToR switches** because SET handles vNIC-to-pNIC mapping at the host level and may route either storage VLAN through either physical NIC.
+
+> [!IMPORTANT]
+> Storage VLANs 711 and 712 should **NOT** be permitted on the ToR-to-ToR peer-link (vPC peer-link, MLAG inter-switch trunk, or any L2 interconnect between ToR switches). Storage traffic must flow directly from host to ToR to destination host to maintain optimal RDMA performance. Allowing storage VLANs on peer links can cause performance degradation.
 
 **Key Configuration Requirements:**
 - Enable Priority Flow Control (PFC) for RDMA support
@@ -173,7 +181,7 @@ This section provides configuration guidance using **Cisco Nexus 93180YC-FX3 (NX
 
 ##### Sample NX-OS Configuration
 
-**Baseline Configuration - TOR1 (One Storage VLAN per TOR):**
+**ToR1 Configuration:**
 ```console
 vlan 7
   name Management_7
@@ -181,6 +189,8 @@ vlan 201
   name Compute_201
 vlan 711
   name Storage_711
+vlan 712
+  name Storage_712
 
 interface Vlan7
   description Management
@@ -203,7 +213,7 @@ interface Ethernet1/1-3
   switchport
   switchport mode trunk
   switchport trunk native vlan 7
-  switchport trunk allowed vlan 7,201,711
+  switchport trunk allowed vlan 7,201,711,712
   priority-flow-control mode on send-tlv
   spanning-tree port type edge trunk
   mtu 9216
@@ -211,12 +221,14 @@ interface Ethernet1/1-3
   no shutdown
 ```
 
-**Baseline Configuration - TOR2 (One Storage VLAN per TOR):**
+**ToR2 Configuration:**
 ```console
 vlan 7
   name Management_7
 vlan 201
   name Compute_201
+vlan 711
+  name Storage_711
 vlan 712
   name Storage_712
 
@@ -241,7 +253,7 @@ interface Ethernet1/1-3
   switchport
   switchport mode trunk
   switchport trunk native vlan 7
-  switchport trunk allowed vlan 7,201,712
+  switchport trunk allowed vlan 7,201,711,712
   priority-flow-control mode on send-tlv
   spanning-tree port type edge trunk
   mtu 9216
@@ -250,7 +262,8 @@ interface Ethernet1/1-3
 ```
 
 > [!NOTE]
-> - The above shows the **baseline "One Storage VLAN per TOR" configuration**
+> - Both ToR switches have **identical VLAN configurations** (7, 201, 711, 712) in Fully Converged deployments
+> - SET at the host level handles vNIC-to-pNIC mapping to optimize storage traffic paths
 > - QoS policies and routing design (e.g., uplinks, BGP/OSPF, default gateway) will be introduced in a separate document
 
 
@@ -323,37 +336,59 @@ Host4      c$        Administrator Administrator 3.1.1   2
 
 Verify Top-of-Rack switch configuration and MAC address learning to ensure proper connectivity.
 
-**Validation Commands for Cisco NX-OS:**
+> [!NOTE]
+> With Switch Embedded Teaming (SET), storage VLAN traffic load balancing is dynamic. MAC addresses for VLANs 711 and 712 may appear on different ToR switches or ports depending on active traffic patterns and SET's load distribution. You may need to generate storage traffic to observe MAC learning.
+
+**Step 1: Verify VLAN Configuration**
+
+Confirm that storage VLANs 711 and 712 are allowed on the trunk to the host:
 
 ```console
-# On TOR1 (Storage VLAN 711 only)
-TOR1# show mac address-table interface ethernet 1/3
+# Verify VLANs are allowed on the interface trunk
+ToR1# show interface ethernet 1/3 trunk
+
+Port          Native  Status        Port
+              Vlan                  Channel
+---------------------------------------------------------------------------
+Eth1/3        1       trunking      --
+
+Port          Vlans Allowed on Trunk
+---------------------------------------------------------------------------
+Eth1/3        1,7,711-712
+
+```
+
+**Step 2: Verify MAC Address Learning**
+
+Check MAC address table entries for storage VLANs. The example below shows one possible state - actual results will vary based on active traffic and SET load balancing decisions:
+
+```console
+# Check per-VLAN MAC table entries across the ToR
+ToR1# show mac address-table vlan 711
 Legend:
         * - primary entry, G - Gateway MAC, (R) - Routed MAC, O - Overlay MAC
         age - seconds since last seen,+ - primary entry using vPC Peer-Link,
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*    7     0c42.a1f9.694a   dynamic  0         F      F    Eth1/3
 *  711     0015.5dc8.2006   dynamic  0         F      F    Eth1/3
 
-# On TOR2 (Storage VLAN 712 only)
-TOR2# show mac address-table interface ethernet 1/3
+ToR1# show mac address-table vlan 712
 Legend:
         * - primary entry, G - Gateway MAC, (R) - Routed MAC, O - Overlay MAC
         age - seconds since last seen,+ - primary entry using vPC Peer-Link,
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*    7     0c42.a1f9.694b   dynamic  0         F      F    Eth1/3
 *  712     0015.5dc8.2007   dynamic  0         F      F    Eth1/3
 
 ```
 
 **Expected Results:**
-- TOR1 should show Management VLAN 7 and Storage VLAN 711 learned MAC addresses
-- TOR2 should show Management VLAN 7 and Storage VLAN 712 learned MAC addresses
-- This validates the baseline "One Storage VLAN per TOR" configuration ensuring RDMA traffic flow
+- VLANs 711 and 712 must be allowed on the trunk interface
+- MAC addresses for storage VLANs should be learned on the ToR switches when storage traffic is active
+- Due to SET load balancing, MAC addresses may appear on either ToR switch and on different ports depending on traffic distribution
+- If no MACs are visible for a VLAN, generate storage traffic (e.g., copy files between cluster nodes) and recheck
 
 ## Quality of Service (QoS)
 
@@ -370,30 +405,26 @@ For BGP routing configuration and best practices in Azure Local deployments:
 
 ## Frequently Asked Questions
 
-### Q: Can I configure both Storage VLANs on both TOR switches?
+### Q: Why must both Storage VLANs be on both ToR switches in Fully Converged?
 
 **A:** 
-**Yes, you can configure both Storage VLANs on both TOR switches, but you won't get too much benefit from it.** Here's why:
+In Fully Converged deployments, **both storage VLANs (711 and 712) must be configured on both ToR switches**. This is required because:
 
-1. **We always want storage to stay in RDMA** - The baseline configuration already ensures RDMA connectivity is maintained
-2. **We don't want traffic to cross the TOR peer link** - Having both VLANs on both switches may introduce unnecessary inter-switch traffic
-3. **It's a balance between resilience vs performance** - The added complexity doesn't provide significant resilience improvements
+1. **Only 2 NICs per host**: Each host connects one NIC to ToR1 and one to ToR2
+2. **SET handles traffic routing**: Switch Embedded Teaming maps storage vNICs to physical NICs at the host level
+3. **Either VLAN through either NIC**: SET's load balancing may route Storage VLAN 711 or 712 through either physical NIC
 
-**Baseline Configuration (Recommended):**
-- **TOR1**: Configure only Storage VLAN 711 (plus Management and Compute VLANs)
-- **TOR2**: Configure only Storage VLAN 712 (plus Management and Compute VLANs)
+**How it differs from Switched deployment:**
 
-This approach ensures:
-- **Design consistency** across deployment patterns
-- **Guaranteed RDMA usage** - storage traffic cannot fall back to regular TCP
-- **Simplified configuration** and troubleshooting
-- **Optimal performance** - no unnecessary cross-TOR traffic
+| Deployment Pattern | Storage NICs | ToR VLAN Config | Why |
+|-------------------|--------------|-----------------|-----|
+| **Fully Converged** | Shared (2 NICs total) | Both VLANs on both ToRs | SET may route either VLAN through either NIC |
+| **Switched** | Dedicated (4 NICs total) | One VLAN per ToR | Each storage NIC connects to a specific ToR |
 
-**Optional Enhanced Configuration:**
-While customers can configure both Storage VLANs (711 and 712) on both TOR switches, this configuration is **not recommended** as it provides minimal additional resilience. The baseline "One Storage VLAN per TOR" configuration already provides sufficient redundancy through the host-side **SET (Switch Embedded Teaming)** and ensures reliable RDMA connectivity without the potential performance implications.
+**Key Point:** The "one storage VLAN per ToR" optimization applies to **Switched** deployments where dedicated storage NICs connect to specific ToRs. In Fully Converged, SET's flexibility requires both VLANs on both switches.
 
-> [!IMPORTANT]
-> The primary goal is to maintain design consistency, force storage traffic to always use RDMA instead of allowing fallback to regular TCP traffic, and avoid unnecessary cross-TOR traffic that could impact performance.
+> [!NOTE]
+> SET uses vNIC-to-pNIC affinity mapping to optimize traffic paths, but the switches must still be configured to carry both storage VLANs to handle any mapping SET chooses.
 
 
 ## Additional Resources
