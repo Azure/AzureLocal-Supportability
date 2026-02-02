@@ -101,17 +101,17 @@ if ($resourceIds.Count -gt 0)
 Delete all failed Update action plans except for the last failed one.
 
 ```
-Import-Module ECEClient -DisableNameChecking 
-$failedUpdates = Get-ActionPlanInstances | ? { $_.Status -eq "Failed" -and $_.ActionPlanName -match "MAS Update" } | sort LastModifiedDateTime -Descending | select -Skip 1
+Import-Module ECEClient -DisableNameChecking
+$failedUpdates = Get-ActionPlanInstances | ? { $_.Status -eq "Failed" -and $_.ActionPlanName -match "MAS Update" } | sort LastModifiedDateTime -Descending | select -Skip 1
 $instanceIDs = $failedUpdates.InstanceID
-   
-$eceClient = Create-ECEClusterServiceClient  
-$deleteActionPlanInstanceDescription = New-Object Microsoft.AzureStack.Solution.Deploy.EnterpriseCloudEngine.Controllers.Models.DeleteActionPlanInstanceDescription  
-  
-foreach ($actionPlanInstanceId in $instanceIDs) {  
-   # remove old instance  
-   $deleteActionPlanInstanceDescription.ActionPlanInstanceID = $actionPlanInstanceID  
-   $eceClient.DeleteActionPlanInstance($deleteActionPlanInstanceDescription).Wait()  
+
+$eceClient = Create-ECEClusterServiceClient
+$deleteActionPlanInstanceDescription = New-Object Microsoft.AzureStack.Solution.Deploy.EnterpriseCloudEngine.Controllers.Models.DeleteActionPlanInstanceDescription
+
+foreach ($actionPlanInstanceId in $instanceIDs) {
+    # remove old instance
+    $deleteActionPlanInstanceDescription.ActionPlanInstanceID = $actionPlanInstanceID
+    $eceClient.DeleteActionPlanInstance($deleteActionPlanInstanceDescription).Wait()
 }
 ```
 
