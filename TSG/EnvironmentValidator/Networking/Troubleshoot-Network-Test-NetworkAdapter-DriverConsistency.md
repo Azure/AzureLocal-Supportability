@@ -26,7 +26,7 @@ Adapters that are part of any one Network Intent must meet the following require
 1. Must exist on the system
 2. Must use the same driver version across all nodes in the cluster
 
-See [Azure Local - Host Network Requirements](https://docs.azure.cn/en-us/azure-local/concepts/host-network-requirements#driver-requirements) for more details.
+See [Azure Local - Host Network Requirements](https://learn.microsoft.com/azure-stack/hci/concepts/host-network-requirements#driver-requirements) for more details.
 
 ## Troubleshooting Steps
 
