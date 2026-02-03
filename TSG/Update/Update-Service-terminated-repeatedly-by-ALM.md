@@ -97,6 +97,24 @@ if ($resourceIds.Count -gt 0)
 }
 ```
 
+## Remove failed Update action plan instances
+Delete all failed Update action plans except for the last failed one.
+
+```
+Import-Module ECEClient -DisableNameChecking
+$failedUpdates = Get-ActionPlanInstances | ? { $_.Status -eq "Failed" -and $_.ActionPlanName -match "MAS Update" } | sort LastModifiedDateTime -Descending | select -Skip 1
+$instanceIDs = $failedUpdates.InstanceID
+
+$eceClient = Create-ECEClusterServiceClient
+$deleteActionPlanInstanceDescription = New-Object Microsoft.AzureStack.Solution.Deploy.EnterpriseCloudEngine.Controllers.Models.DeleteActionPlanInstanceDescription
+
+foreach ($actionPlanInstanceID in $instanceIDs) {
+    # remove old instance
+    $deleteActionPlanInstanceDescription.ActionPlanInstanceID = $actionPlanInstanceID
+    $eceClient.DeleteActionPlanInstance($deleteActionPlanInstanceDescription).Wait()
+}
+```
+
 ## (Last Resort) Increase update service memory limit
 If the problem is still occurring, the final thing to do is to temporarily increase the configured memory limit for the update service.
 
@@ -170,3 +188,5 @@ Invoke-Command -ComputerName $nodes -ScriptBlock {
     }
 }
 ```
+
+
