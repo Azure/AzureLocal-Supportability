@@ -186,6 +186,10 @@ Ensure the certificate with subject name CN=DscEncryptionCert is not missing or 
 NOTE: If the below action plan is run, then the "DeleteEncryptionCertificate" action plan should also be run to delete the generated certificate, once mitigation is completed.
 
 ```PowerShell
+# Import necessary modules
+Import-Module "ECEClient" 3>$null 4>$null
+Import-Module "C:\Program Files\WindowsPowerShell\Modules\Microsoft.AS.Infra.Security.SecretRotation\Microsoft.AS.Infra.Security.ActionPlanExecution.psm1" -DisableNameChecking
+
 $ActionType = "GenerateEncryptionCertificate"
     $Params = @{
         TimeoutInSecs = 10 * 60
@@ -203,6 +207,10 @@ $ActionType = "GenerateEncryptionCertificate"
 To delete the "CN=RuntimeParameterEncryptionCert" **once mitigation is completed**, please run:
 
 ```PowerShell
+# Import necessary modules
+Import-Module "ECEClient" 3>$null 4>$null
+Import-Module "C:\Program Files\WindowsPowerShell\Modules\Microsoft.AS.Infra.Security.SecretRotation\Microsoft.AS.Infra.Security.ActionPlanExecution.psm1" -DisableNameChecking
+
 $ActionType = "DeleteEncryptionCertificate"
     $Params = @{
         TimeoutInSecs = 10 * 60
