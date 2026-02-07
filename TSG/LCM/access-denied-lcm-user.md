@@ -182,7 +182,49 @@ Set-Item WSMan:\localhost\Client\TrustedHosts -Value hostname1,hostname2,192.168
 ### Validating LCM (User Deployment) Credentials Match the ECE Store
 
 ### Prerequisites
-Ensure the certificate with subject name CN=RuntimeParameterEncryptionCert, or CN=DscEncryptionCert is not missing or expired. If so, please run [Start-SecretRotation](https://learn.microsoft.com/en-us/azure/azure-local/manage/manage-secrets-rotation?view=azloc-24113) to rotate certificates.
+Ensure the certificate with subject name CN=DscEncryptionCert is not missing or expired. If so, please run the below action plan to generate the "CN=RuntimeParameterEncryptionCert" instead. 
+NOTE: If the below action plan is run, then the "DeleteEncryptionCertificate" action plan should also be run to delete the generated certificate, once mitigation is completed.
+
+```PowerShell
+# Import necessary modules
+Import-Module "ECEClient" 3>$null 4>$null
+Import-Module "C:\Program Files\WindowsPowerShell\Modules\Microsoft.AS.Infra.Security.SecretRotation\Microsoft.AS.Infra.Security.ActionPlanExecution.psm1" -DisableNameChecking
+
+$ActionType = "GenerateEncryptionCertificate"
+    $Params = @{
+        TimeoutInSecs = 10 * 60
+        RetryCount = "2"
+        ExclusiveLock = $true
+        RolePath = "SecretRotation"
+        ActionType = $ActionType
+        ActionPlanInstanceId = [Guid]::NewGuid()
+    }
+
+    Write-AzsSecurityVerbose -Message "Generating encryption certificate. Action plan Instance ID: $($Params.ActionPlanInstanceId)" -Verbose
+    $ActionPlanInstance = Start-ActionPlan @Params 3>$null 4>$null
+```
+
+To delete the "CN=RuntimeParameterEncryptionCert" **once mitigation is completed**, please run:
+
+```PowerShell
+# Import necessary modules
+Import-Module "ECEClient" 3>$null 4>$null
+Import-Module "C:\Program Files\WindowsPowerShell\Modules\Microsoft.AS.Infra.Security.SecretRotation\Microsoft.AS.Infra.Security.ActionPlanExecution.psm1" -DisableNameChecking
+
+$ActionType = "DeleteEncryptionCertificate"
+    $Params = @{
+        TimeoutInSecs = 10 * 60
+        RetryCount = "2"
+        ExclusiveLock = $true
+        RolePath = "SecretRotation"
+        ActionType = $ActionType
+        ActionPlanInstanceId = [Guid]::NewGuid()
+    }
+
+    Write-AzsSecurityVerbose -Message "Deleting encryption certificate. Action plan Instance ID: $($Params.ActionPlanInstanceId)" -Verbose
+    $ActionPlanInstance = Start-ActionPlan @Params 3>$null 4>$null
+    return $ActionPlanInstance
+```
 
 Please input your LCM user credentials when prompted. **DO NOT include the domain as part of the username in the credential**.
 
@@ -327,6 +369,8 @@ foreach ($containerName in $ECEContainersToUpdate) {
 
 Write-AzsSecurityVerbose -Message "Finished updating credentials in ECE." -Verbose
 ```
+
+NOTE: If the "CN=RuntimeParameterEncryptionCert" was generated using the "GenerateEncryptionCertificate" action, then please run the "DeleteEncryptionCertificate" action plan to clean up the certificate.
 
 ### Retrieving Your LCM (deployment user) Username
 Run the following script on your HCI node to retrieve the LCM username:
