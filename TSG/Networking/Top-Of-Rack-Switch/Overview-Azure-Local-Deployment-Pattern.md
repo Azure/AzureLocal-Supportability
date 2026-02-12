@@ -72,7 +72,7 @@ A high-performance design utilizing dedicated NICs for management/compute and st
 ![Switched with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_Switched.png)
 
 **Fully Converged Deployment**
-A balanced design where all traffic types (management, compute, storage) share the same physical NICs through VLAN segmentation. This pattern minimizes hardware footprint while maintaining high scalability. **Both storage VLANs must be configured on both ToR switches** because SET (Switch Embedded Teaming) may route either storage VLAN through either physical NIC.
+A balanced design where all traffic types (management, compute, storage) share the same physical NICs through VLAN segmentation. This pattern minimizes hardware footprint while maintaining high scalability. The **recommended** configuration uses **one storage VLAN per ToR switch**: Storage VLAN A on ToR-A (mapped to one physical NIC) and Storage VLAN B on ToR-B (mapped to the other physical NIC). In failure scenarios (NIC or ToR), SMB/RDMA traffic automatically fails over to the remaining path.
 
 ![Fully-Converged with 2 ToRs](images/AzureLocalPhysicalNetworkDiagram_FullyConverged.png)
 
@@ -83,10 +83,10 @@ A balanced design where all traffic types (management, compute, storage) share t
 |---------------------|------------------------|-------------------------------|-------------------|
 | **Switchless** | 2 NICs to switches (M+C traffic) + (N−1) direct inter-node NICs (S traffic) | Trunk ports with M, C VLANs only; no storage VLANs on ToRs | Edge deployments, remote sites, cost-sensitive environments |
 | **Switched** | 4 NICs per host: 2 for M+C traffic, 2 dedicated for storage | M and C VLANs on both ToRs; S1 VLAN on ToR1 only, S2 VLAN on ToR2 only (dedicated storage NICs) | Enterprise deployments requiring dedicated storage performance and traffic isolation |
-| **Fully Converged** | 2 NICs per host carrying all traffic types (M+C+S) via VLAN segmentation | Both storage VLANs (S1, S2) on both ToRs (required for SET) | General-purpose deployments balancing performance, simplicity, and hardware efficiency |
+| **Fully Converged** | 2 NICs per host carrying all traffic types (M+C+S) via VLAN segmentation | S1 VLAN on ToR-A only, S2 VLAN on ToR-B only (recommended) | General-purpose deployments balancing performance, simplicity, and hardware efficiency |
 
 > [!NOTE]
-> **Storage VLAN Configuration**: Storage VLANs can be configured as either **Layer 3 (L3) networks with IP subnets** or **Layer 2 (L2) networks without IP subnets**. **Layer 2 configuration is recommended** because it simplifies VLAN tagging, allowing Azure Local hosts to use any IP addresses without hardcoding subnet configurations on the switch or requiring predefined IP ranges. Since Azure Local nodes handle storage traffic tagging, ensure these VLANs are configured as **tagged VLANs on trunk ports** across all ToR switches.
+> **Storage VLAN Configuration**: Storage VLANs can be configured as either **Layer 3 (L3) networks with IP subnets** or **Layer 2 (L2) networks without IP subnets**. **Layer 2 configuration is recommended** because it simplifies VLAN tagging, allowing Azure Local hosts to use any IP addresses without hardcoding subnet configurations on the switch or requiring predefined IP ranges. Since Azure Local nodes handle storage traffic tagging, ensure these VLANs are configured as **tagged VLANs on trunk ports** on their respective ToR switches.
 
 
 ---
@@ -131,27 +131,20 @@ This tool is designed to automate the generation of Azure Local switch configura
 ### Q: How should Storage VLANs be configured across ToR switches?
 
 **A:**  
-Storage VLAN configuration depends on the **deployment pattern**:
+The recommended baseline design uses **one storage VLAN per ToR switch** for both Switched and Fully Converged deployments:
 
 | Deployment Pattern | ToR VLAN Configuration | Why |
 |-------------------|------------------------|-----|
-| **Switched** | S1 on ToR1 only, S2 on ToR2 only | Dedicated storage NICs connect to specific ToRs |
-| **Fully Converged** | Both S1 & S2 on both ToRs | SET may route either storage VLAN through either physical NIC |
+| **Switched** | S1 on ToR-A only, S2 on ToR-B only | Dedicated storage NICs connect to specific ToRs |
+| **Fully Converged** | S1 on ToR-A only, S2 on ToR-B only | Each storage VLAN is mapped to one physical NIC; failover occurs automatically |
 
-**Switched Deployment (One Storage VLAN per ToR):**
-- Each host has **dedicated storage NICs** (4 NICs total)
-- Storage NIC1 connects to ToR1 → only needs VLAN 711
-- Storage NIC2 connects to ToR2 → only needs VLAN 712
-- This reduces MC-LAG utilization and optimizes RDMA performance
+**Storage VLAN Configuration:**
+- Storage VLAN A is configured only on ToR-A and mapped to one physical NIC
+- Storage VLAN B is configured only on ToR-B and mapped to the other physical NIC
+- In failure scenarios (NIC or ToR failure), SMB/RDMA traffic automatically fails over to the remaining path with reduced bandwidth but no functional impact
 
-**Fully Converged Deployment (Both Storage VLANs on Both ToRs):**
-- Each host has only **2 NICs** shared for all traffic
-- SET (Switch Embedded Teaming) handles vNIC-to-pNIC mapping
-- SET may route either storage VLAN through either physical NIC
-- **Both ToRs must carry both storage VLANs** to support SET's flexibility
-
-> [!IMPORTANT]
-> In Fully Converged deployments, configuring only one storage VLAN per ToR will cause connectivity issues when SET routes a storage vNIC to a physical NIC connected to a ToR that doesn't have that VLAN configured.
+> [!NOTE]
+> Configuring both storage VLANs on both ToR switches is also supported but optional. Testing has confirmed there is no meaningful resiliency or failover benefit from this configuration, and it increases complexity without improving availability.
 
 
 ### Q: Are **DCB (Data Center Bridging)** features like **PFC** and **ETS** required for RDMA in Azure Local deployments?
