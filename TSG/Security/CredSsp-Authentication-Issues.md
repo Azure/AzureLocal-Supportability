@@ -165,7 +165,8 @@ The value of the registry keys listed above might be reverted by Group Policy, i
 
 If you apply the script above and then learn that the values of some registry keys are reverted back after running **"gpupdate.exe"** or restarting the node, most likely the culprit is Group Policy.
 
-We have asked customers to disable GP Inheritance on the OU so that Domain Group Policy is not applied on the OU. But sometimes customers might enable GP Inheritance for various reasons, so we can ask them to check the setting on their domain controller.
+
+In domain‑joined environments, Domain Group Policy can override locally applied registry settings. One common mitigation is to ensure that the Organizational Unit (OU) containing the node is configured so that unintended Domain Group Policies are not applied. If Group Policy inheritance is enabled on the OU, collect the Resultant Set of Policy for the node (for example, by running `gpresult /r` or `gpresult /h` on the node, using `rsop.msc`, or `Get-GPResultantSetOfPolicy`) and/or review the GPO links and security filtering in Group Policy Management for the specific OU/computer account to confirm that none are enforcing these registry values.
 
 To check Local Group Policy on the cluster node, run **"gpedit.msc /gpcomputer: $nodeName"** on the jumpbox using a credential that has access to the node. If there is a group policy configured for these settings it will be in Computer Configuration -> Administrative Templates -> System -> Credentials Delegation
 
