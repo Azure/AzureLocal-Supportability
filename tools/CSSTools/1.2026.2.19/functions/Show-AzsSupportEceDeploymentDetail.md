@@ -19,12 +19,3 @@ This function retrieves and displays detailed information about the ECE deployme
 Show-AzsSupportEceDeploymentDetail
 ```
 
-## PARAMETERS
-
-## INPUTS
-
-## OUTPUTS
-
-## NOTES
-
-## RELATED LINKS

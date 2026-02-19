@@ -20,13 +20,6 @@ Additionally, it checks the status of the SDN services.
 Show-AzsSupportSDNStateSummary
 ```
 
-## PARAMETERS
-
-## INPUTS
-
 ## OUTPUTS
 
 ### None. This function displays formatted output to the console with color-coded information.
-## NOTES
-
-## RELATED LINKS

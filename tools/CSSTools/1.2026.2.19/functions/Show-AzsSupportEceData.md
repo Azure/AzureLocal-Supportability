@@ -19,13 +19,6 @@ This function retrieves and displays information about the ECE deployment, inclu
 Show-AzsSupportEceData
 ```
 
-## PARAMETERS
-
-## INPUTS
-
 ## OUTPUTS
 
 ### None. This command writes formatted ECE deployment, WDAC policy, and action plan state information to the host.
-## NOTES
-
-## RELATED LINKS

@@ -83,7 +83,6 @@ Accept wildcard characters: False
 ```
 
 ### -ProgressAction
-{{ Fill ProgressAction Description }}
 
 ```yaml
 Type: ActionPreference
@@ -100,8 +99,6 @@ Accept wildcard characters: False
 ### CommonParameters
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
-## INPUTS
-
 ## OUTPUTS
 
 ### PS> Get-AzsSupportStoragePool -FriendlyName S2D_Pool -CimSession Contoso-cl
@@ -109,6 +106,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ### FriendlyName OperationalStatus HealthStatus IsPrimordial IsReadOnly     Size AllocatedSize PSComputerName
 ### ------------ ----------------- ------------ ------------ ----------     ---- ------------- --------------
 ### S2D_Pool     OK                Healthy      False        False      27.94 TB       1.79 TB Contoso-cl
-## NOTES
-
-## RELATED LINKS

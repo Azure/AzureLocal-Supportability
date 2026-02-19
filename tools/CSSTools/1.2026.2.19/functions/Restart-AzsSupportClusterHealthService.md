@@ -43,7 +43,6 @@ Accept wildcard characters: False
 ```
 
 ### -ProgressAction
-{{ Fill ProgressAction Description }}
 
 ```yaml
 Type: ActionPreference
@@ -60,14 +59,9 @@ Accept wildcard characters: False
 ### CommonParameters
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
-## INPUTS
-
 ## OUTPUTS
 
 ### Confirmation on restarting the cluster health service
 ### PS> Restart-AzsSupportClusterHealthService -Cluster "Contoso-cl"
 ### [Stopping health cluster resource]
 ### [Starting all resources in SDDC Group]
-## NOTES
-
-## RELATED LINKS

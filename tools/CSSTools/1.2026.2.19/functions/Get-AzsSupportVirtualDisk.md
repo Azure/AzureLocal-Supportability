@@ -64,7 +64,6 @@ Accept wildcard characters: False
 ```
 
 ### -ProgressAction
-{{ Fill ProgressAction Description }}
 
 ```yaml
 Type: ActionPreference
@@ -81,14 +80,9 @@ Accept wildcard characters: False
 ### CommonParameters
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
-## INPUTS
-
 ## OUTPUTS
 
 ### Array of virtual disks based on filters selected
 ### FriendlyName  ResiliencySettingName FaultDomainRedundancy OperationalStatus HealthStatus  Size FootprintOnPool StorageEfficiency PSComputerName
 ### ------------  --------------------- --------------------- ----------------- ------------  ---- --------------- ----------------- --------------
 ### UserStorage_1 Mirror                1                     OK                Healthy       64 TB        1017 GB            49.95% Contoso-cl
-## NOTES
-
-## RELATED LINKS

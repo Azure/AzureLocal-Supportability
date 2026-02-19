@@ -14,15 +14,6 @@ Invoke-AzsSupportCommand -ComputerName <String[]> [-Credential <PSCredential>] -
 ## DESCRIPTION
 Runs commands on local and remote computers.
 
-## EXAMPLES
-
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
-```
-
-{{ Add example description here }}
-
 ## PARAMETERS
 
 ### -ComputerName
@@ -187,7 +178,6 @@ Accept wildcard characters: False
 ```
 
 ### -ProgressAction
-{{ Fill ProgressAction Description }}
 
 ```yaml
 Type: ActionPreference
@@ -204,11 +194,6 @@ Accept wildcard characters: False
 ### CommonParameters
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
-## INPUTS
-
 ## OUTPUTS
 
 ### Returns the results of the command that was run on the remote computer(s). If the command is run as a job, returns the job details after completion.
-## NOTES
-
-## RELATED LINKS

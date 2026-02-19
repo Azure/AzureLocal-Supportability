@@ -20,7 +20,6 @@ The cmdlet checks for common issues and provides detailed information about any 
 ```
 Invoke-AzsSupportDiagnosticCheck -Component "Network"
 ```
-
 Runs a diagnostic check on the health and functionality of the Azure Stack HCI product.
 
 ## PARAMETERS
@@ -43,7 +42,6 @@ Accept wildcard characters: False
 ```
 
 ### -ProgressAction
-{{ Fill ProgressAction Description }}
 
 ```yaml
 Type: ActionPreference
@@ -60,12 +58,7 @@ Accept wildcard characters: False
 ### CommonParameters
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
-## INPUTS
-
-## OUTPUTS
-
 ## NOTES
 This cmdlet requires administrative privileges to run.
 It does not modify any system settings or configurations.
 
-## RELATED LINKS

@@ -64,7 +64,6 @@ Accept wildcard characters: False
 ```
 
 ### -ProgressAction
-{{ Fill ProgressAction Description }}
 
 ```yaml
 Type: ActionPreference
@@ -81,8 +80,6 @@ Accept wildcard characters: False
 ### CommonParameters
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
-## INPUTS
-
 ## OUTPUTS
 
 ### Array of storage nodes based on name filter
@@ -91,6 +88,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ### ----                         ------------ -----    ------------ ----------------- --------------
 ### contoso-n01.contoso.lab      Dell Inc.    AX-740xd 10000001     Up                contoso-n01
 ### contoso-n02.contoso.lab      Dell Inc.    AX-740xd 10000002     Up                contoso-n01
-## NOTES
-
-## RELATED LINKS

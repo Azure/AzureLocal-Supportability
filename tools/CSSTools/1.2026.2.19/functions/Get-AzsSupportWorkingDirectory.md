@@ -22,13 +22,8 @@ If the working directory does not exist, it will be created.
 Get-AzsSupportWorkingDirectory
 ```
 
-## PARAMETERS
-
-## INPUTS
-
 ## OUTPUTS
 
-### System.String
 ### System.String
 ### Returns the full path to the active AzsSupport working directory.
 ### If a working directory has not yet been initialized, one is created under the configured ParentWorkingDirectory using a UTC timestamp.
@@ -36,4 +31,3 @@ Get-AzsSupportWorkingDirectory
 ## NOTES
 This function is a public wrapper over Get-WorkingDirectory.
 
-## RELATED LINKS

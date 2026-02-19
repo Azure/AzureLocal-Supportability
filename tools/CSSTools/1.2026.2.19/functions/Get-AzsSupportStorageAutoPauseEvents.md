@@ -21,6 +21,8 @@ $StartTime = (Get-Date).AddDays(-2)
 $EndTime = (Get-Date).AddDays(-1)
 $Nodes = Get-AzsSupportClusterNode
 Get-AzsSupportStorageAutoPauseEvents -StartTime $StartTime -EndTime $EndTime -Nodes $Nodes | Select-Object TimeCreated, Node, Id, CSVFsEventIdName, VolumeName, FromDirectIo, Irp, Parameter1, Parameter2, LastUptime, CurrentDowntime, TimeSinceLastStateTransition, Lifetime, SourceName, StatusName | sort-Object TimeCreated | Format-Table -AutoSize
+Get-AzsSupportStorageAutoPauseEvents -StartTime $StartTime -EndTime $EndTime -Nodes $Nodes | Select-Object TimeCreated, Node, Id, CSVFsEventIdName, VolumeName, FromDirectIo, Irp, Parameter1, Parameter2, LastUptime, CurrentDowntime, TimeSinceLastStateTransition, Lifetime, SourceName, StatusName | sort-Object TimeCreated | Format-Table -AutoSize
+```
 ```
 
 ## PARAMETERS
@@ -71,7 +73,6 @@ Accept wildcard characters: False
 ```
 
 ### -ProgressAction
-{{ Fill ProgressAction Description }}
 
 ```yaml
 Type: ActionPreference
@@ -88,8 +89,6 @@ Accept wildcard characters: False
 ### CommonParameters
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
-## INPUTS
-
 ## OUTPUTS
 
 ### AutoPause errors over time period specified
@@ -97,6 +96,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ### -----------           ----              -- ---------------- ----------       ------------ --- ---------- ---------- ----------
 ### 12/5/2024 12:21:16 AM contoso-n01     9296 VolumeAutopause  Infrastructure_1        False   0          0          0 5922968750
 ### 12/5/2024 12:21:16 AM contoso-n01     9296 VolumeAutopause  UserStorage_1           False   0          0          0 5922968750
-## NOTES
-
-## RELATED LINKS

@@ -53,7 +53,6 @@ Accept wildcard characters: False
 ```
 
 ### -ProgressAction
-{{ Fill ProgressAction Description }}
 
 ```yaml
 Type: ActionPreference
@@ -69,8 +68,6 @@ Accept wildcard characters: False
 
 ### CommonParameters
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
-
-## INPUTS
 
 ## OUTPUTS
 
@@ -92,6 +89,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ### StorageTierUniqueId   :
 ### VirtualDiskOffset     : 154618822656
 ### VirtualDiskUniqueId   : 66C74EBBE4A8954FB33F362DCBED4BA6
-## NOTES
-
-## RELATED LINKS

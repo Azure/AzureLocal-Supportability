@@ -37,7 +37,6 @@ Accept wildcard characters: False
 ```
 
 ### -ProgressAction
-{{ Fill ProgressAction Description }}
 
 ```yaml
 Type: ActionPreference
@@ -54,8 +53,6 @@ Accept wildcard characters: False
 ### CommonParameters
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
-## INPUTS
-
 ## OUTPUTS
 
 ### Checks for any abnormalities with the Storage Node views for non healthy disks
@@ -64,6 +61,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ### ------------         -----------------   ----              --------- ---------- ------------
 ### A1B0C2D4EFGH         OK                  N:Contoso-N01      True           1003 Healthy
 ### A1B0C2D4EFGH         In Maintenance Mode N:contoso-n02      False          1003 Warning
-## NOTES
-
-## RELATED LINKS

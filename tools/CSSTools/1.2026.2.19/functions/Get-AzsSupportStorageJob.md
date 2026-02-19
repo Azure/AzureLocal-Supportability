@@ -75,7 +75,6 @@ Accept wildcard characters: False
 ```
 
 ### -IncludeStoragePoolOptimizationJob
-{{ Fill IncludeStoragePoolOptimizationJob Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -106,7 +105,6 @@ Accept wildcard characters: False
 ```
 
 ### -ProgressAction
-{{ Fill ProgressAction Description }}
 
 ```yaml
 Type: ActionPreference
@@ -123,8 +121,6 @@ Accept wildcard characters: False
 ### CommonParameters
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
-## INPUTS
-
 ## OUTPUTS
 
 ### Array of Storage Jobs based on selected filters
@@ -134,6 +130,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ### ClusterPerformanceHistory-Repair True             00:00:28    Suspended 0                          0 B       1    Contoso-cl
 ### Infrastructure_1-Repair          True             00:00:52    Suspended 0                          0 B       9 GB Contoso-cl
 ### UserStorage_1-Repair             True             00:00:52    Suspended 0                          0 B     768 MB Contoso-cl
-## NOTES
-
-## RELATED LINKS

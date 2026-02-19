@@ -21,6 +21,7 @@ $StartTime = (Get-Date).AddDays(-2)
 $EndTime = (Get-Date).AddDays(-1)
 Get-AzsSupportStorPortOpEvents -ClusterName contoso-cl -StartTime $StartTime -EndTime $EndTime | Sort-Object TimeCreated  | Format-Table  | Format-Table -AutoSize
 ```
+```
 
 ## PARAMETERS
 
@@ -70,7 +71,6 @@ Accept wildcard characters: False
 ```
 
 ### -Credential
-{{ Fill Credential Description }}
 
 ```yaml
 Type: PSCredential
@@ -85,7 +85,6 @@ Accept wildcard characters: False
 ```
 
 ### -ProgressAction
-{{ Fill ProgressAction Description }}
 
 ```yaml
 Type: ActionPreference
@@ -102,11 +101,6 @@ Accept wildcard characters: False
 ### CommonParameters
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
-## INPUTS
-
 ## OUTPUTS
 
 ### Lists specific errors from Storport drive resets and Storage Spaces Driver report disk errors.
-## NOTES
-
-## RELATED LINKS
