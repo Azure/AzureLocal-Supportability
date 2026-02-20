@@ -17,5 +17,6 @@ This script checks the state of the AKS ARC.
 | Support.AksArc.MocUpdating | Validate MOC not stuck in updating state |
 | Support.AksArc.MocVersion | Check if the MOC Cloud Agent version is on the latest patch. |
 | Support.AksArc.NodeAgent.PendingDeletion | Check if the MOC Cloud Agent Service is marked for deletion. |
+| Support.AksArc.MissingMocPsRegistry | Tests if the MOC PowerShell registry configuration is missing. |
 
 
