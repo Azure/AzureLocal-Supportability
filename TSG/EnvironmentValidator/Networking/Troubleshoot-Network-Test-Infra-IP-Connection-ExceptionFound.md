@@ -153,7 +153,7 @@ If **any** unhandled exception occurs during steps 1–6, the catch block return
 
 ### When This Validator is Skipped
 
-The infrastructure IP connectivity validator (including all endpoint tests) is **skipped** when **ArcGateway enabled**. ArcGateway provides alternative connectivity.
+The infrastructure IP connectivity validator (including all endpoint tests) is **skipped** when **ArcGateway is enabled**. ArcGateway provides alternative connectivity.
 
 ### Related Validators
 
