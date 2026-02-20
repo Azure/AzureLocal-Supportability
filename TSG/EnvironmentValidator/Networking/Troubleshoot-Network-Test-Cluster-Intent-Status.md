@@ -171,6 +171,78 @@ If you've resolved the underlying issue, you can retry the intent provisioning:
 
 ---
 
+### Failure: Intent ConfigurationStatus Flipping Between Validating and Success
+
+**Error Message:**
+```text
+Intent <IntentName> on host <NodeName> in pending state and hasn't stabilized. ConfigurationStatus: Validating ProvisioningStatus: <empty>
+```
+
+**Root Cause:** A known issue causes the local status returned by `Get-NetIntentStatus` to toggle between `Validating` and `Success` after a Global Intent failure. This means the intent never stays in a stable `Success` state long enough for the validator to pass, blocking solution updates.
+
+You may observe this behavior when running `Get-NetIntentStatus` repeatedly — the `ConfigurationStatus` rapidly flips between `Validating` and `Success` on one or more nodes, while the `ProvisioningStatus` may appear empty during the `Validating` phase.
+
+#### Remediation Steps
+
+##### Step 1: Confirm the Flipping Behavior
+
+1. Run `Get-NetIntentStatus` multiple times in quick succession and observe whether `ConfigurationStatus` alternates between `Validating` and `Success`:
+
+   ```powershell
+   # Run multiple times to observe the flipping behavior
+   Get-NetIntentStatus | ft IntentName, Host, ConfigurationStatus, ProvisioningStatus
+   ```
+
+2. If you see the status toggling between `Validating` and `Success` (rather than staying in `Failed` or remaining stuck in `Validating`), proceed with the mitigation below.
+
+##### Step 2: Reset Global Intent Overrides
+
+The mitigation involves removing and re-adding the global cluster overrides for Network ATC. This stabilizes the intent status.
+
+1. Check current global overrides:
+
+   ```powershell
+   # Check current overrides
+   $globalIntent = Get-NetIntent -GlobalOverrides
+   $clusterOverride = $globalIntent.ClusterOverride
+   $clusterOverride
+   ```
+
+2. Create new cluster overrides and apply previous override values:
+
+   ```powershell
+   $newClusterOverride = New-NetIntentGlobalClusterOverrides
+
+   # NOTE:
+   # MAKE SURE YOUR NEW OVERRIDE VALUE MATCHES YOUR PREVIOUS VALUE, unless there is any empty value on the previous data
+   # Set overrides on object based on the old value:  ex) $newClusterOverride.<prop> = <val>
+   # If all the old properties are having empty value, you could put:
+   # $newClusterOverride.EnableLiveMigrationNetworkSelection = $true
+   # $newClusterOverride.EnableNetworkNaming= $true
+   # DO NOT USE OTHER DEFAULT VALUE IF THE OLD PROPERTIES HAVE EMPTY VALUE
+   ```
+
+3. Remove old intent global overrides and re-add them:
+
+   ```powershell
+   # Remove old intent global overrides
+   Remove-NetIntent -GlobalOverrides
+
+   # Re-add global cluster overrides
+   Add-NetIntent -GlobalClusterOverrides $newClusterOverride
+   ```
+
+4. Verify that the intent status is now stable:
+
+   ```powershell
+   # Verify intent status is stable at Success
+   Get-NetIntentStatus | ft IntentName, Host, ConfigurationStatus, ProvisioningStatus
+   ```
+
+   Confirm that `ConfigurationStatus` remains `Success` and `ProvisioningStatus` is `Completed` across multiple checks.
+
+---
+
 ### Transient States
 
 The intent transient states include:
