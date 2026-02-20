@@ -115,7 +115,7 @@ Get-WinEvent -LogName System -MaxEvents 100 |
 ```
 
 ##### 4. Re-install Hyper-V
-If the exception is complaining something like below:
+If the exception message looks like the following:
 ```
 Failed while adding virtual Ethernet switch connections. Switch port create failed, switch = "ABCDEF00-1234-5678-ABCD-ABCDABCDABCD", port name = "ABCDEF00-1234-5678-ABCD-ABCDABCDABCD", port friendly name = "ConvergedSwitch(MYINTENT)": Class not registered (0x80040154)
 ```
