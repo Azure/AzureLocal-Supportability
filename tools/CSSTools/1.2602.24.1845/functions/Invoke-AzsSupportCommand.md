@@ -13,6 +13,13 @@ Invoke-AzsSupportCommand -ComputerName <String[]> [-Credential <PSCredential>] -
 
 ## DESCRIPTION
 Runs commands on local and remote computers.
+When the target computer is the local machine,
+the script block is invoked directly using the call operator to avoid the overhead and
+requirements of establishing a remote PSSession via WinRM.
+Remote computers are executed
+via PSSessions as before.
+When a mix of local and remote computers are specified, local
+computers are executed directly and remote computers are executed via PSSessions.
 
 ## PARAMETERS
 
@@ -27,7 +34,7 @@ Aliases:
 Required: True
 Position: Named
 Default value: None
-Accept pipeline input: False
+Accept pipeline input: True (ByValue)
 Accept wildcard characters: False
 ```
 
