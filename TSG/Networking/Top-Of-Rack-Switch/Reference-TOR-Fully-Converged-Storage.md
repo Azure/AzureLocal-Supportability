@@ -27,7 +27,7 @@ This document provides a comprehensive reference for implementing a fully conver
   - [Quality of Service (QoS)](#quality-of-service-qos)
   - [BGP Routing](#bgp-routing)
   - [Frequently Asked Questions](#frequently-asked-questions)
-    - [Q: Why must both Storage VLANs be on both ToR switches in Fully Converged?](#q-why-must-both-storage-vlans-be-on-both-tor-switches-in-fully-converged)
+    - [Q: How should Storage VLANs be configured in Fully Converged deployments?](#q-how-should-storage-vlans-be-configured-in-fully-converged-deployments)
   - [Additional Resources](#additional-resources)
     - [Official Documentation](#official-documentation)
     - [Technical Deep Dives](#technical-deep-dives)
@@ -44,7 +44,7 @@ Azure Local's fully converged network design provides a unified approach to hand
 
 The fully converged physical network architecture integrates **management**, **compute**, and **storage** traffic over the same physical Ethernet interfaces. This design minimizes hardware footprint while maximizing scalability and deployment simplicity.
 
-**Key Design Principle**: In Fully Converged deployments, **both storage VLANs must be configured on both ToR switches**. This is because each host has only 2 NICs (shared for all traffic), and SET (Switch Embedded Teaming) may route either storage VLAN through either physical NIC based on its load balancing algorithm.
+**Key Design Principle**: In Fully Converged deployments, the **recommended** baseline design uses **one storage VLAN per ToR switch**: Storage VLAN A is configured only on ToR-A and mapped to one physical NIC, while Storage VLAN B is configured only on ToR-B and mapped to the other physical NIC. In failure scenarios (NIC or ToR), SMB/RDMA traffic automatically fails over to the remaining path with reduced bandwidth but no functional impact. Configuring both storage VLANs on both ToR switches is also supported but optional.
 
 ## Architecture Components
 
@@ -132,14 +132,14 @@ The fully converged design uses VLAN segmentation to isolate different traffic t
 | Storage 1     | SMB storage over RDMA (first path)  | 711     | Tagged VLAN, L2 only (no SVI)         |
 | Storage 2     | SMB storage over RDMA (second path) | 712     | Tagged VLAN, L2 only (no SVI)         |
 
-> [!IMPORTANT]
-> **Storage VLAN Design Pattern for Fully Converged**: In Fully Converged deployments, **both storage VLANs (711 and 712) must be configured on both ToR switches**. This is because:
+> [!NOTE]
+> **Storage VLAN Design Pattern for Fully Converged**: The **recommended** baseline design uses **one storage VLAN per ToR switch**:
 >
-> - Each host has only **2 NICs** connecting to both ToRs (no dedicated storage NICs)
-> - **SET (Switch Embedded Teaming)** handles vNIC-to-pNIC mapping at the host level
-> - SET may route either storage VLAN through either physical NIC based on its load balancing algorithm
+> - Storage VLAN 711 is configured only on ToR-A and mapped to one physical NIC
+> - Storage VLAN 712 is configured only on ToR-B and mapped to the other physical NIC
+> - In failure scenarios (NIC or ToR), SMB/RDMA traffic automatically fails over to the remaining path
 >
-> This differs from **Switched** deployments where dedicated storage NICs connect to specific ToRs, allowing one storage VLAN per ToR.
+> Configuring both storage VLANs on both ToR switches is also supported but optional. Testing has confirmed no meaningful resiliency benefit from this configuration.
 
 ### Top-of-Rack Switch Configuration
 
@@ -168,7 +168,7 @@ This section provides configuration guidance using **Cisco Nexus 93180YC-FX3 (NX
 - **VLAN 712 (Storage 2)**: Layer 2 only VLAN (no SVI), tagged on trunk ports for RDMA traffic
 
 > [!NOTE]
-> In Fully Converged deployments, **both storage VLANs must be configured on both ToR switches** because SET handles vNIC-to-pNIC mapping at the host level and may route either storage VLAN through either physical NIC.
+> In Fully Converged deployments, the recommended design uses **one storage VLAN per ToR switch**: Storage VLAN 711 on ToR-A only, Storage VLAN 712 on ToR-B only. This simplifies configuration while automatic failover handles NIC or ToR failures.
 
 > [!IMPORTANT]
 > Storage VLANs 711 and 712 should **NOT** be permitted on the ToR-to-ToR peer-link (vPC peer-link, MLAG inter-switch trunk, or any L2 interconnect between ToR switches). Storage traffic must flow directly from host to ToR to destination host to maintain optimal RDMA performance. Allowing storage VLANs on peer links can cause performance degradation.
@@ -213,7 +213,7 @@ interface Ethernet1/1-3
   switchport
   switchport mode trunk
   switchport trunk native vlan 7
-  switchport trunk allowed vlan 7,201,711,712
+  switchport trunk allowed vlan 7,201,711
   priority-flow-control mode on send-tlv
   spanning-tree port type edge trunk
   mtu 9216
@@ -227,8 +227,6 @@ vlan 7
   name Management_7
 vlan 201
   name Compute_201
-vlan 711
-  name Storage_711
 vlan 712
   name Storage_712
 
@@ -253,7 +251,7 @@ interface Ethernet1/1-3
   switchport
   switchport mode trunk
   switchport trunk native vlan 7
-  switchport trunk allowed vlan 7,201,711,712
+  switchport trunk allowed vlan 7,201,712
   priority-flow-control mode on send-tlv
   spanning-tree port type edge trunk
   mtu 9216
@@ -262,8 +260,8 @@ interface Ethernet1/1-3
 ```
 
 > [!NOTE]
-> - Both ToR switches have **identical VLAN configurations** (7, 201, 711, 712) in Fully Converged deployments
-> - SET at the host level handles vNIC-to-pNIC mapping to optimize storage traffic paths
+> - ToR-A has Storage VLAN 711 only, ToR-B has Storage VLAN 712 only (one storage VLAN per ToR)
+> - In failure scenarios, SMB/RDMA traffic automatically fails over to the remaining path
 > - QoS policies and routing design (e.g., uplinks, BGP/OSPF, default gateway) will be introduced in a separate document
 
 
@@ -326,7 +324,7 @@ Host4      c$        Administrator Administrator 3.1.1   2
 
 > [!NOTE]
 > **SMB Multichannel Validation Key Points:**
-> - Both storage VLANs (711 and 712) are operational with RDMA enabled
+> - Storage VLANs 711 and 712 are operational with RDMA enabled (each mapped to its respective ToR)
 > - `RdmaConnectionCount = 2` confirms RDMA is being used for storage traffic
 > - `TcpConnectionCount = 0` shows no fallback to regular TCP
 > - SMB 3.1.1 dialect is being used for optimal performance
@@ -405,26 +403,24 @@ For BGP routing configuration and best practices in Azure Local deployments:
 
 ## Frequently Asked Questions
 
-### Q: Why must both Storage VLANs be on both ToR switches in Fully Converged?
+### Q: How should Storage VLANs be configured in Fully Converged deployments?
 
 **A:** 
-In Fully Converged deployments, **both storage VLANs (711 and 712) must be configured on both ToR switches**. This is required because:
+The recommended baseline design uses **one storage VLAN per ToR switch** for Fully Converged deployments:
 
-1. **Only 2 NICs per host**: Each host connects one NIC to ToR1 and one to ToR2
-2. **SET handles traffic routing**: Switch Embedded Teaming maps storage vNICs to physical NICs at the host level
-3. **Either VLAN through either NIC**: SET's load balancing may route Storage VLAN 711 or 712 through either physical NIC
+- Storage VLAN A (711) is configured only on ToR-A and mapped to one physical NIC
+- Storage VLAN B (712) is configured only on ToR-B and mapped to the other physical NIC
+- In failure scenarios (NIC or ToR failure), SMB/RDMA traffic automatically fails over to the remaining path with reduced bandwidth but no functional impact
 
-**How it differs from Switched deployment:**
+**Storage VLAN Configuration:**
 
 | Deployment Pattern | Storage NICs | ToR VLAN Config | Why |
 |-------------------|--------------|-----------------|-----|
-| **Fully Converged** | Shared (2 NICs total) | Both VLANs on both ToRs | SET may route either VLAN through either NIC |
-| **Switched** | Dedicated (4 NICs total) | One VLAN per ToR | Each storage NIC connects to a specific ToR |
-
-**Key Point:** The "one storage VLAN per ToR" optimization applies to **Switched** deployments where dedicated storage NICs connect to specific ToRs. In Fully Converged, SET's flexibility requires both VLANs on both switches.
+| **Fully Converged** | Shared (2 NICs total) | S1 on ToR-A only, S2 on ToR-B only | One storage VLAN per NIC; failover occurs automatically |
+| **Switched** | Dedicated (4 NICs total) | S1 on ToR-A only, S2 on ToR-B only | Each storage NIC connects to a specific ToR |
 
 > [!NOTE]
-> SET uses vNIC-to-pNIC affinity mapping to optimize traffic paths, but the switches must still be configured to carry both storage VLANs to handle any mapping SET chooses.
+> Configuring both storage VLANs on both ToR switches is also supported but optional. Testing has confirmed there is no meaningful resiliency or failover benefit from this configuration, and it increases complexity without improving availability.
 
 
 ## Additional Resources
