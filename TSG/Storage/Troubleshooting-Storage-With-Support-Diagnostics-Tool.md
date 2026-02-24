@@ -54,7 +54,7 @@ Start-AzsSupportStorageDiagnostic -Include 'DiskHealth','StorageHealth','Virtual
 | Test | Description |
 |------|-------------|
 | Storage Pool Health Check | Checks for any Storage Pool that is not in a healthy state, which is determined by anything other than Health Status of OK.
-| Cluster Nodes Health Process Running | Ensures that all Nodes in Cluster are running the Health Service process (Healthpih.exe).
+| Cluster Nodes Health Process Running | Ensures that all Nodes in Cluster are running the Health Service process (HealthPIH.exe).
 | Storage Job Check | Looks for any Storage Jobs that are running on the system, in a healthy system the expectation is that there will be no jobs running on the system.
 | Cluster Node Check | Gets any Cluster Nodes that are in any other state than “Up”, which would indicate a requirement to review.
 | Cluster Shared Volumes Check | Confirms that no Cluster Shared Volumes are present that have a state that is not “Online”.
