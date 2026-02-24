@@ -166,16 +166,26 @@ The user should have the following permissions on the OU:
  
 If you do not see all of these ActiveDirectoryRights listed for this user, please follow [instructions to prepare active directory](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-prep-active-directory?view=azloc-2503), including running the `AsHciADArtifactsPreCreationTool` listed in the wiki to ensure all permissions are set appropriately for the user. Ensure these same permissions are applied to all OU objects and their descendents.
 
-### WinRM Trusted Hosts Configuration
-
+### WinRM TrustedHosts Configuration
+TrustedHosts should be checked on each node for correct configuration.
 ```Powershell
 Get-Item WSMan:\localhost\Client\TrustedHosts
 ```
 
-This file should contain the ips or hostnames of each of the nodes in your cluster. To set this file, use this command and specify all hostnames and ip-addresses in your cluster delimited by commas.
+TrustedHosts should include the following:
+- Each cluster node's hostname
+- Each cluster node's IP address
+- Each cluster node's FQDN
 
-```Powershell
-Set-Item WSMan:\localhost\Client\TrustedHosts -Value hostname1,hostname2,192.168.0.1,192.168.0.2
+To set TrustedHosts, use one of the commands below and replace the placeholder values with your cluster node hostnames, IPs, and FQDNs.
+
+```PowerShell
+# Setting and overwriting all values
+Set-Item WSMan:\localhost\Client\TrustedHosts -Value "hostname1,hostname2,192.168.0.1,192.168.0.2,hostname1.contoso.local,hostname2.contoso.local" -Force
+```
+```PowerShell
+# Adding missing values to existing TrustedHosts
+Set-Item WSMan:\localhost\Client\TrustedHosts -Value "hostname1.contoso.local,hostname2.contoso.local" -Concatenate -Force
 ```
 
 # Scripts
