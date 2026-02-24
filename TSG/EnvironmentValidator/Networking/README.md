@@ -14,6 +14,7 @@ For Azure Local Network Resources not related to Environment Validator, see [TSG
 - [Troubleshoot: Cluster Storage Intent Exists](Troubleshoot-Network-Test-Cluster-StorageIntent-Exists.md)
 - [Troubleshoot: Host Network Configuration Readiness](Troubleshoot-Network-Test-HostNetworkConfigurationReadiness.md)
 - [Troubleshoot: Infrastructure IP Azure Endpoint Connection](Troubleshoot-Network-Test-InfraIP-Azure-Endpoint-Connection.md)
+- [Troubleshoot: Infrastructure IP Connection Exception Found](Troubleshoot-Network-Test-Infra-IP-Connection-ExceptionFound.md)
 - [Troubleshoot: Infrastructure IP DNS Client Readiness](Troubleshoot-Network-Test-InfraIP-DNS-Client-Readiness.md)
 - [Troubleshoot: Infrastructure IP DNS Port 53 Connection](Troubleshoot-Network-Test-InfraIP-DNS-Port-53.md)
 - [Troubleshoot: Infrastructure IP Hyper-V Readiness](Troubleshoot-Network-Test-InfraIP-Hyper-V-Readiness.md)
