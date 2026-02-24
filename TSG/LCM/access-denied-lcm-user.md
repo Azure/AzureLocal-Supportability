@@ -177,7 +177,7 @@ TrustedHosts should include the following:
 - Each cluster node's IP address
 - Each cluster node's FQDN
 
-To set TrustedHosts, use one of the commands below and replace the placeholder values with your cluster node hostnames, IPs, or FQDNs.
+To set TrustedHosts, use one of the commands below and replace the placeholder values with your cluster node hostnames, IPs, and FQDNs.
 
 ```PowerShell
 # Setting and overwriting all values
