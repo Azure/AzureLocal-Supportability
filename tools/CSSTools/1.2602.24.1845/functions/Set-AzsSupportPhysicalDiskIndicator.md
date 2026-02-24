@@ -1,7 +1,7 @@
 # Set-AzsSupportPhysicalDiskIndicator
 
 ## SYNOPSIS
-To Enable or Disable physical disk indicator for spcific disk based on its serial number.
+To Enable or Disable physical disk indicator for specific disk based on its serial number.
 
 ## SYNTAX
 

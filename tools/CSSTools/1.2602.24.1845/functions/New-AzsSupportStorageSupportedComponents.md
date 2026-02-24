@@ -11,7 +11,7 @@ New-AzsSupportStorageSupportedComponents [[-CimSession] <CimSession>] [-Progress
 ```
 
 ## DESCRIPTION
-Gets supported componants on storage spaces and builds new config recommended to apply
+Gets supported components on storage spaces and builds new config recommended to apply
 
 ## EXAMPLES
 

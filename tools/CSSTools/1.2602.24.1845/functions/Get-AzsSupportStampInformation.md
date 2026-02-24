@@ -10,7 +10,7 @@ Get-AzsSupportStampInformation [-ProgressAction <ActionPreference>] [<CommonPara
 ```
 
 ## DESCRIPTION
-Queries for common stamp information properties such as DeplymentID, OEMVersion and CloudID
+Queries for common stamp information properties such as DeploymentID, OEMVersion and CloudID
 
 ## EXAMPLES
 

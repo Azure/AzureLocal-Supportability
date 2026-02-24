@@ -4,7 +4,7 @@ This script checks the state of the host network.
 
 ## Windows.Network.VMNetworkAdapter
 
-{REPLACE SYNOPSIS}
+Performs tests against the VM Network Adapters.
 
 | Rule | Synopsis |
 | --- | --- |

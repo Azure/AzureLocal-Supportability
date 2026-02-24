@@ -37,7 +37,7 @@ Checks Health actions that have not completed
 
 ## Windows.Storage.HealthProcess.State
 
-This script checks the Healthpih process state
+This script checks the HealthPIH process state
 
 | Rule | Synopsis |
 | --- | --- |

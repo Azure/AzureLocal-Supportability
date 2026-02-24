@@ -11,7 +11,7 @@ Get-AzsSupportStorageSupportedComponents [[-CimSession] <CimSession>] [-Progress
 ```
 
 ## DESCRIPTION
-Gets supported componants on storage spaces
+Gets supported components on storage spaces
 
 ## EXAMPLES
 

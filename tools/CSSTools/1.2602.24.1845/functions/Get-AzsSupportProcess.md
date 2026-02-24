@@ -174,7 +174,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-### Get-AzsSupportProcess -ComputerName "contoso-n01" -Name "healthpih.exe" | Select-Object Name, ProcessId, StartTime, WorkingSetMB, HandleCount | Format-Table -AutoSize
+### Get-AzsSupportProcess -ComputerName "contoso-n01" -Name "HealthPIH.exe" | Select-Object Name, ProcessId, StartTime, WorkingSetMB, HandleCount | Format-Table -AutoSize
 ### Name          ProcessId StartTime             WorkingSetMB HandleCount
 ### ----          --------- ---------             ------------ -----------
-### healthpih.exe     11692 2/21/2025 10:34:14 AM 49 MB               2319
+### HealthPIH.exe     11692 2/21/2025 10:34:14 AM 49 MB               2319

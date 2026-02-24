@@ -1,7 +1,7 @@
 # Get-AzsSupportStoragePhysicalExtent
 
 ## SYNOPSIS
-Gets physical allocations for a virtual disk that is unhealty.
+Gets physical allocations for a virtual disk that is unhealthy.
 
 ## SYNTAX
 
