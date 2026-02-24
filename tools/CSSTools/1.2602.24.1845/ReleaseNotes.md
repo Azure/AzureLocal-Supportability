@@ -16,7 +16,7 @@ Import-Module -Name Microsoft.AzLocal.CSSTools
 
 # What's new
 
-We have introduced two new components called `KnownIssues` and `VirtualMachines` for our Support Module Insights. We have scaled to include an additional 36 analyzers (not include build analyzers) and 63 rules. To see a full list of tests performed, look at each Component:
+We have introduced two new components called `KnownIssues` and `VirtualMachines` for our Support Module Insights. In addition, we have added several new analyzers and rules. A complete list of the tests being performed can be found by reviewing the Components below.
 
 - [AzureLocalServices](/tools/CSSTools/1.2602.24.1845/insights/AzureLocalServices.md)
 - [HostCompute](/tools/CSSTools/1.2602.24.1845/insights/HostCompute.md)
@@ -26,13 +26,13 @@ We have introduced two new components called `KnownIssues` and `VirtualMachines`
 - [Support.AksArc](/tools/CSSTools/1.2602.24.1845/insights/Support.AksArc.md)
 - [VirtualMachines](/tools/CSSTools/1.2602.24.1845/insights/VirtualMachines.md)
 
-In addition to some code and reliability fixes, we have added the following functionality.
-- `Install-AzsSupportModule`: Used to distribute the current module to remote computers within your Azure Local environment.
-- `Get-AzsSupportLcmDeploymentUserName`: Retrieves the deployment username from within Lifecycle Manager (LCM).
-- `Get-AzsSupportBlocklistedDisk`: Gets all blocklisted physical disks from the cluster filter service.
-- `Show-AzsSupportSDNStateSummary`: Checks the current status of SDN, including if FCNC is deployed and if SDN services are online.
+In addition to some code and reliability fixes, we have added some new functions.
+- [Install-AzsSupportModule](/tools/CSSTools/1.2602.24.1845/functions/Install-AzsSupportModule.md): Used to distribute the current module to remote computers within your Azure Local environment.
+- [Get-AzsSupportLcmDeploymentUserName](/tools/CSSTools/1.2602.24.1845/functions/Get-AzsSupportLcmDeploymentUserName.md): Retrieves the deployment username from within Lifecycle Manager (LCM).
+- [Get-AzsSupportBlocklistedDisk](/tools/CSSTools/1.2602.24.1845/functions/Get-AzsSupportBlocklistedDisk.md): Gets all blocklisted physical disks from the cluster filter service.
+- [Show-AzsSupportSDNStateSummary](/tools/CSSTools/1.2602.24.1845/functions/Show-AzsSupportSDNStateSummary.md): Checks the current status of SDN, including if FCNC is deployed and if SDN services are online.
 
-A comprehensive list of all our functions can be found under [functions](/tools/CSSTools/1.2602.24.1845/functions)
+A comprehensive list of all our functions can be found under [functions](/tools/CSSTools/1.2602.24.1845/functions).
 
 # Contact Us
 If you are encountering an issue, or need assistance, refer to [questions-or-feedback](https://learn.microsoft.com/en-us/azure/azure-local/manage/support-tools#questions-or-feedback).
