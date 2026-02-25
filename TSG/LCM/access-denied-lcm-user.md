@@ -191,7 +191,7 @@ Set-Item WSMan:\localhost\Client\TrustedHosts -Value "hostname1.contoso.local,ho
 # Scripts
 ### Validating LCM (User Deployment) Credentials Match the ECE Store
 
-#### Validate that the username provided is of the correct format. Username should be provided without domain and not contain any special characters.
+NOTE: Please note that the LCM Username should be provided without domain and not contain any special characters. To Validate that the username provided is of the correct format, run:
 
 ```Powershell
 
@@ -199,6 +199,7 @@ if ($credential.UserName -match '^[^\\]+(?=\\)|(?<=@).+$') {
     throw "Please provide user name without domain."
 }
 ```
+Proceed with credential validation:
 
 ```Powershell
 
