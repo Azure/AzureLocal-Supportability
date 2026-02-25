@@ -191,6 +191,11 @@ Set-Item WSMan:\localhost\Client\TrustedHosts -Value "hostname1.contoso.local,ho
 # Scripts
 ### Validating LCM (User Deployment) Credentials Match the ECE Store
 
+#### Validate that the username provided is of the correct format. Username should be provided without domain and not contain any special characters.
+if ($credential.UserName -match '^[^\\]+(?=\\)|(?<=@).+$') {
+    throw "Please provide user name without domain."
+}
+
 ```Powershell
 
 function CredentialsHelper
@@ -263,10 +268,15 @@ function CredentialsHelper
             return
         }
 
-
         $DAAdminUserPassword = $DAAdminUserCredential.GetNetworkCredential().password
 
         $userProvidedPassword = $Credential.GetNetworkCredential().Password
+        $userProvidedUserName = $Credential.GetNetworkCredential().UserName
+
+        if ($DAAdminUserCredential.UserName -ne $userProvidedUserName)
+        {
+            Write-AzsSecurityWarning -Message "Provided LCM credential user name does not match the one in ECE." -Verbose
+        }
 
         if ($DAAdminUserPassword -eq $userProvidedPassword)
         {
@@ -286,19 +296,6 @@ function CredentialsHelper
 $lcmCredentials = Get-Credential
 CredentialsHelper -Credential $lcmCredentials
 ```
-
-# Import necessary modules
-Import-Module "ECEClient" 3>$null 4>$null
-Import-Module "C:\Program Files\WindowsPowerShell\Modules\Microsoft.AS.Infra.Security.SecretRotation\Microsoft.AS.Infra.Security.ActionPlanExecution.psm1" -DisableNameChecking
-Import-Module "C:\Program Files\WindowsPowerShell\Modules\Microsoft.AS.Infra.Security.SecretRotation\PasswordUtilities.psm1" -DisableNameChecking
-
-# Print the User Name
-Write-Host "Username provided: $($credential.UserName)" -ForegroundColor Cyan
-
-# Validate that the username provided is of the correct format. Username should be provided without domain and not contain any special characters.
-if ($credential.UserName -match '^[^\\]+(?=\\)|(?<=@).+$') {
-    throw "Please provide user name without domain."
-}
 
 ### Mitigation
 Please input your LCM user credentials when prompted. **DO NOT include the domain as part of the username in the credential**.
@@ -357,9 +354,6 @@ foreach ($containerName in $ECEContainersToUpdate) {
 
 Write-AzsSecurityVerbose -Message "Finished updating credentials in ECE." -Verbose
 ```
-
-NOTE: If the "CN=RuntimeParameterEncryptionCert" was generated using the "GenerateEncryptionCertificate" action, then please run the "DeleteEncryptionCertificate" action plan to clean up the certificate.
-
 ### Retrieving Your LCM (deployment user) Username
 Run the following script on your HCI node to retrieve the LCM username:
 
