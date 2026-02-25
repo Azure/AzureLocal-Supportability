@@ -343,11 +343,6 @@ Write-AzsSecurityVerbose -Message "Updating password in ECE" -Verbose
 $ECEContainersToUpdate = @(
     "DomainAdmin",
     "DeploymentDomainAdmin",
-    "SecondaryDomainAdmin",
-    "TemporaryDomainAdmin",
-    "BareMetalAdmin",
-    "FabricAdmin",
-    "SecondaryFabric",
     "CloudAdmin"
 )
 
