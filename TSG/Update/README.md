@@ -31,3 +31,4 @@
 * [2510 Update fails at CauPostVersionCheck](./CauPostVersionCheck-2510-23H2.md)
 * [Update preparation fails with 'Could not find part of the path' after 24H2 upgrade](./Update-preparation-fails-Could-not-find-part-of-the-file-path.md)
 * [2509 | Update Service terminated repeatedly by ALM due to high memory usage](./Update-Service-terminated-repeatedly-by-ALM.md)
+* [Test-AzStackHciARBStack: Fails on Non-Numeric Az CLI Extension Versions](./Test-AzStackHciARBStack-NonNumericAzCLIExtensionVersions.md)
