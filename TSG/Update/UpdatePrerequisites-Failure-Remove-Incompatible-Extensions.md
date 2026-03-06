@@ -92,10 +92,26 @@ Compare this against the expected list from Step 1. Any extension present here t
 
 ## Mitigation
 
-Remove any **unmanaged extension** (not listed in the ValidatedRecipe) from **every node** in the cluster:
+Remove any **unmanaged extension** (not listed in the ValidatedRecipe) from **every node** in the cluster. You can run the following script from any node to remove the extension from all nodes at once:
 
 ```powershell
-az extension remove --name "<extension-name>" --only-show-errors
+# List of all cluster nodes
+$nodes = (Get-ClusterNode).Name
+
+# Name of the extension to remove (replace with your extension)
+$extensionName = "<extension-name>"
+
+# Remove the extension from all nodes
+Invoke-Command -ComputerName $nodes -ScriptBlock {
+    param($ext)
+    $env:AZURE_EXTENSION_DIR = "$env:LocalRootFolderPath\AzCliExtensions"
+    $output = az extension remove --name $ext 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Removed extension $ext on $env:COMPUTERNAME"
+    } else {
+        Write-Host "Extension $ext not present on $env:COMPUTERNAME"
+    }
+} -ArgumentList $extensionName
 ```
 
-Repeat for each unmanaged extension identified in Step 2, on every affected node. Then resume or retry the update. The UpdatePreRequisites step will handle installing the correct managed extensions automatically.
+Repeat for each unmanaged extension identified in Step 2. Then resume or retry the update. The UpdatePreRequisites step will handle installing the correct managed extensions automatically.
