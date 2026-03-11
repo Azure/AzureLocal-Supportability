@@ -252,7 +252,7 @@ In converged deployments, the Storage Connections validator will create a tempor
 
 4. If any ping fails, check the following:
 
-   - That the VLANs are correctly configured on the TOR switches. In a converged deployment, both storage VLANs should be configured on the interface.
+   - That the VLANs are correctly configured on the TOR switches. In a converged deployment, each storage VLAN should be configured on its respective ToR switch (Storage VLAN A on ToR-A, Storage VLAN B on ToR-B).
    - That physical NICs are connected to the correct ports on the TOR switches.
    - That no VLANs are configured on the physical NICs.
    - That no firewall rules or other configuration are blocking APIPA traffic.
