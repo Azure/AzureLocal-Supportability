@@ -201,6 +201,14 @@ if ($credential.UserName -match '^[^\\]+(?=\\)|(?<=@).+$') {
 ```
 Proceed with credential validation:
 
+NOTE: Please run the below 'CredentialsHelper' from the seed node. 
+To find the seed node :
+
+```Powershell
+$owner_node = (Get-ClusterResource *Orc*).OwnerNode.Name
+$owner_node
+```
+
 ```Powershell
 
 function CredentialsHelper
