@@ -189,8 +189,6 @@ vlan 201
   name Compute_201
 vlan 711
   name Storage_711
-vlan 712
-  name Storage_712
 
 interface Vlan7
   description Management
