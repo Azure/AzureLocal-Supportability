@@ -6,10 +6,6 @@
     <td><strong>Arc Agent</strong></td>
   </tr>
   <tr>
-    <th style="text-align:left; width: 180px;">Severity</th>
-    <td><strong>High</strong></td>
-  </tr>
-  <tr>
     <th style="text-align:left;">Applicable Scenarios</th>
     <td><strong>Update</strong></td>
   </tr>
@@ -30,7 +26,7 @@ Azure Local update may fail during Arc agent installation due to a file lockdown
 - Solution update fails during Arc agent installation step.
 - Arc agent install logs indicate a lockdown or file access issue.
 
-**Common error messages:**
+**Diagnosing the issue:**
 
 Check `C:\ImageComposition\ArcAgent\arcInstallLog.txt` on the affected node(s) for errors referencing a lockdown or inability to access the log file.
 
@@ -38,10 +34,6 @@ Check `C:\ImageComposition\ArcAgent\arcInstallLog.txt` on the affected node(s) f
 
 - Update does not progress past the Arc agent installation phase.
 - The `arcInstallLog.txt` file on one or more nodes contains lockdown-related errors.
-
-## Root Cause
-
-The Arc agent log file (`C:\ProgramData\AzureConnectedMachineAgent\Log\azcmagent.log`) becomes locked, which prevents the Arc agent installer from writing to it during the update process. This causes the installation to fail and blocks the overall update.
 
 ## Resolution
 
@@ -73,11 +65,5 @@ The Arc agent log file (`C:\ProgramData\AzureConnectedMachineAgent\Log\azcmagent
 
 3. **Retry the update**
    Attempt the update again. The Arc agent installer should now be able to proceed without the lockdown issue.
-
-4. **Verify resolution**
-   ```powershell
-   # Confirm the update is progressing past the Arc agent install step
-   Get-SolutionUpdate | Format-Table -Property Title, State, Status
-   ```
 
 ---
