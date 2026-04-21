@@ -47,7 +47,7 @@ Check `C:\ImageComposition\ArcAgent\arcInstallLog.txt` on the affected node(s) f
    Review the Arc agent install log on each affected node to confirm the lockdown error.
 
    ```powershell
-   Get-Content "C:\ImageComposition\ArcAgent\arcInstallLog.txt" | Select-String -Pattern "lock"
+   Get-Content "C:\ImageComposition\ArcAgent\arcInstallLog.txt" | Select-String -Pattern "lockdown"
    ```
 
 2. **Back up the locked log file**
