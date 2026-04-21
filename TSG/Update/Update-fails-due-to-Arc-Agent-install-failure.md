@@ -15,13 +15,15 @@
   </tr>
   <tr>
     <th style="text-align:left;">Affected Versions</th>
-    <td><strong>All versions</strong></td>
+    <td><strong>Arc Agent versions below 1.62</strong></td>
   </tr>
 </table>
 
 ## Overview
 
 Azure Local update may fail during Arc agent installation due to a file lockdown issue. The `azcmagent.log` file under `C:\ProgramData\AzureConnectedMachineAgent\Log` can become locked, preventing the Arc agent installer from completing successfully.
+
+> **Note:** This issue only affects Arc agent versions below 1.62. If you are running Arc agent 1.62 or later, this issue does not apply.
 
 ## Symptoms
 
