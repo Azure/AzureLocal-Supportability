@@ -1,44 +1,32 @@
 # F5 BIG-IP Virtual Edition Sees the Wrong VLAN ID on Frames Delivered via a Hyper-V Trunk-Mode vNIC
 
-<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
-  <tr>
-    <th style="text-align:left; width: 180px;">Component</th>
-    <td><strong>Networking / Third-Party VM Appliances</strong></td>
-  </tr>
-  <tr>
-    <th style="text-align:left; width: 180px;">Severity</th>
-    <td><strong>High</strong></td>
-  </tr>
-  <tr>
-    <th style="text-align:left;">Applicable Scenarios</th>
-    <td><strong>Hosting F5 BIG-IP Virtual Edition as a Hyper-V guest on Azure Local, with a vNIC in VLAN trunk mode</strong></td>
-  </tr>
-  <tr>
-    <th style="text-align:left;">Affected Versions</th>
-    <td><strong>F5 BIG-IP VE 17.5.1.x builds earlier than 17.5.1.6 (confirmed on 17.5.1.3 Build 0.0.19). All currently supported Azure Local releases.</strong></td>
-  </tr>
-</table>
+| Field | Value |
+|---|---|
+| Component | Networking / Third-Party VM Appliances |
+| Severity | High |
+| Applicable Scenarios | Hosting F5 BIG-IP Virtual Edition as a Hyper-V guest on Azure Local, with a vNIC in VLAN trunk mode |
+| Affected Versions | F5 BIG-IP VE 17.5.1.x builds earlier than 17.5.1.6 (confirmed on 17.5.1.3 Build 0.0.19). All currently supported Azure Local releases. |
 
 ## Overview
 
-When an F5 BIG-IP Virtual Edition (VE) guest runs on an Azure Local Hyper-V host with a virtual NIC attached to the Hyper-V virtual switch in **VLAN trunk mode**, BIG-IP builds earlier than **17.5.1.6** parse the 802.1Q Tag Control Information (TCI) field incorrectly. The Priority (PCP) bits of the TCI are concatenated onto the VLAN Identifier (VID) instead of being held separately, so BIG-IP reports a VLAN ID that is the true VID shifted left by four bits. For example, VLAN **201** (hex `0xC9`) is read by the guest as VLAN **3216** (hex `0xC90`) when PCP is `0`. Traffic is therefore classified to a VLAN inside F5's Traffic Management Operating System (TMOS, the OS that runs on BIG-IP) that does not correspond to the tag actually on the wire, and per-VLAN listeners, virtual servers, and routing decisions downstream of the F5 behave incorrectly.
+When an F5 BIG-IP Virtual Edition (VE) guest runs on an Azure Local Hyper-V host with a virtual NIC attached to the Hyper-V virtual switch in VLAN trunk mode, BIG-IP builds earlier than 17.5.1.6 parse the 802.1Q Tag Control Information (TCI) field incorrectly. The Priority (PCP) bits of the TCI are concatenated onto the VLAN Identifier (VID) instead of being held separately, so BIG-IP reports a VLAN ID that is the true VID shifted left by four bits. For example, VLAN 201 (hex `0xC9`) is read by the guest as VLAN 3216 (hex `0xC90`) when PCP is `0`. Traffic is therefore classified to a VLAN inside F5's Traffic Management Operating System (TMOS, the OS that runs on BIG-IP) that does not correspond to the tag actually on the wire, and per-VLAN listeners, virtual servers, and routing decisions downstream of the F5 behave incorrectly.
 
-The 802.1Q tag itself is present and correct on the frames arriving at the guest — the Azure Local host delivers them correctly — the defect is in how the F5 guest's high-performance network driver path (`xnet`/`dpdk`) reads the TCI field. This is a defect in F5 BIG-IP's guest-side driver; it is **not** an Azure Local host, Hyper-V virtual switch, or physical-fabric issue. Fix: upgrade the F5 BIG-IP VE guest to **17.5.1.6 or later**. No Azure Local host configuration change is required.
+The 802.1Q tag itself is present and correct on the frames arriving at the guest — the Azure Local host delivers them correctly — the defect is in how the F5 guest's high-performance network driver path (`xnet`/`dpdk`) reads the TCI field. This is a defect in F5 BIG-IP's guest-side driver; it is not an Azure Local host, Hyper-V virtual switch, or physical-fabric issue. Fix: upgrade the F5 BIG-IP VE guest to 17.5.1.6 or later. No Azure Local host configuration change is required.
 
 The same F5 configuration running on VMware ESXi, or running on Hyper-V with the vNIC in access mode (single VLAN — no 802.1Q tag visible to the guest), is not affected — the defect is specific to the combination of an affected F5 build, the `xnet`/`dpdk` driver path, and a Hyper-V trunk-mode vNIC.
 
 ## Symptoms
 
-**Observable behaviors:**
+Observable behaviors:
 
 - BIG-IP sees traffic on a trunk vNIC, but classifies it to an unexpected TMOS VLAN that corresponds to the true VLAN ID shifted left by four bits.
 - The mis-read VLAN ID matches the pattern `(PCP << 13) | (DEI << 12) | VID` treated as a single value. With PCP = 0 and DEI = 0, that reduces to `VID << 4`. Example: VLAN 201 on the wire appears inside BIG-IP as VLAN 3216 (201 × 16).
 - Traffic sent on VLAN `X` is classified by BIG-IP as if it arrived on a different VLAN (`VID << 4`) bound to the same trunk interface. Virtual servers, self-IPs, and routing rules scoped to VLAN `X` do not match, while rules scoped to the shifted VLAN match traffic that was not intended for them.
 - Downstream services that rely on correct per-VLAN handling through the F5 break in ways that look like configuration drift: for example, Citrix Provisioning Services (PVS) DHCP reservations failing for hosts on the "broken" VLAN, VLAN tagging not being honored end-to-end, and target VMs failing to boot because DHCP/PXE replies are returned on the wrong VLAN.
-- The same BIG-IP VE, identically configured, works correctly when moved to a Hyper-V vSwitch in **access mode** (single VLAN, no 802.1Q tag reaches the guest), or when running on VMware ESXi.
-- Host-side packet captures taken on the Azure Local host (filtered to the F5 VM's vNIC MAC) show the **correct** 802.1Q VLAN IDs on frames delivered to the guest — proving the host is not mis-tagging.
+- The same BIG-IP VE, identically configured, works correctly when moved to a Hyper-V vSwitch in access mode (single VLAN, no 802.1Q tag reaches the guest), or when running on VMware ESXi.
+- Host-side packet captures taken on the Azure Local host (filtered to the F5 VM's vNIC MAC) show the correct 802.1Q VLAN IDs on frames delivered to the guest — proving the host is not mis-tagging.
 
-**Confirming the driver path on the F5 VE:**
+Confirming the driver path on the F5 VE:
 
 ```text
 # The defect lives in the xnet/dpdk driver path. From a root shell on the BIG-IP VE:
@@ -82,7 +70,7 @@ tcpdump -ni <trunkInterface> -e host <sourceIP> -c 20
 *Compare the two captures.* If the host-side VID is `X` and the guest-side VID is `X << 4` (i.e., `X * 16` when PCP = 0 and DEI = 0), the defect is confirmed. The table below gives a few quick references:
 
 | True VID on the wire (host capture) | VID BIG-IP reads (guest capture) — PCP = 0, DEI = 0 |
-|---:|---:|
+|:---:|:---:|
 | 10   | 160  |
 | 100  | 1600 |
 | 201  | 3216 |
@@ -95,7 +83,7 @@ In F5 BIG-IP VE builds earlier than 17.5.1.6, the `xnet`/`dpdk` receive path doe
 
 Put another way, the bug bites at the boundary between Hyper-V and BIG-IP: Hyper-V hands the frame and its NDIS VLAN metadata to the netvsc PMD, the PMD mis-packs that metadata into the mbuf's `vlan_tci`, and TMM then matches the wrong VID against your TMOS VLAN configuration — so the tagged TMOS VLAN never sees its traffic.
 
-The defect lives in the **DPDK `netvsc` poll-mode driver (PMD)** — the DPDK driver that talks to Hyper-V synthetic NICs — which F5's `xnet`/`dpdk` path links against. The bug has a specific upstream fix in DPDK:
+The defect lives in the DPDK `netvsc` poll-mode driver (PMD) — the DPDK driver that talks to Hyper-V synthetic NICs — which F5's `xnet`/`dpdk` path links against. The bug has a specific upstream fix in DPDK:
 
 - **Upstream fix:** [`DPDK/dpdk@f7654c8c13f4`](https://github.com/DPDK/dpdk/commit/f7654c8c13f46ab537e8220ea4d6b4911f9f0fd5) — `net/netvsc: fix VLAN metadata parsing` (merged 2024-02-19; `Cc: stable@dpdk.org` so backported to DPDK stable branches).
 - **File:** `drivers/net/netvsc/hn_rxtx.c`.
