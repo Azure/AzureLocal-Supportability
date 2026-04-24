@@ -13,7 +13,7 @@ Troubleshooting guides (TSGs) are grouped by categories and stored in relevantly
 * [LCM](./TSG/LCM/README.md) - Lifecycle Manager.
 * [Infra Lifecycle Operations](./TSG/Lifecycle/README.md) - Add Server, Repair Server.
 * [Arc VMs](./TSG/ArcVMs/README.md) - VM lifecycle management, licensing, extensions, networking and storage.
-* [3rd Party VM Appliances](./TSG/3rdPartyVMAppliances/README.md) - Interop guidance for third-party virtual appliances (e.g., F5 BIG-IP VE) hosted as Hyper-V guests on Azure Local.
+* [Third-Party VM Appliances](./TSG/3rdPartyVMAppliances/README.md) - Interop guidance for third-party virtual appliances (e.g., F5 BIG-IP VE) hosted as Hyper-V guests on Azure Local.
 * [Security](./TSG/Security/README.md) - WDAC, BitLocker, Secret Rotation, Syslog, Defender for Cloud.
 * [Networking](./TSG/Networking/README.md) - Arc Gateway, Outbound Connectivity, TOR Configuration.
 * [Monitoring](./TSG/Monitoring/README.md) - Insights, Metric and Alerts.

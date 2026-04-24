@@ -50,18 +50,44 @@ tmctl -d blade tmm/xnet/device_probed
 # with a trunk-mode vNIC, this TSG applies.
 ```
 
-**Confirming the tag-parsing signature in-guest (decisive):**
+**Confirming the tag-parsing signature (decisive):**
+
+Take two matched packet captures — one on the Azure Local host (the "truth" side), one in the F5 guest (the "what BIG-IP sees" side) — while driving tagged traffic from a known source IP. If the guest-side VLAN ID equals the host-side VLAN ID shifted left by four bits, the bug is confirmed.
+
+*On the Azure Local host (PowerShell, as Administrator):*
+
+```powershell
+# Find the F5 VM's data vNIC MAC (the trunk adapter, not the management NIC)
+Get-VMNetworkAdapter -VMName <F5VmName> | Format-List Name, SwitchName, MacAddress
+
+# Start pktmon filtered to that MAC. Replace AA-BB-CC-DD-EE-FF with the data vNIC MAC.
+pktmon filter remove
+pktmon filter add -m AA-BB-CC-DD-EE-FF
+pktmon start --capture --pkt-size 256 --file-name f5-host.etl
+# ... drive tagged traffic from the known source IP for ~30 seconds ...
+pktmon stop
+pktmon etl2pcap f5-host.etl --out f5-host.pcap
+# Open f5-host.pcap in Wireshark or equivalent; confirm the 802.1Q VID on the wire
+# is the expected value (for example, VID 201).
+```
+
+*On the F5 BIG-IP VE (bash shell):*
 
 ```text
-# On the F5 BIG-IP VE, capture on the trunk interface (for example, 1.1) while sending
-# tagged traffic from a known source IP:
-tcpdump -ni <trunkInterface> -e host <sourceIP>
-
-# Compare the VLAN ID decoded by tcpdump in the guest to the VLAN ID known to be on
-# the wire at the host (from a host-side capture). If the guest-side VLAN ID equals
-# the host-side VLAN ID shifted left by four bits (i.e., true_vid * 16 when PCP=0),
-# the bug is confirmed.
+# Capture on the trunk interface (for example, 1.1) while the same traffic is flowing.
+tcpdump -ni <trunkInterface> -e host <sourceIP> -c 20
+# Note the VLAN ID tcpdump decodes inside the guest.
 ```
+
+*Compare the two captures.* If the host-side VID is `X` and the guest-side VID is `X << 4` (i.e., `X * 16` when PCP = 0 and DEI = 0), the defect is confirmed. The table below gives a few quick references:
+
+| True VID on the wire (host capture) | VID BIG-IP reads (guest capture) — PCP = 0, DEI = 0 |
+|---:|---:|
+| 10   | 160  |
+| 100  | 1600 |
+| 201  | 3216 |
+| 500  | 8000 |
+| 1000 | 16000 (exceeds the 12-bit VID space; BIG-IP may report a truncated value or drop) |
 
 ## Root Cause
 
@@ -145,7 +171,6 @@ F5 BIG-IP 17.5.1.3 was built against a netvsc PMD predating the fix, which is wh
 
 ## Related Issues
 
-- F5 BIG-IP 17.5.1.6 release notes (vendor documentation).
 - [DPDK commit `f7654c8c13f4` — `net/netvsc: fix VLAN metadata parsing`](https://github.com/DPDK/dpdk/commit/f7654c8c13f46ab537e8220ea4d6b4911f9f0fd5) — upstream DPDK fix that F5 BIG-IP 17.5.1.6 incorporates. Any DPDK-based virtual appliance running on Hyper-V that was built against a netvsc PMD predating this commit is a candidate for the same defect.
 - [`Set-VMNetworkAdapterVlan`](https://learn.microsoft.com/powershell/module/hyper-v/set-vmnetworkadaptervlan) — Hyper-V PowerShell reference for VM VLAN configuration.
 
