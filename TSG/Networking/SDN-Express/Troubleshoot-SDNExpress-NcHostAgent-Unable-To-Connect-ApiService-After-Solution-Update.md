@@ -100,7 +100,12 @@ If the key is missing or empty, populate it with the Network Controller VM names
 ```powershell
 # Replace <NC-VM1>,<NC-VM2>,<NC-VM3> with your actual NC VM names
 $ncNodeNames = "<NC-VM1>,<NC-VM2>,<NC-VM3>"
+
+# update existing key if present
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\NcHostAgent\Parameters" -Name "NetworkControllerNodeNames" -Value $ncNodeNames
+
+# create key if missing
+New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\NcHostAgent\Parameters' -Name 'NetworkControllerNodeNames' -Value $nodeNames -PropertyType "MultiString" -Force
 ```
 
 > **Important:** Repeat this step on every Hyper-V host in the cluster.
