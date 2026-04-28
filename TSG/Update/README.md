@@ -33,3 +33,4 @@
 * [2509 | Update Service terminated repeatedly by ALM due to high memory usage](./Update-Service-terminated-repeatedly-by-ALM.md)
 * [2601 | Solution Update failed with error message "Access is denied" ] (./AZLUpdate2601.md)
 * [Test-AzStackHciARBStack: Fails on Non-Numeric Az CLI Extension Versions](./Test-AzStackHciARBStack-NonNumericAzCLIExtensionVersions.md)
+* [Update fails due to Arc Agent install failure (lockdown on azcmagent.log)](./Update-fails-due-to-Arc-Agent-install-failure.md)
