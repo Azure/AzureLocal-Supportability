@@ -25,6 +25,7 @@ For Network Environment Validator Resources, see [TSG/EnvironmentValidator/Netwo
 - [How To: SDN Layer 3 Gateway Configuration](SDN-Express/HowTo-SDNExpress-SDN-Layer3-Gateway-Configuration.md)
 - [Troubleshoot: Host Unreachable](SDN-Express/Troubleshoot-SDNExpress-HealthAlert-HostUnreachable.md)
 - [Troubleshoot: Outbound Connectivity Issues with NAT](SDN-Express/Troubleshoot-SDNExpress-Outbound-Connectivity-Issues-When-Using-Outbound-NAT.md)
+- [Troubleshoot: NcHostAgent Unable to Connect to ApiService After Solution Update](SDN-Express/Troubleshoot-SDNExpress-NcHostAgent-Unable-To-Connect-ApiService-After-Solution-Update.md)
 - [Troubleshoot: Recreate Intent Without SR-IOV](SDN-Express/Troubleshoot-SDNExpress-Recreate-Intent-No-SRIOV.md)
 
 ### Diagnostics
