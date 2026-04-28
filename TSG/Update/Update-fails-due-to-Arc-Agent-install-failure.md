@@ -63,40 +63,6 @@ Check `C:\ImageComposition\ArcAgent\arcInstallLog.txt` on the affected node(s) f
 2. **Move the existing log file**
    Move the `azcmagent.log` file to a backup location outside of the `C:\ProgramData\AzureConnectedMachineAgent` directory. This allows the Arc agent installer to create a fresh log file without encountering the locking issue.
 
-   ```powershell
-   $ErrorActionPreference = "Stop"
-
-   $sourceLogPath = "C:\ProgramData\AzureConnectedMachineAgent\Log\azcmagent.log"
-   $backupDirectory = "C:\Temp\ArcAgentLogBackup"
-   $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-   $nodeName = $env:COMPUTERNAME
-   $backupFileName = "azcmagent-$nodeName-$timestamp.log"
-   $destinationLogPath = Join-Path -Path $backupDirectory -ChildPath $backupFileName
-
-   # Verify the source log file exists
-   if (-not (Test-Path -Path $sourceLogPath)) {
-       throw "Source log file not found: $sourceLogPath"
-   }
-
-   # Create a backup directory if it doesn't exist
-   if (-not (Test-Path -Path $backupDirectory)) {
-       New-Item -ItemType Directory -Path $backupDirectory | Out-Null
-   }
-
-   # Verify the backup destination doesn't already exist
-   if (Test-Path -Path $destinationLogPath) {
-       throw "Backup destination already exists: $destinationLogPath"
-   }
-
-   # Move the log file to the backup location
-   Move-Item -Path $sourceLogPath -Destination $destinationLogPath
-
-   # Verify the move completed successfully
-   if ((-not (Test-Path -Path $destinationLogPath)) -or (Test-Path -Path $sourceLogPath)) {
-       throw "Backup verification failed. Source: $sourceLogPath Destination: $destinationLogPath"
-   }
-   ```
-
    > **Note:** Repeat this step on all affected nodes in the cluster.
 
 3. **Retry the update**
