@@ -17,9 +17,19 @@
 
 ## Overview
 
-Azure Local update may fail during Arc agent installation due to a file lockdown issue. The `azcmagent.log` file under `C:\ProgramData\AzureConnectedMachineAgent\Log` can become locked, preventing the Arc agent installer from completing successfully.
+Azure Local update may fail during Arc agent installation due to a file locking issue. The Arc agent installer may encounter problems when trying to lock the existing `azcmagent.log` file under `C:\ProgramData\AzureConnectedMachineAgent\Log`, preventing it from completing successfully.
 
 > **Note:** This issue only affects Arc agent versions below 1.62. If you are running Arc agent 1.62 or later, this issue does not apply.
+
+### Check your Arc Agent version
+
+Run the following command on the affected node(s) to confirm the installed Arc Agent version:
+
+```powershell
+azcmagent version
+```
+
+If the version is **1.62 or later**, this issue does not apply and you do not need to follow the steps below. If possible, upgrading the Arc Agent to version 1.62 or later is the recommended permanent fix for this issue.
 
 ## Symptoms
 
@@ -50,20 +60,46 @@ Check `C:\ImageComposition\ArcAgent\arcInstallLog.txt` on the affected node(s) f
    Get-Content "C:\ImageComposition\ArcAgent\arcInstallLog.txt" | Select-String -Pattern "lockdown"
    ```
 
-2. **Back up the locked log file**
-   Move the `azcmagent.log` file to a backup location outside of the `C:\ProgramData\AzureConnectedMachineAgent` directory. This releases the lock and allows the installer to create a fresh log file.
+2. **Move the existing log file**
+   Move the `azcmagent.log` file to a backup location outside of the `C:\ProgramData\AzureConnectedMachineAgent` directory. This allows the Arc agent installer to create a fresh log file without encountering the locking issue.
 
    ```powershell
-   # Create a backup directory if it doesn't exist
-   New-Item -ItemType Directory -Path "C:\Temp\ArcAgentLogBackup" -Force
+   $ErrorActionPreference = "Stop"
 
-   # Move the locked log file to the backup location
-   Move-Item -Path "C:\ProgramData\AzureConnectedMachineAgent\Log\azcmagent.log" -Destination "C:\Temp\ArcAgentLogBackup\azcmagent.log" -Force
+   $sourceLogPath = "C:\ProgramData\AzureConnectedMachineAgent\Log\azcmagent.log"
+   $backupDirectory = "C:\Temp\ArcAgentLogBackup"
+   $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+   $nodeName = $env:COMPUTERNAME
+   $backupFileName = "azcmagent-$nodeName-$timestamp.log"
+   $destinationLogPath = Join-Path -Path $backupDirectory -ChildPath $backupFileName
+
+   # Verify the source log file exists
+   if (-not (Test-Path -Path $sourceLogPath)) {
+       throw "Source log file not found: $sourceLogPath"
+   }
+
+   # Create a backup directory if it doesn't exist
+   if (-not (Test-Path -Path $backupDirectory)) {
+       New-Item -ItemType Directory -Path $backupDirectory | Out-Null
+   }
+
+   # Verify the backup destination doesn't already exist
+   if (Test-Path -Path $destinationLogPath) {
+       throw "Backup destination already exists: $destinationLogPath"
+   }
+
+   # Move the log file to the backup location
+   Move-Item -Path $sourceLogPath -Destination $destinationLogPath
+
+   # Verify the move completed successfully
+   if ((-not (Test-Path -Path $destinationLogPath)) -or (Test-Path -Path $sourceLogPath)) {
+       throw "Backup verification failed. Source: $sourceLogPath Destination: $destinationLogPath"
+   }
    ```
 
    > **Note:** Repeat this step on all affected nodes in the cluster.
 
 3. **Retry the update**
-   Attempt the update again. The Arc agent installer should now be able to proceed without the lockdown issue.
+   Attempt the update again after the old log file has been moved. The Arc agent installer should now be able to proceed without the locking issue.
 
 ---
