@@ -29,7 +29,7 @@ Run the following command on the affected node(s) to confirm the installed Arc A
 azcmagent version
 ```
 
-If the version is **1.62 or later**, this issue does not apply and you do not need to follow the steps below. If possible, upgrading the Arc Agent to version 1.62 or later is the recommended permanent fix for this issue.
+If the version is **1.62 or later**, this issue does not apply and you do not need to follow the steps below.
 
 ## Symptoms
 
