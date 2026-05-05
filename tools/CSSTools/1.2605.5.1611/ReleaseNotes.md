@@ -43,7 +43,7 @@ As we continue to onboard more diagnostics and issue checks, we will continue to
 | [IncreaseWmiQuotaConfig](/tools/CSSTools/1.2605.5.1611/remediations/IncreaseWmiQuotaConfig.md) | Increases the WMI Provider Host quota configuration to support more memory and handles for WMI providers. |
 | [RemovedFailedUpdateEceActionPlans](/tools/CSSTools/1.2605.5.1611/remediations/RemovedFailedUpdateEceActionPlans.md) | Removes failed `MAS Update` ECE action plans from the system. |
 | [RemoveHealthCheckFilesForUpdates](/tools/CSSTools/1.2605.5.1611/remediations/RemoveHealthCheckFilesForUpdates.md) | Removes health check files created for updates from the system. |
-| [UnlockAzureLocalAccounts](/tools/CSSTools/1.2605.5.1611//remediations/UnlockAzureLocalAccounts.md) | Remediates a specified Azure Local account by ensuring it exists, is not disabled, is a member of the correct groups, and is not locked. |
+| [UnlockAzureLocalAccounts](/tools/CSSTools/1.2605.5.1611/remediations/UnlockAzureLocalAccounts.md) | Remediates a specified Azure Local account by ensuring it exists, is not disabled, is a member of the correct groups, and is not locked. |
 
 ## Core Framework
 In addition to some code and reliability fixes, we have added some new functions.
