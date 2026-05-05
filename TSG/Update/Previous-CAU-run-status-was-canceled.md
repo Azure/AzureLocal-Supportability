@@ -57,7 +57,7 @@ function GetCauError ($cauReport)
             }
             $failures = $nodeResult.InstallResults | Where-Object {$_.UpdateResultCode -eq "Failed"}
             $msg = ("Failed CAU updates on node $($nodeResult.Node.NodeName):`n" + ($failures | Format-List * | Out-String))
-            $fullOutput += $msg
+            $overallErrorMessage += $msg
 
             # create more compressed version to include in overall message
             $installFailMsg = (" Failed update list -- " + ( $failures | Select-Object -Property UpdateTitle, UpdateId, ErrorCode | ConvertTo-Json -Compress))
@@ -163,7 +163,7 @@ function GetCauError ($cauReport)
             }
             $failures = $nodeResult.InstallResults | Where-Object {$_.UpdateResultCode -eq "Failed"}
             $msg = ("Failed CAU updates on node $($nodeResult.Node.NodeName):`n" + ($failures | Format-List * | Out-String))
-            $fullOutput += $msg
+            $overallErrorMessage += $msg
 
             # create more compressed version to include in overall message
             $installFailMsg = (" Failed update list -- " + ( $failures | Select-Object -Property UpdateTitle, UpdateId, ErrorCode | ConvertTo-Json -Compress))
