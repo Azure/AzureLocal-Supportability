@@ -182,7 +182,8 @@ if (-not $earliestRun) {
     $reports | % { $reportError = GetCauError $_; Write-Host "CAU run from $($_.ClusterResult.StartTimestamp) failure: $reportError" }   
 }
   
-$response = Read-Host "Have you examined the original CAU failure and remediated the underlying failure cause? (Y/N)"  
+$response = Read-Host "Have you examined the original CAU failure and remediated the underlying failure cause? (Y/N)"
+
 if ($response -match '^[Yy]$' ) {
     $csvBasePath = $env:InfraCSVRootFolderPath
     $breadcrumbPath = Join-Path -Path $csvBasePath -ChildPath "CloudMedia\MsuHostUpdate\Staged\Metadata\cauFailureInfo.txt"
