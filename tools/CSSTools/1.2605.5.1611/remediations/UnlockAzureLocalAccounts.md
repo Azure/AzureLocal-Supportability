@@ -27,7 +27,7 @@ For each specified account, the script performs the following checks and correct
 ## SYNTAX
 
 ```powershell
-Invoke-AzsSupportInsightRemediation -ScriptName "UnlockAzureLocalAccounts" -Parameters @{ Account = "<AccountName>" } [-Parameters <Hashtable>]
+Invoke-AzsSupportInsightRemediation -ScriptName "UnlockAzureLocalAccounts" -Parameters @{ Account = "<AccountName>" }
 ```
 
 ## PARAMETERS
