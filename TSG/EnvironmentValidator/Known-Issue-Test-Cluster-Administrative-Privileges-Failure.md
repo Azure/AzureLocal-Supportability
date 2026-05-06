@@ -34,11 +34,26 @@ During the domain join phase of deployment, nodes must be rebooted for their Ker
 
 ### Step 1: Reboot the affected node(s)
 
-Reboot each node mentioned in the error message:
+Reboot each node mentioned in the error message. Since the node's authentication state may be incomplete, remote PowerShell commands may not succeed. Use the **primary path** if remoting is available, or the **fallback path** if it is not.
+
+**Primary path (remote PowerShell):**
+
+> [!NOTE]
+> This requires that WinRM/PowerShell remoting is functional to the failing node. If the remote command fails, use the fallback path below.
 
 ```powershell
-Restart-Computer -ComputerName <FailingNodeName> -Force
+Restart-Computer -ComputerName <FailingNodeName>
 ```
+
+**Fallback path (local or out-of-band):**
+
+If remote commands fail (e.g., `Access is denied` or connection errors), reboot the node using one of these alternatives:
+
+- **Locally on the node:** Log in to the node directly (console or RDP) and run:
+  ```powershell
+  Restart-Computer
+  ```
+- **Out-of-band management:** Use the node's hardware management interface (iLO, iDRAC, or Hyper-V console) to initiate a graceful reboot.
 
 Wait 2-3 minutes for the reboot to complete.
 
@@ -50,7 +65,7 @@ From another node, verify you can connect to the rebooted node:
 Invoke-Command -ComputerName <FailingNodeName> -ScriptBlock { whoami }
 ```
 
-If this returns a username successfully, the issue is resolved.
+If this returns a username successfully, the issue is resolved. If this command fails, the node may still be rebooting — wait another minute and retry.
 
 ### Step 3: Resume deployment
 
