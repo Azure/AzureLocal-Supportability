@@ -13,6 +13,8 @@ This folder contains the TSG's related to Environment Validators.
 * [Known Issue: WinRM cannot process the configuration request](Known-Issue-WinRM-cannot-process-the-configuration-request.md)
 * [Known Issue: This module requires Az.Accounts version 5.3.0](Known-Issue-This-module-requires-Az-Accounts-version-5-3-0.md)
 * [Known Issue: Pre-Update Health Check fails with AllResults property error](Known-Issue-AllResults-property-error-during-Pre-Update-Health-Check.md)
+* [Known Issue: Test-Cluster Administrative Privileges Failure During Deployment](Known-Issue-Test-Cluster-Administrative-Privileges-Failure.md)
+
 ## Networking
 
 For Network Environment Validator TSGs, see [Networking/README.md](Networking/README.md).
