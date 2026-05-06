@@ -34,7 +34,7 @@ During the domain join phase of deployment, nodes must be rebooted for their Ker
 
 ### Step 1: Reboot the affected node(s)
 
-Reboot each node mentioned in the error message. Since the node's authentication state may be incomplete, remote PowerShell commands may not succeed. Use the **primary path** if remoting is available, or the **fallback path** if it is not.
+Reboot each node mentioned in the error message. Since the node's authentication state may be incomplete, remote PowerShell commands may not succeed—use the **primary path** if remoting is available, or the **fallback path** if it is not.
 
 **Primary path (remote PowerShell):**
 
@@ -65,7 +65,7 @@ From another node, verify you can connect to the rebooted node:
 Invoke-Command -ComputerName <FailingNodeName> -ScriptBlock { whoami }
 ```
 
-If this returns a username successfully, the issue is resolved. If this command fails, the node may still be rebooting — wait another minute and retry.
+If this returns a username successfully, the issue is resolved. If this command fails, the node may still be rebooting—wait an additional 1-2 minutes and retry.
 
 ### Step 3: Resume deployment
 
