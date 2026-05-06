@@ -195,25 +195,46 @@ If this returns no rows and the new disks show `CannotPoolReason = In a Pool`, t
 
 Manual add is appropriate when automatic pooling does not claim eligible disks, the target pool is known, and the disks show `CanPool=True`.
 
+First, inspect the current pool and eligible disks:
+
 ```powershell
-# Identify the target pool and the eligible disks
+# Inspect the target pool and the eligible disks
 $pool          = Get-StoragePool -IsPrimordial $false
 $eligibleDisks = Get-PhysicalDisk -CanPool $true
 
-# Confirm exactly one non-primordial pool and the expected eligible disk list
 $pool          | Format-Table FriendlyName, HealthStatus, OperationalStatus
 $eligibleDisks | Format-Table DeviceId, FriendlyName, SerialNumber, MediaType, Size, FirmwareVersion
 ```
 
-If there is exactly one non-primordial pool and the eligible disks are the intended new disks:
+> [!IMPORTANT]
+> A healthy Storage Spaces Direct cluster has exactly one non-primordial pool. The snippet below enforces that and requires the operator to enumerate the intended new disks by serial number, so `Add-PhysicalDisk` cannot accidentally claim unintended `CanPool=True` disks.
 
 ```powershell
-# Add the eligible disks to the target pool
-Add-PhysicalDisk -StoragePoolFriendlyName $pool.FriendlyName -PhysicalDisks $eligibleDisks
-```
+# Defensive: require exactly one non-primordial pool. Abort otherwise.
+$pool = Get-StoragePool -IsPrimordial $false
+if (@($pool).Count -ne 1) {
+    throw "Expected exactly one non-primordial pool. Found $(@($pool).Count). " +
+          "Select the target pool explicitly by FriendlyName before continuing."
+}
 
-> [!IMPORTANT]
-> If more than one non-primordial pool exists, do not pipe `Get-StoragePool` directly into `Add-PhysicalDisk`. Select the intended pool and the exact disks explicitly.
+# Operator MUST enumerate the intended new disks by serial number.
+# Do NOT pipe Get-PhysicalDisk -CanPool $true directly into Add-PhysicalDisk.
+$intendedSerials = @(
+    '<serial-number-1>',
+    '<serial-number-2>'
+)
+
+# Resolve serials to physical disk objects and confirm the count matches the intent.
+$disksToAdd = Get-PhysicalDisk -CanPool $true |
+              Where-Object SerialNumber -in $intendedSerials
+if ($disksToAdd.Count -ne $intendedSerials.Count) {
+    throw "Disk count mismatch: $($disksToAdd.Count) eligible disks matched " +
+          "the $($intendedSerials.Count) intended serial numbers. Resolve before continuing."
+}
+
+# Add only the explicitly identified disks to the target pool.
+Add-PhysicalDisk -StoragePoolFriendlyName $pool.FriendlyName -PhysicalDisks $disksToAdd
+```
 
 ## Monitor Redistribution and Storage Jobs
 
