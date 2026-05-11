@@ -67,7 +67,8 @@ StorageVLANs          : {711, 712}
 NetAdapterNamesAsList : {ethernet, ethernet 2}
 ```
 
-> [!NOTE] In this example x.x.x.x is just the place holder for the management network IP address.
+> [!NOTE]
+> In this example x.x.x.x is just the place holder for the management network IP address.
 
 **Failover Cluster Manager**: From Failover Cluster manager, identify the storage Cluster Network. It should not have more than one subnet configured.
 
@@ -89,7 +90,7 @@ This mitigation will temporarily reduce Storage redundancy down to one VLAN so i
 
 1. **Identify the set adapters that need to be split**
 
-In this example, the adapters that should be in the `10.71.2.0/24` subnet are in the Cluster Network 1 with address `10.71.1.0`. Therefore, the `10.71.2.0/24` adapters need to be split.
+In this example, the adapters that should be in the `10.71.2.0/24` subnet are in the `Cluster Network 2` with address `10.71.1.0`. Therefore, the `10.71.2.0/24` adapters need to be split.
 
 ```powershell
 Name              Address      Ipv4Addresses          AddressMask   State
@@ -118,14 +119,14 @@ This means that the `vSMB(managementcomputestorage#ethernet 2)` on each node are
 
 From step 1, we have identified `vSMB(managementcomputestorage#ethernet 2)` as the adapters that have merged with `Cluster Network 2`.
 
-On _all nodes, at the same time_ disable this Network Adapter.
+Open a PS Session to all Cluster Notes and disable the Network Adapter. You must disable the adapter on all nodes before proceeding with Step 3.
 
 > [!WARNING]
 > At this time, Storage redundancy is temporarily reduced to one VLAN.
 
 ```powershell
 $storageAdapter = Get-VMNetworkAdapter -Name "vSMB(managementcomputestorage#ethernet 2)" -ManagementOs
-Disable-NetAdapter $storageAdapter.Name
+Disable-NetAdapter $storageAdapter.Name -Confirm:$false
 ```
 
 3. **Re-enable the NetAdapters on each node**
@@ -134,7 +135,7 @@ Only proceed with this step after Step 2. The Storage adapter must have been dis
 
 ```powershell
 $storageAdapter = Get-VMNetworkAdapter -Name "vSMB(managementcomputestorage#ethernet 2)" -ManagementOs
-Enable-NetAdapter $storageAdapter.Name
+Enable-NetAdapter $storageAdapter.Name -Confirm:$false
 ```
 
 4. **Confirm that the Networks have split**
@@ -149,6 +150,58 @@ Name              Address      AddressMask   State
 Cluster Network 1 x.x.x.x      255.255.255.0    Up
 Cluster Network 2 10.71.1.0    255.255.255.0    Up
 Cluster Network 4 10.71.2.0    255.255.255.0    Up
+```
+
+
+5. **Reconfigure MigrationNetworkOrder**
+
+Run the following script to update the Migration Network Order with the new Storage Network.
+
+This step can be run on any one node.
+
+```powershell
+$ErrorActionPreference = "Stop"
+
+$storageAdapters = Get-NetAdapter -Name "vSMB*"
+$storageAdapterGuids = $storageAdapters | ForEach-Object { $_.InterfaceGuid }
+Write-Host "Storage adapter GUIDs: $($storageAdapterGuids -join ', ')"
+
+[String[]] $storageClusterNetworkNames = Get-ClusterNetworkInterface -Node $env:COMPUTERNAME |
+    Where-Object { "{$($_.AdapterId)}" -in $storageAdapterGuids } |
+    ForEach-Object { $_.Network }
+Write-Host "Storage cluster network names: $($storageClusterNetworkNames -join ', ')"
+
+[String[]] $storageNetworkIds = (Get-ClusterNetwork -Name $storageClusterNetworkNames).Id | Select-Object -Unique
+Write-Host "Storage network IDs: $($storageNetworkIds -join ', ')"
+
+# Remove storage networks from MigrationExcludeNetworks (case-insensitive)
+$currentExclude = (Get-ClusterResourceType "Virtual Machine" |
+    Get-ClusterParameter -Name "MigrationExcludeNetworks").Value -Split ";" | Where-Object { $_ -ne "" }
+Write-Host "Current MigrationExcludeNetworks: $($currentExclude -join '; ')"
+
+$storageNetworkIdsLower = $storageNetworkIds | ForEach-Object { $_.ToLower() }
+$newExclude = $currentExclude | Where-Object { $_.ToLower() -notin $storageNetworkIdsLower }
+Write-Host "New MigrationExcludeNetworks: $($newExclude -join '; ')"
+
+Get-ClusterResourceType "Virtual Machine" |
+    Set-ClusterParameter -Name "MigrationExcludeNetworks" -Value ""
+Get-ClusterResourceType "Virtual Machine" |
+    Set-ClusterParameter -Name "MigrationExcludeNetworks" -Value ($newExclude -join ";")
+Write-Host "Done setting MigrationExcludeNetworks."
+
+# Prepend storage networks to existing MigrationNetworkOrder (case-insensitive dedup)
+$currentOrder = (Get-ClusterResourceType "Virtual Machine" |
+    Get-ClusterParameter -Name "MigrationNetworkOrder").Value -Split ";" | Where-Object { $_ -ne "" }
+Write-Host "Current MigrationNetworkOrder: $($currentOrder -join '; ')"
+
+$newOrder = ($storageNetworkIds + $currentOrder) | ForEach-Object { $_.ToLower() } | Select-Object -Unique
+Write-Host "New MigrationNetworkOrder: $($newOrder -join '; ')"
+
+Get-ClusterResourceType "Virtual Machine" |
+    Set-ClusterParameter -Name "MigrationNetworkOrder" -Value ""
+Get-ClusterResourceType "Virtual Machine" |
+    Set-ClusterParameter -Name "MigrationNetworkOrder" -Value ($newOrder -join ";")
+Write-Host "Done setting MigrationNetworkOrder."
 ```
 
 ---
