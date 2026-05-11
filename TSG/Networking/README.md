@@ -28,6 +28,9 @@ For Network Environment Validator Resources, see [TSG/EnvironmentValidator/Netwo
 - [Troubleshoot: NcHostAgent Unable to Connect to ApiService After Solution Update](SDN-Express/Troubleshoot-SDNExpress-NcHostAgent-Unable-To-Connect-ApiService-After-Solution-Update.md)
 - [Troubleshoot: Recreate Intent Without SR-IOV](SDN-Express/Troubleshoot-SDNExpress-Recreate-Intent-No-SRIOV.md)
 
+### Host Network
+- [Troubleshoot: Storage Cluster Networks merge causing Update Failure](Host-Network/Troubleshoot-ClusterNetworks-MergedStorageNetworksBlockUpdate.md)
+
 ### Diagnostics
 - [How to collect SDN or Networking related logs](Diagnostics/HowTo-Diagnostic-SendNetworkingLogs.md)
 
