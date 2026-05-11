@@ -8,7 +8,7 @@ cluster("https://armprodgbl.eastus.kusto.windows.net").database('ARMProd').Union
 | take 50;
 ```
 
-the above query is for a deployment, but there are a number of [other databases](https://eng.ms/docs/cloud-ai-platform/azure-core/azure-cloud-native-and-management-platform/control-plane-bburns/azure-resource-reporting/azure-resource-reporting/dataconsumeronboarding/armdata/kustov2/overview_prod) that can be accessed, as listed on that page:
+The above query is for a deployment, but there are a number of [other databases](https://eng.ms/docs/cloud-ai-platform/azure-core/azure-cloud-native-and-management-platform/control-plane-bburns/azure-resource-reporting/azure-resource-reporting/dataconsumeronboarding/armdata/kustov2/overview_prod) that can be accessed, as listed on that page:
 
 | database | tables |
 |---------|----------|
