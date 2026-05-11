@@ -1,4 +1,4 @@
-# Storage Cluster Networks merge causing Update Failure
+# Merged Storage Cluster Networks block Update
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr>
@@ -67,9 +67,6 @@ StorageVLANs          : {711, 712}
 NetAdapterNamesAsList : {ethernet, ethernet 2}
 ```
 
-> [!NOTE]
-> In this example x.x.x.x is just the place holder for the management network IP address.
-
 **Failover Cluster Manager**: From Failover Cluster manager, identify the storage Cluster Network. It should not have more than one subnet configured.
 
 ![Cluster Network 2 has two networks configured](images/merged-cluster-networks.png)
@@ -84,11 +81,12 @@ If you have assigned Storage IPs manually, they must be a part of different subn
 
 ### Prerequisites
 
-This mitigation will temporarily reduce Storage redundancy down to one VLAN so it is best ran during a maintenance window.
+> [!WARNING]
+> This mitigation will temporarily reduce Storage redundancy down to one VLAN. A maintenance window is reccomended.
 
 ### Steps
 
-1. **Identify the set adapters that need to be split**
+1. **Identify the set of adapters that need to be split**
 
 In this example, the adapters that should be in the `10.71.2.0/24` subnet are in the `Cluster Network 2` with address `10.71.1.0`. Therefore, the `10.71.2.0/24` adapters need to be split.
 
@@ -162,8 +160,9 @@ This step can be run on any one node.
 ```powershell
 $ErrorActionPreference = "Stop"
 
-$storageAdapters = Get-NetAdapter -Name "vSMB*"
-$storageAdapterGuids = $storageAdapters | ForEach-Object { $_.InterfaceGuid }
+$storageIntentName = (Get-NetIntent  | Where-Object {$_.IsStorageIntentSet}).IntentName
+$storageAdapters = Get-NetAdapter -Name "vSMB($storageIntentName*"
+$storageAdapterGuids = $storageAdapters | ForEach-Object { $_.InterfaceGuid.ToString().ToLowerInvariant() }
 Write-Host "Storage adapter GUIDs: $($storageAdapterGuids -join ', ')"
 
 [String[]] $storageClusterNetworkNames = Get-ClusterNetworkInterface -Node $env:COMPUTERNAME |
