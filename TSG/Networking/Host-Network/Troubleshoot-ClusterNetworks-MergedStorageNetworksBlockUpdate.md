@@ -119,7 +119,7 @@ This means that the `vSMB(managementcomputestorage#ethernet 2)` on each node are
 
 From step 1, we have identified `vSMB(managementcomputestorage#ethernet 2)` as the adapters that have merged with `Cluster Network 2`.
 
-Open a PS Session to all Cluster Notes and disable the Network Adapter. You must disable the adapter on all nodes before proceeding with Step 3.
+Open a PS Session to all Cluster Nodes and disable the Network Adapter. You must disable the adapter on all nodes before proceeding with Step 3.
 
 > [!WARNING]
 > At this time, Storage redundancy is temporarily reduced to one VLAN.
