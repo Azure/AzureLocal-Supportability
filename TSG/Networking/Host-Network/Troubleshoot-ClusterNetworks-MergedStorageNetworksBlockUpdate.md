@@ -2,7 +2,7 @@
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr>
-    <th style="text-align:left; width: 180px;">Cluster Networks</th>
+    <th style="text-align:left; width: 180px;">Component</th>
     <td><strong>Cluster Networks</strong></td>
   </tr>
   <tr>
@@ -38,11 +38,7 @@ Cluster storage network for storage network intent [ storage ] not ready after 1
 ```
 
 
-**CSS Tools Insight:** The `1.2605.5.1611` release of `CSSTools` adds an insight to detect and flag this issue.
-
-```
-{Error message example}
-```
+**CSS Tools Insight:** The `1.2605.5.1611` release of `CSSTools` adds a Host Network insight to detect and flag this issue.
 
 **Manual Detection:** From a cluster node, run the following.
 
@@ -71,11 +67,11 @@ StorageVLANs          : {711, 712}
 NetAdapterNamesAsList : {ethernet, ethernet 2}
 ```
 
-> Note that x.x.x.x is just the place holder for the management network IP address.
+> [!NOTE] In this example x.x.x.x is just the place holder for the management network IP address.
 
 **Failover Cluster Manager**: From Failover Cluster manager, identify the storage Cluster Network. It should not have more than one subnet configured.
 
-![Cluster Network 2 has two networks configured](.images/merged-cluster-networks.png)
+![Cluster Network 2 has two networks configured](images/merged-cluster-networks.png)
 
 ## Root Cause
 
@@ -122,16 +118,19 @@ This means that the `vSMB(managementcomputestorage#ethernet 2)` on each node are
 
 From step 1, we have identified `vSMB(managementcomputestorage#ethernet 2)` as the adapters that have merged with `Cluster Network 2`.
 
-On _all nodes, at the same time_ disable this Network Adapter. **Note that at this time, Storage Redundancy is temporarily reduced to one VLAN**.
+On _all nodes, at the same time_ disable this Network Adapter.
+
+> [!WARNING]
+> At this time, Storage redundancy is temporarily reduced to one VLAN.
 
 ```powershell
 $storageAdapter = Get-VMNetworkAdapter -Name "vSMB(managementcomputestorage#ethernet 2)" -ManagementOs
 Disable-NetAdapter $storageAdapter.Name
 ```
 
-3. **Reneable the NetAdapters on each node**
+3. **Re-enable the NetAdapters on each node**
 
-Only proceed with this step after Step 2 on **all nodes, at the same time**
+Only proceed with this step after Step 2. The Storage adapter must have been disabled on **each node in the cluster**.
 
 ```powershell
 $storageAdapter = Get-VMNetworkAdapter -Name "vSMB(managementcomputestorage#ethernet 2)" -ManagementOs
@@ -143,7 +142,7 @@ Enable-NetAdapter $storageAdapter.Name
 In Failover Cluster Manager and CLI you should now see a new Cluster Network with the `10.71.2.0` address space.
 
 ```powershell
-[azlocal-node01]: PS C:\Users\HciDeploymentUser\Documents> Get-ClusterNetwork | Format-Table Name, Address, AddressMask, State
+[azlocal-node01]: PS C:\> Get-ClusterNetwork | Format-Table Name, Address, AddressMask, State
 
 Name              Address      AddressMask   State
 ----              -------      -----------   -----
