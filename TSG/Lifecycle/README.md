@@ -2,12 +2,15 @@
 
 * [Add node, repair node fails with Type 'AddAsZHostToDomain' of Role 'BareMetal' raised an exception after cluster upgrade fail when upgraded from <=2311](./Add-node-repair-node-fails-with-Type-AddAsZHostToDomain-of-Role-BareMetal-raised-an-exception.md)
 
-The status of any ARC Node can be ascertained by looking at it's Census records. A sample query could be:
+The status of any ARC Node can be ascertained by looking at its Census records. A sample query could be:
+
+> [!NOTE]
+> This sample query requires access to the appropriate Kusto cluster and database. Replace the placeholders with values from your environment and ensure you have the required permissions before running it.
 
 ```KQL
-cluster("https://aeoprodtelemetry.eastus.kusto.windows.net").database("Telemetry").Census
+cluster("<kusto_cluster_uri>").database("Telemetry").Census
 | where AEODeviceARMResourceUri =~ '<resource_id>'
-| where AEOClusterNodeName =~ "Node name"
+| where AEOClusterNodeName =~ "<node_name>"
 | take 20
 | order by PreciseTimeStamp desc
 ```
