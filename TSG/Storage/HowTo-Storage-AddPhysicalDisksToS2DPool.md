@@ -43,6 +43,13 @@ Do **not** use this guide for:
 - Adding unsupported disk models or firmware.
 - Changing cache/capacity tier design.
 
+> [!NOTE]
+> Some hardware OEMs publish hardware-lifecycle wizards as Windows Admin Center (WAC) extensions that include guided disk-add flows -- for example, **Dell OpenManage Integration with Microsoft Windows Admin Center (OMIMSWAC)**, with similar tooling available from other major Azure Local OEMs. These extensions can be a more convenient alternative to the PowerShell sequence below.
+>
+> Caveats:
+> - OEM WAC extensions are only supported on **standalone (on-premises)** installations of Windows Admin Center, not the WAC instance embedded in the Azure portal. See [Manage Azure Local clusters using Windows Admin Center in Azure](https://learn.microsoft.com/windows-server/manage/windows-admin-center/azure/manage-hci-clusters) for the supported scope of the embedded WAC.
+> - The PowerShell flow in this TSG remains the canonical path when an OEM wizard is unavailable, fails, or finer-grained control is needed (for example, when troubleshooting `CanPool=False`).
+
 ## Prerequisites
 
 Before inserting disks, confirm all of the following:
