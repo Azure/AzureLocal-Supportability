@@ -47,17 +47,18 @@ S2D will not claim a physical disk into its pool unless every gate passes: the d
 
 ### Common `CannotPoolReason` Values
 
+The `CannotPoolReason` column lists values as they appear in `Get-PhysicalDisk` output. A disk carrying stale Storage Spaces metadata from a prior deployment is a sub-case of `In a Pool` (the disk thinks it belongs to a pool that no longer exists) and is handled separately in [Step 2g](#step-2g-resolve-stale-metadata-or-previous-pool-membership).
+
 | CannotPoolReason | Meaning | Action |
 |---|---|---|
-| `In a Pool` | The disk was already claimed by a storage pool | Confirm pool membership; no fix needed |
+| `In a Pool` | The disk was already claimed by a storage pool | Confirm pool membership via Step 2a. If `Get-StoragePool \| Get-PhysicalDisk` finds no match for the disk, treat it as stale metadata (Step 2g). |
 | `Verification in progress` | Health Service is checking whether the disk and firmware are approved | Wait and recheck |
 | `Verification failed` | Health Service could not complete supportability verification | Check cluster health and vendor support data |
 | `Hardware not compliant` | The disk model is not approved by the solution vendor | Contact the hardware vendor |
-| `Firmware not compliant` | The disk firmware is not approved by the solution vendor | Contact the hardware vendor |
+| `Firmware not compliant` | The disk firmware is not approved by the solution vendor | Update firmware to a supported version using OEM update tooling, or contact the hardware vendor |
 | `Offline` | The disk is offline | Bring only the intended disk online |
 | `Insufficient Capacity` | The disk is too small | Replace with a supported disk |
 | `Removable media not supported` | The disk is removable or presented as removable | Replace with supported internal storage |
-| Stale metadata suspected | The disk has previous data or pool metadata | Reset only after confirming the disk is safe to wipe |
 
 ## Resolution
 
@@ -160,7 +161,7 @@ Get-PhysicalDisk |
     Format-Table DeviceId, FriendlyName, SerialNumber, FirmwareVersion, HealthStatus, CanPool, CannotPoolReason
 ```
 
-Contact the hardware vendor for firmware alignment or updated support guidance.
+Contact the hardware vendor for firmware alignment or updated support guidance. In most cases, the resolution is to update firmware to a supported version using the OEM update tooling (Dell DSU, HPE SUM, Lenovo XClarity Essentials, etc.). If no supported firmware version exists for this disk model, the model itself may have been deprecated -- escalate to the hardware vendor.
 
 #### Step 2f: Resolve `Offline` or Read-Only Disk State
 
@@ -171,6 +172,9 @@ Get-Disk | Sort-Object Number |
 ```
 
 After the intended disk is confirmed:
+
+> [!CAUTION]
+> Run `Get-StorageJob` first. If a repair, regeneration, or rebalance job is active that involves this disk, let it complete before bringing the disk online -- forcing it online mid-rebuild can cause the rebuild to retry against the newly-online path and extend the impact window.
 
 ```powershell
 # Replace <disk-number> with the Number value from Get-Disk above
@@ -245,8 +249,9 @@ $intendedSerials = @(
 )
 
 # Resolve serials to physical disk objects and confirm the count matches the intent.
-$disksToAdd = Get-PhysicalDisk -CanPool $true |
-              Where-Object SerialNumber -in $intendedSerials
+# Wrap in @() so .Count is reliable when 0 or 1 disk matches.
+$disksToAdd = @(Get-PhysicalDisk -CanPool $true |
+                Where-Object SerialNumber -in $intendedSerials)
 if ($disksToAdd.Count -ne $intendedSerials.Count) {
     throw "Disk count mismatch: $($disksToAdd.Count) eligible disks matched " +
           "the $($intendedSerials.Count) intended serial numbers. Resolve before continuing."

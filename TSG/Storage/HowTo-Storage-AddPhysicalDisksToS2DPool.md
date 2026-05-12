@@ -225,8 +225,9 @@ $intendedSerials = @(
 )
 
 # Resolve serials to physical disk objects and confirm the count matches the intent.
-$disksToAdd = Get-PhysicalDisk -CanPool $true |
-              Where-Object SerialNumber -in $intendedSerials
+# Wrap in @() so .Count is reliable when 0 or 1 disk matches.
+$disksToAdd = @(Get-PhysicalDisk -CanPool $true |
+                Where-Object SerialNumber -in $intendedSerials)
 if ($disksToAdd.Count -ne $intendedSerials.Count) {
     throw "Disk count mismatch: $($disksToAdd.Count) eligible disks matched " +
           "the $($intendedSerials.Count) intended serial numbers. Resolve before continuing."
