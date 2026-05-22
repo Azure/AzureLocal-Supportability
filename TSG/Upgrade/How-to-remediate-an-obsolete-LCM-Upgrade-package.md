@@ -1,5 +1,5 @@
 # Overview
-This TSG applies to solution upgrade of an existing 23H2/24H2 cluster that doesn't have solution installed yet
+This TSG applies to a solution upgrade on an existing 23H2/24H2 cluster where the solution is not currently installed.
 This article will explain how to remediate a cluster that has an obsolete upgrade package. A cluster can have an obsolete upgrade package if the LCM extension was installed some time back.
 
 # Symptoms 
