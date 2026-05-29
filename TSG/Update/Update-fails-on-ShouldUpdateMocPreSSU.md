@@ -1,5 +1,5 @@
 # Overview
-For disconnected clusters, Update of the Azure Local cluster to 2604 or 2605 may fail during 'ShouldUpdateMocPreSSU' if the existing MOC version is not at the required version or above. The following update error message may be used to identify and match the issue.
+For **disconnected clusters only**, Update of the Azure Local cluster to 2604 or 2605 may fail during 'ShouldUpdateMocPreSSU' if the existing MOC version is not at the required version or above. The following update error message may be used to identify and match the issue.
 
 This TSG does not apply to connected clusters. 
 
