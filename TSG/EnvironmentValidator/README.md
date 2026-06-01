@@ -14,6 +14,7 @@ This folder contains the TSG's related to Environment Validators.
 * [Known Issue: This module requires Az.Accounts version 5.3.0](Known-Issue-This-module-requires-Az-Accounts-version-5-3-0.md)
 * [Known Issue: Pre-Update Health Check fails with AllResults property error](Known-Issue-AllResults-property-error-during-Pre-Update-Health-Check.md)
 * [Known Issue: Test-Cluster Administrative Privileges Failure During Deployment](Known-Issue-Test-Cluster-Administrative-Privileges-Failure.md)
+* [Known Issue: Test-WdacEnablement Fails with Null-Reference Error During Upgrade Validation](Known-Issue-Test-WdacEnablement-Null-Reference.md)
 
 ## Networking
 
