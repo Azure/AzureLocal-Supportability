@@ -9,6 +9,13 @@
 | **Audience** | Azure Local operators and network engineers |
 | **Document Version** | 1.0 (2026-06-10) |
 
+> **Version naming used in this guide.** "23H2" is the Azure Local release family;
+> "12.2607" is a specific Azure Local solution (build) version within that family.
+> Where a behavior or platform fix is tied to a particular build, this guide cites
+> the solution version (for example, 12.2607); where guidance applies to the whole
+> release, it says 23H2. To read your own build, run `Get-AzureStackHCI` (or check
+> the Azure portal) and compare the reported solution version to the build cited.
+
 > **Start here (TL;DR).** If your storage NICs are Mellanox ConnectX, your
 > top-of-rack switches are Cisco NX-OS or Aruba CX, and you see PFC failing to
 > stay on or an Aruba `multiple_peers` LLDP error on storage ports, this guide
@@ -1177,7 +1184,7 @@ $lldp = Invoke-Command -ComputerName $nodes -ScriptBlock {
             Check = 'Windows LLDP agent'
             Role  = $role
             Item  = $name
-            State = if ($agent) { "$($agent.Status)" } else { '(not present)' }
+            State = if ($agent) { if ($agent.AdminStatus) { "$($agent.AdminStatus)" } else { "$($agent.Status)" } } else { '(not present)' }
         }
     }
     $win = @()
@@ -1537,7 +1544,7 @@ $result = Invoke-Command -ComputerName $nodes -ScriptBlock {
         [pscustomobject]@{
             Node        = $env:COMPUTERNAME
             NIC         = $nic.Name
-            AdminStatus = if ($agent) { "$($agent.Status)" } else { '(not present)' }
+            AdminStatus = if ($agent) { if ($agent.AdminStatus) { "$($agent.AdminStatus)" } else { "$($agent.Status)" } } else { '(not present)' }
         }
     }
 } | Select-Object Node, NIC, AdminStatus
@@ -2382,7 +2389,7 @@ $verify = Invoke-Command -ComputerName $nodes -ScriptBlock {
         $agent = Get-NetLldpAgent -NetAdapterName $nic.Name -ErrorAction SilentlyContinue |
             Select-Object -First 1
         $rows += [pscustomobject]@{ Node = $env:COMPUTERNAME; Check = 'Windows LLDP agent'
-            Item = $nic.Name; State = if ($agent) { "$($agent.Status)" } else { '(not present)' }; Expected = 'Enabled' }
+            Item = $nic.Name; State = if ($agent) { if ($agent.AdminStatus) { "$($agent.AdminStatus)" } else { "$($agent.Status)" } } else { '(not present)' }; Expected = 'Enabled' }
 
         $dcbx = Get-NetQosDcbxSetting -InterfaceAlias $nic.Name -ErrorAction SilentlyContinue
         $rows += [pscustomobject]@{ Node = $env:COMPUTERNAME; Check = 'Host DCBX Willing'
