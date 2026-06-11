@@ -300,7 +300,7 @@ a time (on Cisco NX-OS) or both simultaneously (on Aruba CX).
 On Aruba CX, seeing two chassis-IDs on the same port causes the switch to
 enter `DCBx operational state: multiple_peers`, where it refuses to
 negotiate DCBX with either agent and PFC goes inactive. This Aruba behavior is
-inferred from Brazil production data (2026-05-11); it was not reproduced in the
+inferred from a production deployment; it was not reproduced in the
 in-house Cisco test matrix.
 
 ### Factor 2: Cisco Auto-Negotiation Detects CIN, Not IEEE
@@ -498,7 +498,7 @@ $rows = Invoke-Command -ComputerName $nodes -ScriptBlock {
             Node    = $env:COMPUTERNAME
             NIC     = $nic.Name                  # interface alias, e.g. 'ethernet 3'
             Adapter = $nic.InterfaceDescription  # model, e.g. 'Mellanox ConnectX-6 Dx Adapter'
-            MAC     = $nic.MacAddress            # format: 58-A2-E1-FB-0C-C6
+            MAC     = $nic.MacAddress            # format: 00-00-5E-00-53-A1
             Status  = $nic.Status
             Role    = $role
             Card    = $card                      # PCI Segment:Bus:Device (same value = same card)
@@ -654,8 +654,8 @@ card), even though all four ports report RDMA enabled.
 
 > **About the "Other (not in ATC intent)" rows.** Some nodes have physical NICs
 > that belong to no NetworkATC intent, for example Dell onboard LOM ports or a
-> BMC-shared management port (often shown with a GUID name and a non-Mellanox MAC
-> such as a `C4-5A-B1` or `C4-CB-E1` Dell OUI, frequently Disconnected). These are
+> BMC-shared management port (often shown with a GUID name and a non-Mellanox
+> OUI, frequently Disconnected). These are
 > neither storage nor ATC-managed management/compute uplinks. The script tags them
 > "Other" rather than sweeping them into the mgmt/compute list, so do not put their
 > MACs on the storage-switch PFC lists. They are listed only so you can account for
@@ -770,18 +770,18 @@ are native, non-teamed adapters, so the host sources traffic from each storage
 port's own MAC and the switch learns it on exactly one port. This gives a clean,
 direct port mapping.
 
-**MAC format differs by vendor.** Windows prints `58-A2-E1-FB-0C-C6`. Cisco
-prints `58a2.e1fb.0cc6`. Aruba CX prints `58a2e1-fb0cc6` (or colon-separated).
+**MAC format differs by vendor.** Windows prints `00-00-5E-00-53-A1`. Cisco
+prints `0000.5e00.53a1`. Aruba CX prints `00005e-0053a1` (or colon-separated).
 Convert the host MAC to the switch's format before searching.
 
 **Cisco NX-OS:**
 ```
-show mac address-table address 58a2.e1fb.0cc6
+show mac address-table address 0000.5e00.53a1
 ```
 
 **Aruba CX (AOS-CX):**
 ```
-show mac-address-table | include 58a2e1-fb0cc6
+show mac-address-table | include 00005e-0053a1
 ```
 
 Each command returns the switch interface (for example `Ethernet1/21` on Cisco
@@ -831,8 +831,8 @@ the converged virtual switch, not because they lack RDMA:
 
 | Node    | Host port (role source)      | MAC / identifier  | Role         | ToR / Port    | PFC policy | Mapped by               |
 |---------|------------------------------|-------------------|--------------|---------------|------------|-------------------------|
-| Node-01 | ethernet 3                   | 58-A2-E1-E9-F9-5E | Storage      | ToR-A Eth1/22 | Forced ON  | MAC table               |
-| Node-01 | ethernet 4                   | 58-A2-E1-E9-F9-5F | Storage      | ToR-B Eth1/22 | Forced ON  | MAC table               |
+| Node-01 | ethernet 3                   | 00-00-5E-00-53-01 | Storage      | ToR-A Eth1/22 | Forced ON  | MAC table               |
+| Node-01 | ethernet 4                   | 00-00-5E-00-53-02 | Storage      | ToR-B Eth1/22 | Forced ON  | MAC table               |
 | Node-01 | ethernet (vSwitch member)    | host "Node-01"    | Mgmt/Compute | ToR-A Eth1/5  | Off        | LLDP name / elimination |
 | Node-01 | ethernet 2 (vSwitch member)  | host "Node-01"    | Mgmt/Compute | ToR-B Eth1/5  | Off        | LLDP name / elimination |
 
@@ -925,8 +925,8 @@ skip this and the Mellanox-specific steps.)
    ```
    Node           WinMFT     Devices Device names
    ----           ------     ------- ------------
-   ASRR1S45R23U13 4.35.0-159       2 mt4125_pciconf0, mt4127_pciconf0
-   ASRR1S45R23U15 4.35.0-159       2 mt4125_pciconf0, mt4127_pciconf0
+   ContosoNode-01 4.35.0-159       2 mt4125_pciconf0, mt4127_pciconf0
+   ContosoNode-02 4.35.0-159       2 mt4125_pciconf0, mt4127_pciconf0
    ```
 
    Each `mt<model>_pciconfN` entry is one NIC (PCI function). On a two-NIC
@@ -986,10 +986,10 @@ Expected output (one row per storage port, per node):
 ```
 Node           Name       InterfaceDescription              RdmaTransport
 ----           ----       --------------------              -------------
-ASRR1S45R23U13 ethernet 3 Mellanox ConnectX-6 Dx Adapter #2 RoCEv2
-ASRR1S45R23U13 ethernet 4 Mellanox ConnectX-6 Dx Adapter    RoCEv2
-ASRR1S45R23U15 ethernet 3 Mellanox ConnectX-6 Dx Adapter #2 RoCEv2
-ASRR1S45R23U15 ethernet 4 Mellanox ConnectX-6 Dx Adapter    RoCEv2
+ContosoNode-01 ethernet 3 Mellanox ConnectX-6 Dx Adapter #2 RoCEv2
+ContosoNode-01 ethernet 4 Mellanox ConnectX-6 Dx Adapter    RoCEv2
+ContosoNode-02 ethernet 3 Mellanox ConnectX-6 Dx Adapter #2 RoCEv2
+ContosoNode-02 ethernet 4 Mellanox ConnectX-6 Dx Adapter    RoCEv2
 ```
 
 Interpret the output by vendor:
@@ -1054,10 +1054,10 @@ Expected output when PFC is healthy (one row per storage NIC, per node):
 ```
 Node           NIC        OperationalFlowControl Host Pri3 FC
 ----           ---        ---------------------- ------------
-ASRR1S45R23U13 ethernet 3 Priority 3 Enabled             True
-ASRR1S45R23U13 ethernet 4 Priority 3 Enabled             True
-ASRR1S45R23U15 ethernet 3 Priority 3 Enabled             True
-ASRR1S45R23U15 ethernet 4 Priority 3 Enabled             True
+ContosoNode-01 ethernet 3 Priority 3 Enabled             True
+ContosoNode-01 ethernet 4 Priority 3 Enabled             True
+ContosoNode-02 ethernet 3 Priority 3 Enabled             True
+ContosoNode-02 ethernet 4 Priority 3 Enabled             True
 ```
 
 Interpret the output:
@@ -1195,22 +1195,22 @@ agent is transmitting (`ALL(2)`), so the only LLDP speaker is the firmware agent
 ```
 Node           Check               Role         Item               State
 ----           -----               ----         ----               -----
-ASRR1S45R23U13 Mellanox FW LLDP TX              mt4125_pciconf0 P1 OFF(0)
-ASRR1S45R23U13 Mellanox FW LLDP TX              mt4125_pciconf0 P2 OFF(0)
-ASRR1S45R23U13 Mellanox FW LLDP TX              mt4127_pciconf0 P1 OFF(0)
-ASRR1S45R23U13 Mellanox FW LLDP TX              mt4127_pciconf0 P2 OFF(0)
-ASRR1S45R23U13 Windows LLDP agent  Mgmt/Compute ethernet           Enabled
-ASRR1S45R23U13 Windows LLDP agent  Mgmt/Compute ethernet 2         Enabled
-ASRR1S45R23U13 Windows LLDP agent  Storage      ethernet 3         Enabled
-ASRR1S45R23U13 Windows LLDP agent  Storage      ethernet 4         Enabled
-ASRR1S45R23U15 Mellanox FW LLDP TX              mt4125_pciconf0 P1 ALL(2)
-ASRR1S45R23U15 Mellanox FW LLDP TX              mt4125_pciconf0 P2 ALL(2)
-ASRR1S45R23U15 Mellanox FW LLDP TX              mt4127_pciconf0 P1 ALL(2)
-ASRR1S45R23U15 Mellanox FW LLDP TX              mt4127_pciconf0 P2 ALL(2)
-ASRR1S45R23U15 Windows LLDP agent  Mgmt/Compute ethernet           Disabled
-ASRR1S45R23U15 Windows LLDP agent  Mgmt/Compute ethernet 2         Disabled
-ASRR1S45R23U15 Windows LLDP agent  Storage      ethernet 3         Disabled
-ASRR1S45R23U15 Windows LLDP agent  Storage      ethernet 4         Disabled
+ContosoNode-01 Mellanox FW LLDP TX              mt4125_pciconf0 P1 OFF(0)
+ContosoNode-01 Mellanox FW LLDP TX              mt4125_pciconf0 P2 OFF(0)
+ContosoNode-01 Mellanox FW LLDP TX              mt4127_pciconf0 P1 OFF(0)
+ContosoNode-01 Mellanox FW LLDP TX              mt4127_pciconf0 P2 OFF(0)
+ContosoNode-01 Windows LLDP agent  Mgmt/Compute ethernet           Enabled
+ContosoNode-01 Windows LLDP agent  Mgmt/Compute ethernet 2         Enabled
+ContosoNode-01 Windows LLDP agent  Storage      ethernet 3         Enabled
+ContosoNode-01 Windows LLDP agent  Storage      ethernet 4         Enabled
+ContosoNode-02 Mellanox FW LLDP TX              mt4125_pciconf0 P1 ALL(2)
+ContosoNode-02 Mellanox FW LLDP TX              mt4125_pciconf0 P2 ALL(2)
+ContosoNode-02 Mellanox FW LLDP TX              mt4127_pciconf0 P1 ALL(2)
+ContosoNode-02 Mellanox FW LLDP TX              mt4127_pciconf0 P2 ALL(2)
+ContosoNode-02 Windows LLDP agent  Mgmt/Compute ethernet           Disabled
+ContosoNode-02 Windows LLDP agent  Mgmt/Compute ethernet 2         Disabled
+ContosoNode-02 Windows LLDP agent  Storage      ethernet 3         Disabled
+ContosoNode-02 Windows LLDP agent  Storage      ethernet 4         Disabled
 ```
 
 Interpret the output per node (the desired end state is the Windows agent Enabled
@@ -1342,14 +1342,14 @@ Expected output when the firmware agent is correctly disabled:
 ```
 Node           Device          Port FW_LLDP_TX FW_LLDP_RX FW_DCBX
 ----           ------          ---- ---------- ---------- -------
-ASRR1S45R23U13 mt4125_pciconf0 P1   OFF(0)     OFF(0)     False(0)
-ASRR1S45R23U13 mt4125_pciconf0 P2   OFF(0)     OFF(0)     False(0)
-ASRR1S45R23U13 mt4127_pciconf0 P1   OFF(0)     OFF(0)     False(0)
-ASRR1S45R23U13 mt4127_pciconf0 P2   OFF(0)     OFF(0)     False(0)
-ASRR1S45R23U15 mt4125_pciconf0 P1   OFF(0)     OFF(0)     False(0)
-ASRR1S45R23U15 mt4125_pciconf0 P2   OFF(0)     OFF(0)     False(0)
-ASRR1S45R23U15 mt4127_pciconf0 P1   OFF(0)     OFF(0)     False(0)
-ASRR1S45R23U15 mt4127_pciconf0 P2   OFF(0)     OFF(0)     False(0)
+ContosoNode-01 mt4125_pciconf0 P1   OFF(0)     OFF(0)     False(0)
+ContosoNode-01 mt4125_pciconf0 P2   OFF(0)     OFF(0)     False(0)
+ContosoNode-01 mt4127_pciconf0 P1   OFF(0)     OFF(0)     False(0)
+ContosoNode-01 mt4127_pciconf0 P2   OFF(0)     OFF(0)     False(0)
+ContosoNode-02 mt4125_pciconf0 P1   OFF(0)     OFF(0)     False(0)
+ContosoNode-02 mt4125_pciconf0 P2   OFF(0)     OFF(0)     False(0)
+ContosoNode-02 mt4127_pciconf0 P1   OFF(0)     OFF(0)     False(0)
+ContosoNode-02 mt4127_pciconf0 P2   OFF(0)     OFF(0)     False(0)
 ```
 
 Interpret the output (per row):
@@ -1503,14 +1503,14 @@ the storage ports):
 ```
 Node           NIC        AdminStatus
 ----           ---        -----------
-ASRR1S45R23U13 ethernet   Enabled
-ASRR1S45R23U13 ethernet 2 Enabled
-ASRR1S45R23U13 ethernet 3 Enabled
-ASRR1S45R23U13 ethernet 4 Enabled
-ASRR1S45R23U15 ethernet   Enabled
-ASRR1S45R23U15 ethernet 2 Enabled
-ASRR1S45R23U15 ethernet 3 Enabled
-ASRR1S45R23U15 ethernet 4 Enabled
+ContosoNode-01 ethernet   Enabled
+ContosoNode-01 ethernet 2 Enabled
+ContosoNode-01 ethernet 3 Enabled
+ContosoNode-01 ethernet 4 Enabled
+ContosoNode-02 ethernet   Enabled
+ContosoNode-02 ethernet 2 Enabled
+ContosoNode-02 ethernet 3 Enabled
+ContosoNode-02 ethernet 4 Enabled
 ```
 
 **Effect:** The Windows LLDP agent remains `Enabled` on the storage NICs across
@@ -2391,15 +2391,15 @@ omitted):
 ```
 Node           Check               Item               State    Expected OK
 ----           -----               ----               -----    -------- --
-ASRR1S45R23U13 Host DCBX Willing   ethernet 3         False    False    PASS
-ASRR1S45R23U13 Host PFC priority 3 Priority 3         True     True     PASS
-ASRR1S45R23U13 Mellanox FW DCBX    mt4125_pciconf0 P1 False(0) False(0) PASS
-ASRR1S45R23U13 Mellanox FW LLDP TX mt4125_pciconf0 P1 OFF(0)   OFF(0)   PASS
-ASRR1S45R23U13 RDMA enabled        ethernet 3         True     True     PASS
-ASRR1S45R23U13 Windows LLDP agent  ethernet 3         Enabled  Enabled  PASS
-ASRR1S45R23U15 Host PFC priority 3 Priority 3         True     True     PASS
-ASRR1S45R23U15 Mellanox FW LLDP TX mt4127_pciconf0 P2 OFF(0)   OFF(0)   PASS
-ASRR1S45R23U15 Windows LLDP agent  ethernet 4         Enabled  Enabled  PASS
+ContosoNode-01 Host DCBX Willing   ethernet 3         False    False    PASS
+ContosoNode-01 Host PFC priority 3 Priority 3         True     True     PASS
+ContosoNode-01 Mellanox FW DCBX    mt4125_pciconf0 P1 False(0) False(0) PASS
+ContosoNode-01 Mellanox FW LLDP TX mt4125_pciconf0 P1 OFF(0)   OFF(0)   PASS
+ContosoNode-01 RDMA enabled        ethernet 3         True     True     PASS
+ContosoNode-01 Windows LLDP agent  ethernet 3         Enabled  Enabled  PASS
+ContosoNode-02 Host PFC priority 3 Priority 3         True     True     PASS
+ContosoNode-02 Mellanox FW LLDP TX mt4127_pciconf0 P2 OFF(0)   OFF(0)   PASS
+ContosoNode-02 Windows LLDP agent  ethernet 4         Enabled  Enabled  PASS
 ```
 
 ### Switch Side
@@ -2656,7 +2656,7 @@ Direction-split wire evidence (host `pktmon` captures, TX separated from RX):
   detection.
 
 Aruba CX `multiple_peers` behavior referenced elsewhere in this guide is
-inferred from Brazil production data (2026-05-11); it was not reproduced in
+inferred from a production deployment; it was not reproduced in
 this Cisco test matrix.
 
 ## Appendix B: Switch-Side Command Reference
