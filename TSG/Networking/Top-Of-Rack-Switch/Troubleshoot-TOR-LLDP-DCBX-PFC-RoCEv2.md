@@ -9,12 +9,16 @@
 | **Audience** | Azure Local operators and network engineers |
 | **Document Version** | 1.0 (2026-06-10) |
 
-> **Version naming used in this guide.** "23H2" is the Azure Local release family;
-> "12.2607" is a specific Azure Local solution (build) version within that family.
-> Where a behavior or platform fix is tied to a particular build, this guide cites
-> the solution version (for example, 12.2607); where guidance applies to the whole
-> release, it says 23H2. To read your own build, run `Get-AzureStackHCI` (or check
-> the Azure portal) and compare the reported solution version to the build cited.
+> **Version naming used in this guide.** Each Azure Local release has an OS
+> baseline (for example, 23H2 or 24H2) and a solution (build) version written as
+> `MAJOR.YYMM`. The major number tracks the OS baseline: `11.xxxx` builds (for
+> example, 11.2507) are 23H2-based, and `12.xxxx` builds (for example, 12.2607)
+> are 24H2-based. The platform fix referenced in this guide ships in solution
+> version 12.2607, which is 24H2-based. Where a behavior or fix is tied to a
+> specific build, this guide cites the solution version; where guidance applies
+> regardless of build, it names the OS baseline. To read your own versions, run
+> `Get-AzureStackHCI` (or check the Azure portal) and compare the reported OS and
+> solution versions to those cited here.
 
 > **Start here (TL;DR).** If your storage NICs are Mellanox ConnectX, your
 > top-of-rack switches are Cisco NX-OS or Aruba CX, and you see PFC failing to
