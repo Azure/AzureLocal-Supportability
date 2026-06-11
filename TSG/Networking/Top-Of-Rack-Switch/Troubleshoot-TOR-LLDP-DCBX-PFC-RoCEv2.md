@@ -1176,6 +1176,8 @@ $lldp = Invoke-Command -ComputerName $nodes -ScriptBlock {
 
     # Windows LLDP agent: Get-NetLldpAgent returns one row per Scope (3 per NIC),
     # all with the same Status. Collapse to a single state per ATC NIC.
+    # Note: read .Status (the friendly ScriptProperty: Enabled/Disabled), NOT
+    # .AdminStatus (the raw uint32, e.g. 3 = RxTx) which renders as an integer.
     function Get-WinLldpRow($name, $role) {
         $agent = Get-NetLldpAgent -NetAdapterName $name -ErrorAction SilentlyContinue |
             Select-Object -First 1
@@ -1184,7 +1186,7 @@ $lldp = Invoke-Command -ComputerName $nodes -ScriptBlock {
             Check = 'Windows LLDP agent'
             Role  = $role
             Item  = $name
-            State = if ($agent) { if ($agent.AdminStatus) { "$($agent.AdminStatus)" } else { "$($agent.Status)" } } else { '(not present)' }
+            State = if ($agent) { "$($agent.Status)" } else { '(not present)' }
         }
     }
     $win = @()
@@ -1537,14 +1539,15 @@ $result = Invoke-Command -ComputerName $nodes -ScriptBlock {
     }
 
     # Confirm: Get-NetLldpAgent returns 3 Scope rows per NIC, all with the same
-    # status. Collapse to one row per NIC.
+    # status. Collapse to one row per NIC. Read .Status (friendly ScriptProperty:
+    # Enabled/Disabled), not .AdminStatus (raw uint32 that renders as an integer).
     foreach ($nic in $fabricNics) {
         $agent = Get-NetLldpAgent -NetAdapterName $nic.Name -ErrorAction SilentlyContinue |
             Select-Object -First 1
         [pscustomobject]@{
             Node        = $env:COMPUTERNAME
             NIC         = $nic.Name
-            AdminStatus = if ($agent) { if ($agent.AdminStatus) { "$($agent.AdminStatus)" } else { "$($agent.Status)" } } else { '(not present)' }
+            AdminStatus = if ($agent) { "$($agent.Status)" } else { '(not present)' }
         }
     }
 } | Select-Object Node, NIC, AdminStatus
@@ -2389,7 +2392,7 @@ $verify = Invoke-Command -ComputerName $nodes -ScriptBlock {
         $agent = Get-NetLldpAgent -NetAdapterName $nic.Name -ErrorAction SilentlyContinue |
             Select-Object -First 1
         $rows += [pscustomobject]@{ Node = $env:COMPUTERNAME; Check = 'Windows LLDP agent'
-            Item = $nic.Name; State = if ($agent) { if ($agent.AdminStatus) { "$($agent.AdminStatus)" } else { "$($agent.Status)" } } else { '(not present)' }; Expected = 'Enabled' }
+            Item = $nic.Name; State = if ($agent) { "$($agent.Status)" } else { '(not present)' }; Expected = 'Enabled' }
 
         $dcbx = Get-NetQosDcbxSetting -InterfaceAlias $nic.Name -ErrorAction SilentlyContinue
         $rows += [pscustomobject]@{ Node = $env:COMPUTERNAME; Check = 'Host DCBX Willing'
