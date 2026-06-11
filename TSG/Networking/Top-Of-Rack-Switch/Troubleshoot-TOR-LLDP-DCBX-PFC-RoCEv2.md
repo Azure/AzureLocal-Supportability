@@ -81,12 +81,19 @@ traffic.
 The official documentation requires switches to support DCBX TLV
 advertisement. This guide recommends forcing PFC on the switch rather than
 relying on DCBX negotiation. This does not disable DCBX on the switch; it
-only changes PFC from negotiated to locally enforced. DCBX ETS and
-Application Priority TLVs continue to be exchanged. The switch still
-advertises its configuration via LLDP; the host still receives it. The
-only change is that PFC activation no longer depends on a successful
-DCBX handshake, which avoids the DCBX auto-negotiation issue
-described in this guide.
+only changes PFC from negotiated to locally enforced, so DCBX TLVs (including
+ETS and Application Priority) can still be exchanged for telemetry. Advertising
+the DCBX TLVs over LLDP may require a platform-specific option (for example, the
+`send-tlv` keyword on the `priority-flow-control` line on some Cisco NX-OS
+versions; consult your switch vendor's documentation for whether the option is
+supported on your firmware version and for the equivalent on Aruba CX or other
+platforms). When the switch is configured to advertise DCBX TLVs, set
+switch-side DCBX Willing to False so the host stays authoritative. See
+[Reference-TOR-QOS-Policy-Configuration.md](./Reference-TOR-QOS-Policy-Configuration.md)
+for the switch-side QoS, DCBX, and TLV-advertisement details. The only change
+forced PFC introduces is that PFC activation no longer depends on a successful
+DCBX handshake, which avoids the DCBX auto-negotiation issue described in this
+guide.
 
 For the official network requirements and background on RDMA, DCBX, and related concepts, see:
 - [Host network requirements for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements)
@@ -168,6 +175,22 @@ Mellanox and Intel clusters.
 (IEEE vs CEE) is the sole factor that determines whether PFC converges, not the
 DCBX Willing flag. Set the host Willing flag to False (host-authoritative);
 this is the required posture. Do not set Willing to True.
+
+> **Corroborating Azure Local guidance (this guide does not change these
+> settings).** The priority and PFC posture above is the established Azure Local
+> baseline, documented elsewhere in this repository. This troubleshooting guide
+> promotes the same settings and exists to explain a dual-LLDP-agent failure
+> mode that prevents them from taking effect, plus how to resolve it. For the
+> baseline configuration these recommendations align with, see:
+> - [Reference-TOR-QOS-Policy-Configuration.md](./Reference-TOR-QOS-Policy-Configuration.md):
+>   priority-3 storage (RDMA) as a no-drop class, priority-7 cluster, host-authoritative
+>   DCBX with Willing=False, and forced PFC on storage.
+> - [Reference-TOR-Explicit-Congestion-Notification.md](./Reference-TOR-Explicit-Congestion-Notification.md):
+>   ECN/WRED congestion handling for the lossless storage class.
+> - Per-topology switch templates that apply forced PFC on storage ports:
+>   [Fully-Converged](./Reference-TOR-Fully-Converged-Storage.md),
+>   [Disaggregated](./Reference-TOR-Disaggregated-Switched-Storage.md), and
+>   [2-Node Switchless](./Reference-TOR-2Node-Switchless-Storage.md).
 
 ## Problem
 
@@ -2573,6 +2596,16 @@ unconditionally: when it is the sole active agent (states C1/C2), the switch
 detects clean IEEE 802.1. The `mlxconfig DCBX_CEE_P1` / `DCBX_CEE_P2` and
 `DCBX_IEEE` parameters were not used in the recommended remediation, which does
 not depend on suppressing CEE in firmware.
+
+This is consistent with the Azure Local QoS guidance that the host operating
+system does not configure or send DCB TLVs (see
+[Reference-TOR-QOS-Policy-Configuration.md](./Reference-TOR-QOS-Policy-Configuration.md),
+which states the host has no DCBX settings and does not send DCB TLVs back to the
+switch). The OS LLDP agent egress is bare (CONFIRMED); any DCBX TLVs reaching the
+switch originate from the separate NIC firmware LLDP agent, which Azure Local does
+not configure and which this guide disables. The OS-level "no DCB TLVs" posture
+and the suspected firmware-level CEE injection are therefore not in conflict:
+they describe two different agents.
 
 **The injection point of the firmware DCBX TLVs is not localized.** Both the
 firmware-supplied IEEE DCBX (states C1/C2) and the suspected CEE TLVs originate
