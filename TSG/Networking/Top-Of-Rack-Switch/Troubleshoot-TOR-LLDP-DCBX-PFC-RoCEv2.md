@@ -9,6 +9,22 @@
 | **Audience** | Azure Local operators and network engineers |
 | **Document Version** | 1.0 (2026-06-10) |
 
+> **Start here (TL;DR).** If your storage NICs are Mellanox ConnectX, your
+> top-of-rack switches are Cisco NX-OS or Aruba CX, and you see PFC failing to
+> stay on or an Aruba `multiple_peers` LLDP error on storage ports, this guide
+> confirms a dual LLDP-agent conflict (Diagnosis Steps) and then fixes it in three
+> moves: make the Windows LLDP agent durable (Resolution Step 1), force PFC on at
+> the switch (Resolution Step 2), and disable the Mellanox firmware LLDP agent
+> (Resolution Step 3).
+>
+> **Plan a maintenance window.** Working this guide end to end touches NIC
+> firmware and resets or reboots storage NICs node by node. Schedule **at least a
+> 4-hour maintenance window for a 4-node cluster**, and budget longer for larger
+> clusters or for clusters whose storage plane has no card-level redundancy
+> (single card per plane), where each node must be drained and rebooted in
+> sequence. The Diagnosis steps are read-only and safe during production hours;
+> the Resolution steps are not.
+
 ## Contents
 
 1. [Relationship to Official Documentation](#relationship-to-official-documentation)
@@ -414,6 +430,11 @@ the switch vendor it applies to.
 > so review the file before sharing.
 
 ## Mapping NIC Roles to Switch Ports
+
+> **Prerequisite, do this first.** Complete this mapping before the Diagnosis and
+> Resolution steps. Diagnosis Steps 4 through 6 and every Resolution step reference
+> the per-port storage and mgmt/compute map you build here. If you jump straight
+> into the diagnosis scripts you will stall at the first "Which ports?" callout.
 
 Before you run any switch-side command that targets specific ports (the
 diagnosis steps below, the forced PFC policy in the Resolution section, and the
@@ -1211,7 +1232,7 @@ $lldp | Sort-Object Node, Check, Role, Item | Format-Table -AutoSize
 ```
 
 Example output from a cluster where the two nodes are in different states. Node
-U13 is correct (Windows agent on, firmware agent off). Node U15 has the
+ContosoNode-01 is correct (Windows agent on, firmware agent off). Node ContosoNode-02 has the
 post-reboot bug: the Windows agent is Disabled on every ATC plane and the firmware
 agent is transmitting (`ALL(2)`), so the only LLDP speaker is the firmware agent:
 
@@ -1239,12 +1260,12 @@ ContosoNode-02 Windows LLDP agent  Storage      ethernet 4         Disabled
 Interpret the output per node (the desired end state is the Windows agent Enabled
 and every firmware `ALL(2)` turned to `OFF(0)`):
 - **GOOD (single agent):** `Windows LLDP agent` = `Enabled` on every ATC NIC AND
-  every `Mellanox FW LLDP TX` row = `OFF(0)`. Only the Windows agent speaks (node U13 above).
+  every `Mellanox FW LLDP TX` row = `OFF(0)`. Only the Windows agent speaks (node ContosoNode-01 above).
 - **BAD (dual-agent state):** `Windows LLDP agent` = `Enabled` AND any
   `Mellanox FW LLDP TX` row = `ALL(2)`. Both agents transmit; this is the conflict
   this guide addresses. Apply Resolution Step 3 to disable the firmware agent.
 - **BAD (wrong agent / post-reboot bug):** `Windows LLDP agent` = `Disabled` across
-  both planes (as on node U15 above), usually with firmware `ALL(2)`. Because the
+  both planes (as on node ContosoNode-02 above), usually with firmware `ALL(2)`. Because the
   bug is host-wide, the storage and mgmt/compute rows flip together. The Windows
   agent was turned off by the post-reboot bug (fixed in Azure Local 12.2607),
   leaving the firmware agent as the only speaker. Re-enable the Windows agent per
@@ -1464,6 +1485,10 @@ still require this toggle. In short:
 - Deployed on an earlier build (whether or not later updated to 12.2607+):
   apply this toggle.
 
+**If you are not sure which case applies, apply the toggle.** It is idempotent and
+safe to re-apply, including on a cluster that already has the durable platform fix;
+re-asserting the durable state and Willing = False posture causes no harm.
+
 Use the following one-time toggle, applied to every node, to write a durable LLDP
 agent state that survives reboot and to re-assert the host-authoritative DCBX
 posture (Willing = False). It targets the ATC-managed fabric uplinks (the storage
@@ -1599,6 +1624,12 @@ configures. This syntax applies to AOS-CX 10.10 and later (the
 `flow-control priority rxtx <list>` form was finalized in 10.10); Azure Local
 Aruba CX deployments typically run 10.13 or later.
 
+> **Lab-validation note (Aruba CX).** The `flow-control priority rxtx 3` syntax is
+> verified against the AOS-CX command documentation but was not validated on live
+> Aruba hardware in our test lab; the lab evidence in this guide is from Cisco
+> NX-OS. See "Known Limitations and Open Items." Confirm the command against your
+> AOS-CX version, and validate on a non-production port first.
+
 Follow-on validation (confirm the change took effect on the switch):
 ```
 show interface 1/1/<port> flow-control
@@ -1682,10 +1713,10 @@ any DCB parameter.
 > `Invoke-Command`), this is a disruptive firmware change: it resets the NIC, so it
 > must be run from a PowerShell session **on the node being changed** (RDP into that
 > node), and it must be done one node at a time, not fanned out across the cluster.
-> Apply it only to the nodes the Diagnosis Step 3 / Step 6 diagnostics flagged with firmware
+> Apply it only to the nodes that Diagnosis Step 3 and Diagnosis Step 6 flagged with firmware
 > LLDP `ALL(2)`. A node already showing `OFF(0)` on every card is done; skip it. (In
-> the worked example, node U13 is already `OFF(0)` and needs no change, while node
-> U15 shows `ALL(2)` and is the node to remediate here.)
+> the worked example, node ContosoNode-01 is already `OFF(0)` and needs no change, while node
+> ContosoNode-02 shows `ALL(2)` and is the node to remediate here.)
 
 With the Windows LLDP agent confirmed durable (Step 1), disable the firmware LLDP
 agent so the Windows agent becomes the sole LLDP speaker on each storage port.
@@ -2031,6 +2062,9 @@ commands in order.
 **1. Write the firmware setting to NVM.** Non-disruptive on its own; it takes
 effect only when the NIC receives a PCIe card reset below.
 
+> This is the same NVM-write block shown in Option 1. It is repeated here so you
+> can follow Option 2 top to bottom; there is no hidden difference to spot.
+
 ```powershell
 # Requires WinMFT (Mellanox Firmware Tools).
 $mstDir = 'C:\Program Files\Mellanox\WinMFT'
@@ -2204,6 +2238,9 @@ there is no PCIe card reset loop. Run these commands in order.
 
 **1. Write the firmware setting to NVM.** Persists across reboots; activates on
 the next boot.
+
+> This is the same NVM-write block shown in Options 1 and 2. It is repeated here so
+> you can follow Option 3 top to bottom; there is no hidden difference to spot.
 
 ```powershell
 # Requires WinMFT (Mellanox Firmware Tools).
