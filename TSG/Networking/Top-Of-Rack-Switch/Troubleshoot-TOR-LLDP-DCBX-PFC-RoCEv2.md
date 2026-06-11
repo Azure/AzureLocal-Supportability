@@ -54,11 +54,13 @@ The official documentation states that DCBX TLVs "must be dynamically
 enabled." This means the switch should be capable of advertising DCBX TLVs
 via LLDP. It does NOT mean PFC must be negotiated dynamically via DCBX.
 This guide prescribes forcing PFC ON at the switch (rather than relying on
-DCBX negotiation) because Mellanox NIC firmware injects legacy CEE DCBX
-TLVs that cause negotiation failures on some switch platforms. Forced PFC
-is fully compatible with the IEEE 802.1Qbb requirement; it simply removes
-the dependency on a successful DCBX handshake and therefore hardens the RDMA
-configuration for Azure Local cluster storage traffic.
+DCBX negotiation) because DCBX-negotiated (auto) PFC does not converge once
+the cluster is in the remediated single-LLDP-agent state (see Contributing
+Factors and
+Appendix A). Forced PFC is fully compatible with the IEEE 802.1Qbb
+requirement; it simply removes the dependency on a successful DCBX handshake
+and therefore hardens the RDMA configuration for Azure Local cluster storage
+traffic.
 
 **What this guide adds:**
 - Diagnosis and resolution for DCBX interoperability issues between
@@ -83,7 +85,7 @@ only changes PFC from negotiated to locally enforced. DCBX ETS and
 Application Priority TLVs continue to be exchanged. The switch still
 advertises its configuration via LLDP; the host still receives it. The
 only change is that PFC activation no longer depends on a successful
-DCBX handshake, which avoids the CEE dialect interoperability issue
+DCBX handshake, which avoids the DCBX auto-negotiation issue
 described in this guide.
 
 For the official network requirements and background on RDMA, DCBX, and related concepts, see:
@@ -101,7 +103,10 @@ configuration is:
   section (otherwise the enablement is lost on the next reboot). See Resolution Step 1 for
   which clusters still require the toggle on Azure Local 12.2607 and later.
 - Mellanox NIC firmware LLDP agent: **Disabled** (this may require a `mlxconfig` change)
-- Intel NIC firmware LLDP agent: No action needed (Intel sends IEEE-only)
+- Intel NIC firmware LLDP agent: see the Intel note in Resolution Step 3
+  (whether a competing Intel firmware agent is present is not established on the
+  tested adapters; if one is active alongside the Windows agent, the same
+  single-agent guidance applies)
 - DCBX Willing: **False** (required, host-authoritative). The Willing flag
   decides who wins when the host and the switch disagree on DCBX settings:
   Willing = True means "defer to the switch's settings," and Willing = False
@@ -126,7 +131,7 @@ configuration is:
   class, which is defined as PFC-disabled (priority 0, no host PFC configuration).
   Setting these ports explicitly OFF (rather than leaving them at AUTO) is
   deterministic, keeps them out of any DCBX negotiation, and avoids the same
-  CEE/IEEE TLV misclassification that affects storage ports. Enabling PFC on
+  PFC auto-negotiation issue that affects storage ports. Enabling PFC on
   compute ports is unnecessary and can cause unintended pause behavior on VM
   traffic.
   - Cisco NX-OS: `priority-flow-control mode off`
@@ -148,13 +153,14 @@ configuration is:
   > never carry RDMA on the compute ports. There is no workload that requires PFC
   > on a disaggregated compute port.
 
-**Why forced PFC, not AUTO:** Mellanox ConnectX NIC firmware injects legacy
-CEE DCBX TLVs alongside IEEE TLVs into every LLDP frame. This cannot be
-suppressed through any user configuration. When a switch in AUTO mode sees
-both CEE and IEEE TLVs, it may misclassify the DCBX dialect and fail to
-converge PFC. Intel E810 NICs do not have this issue (they send IEEE-only TLVs), but since
-a cluster may contain Mellanox NICs (or be replaced with them in the future),
-forced PFC is the safe universal configuration.
+**Why forced PFC, not AUTO:** the recommended remediation disables the
+Mellanox firmware LLDP agent to resolve the dual-agent conflict (see
+Contributing Factors). In that single-agent state the host transmits bare LLDP with no DCBX
+TLVs (CONFIRMED by direction-split packet capture; see Appendix A), so a
+switch in AUTO mode has no IEEE DCBX peer and PFC auto-negotiation does not
+converge. Forcing PFC bypasses the DCBX handshake entirely and is
+dialect-independent, which makes it the safe universal configuration for both
+Mellanox and Intel clusters.
 
 **The Willing flag is not the cause of the PFC failure.** The DCBX dialect
 (IEEE vs CEE) is the sole factor that determines whether PFC converges, not the
@@ -165,10 +171,13 @@ this is the required posture. Do not set Willing to True.
 
 Azure Local clusters using Mellanox ConnectX NICs with RoCEv2 storage may
 experience PFC failures when connected to switches that negotiate PFC
-through DCBX. The root cause is the Mellanox NIC firmware injecting legacy
-CEE DCBX TLVs alongside IEEE 802.1Qaz TLVs into every LLDP frame.
-This dual-dialect advertisement causes some switch platforms to misclassify
-the DCBX session and fail to converge PFC.
+through DCBX. The trigger is a dual-LLDP-agent conflict on each storage port:
+the Windows OS agent and the Mellanox NIC firmware agent are both active (see
+the dual-agent description below). Once the firmware agent is disabled to
+resolve that conflict, the host transmits bare LLDP with no DCBX TLVs
+(CONFIRMED by direction-split packet capture; see Appendix A). A switch
+configured for PFC auto-negotiation then has no IEEE DCBX peer and cannot
+converge PFC, so PFC must be forced at the switch.
 
 Additionally, on Mellanox-based clusters two LLDP agents are typically active
 on each storage port at the same time: the Windows OS agent, which Azure
@@ -191,10 +200,14 @@ this can
 cause storage timeouts, RDMA.Alert health faults, and in severe cases,
 Cluster Shared Volume (CSV) access failures and VM disruption.
 
-Intel E810 Network Interface Cards (NICs) are not affected by the CEE
-dialect issue (Intel firmware sends IEEE-only DCBX TLVs). However, Intel
-E810 supports both iWARP and RoCEv2. If an Intel cluster is configured for
-RoCEv2, PFC is still required and should be forced ON at the switch.
+On Intel E810 Network Interface Cards (NICs) with the Windows LLDP agent
+active, host egress is also bare LLDP with no DCBX TLVs (CONFIRMED by a
+direction-split capture on an Intel node), so the host-sent DCBX dialect is
+not what distinguishes the vendors. What matters is whether the NIC also runs
+a competing firmware LLDP agent; this is established for Mellanox ConnectX and
+is a data gap for Intel E810 on the tested adapters. Intel E810 supports both
+iWARP and RoCEv2; if an Intel cluster is configured for RoCEv2, PFC is still
+required and should be forced ON at the switch.
 
 ## Symptoms
 
@@ -206,8 +219,10 @@ Operators may observe one or more of the following:
   or `RemoteFlowControl: Not Available`
 - Switch-side `show interface priority-flow-control` shows `PFC Oper Off`
   on storage ports configured with PFC auto
-- Switch-side `show lldp dcbx` shows `Detected: CIN` (instead of IEEE)
-  on Mellanox-connected storage ports
+- Switch-side `show lldp dcbx` shows `Detected: CIN` (instead of IEEE) on
+  storage ports in PFC auto mode (observed on Cisco NX-OS 10.3(4a)). `CIN` is
+  the switch's local default DCBX label when it has no IEEE DCBX peer from the
+  host; it is not proof of a host-sent dialect.
 - Switch-side `show lldp neighbors` shows two different chassis-IDs per
   storage port (MAC-based from NIC firmware and hostname-based from Windows)
 - On Aruba CX: `DCBx operational state: multiple_peers` and
@@ -224,10 +239,10 @@ Operators may observe one or more of the following:
 
 | Component | Affected | Not Affected |
 |---|---|---|
-| NIC | Mellanox ConnectX-6 Lx, ConnectX-6 Dx | Intel E810 (IEEE-only DCBX; not affected by CEE dialect issue) |
+| NIC | Mellanox ConnectX-6 Lx, ConnectX-6 Dx (runs a competing firmware LLDP agent) | Intel E810 (competing firmware LLDP agent not confirmed on tested adapters; see the Intel note in Step 3) |
 | RDMA Transport | RoCEv2 (requires PFC) | iWARP (PFC not required, but note: Intel E810 supports both iWARP and RoCEv2; if configured for RoCEv2, PFC is required) |
 | Switch: Aruba CX | Affected (multiple_peers deadlock) | N/A |
-| Switch: Cisco NX-OS | Affected (CIN misclassification in auto mode) | Not affected when PFC mode on (forced) |
+| Switch: Cisco NX-OS 10.3(4a) | Affected: PFC auto does not converge (switch reports `Detected: CIN`, its local default when no IEEE DCBX peer is present) | Not affected when PFC mode on (forced) |
 | Switch: Dell OS10 / SONiC | Potentially affected (untested) | N/A |
 | Switch: Arista EOS | Potentially affected (untested) | N/A |
 
@@ -264,32 +279,37 @@ deployment:
 
 | Agent | Identity | TTL | DCBX TLVs | Source |
 |---|---|---|---|---|
-| Windows `mslldp.sys` | Hostname (e.g., `NODE01`) | ~120s | None (bare LLDP) | OS networking stack |
-| Mellanox NIC firmware | NIC MAC address | ~30s | IEEE + CEE | NIC firmware, below NDIS |
+| Windows `mslldp.sys` | Hostname (e.g., `NODE01`) | ~120s | None (bare LLDP, CONFIRMED on host egress) | OS networking stack |
+| Mellanox NIC firmware | NIC MAC address | ~30s | IEEE 802.1 DCBX (clean) | NIC firmware |
 
 The two agents race on each storage port. The switch sees one identity at
 a time (on Cisco NX-OS) or both simultaneously (on Aruba CX).
 
 On Aruba CX, seeing two chassis-IDs on the same port causes the switch to
 enter `DCBx operational state: multiple_peers`, where it refuses to
-negotiate DCBX with either agent. PFC goes inactive.
+negotiate DCBX with either agent and PFC goes inactive. This Aruba behavior is
+inferred from Brazil production data (2026-05-11); it was not reproduced in the
+in-house Cisco test matrix.
 
-### Factor 2: CEE DCBX Dialect (NIC Firmware)
+### Factor 2: No Host DCBX Peer After the Firmware Agent Is Disabled
 
-The Mellanox NIC firmware injects both IEEE 802.1Qaz, with
-Organizationally Unique Identifier (OUI) `00:80:C2`, and legacy CEE
-(OUI `00:1B:21`) DCBX TLVs into every LLDP frame. This happens at the
-hardware level, below the OS NDIS layer, and cannot be suppressed
-through any user-accessible configuration (`mlxconfig DCBX_CEE` settings
-have no runtime effect on ConnectX-6 Lx firmware).
+The Mellanox firmware LLDP agent is the component that supplies IEEE 802.1Qaz
+DCBX (OUI `00:80:C2`) to the switch. When it is the active agent, a Cisco
+NX-OS switch in auto mode detects `IEEE 802.1` and PFC auto-negotiation
+succeeds (CONFIRMED on Cisco NX-OS 10.3(4a); see Appendix A, states C1/C2).
 
-When a switch sees both IEEE and CEE TLVs in the same frame:
-- Cisco NX-OS classifies the peer as **CIN** and PFC auto-negotiation fails
-- Aruba CX may not correctly converge DCBX when both dialects are present
+Disabling the firmware agent to resolve the dual-agent conflict (Factor 1)
+removes that DCBX speaker. Direction-split packet capture confirms that the
+Windows OS agent transmits bare LLDP with no DCBX TLVs on host egress, on both
+Mellanox and Intel (CONFIRMED; Appendix A, states A1/A2). With no IEEE DCBX
+peer presented by the host, the switch falls back to its local default and
+reports `Detected: CIN` with `Willing=No`; PFC auto-negotiation then does not
+converge.
 
-Intel E810 NICs send IEEE-only DCBX TLVs (no CEE). On the same Cisco
-switches, Intel-connected ports correctly detect **IEEE 802.1** and PFC
-auto-negotiation succeeds.
+`CIN` here is the switch's own DCBX state-machine label, not evidence of a
+host-transmitted dialect: in this state there is no CEE (or any other DCBX) on
+the host wire. The practical consequence is that, with the firmware agent
+disabled, PFC must be forced at the switch.
 
 ### Factor 3: Switch PFC Mode (Switch Side)
 
@@ -942,21 +962,20 @@ Interpret the output by vendor:
   `RdmaTransport` reports **RoCEv2** on current drivers. ConnectX supports only RoCE,
   so RoCEv2 is the only valid transport here; if an older driver leaves the value
   blank ("not reported by driver"), treat it as RoCEv2 regardless. Either way PFC is
-  required, so continue with Step 2. ConnectX is also the vendor affected by the CEE
-  dialect issue this guide addresses.
+  required, so continue with Step 2. ConnectX is also the vendor that runs the
+  competing firmware LLDP agent this guide addresses.
 - **Intel E810 / Chelsio** (`RdmaTransport` shows a value): the value tells you the
   selected transport.
   - **RoCEv2**: PFC is required. Continue with Step 2.
-  - **iWARP**: PFC is not required. LLDP/DCBX issues are informational only. Intel
-    E810 sends IEEE-only DCBX and is not affected by the CEE dialect issue.
+  - **iWARP**: PFC is not required. LLDP/DCBX issues are informational only.
 
-> **If no Mellanox NICs are present**, this cluster does not have the CEE dialect
-> problem this guide addresses, and Resolution Step 3 (disable the Mellanox firmware
-> LLDP agent) does not apply: only Resolution Steps 1 and 2 are relevant. See "Which
-> steps apply to your cluster" at the top of the Resolution section. Note that Intel
-> E810 and Broadcom NICs do have their own firmware LLDP agents; what is specific to
-> Mellanox is the legacy CEE dialect it injects (Factor 2 below), not the existence
-> of a firmware agent.
+> **If no Mellanox NICs are present**, the Mellanox-specific remediation in this
+> guide (Resolution Step 3, disable the Mellanox firmware LLDP agent using WinMFT)
+> does not apply: only Resolution Steps 1 and 2 are relevant. See "Which steps apply
+> to your cluster" at the top of the Resolution section. Intel E810 and Broadcom NICs
+> may also ship a firmware LLDP agent; if one is active alongside the Windows agent,
+> the same dual-agent guidance applies, but the command to disable it is
+> vendor-specific (the WinMFT procedure in Step 3 is Mellanox-only).
 
 ### Step 2: Check PFC Status on Host
 
@@ -1193,7 +1212,7 @@ show dcbx interface 1/1/<port>
 
 Interpret the output (either platform):
 - **GOOD:** `Detected: IEEE 802.1` = correct dialect, DCBX should converge.
-- **BAD:** `Detected: CIN` = Cisco detected legacy CEE TLVs, PFC auto will not converge.
+- **BAD:** `Detected: CIN` = the switch has no IEEE DCBX peer and fell back to its CIN default; PFC auto will not converge.
 - **BAD:** `DCBx operational state: multiple_peers` (Aruba) = dual-agent deadlock.
 
 ### Step 5: Check PFC Status on the Switch
@@ -1321,17 +1340,18 @@ order below. Do **not** perform them out of order:
 Diagnosis Steps earlier in the guide.)
 
 **Which steps apply to your cluster.** This TSG addresses a PFC negotiation failure
-rooted in the Mellanox ConnectX NIC firmware injecting legacy CEE DCBX (see Affected
-Configurations). How much of the resolution you run depends on your NIC vendor:
+rooted in a competing firmware LLDP agent on Mellanox ConnectX clusters, and in the
+loss of host DCBX once that agent is disabled (see Affected Configurations). How much
+of the resolution you run depends on your NIC vendor:
 
 | Step | Mellanox ConnectX cluster | Non-Mellanox cluster (for example, Intel E810) |
 |------|---------------------------|------------------------------------------------|
 | Step 1: durable Windows LLDP agent (Willing = False) | Required | Recommended hardening; vendor-agnostic |
 | Step 2: force PFC on the switch | Required (RoCEv2 is the only transport, so PFC is mandatory) | Required if the cluster runs RoCEv2; otherwise recommended |
-| Step 3: disable the firmware LLDP agent | Required; this is the change that removes the CEE-injecting agent | Does not apply as written: Step 3 removes the Mellanox firmware agent's CEE injection using Mellanox-only tooling. Skip Step 3 and the WinMFT prerequisite. See the note on other vendors below. |
+| Step 3: disable the firmware LLDP agent | Required; this collapses each storage port to a single LLDP agent and resolves the dual-agent conflict | Does not apply as written: Step 3 disables the Mellanox firmware agent using Mellanox-only tooling. Skip Step 3 and the WinMFT prerequisite. See the note on other vendors below. |
 
-- **No Mellanox NICs at all (for example, an Intel E810 cluster):** you will not hit
-  the CEE dialect problem, so Step 3 does not apply. Run Step 1, and
+- **No Mellanox NICs at all (for example, an Intel E810 cluster):** there is no
+  Mellanox firmware LLDP agent to disable, so Step 3 does not apply. Run Step 1, and
   on a RoCEv2 cluster run Step 2, as standard lossless-fabric hygiene.
 - **Mixed cluster:** run Step 3 only on the nodes whose Mellanox cards the diagnostics
   flagged with firmware LLDP `ALL(2)`. Nodes with no Mellanox NICs need only Steps 1
@@ -1342,15 +1362,16 @@ Configurations). How much of the resolution you run depends on your NIC vendor:
   the switch-side neighbor-count check, then see the vendor pointers in the
   neighbor-count note under Verification After Remediation.
 - **Other NICs also have firmware LLDP agents.** Intel E810 and Broadcom ship a
-  firmware LLDP agent too, so the existence of a competing agent is not unique to
-  Mellanox. What is Mellanox-specific is the legacy CEE dialect its firmware injects
-  (Factor 2), which is what breaks PFC negotiation on Cisco and Aruba; Intel E810 is
-  IEEE-only and negotiates correctly. One caveat: on Aruba CX the `multiple_peers`
-  deadlock (Factor 1) comes from two chassis-IDs on a port and is dialect-independent,
-  so a non-Mellanox cluster that leaves a firmware agent enabled could see the same
-  deadlock. The remedy follows the same principle (one durable host agent, firmware
-  agent off), but the command to disable a non-Mellanox firmware agent is vendor-specific;
-  see the vendor pointers in the neighbor-count note under Verification After Remediation.
+  firmware LLDP agent too, so a competing agent is not unique to Mellanox. The
+  shared problem is the dual-agent state itself: on Aruba CX the `multiple_peers`
+  deadlock (Factor 1) comes from two chassis-IDs on a port and is independent of any
+  DCBX dialect, so a non-Mellanox cluster that leaves a firmware agent enabled could
+  see the same deadlock. What is established for Mellanox ConnectX is that it runs
+  such a competing agent; whether a given Intel or Broadcom adapter does is a data gap
+  on the tested hardware. The remedy follows the same principle (one durable host
+  agent, firmware agent off), but the command to disable a non-Mellanox firmware agent
+  is vendor-specific; see the vendor pointers in the neighbor-count note under
+  Verification After Remediation.
 
 ### Step 1: Ensure the Windows LLDP Agent Is Durably Enabled (Willing = False) [LOW RISK]
 
@@ -1537,8 +1558,8 @@ queue/pool in the active QoS profile before re-applying.
 On a disaggregated design, set PFC explicitly OFF on the management and compute
 ports. This aligns with Microsoft's traffic-class model (management and VM/compute
 traffic is in the default class, which is PFC-disabled), and keeps these ports
-out of DCBX negotiation entirely so they cannot be affected by the same CEE/IEEE
-TLV misclassification that affects storage ports. Use the "Mgmt/Compute" rows
+out of DCBX negotiation entirely so they cannot be affected by the same PFC
+auto-negotiation issue that affects storage ports. Use the "Mgmt/Compute" rows
 from the port map to identify these ports.
 
 Cisco NX-OS:
@@ -2185,9 +2206,15 @@ Option 3 is complete.
 
 #### Notes that apply to all three options
 
-**Effect:** Removes the FW LLDP identity and the CEE/IEEE DCBX TLVs from
-the wire. The switch sees only the Windows LLDP agent (hostname chassis-ID,
-bare LLDP with no DCBX TLVs).
+**Effect:** Removes the firmware LLDP agent's separate identity (the MAC-based
+chassis-ID), collapsing each storage port to a single LLDP agent: the Windows
+agent (hostname chassis-ID, bare LLDP with no DCBX TLVs). This resolves the
+Aruba CX dual-agent `multiple_peers` deadlock. Because the host then presents
+no IEEE DCBX peer, a Cisco NX-OS switch in auto mode falls back to its local
+default (`Detected: CIN`, `Willing=No`) and PFC auto-negotiation will not
+converge. This is why Step 2 (forced PFC on the switch) is mandatory and is the
+actual PFC fix; Step 3 resolves the dual-agent deadlock, not the auto-negotiation
+fallback.
 
 **Limitation:** This does not provide DCBX negotiation capability. The
 switch must force PFC locally (Step 2).
@@ -2200,8 +2227,8 @@ settings, so it will not revert this change. However, NIC firmware updates
 delivered through SBE or OEM update packages may reset the firmware LLDP
 settings to defaults. Re-check after any firmware update.
 
-**What you lose:** Disabling the FW LLDP agent removes the NIC firmware's
-DCBX TLVs (both IEEE and CEE) from the wire. The switch will no longer
+**What you lose:** Disabling the firmware LLDP agent removes the host's only
+DCBX speaker (the firmware-supplied IEEE DCBX). The switch will no longer
 receive DCBX PFC or ETS configuration from the host via LLDP. This is why
 Step 2 (forced PFC on the switch) is required alongside this step: the switch
 must enforce PFC locally because DCBX negotiation is no longer available.
@@ -2215,7 +2242,8 @@ provide defense in depth:
 - Step 2 pins PFC statically on the switch so it never depends on DCBX negotiation,
   and keeps PFC active even if Step 3 is later reverted by an OS update, NIC
   firmware update, or configuration drift.
-- Step 3 prevents the dual-agent and CEE dialect issues from occurring.
+- Step 3 disables the Mellanox firmware LLDP agent, collapsing each storage port to
+  a single LLDP agent and resolving the Aruba CX dual-agent deadlock.
 
 All three steps are independently reversible. Step 1 and Step 2 are control-plane
 changes that carry no link disruption; the MEDIUM risk for the overall procedure
@@ -2393,9 +2421,9 @@ Expected: exactly one LLDP neighbor per port, PFC active on priority 3. See the 
 >   [Intel Download Center](https://www.intel.com/content/www/us/en/download/19314/intel-ethernet-adapter-complete-driver-pack.html).
 >   Contact Intel support if your firmware does not expose the control. (On Linux the
 >   control is `ethtool --set-priv-flags <interface> fw-lldp-agent off`.) Note that
->   Intel E810 is IEEE-only, so even when its agent transmits it does not inject the
->   legacy CEE dialect (Factor 2); the risk it carries is the dual-agent `multiple_peers`
->   case (Factor 1) on Aruba CX.
+>   on the tested Intel adapters, host egress with the Windows agent active carries no
+>   DCBX TLVs (CONFIRMED); the risk an Intel firmware agent would carry, if active, is
+>   the dual-agent `multiple_peers` case (Factor 1) on Aruba CX, not a DCBX dialect.
 > - **Server OEM (Dell, HPE, and others):** the firmware DCBX/LLDP agent can also be
 >   governed by BIOS/UEFI HII or by BMC (iDRAC, iLO) DCB settings; check the OEM's DCB
 >   configuration guide.
@@ -2438,15 +2466,19 @@ finalized the standard, resulting in three incompatible dialects:
 ### CIN
 Cisco Intel Nuova (CIN) was the earliest implementation, developed jointly
 by Cisco, Intel, and Nuova Systems (acquired by Cisco in 2008). It uses
-proprietary TLV encoding. Cisco NX-OS uses "CIN" as its internal
-classification label when it detects pre-standard DCBX framing, even if the
-actual TLVs are CEE rather than the original CIN format.
+proprietary TLV encoding. On Cisco NX-OS 10.3(4a), `CIN` is also the label the
+switch reports as its local default DCBX mode when it has no IEEE 802.1 DCBX
+peer from the host. In the remediated single-agent state, `show lldp dcbx`
+reports `Detected: CIN` with `Willing=No`; this does not indicate that the host
+transmitted CEE or CIN TLVs.
 
 ### CEE
 Converged Enhanced Ethernet (CEE) was a later pre-standard draft developed
-by Intel and partners. It uses OUI `00:1B:21` (Intel's registered OUI).
-This is the dialect that Mellanox ConnectX NIC firmware injects into LLDP
-frames alongside IEEE TLVs.
+by Intel and partners. It uses OUI `00:1B:21` (Intel's registered OUI). In
+the scenarios this guide covers, CEE TLVs are not present on host egress
+(CONFIRMED by direction-split packet capture; see Appendix A). Where CEE
+appears near the host, it is in the switch's own inbound advertisements, not
+host output.
 
 ### IEEE 802.1Qaz (2011, ratified standard)
 The Institute of Electrical and Electronics Engineers (IEEE) ratified this
@@ -2455,42 +2487,43 @@ the only dialect that all modern switches are required to support. Azure
 Local's NetworkATC configures the host QoS settings to match the IEEE
 standard's PFC and ETS parameters.
 
-### Why the dialect matters for PFC convergence
+### Why DCBX state matters for PFC convergence
 
 When a switch port is configured for PFC auto-negotiation (rather than
 forced PFC), the switch uses DCBX to determine whether the host wants PFC
-and on which priorities. If the switch cannot determine the correct DCBX
-dialect, it cannot converge PFC.
+and on which priorities. If the switch has no IEEE 802.1 DCBX peer, it cannot
+converge PFC.
 
-The Mellanox ConnectX NIC firmware sends BOTH IEEE and CEE TLVs in every
-LLDP frame, at the hardware level below the OS. When a Cisco NX-OS switch
-in auto mode receives both dialects, it classifies the peer as CIN (the
-oldest/lowest-common-denominator dialect) and fails to converge PFC.
-
-Intel E810 NIC firmware sends only IEEE TLVs. On the same Cisco switch,
-Intel-connected ports correctly detect IEEE 802.1 and PFC auto-negotiation
-succeeds.
+On Mellanox ConnectX, the firmware LLDP agent is the component that supplies
+IEEE 802.1 DCBX to the switch. With that agent active, a Cisco NX-OS 10.3(4a)
+switch in auto mode detects `IEEE 802.1` and PFC converges (Appendix A, states
+C1/C2). Once the firmware agent is disabled to resolve the dual-agent conflict,
+the host transmits bare LLDP with no DCBX TLVs (CONFIRMED on both Mellanox and
+Intel; Appendix A, states A1/A2), the switch falls back to its `CIN` default,
+and PFC auto-negotiation does not converge.
 
 This is why forced PFC (`mode on`) is recommended: it bypasses DCBX
-negotiation entirely, making the dialect irrelevant.
+negotiation entirely, so PFC activation does not depend on the host presenting
+a DCBX peer.
 
 ## Known Limitations and Open Items
 
-**Mellanox `DCBX_CEE` firmware setting has no effect.** The `mlxconfig`
-parameters `DCBX_CEE_P1` and `DCBX_CEE_P2` can be set to 0 (disabled) in
-Non-Volatile Memory (NVM), but the ConnectX-6 Lx firmware continues to
-inject CEE TLVs regardless.
-This was tested with PCIe reset, level 3 driver reset, and full OS reboot.
-The `DCBX_IEEE` parameters are similarly non-functional. These settings
-appear to be vestigial on the ConnectX-6 Lx firmware and cannot be used to
-selectively suppress CEE DCBX TLVs. A fix would require an NVIDIA firmware
-code change.
+**Host egress carries no CEE TLVs (earlier "firmware injects CEE" claim
+withdrawn).** Earlier drafts of this guide attributed the failure to Mellanox
+firmware injecting legacy CEE DCBX TLVs into every LLDP frame. Direction-split
+packet capture (host TX separated from switch RX) refuted this: with the
+Windows LLDP agent active and the firmware agent disabled, host egress is bare
+LLDP with no DCBX TLVs on both Mellanox and Intel. The IEEE + CEE TLVs seen in
+an earlier non-direction-split capture were the switch's own inbound
+advertisements. The `mlxconfig DCBX_CEE_P1` / `DCBX_CEE_P2` and `DCBX_IEEE`
+parameters therefore have no bearing on the host-egress dialect, and there is
+no host-sent CEE to suppress.
 
-**No user-accessible method to suppress CEE TLVs.** The only way to remove
-CEE DCBX TLVs from the wire on Mellanox ConnectX NICs is to disable the
-FW LLDP agent entirely (Resolution Step 3), which also removes the IEEE DCBX TLVs.
-Selective suppression of CEE while keeping IEEE is not possible with current
-firmware.
+**Injection point of the firmware-supplied IEEE DCBX is not established.** The
+firmware LLDP agent's DCBX frames originate below the host packet-capture tap,
+so the current captures confirm the switch-side effect (IEEE detected with the
+firmware agent active; `CIN` fallback once it is disabled) but do not localize
+where the firmware generates them. This does not affect the remediation.
 
 **Aruba CX PFC syntax (verified against AOS-CX CLI documentation).** The
 correct AOS-CX command for locally enabling PFC on priority 3 is
@@ -2516,37 +2549,53 @@ applies to the 10.13 and 10.16 releases referenced elsewhere in this guide.
 
 ## Appendix A: Test Evidence Matrix
 
-The following test matrix was executed on two in-house clusters (7-node
-Mellanox ConnectX-6 Lx and 3-node Intel E810) with Cisco NX-OS Top-of-Rack
-(ToR) switches. Each test case varied the LLDP agent configuration and
-measured the switch-side DCBX dialect detection and PFC convergence.
+The following tests were executed on two in-house clusters (7-node Mellanox
+ConnectX-6 Lx and 3-node Intel E810) with Cisco NX-OS 10.3(4a) Top-of-Rack
+(ToR) switches. Host DCBX on egress was measured with direction-split host
+`pktmon` captures (host TX separated from switch RX by source MAC, OUI-decoded
+on-box); the "Cisco DCBX detected" column is the DCBX state the switch
+reported.
 
-| Test | Host LLDP Config | DCBX Dialect (Cisco) | PFC (mode on) | PFC (auto) |
-|---|---|---|---|---|
-| A1 (Win only, Willing=True) | Win LLDP on, FW off | CIN (Mellanox), IEEE (Intel) | On | Off (Mellanox), On (Intel) |
-| A2 (Win only, Willing=False) | Win LLDP on, FW off | CIN (Mellanox), IEEE (Intel) | On | Off (Mellanox) |
-| B1 (Dual agent) | Both agents on | CIN (Mellanox) | On | N/A |
-| C1 (FW only, Willing=True) | FW LLDP on, Win off | IEEE (Mellanox) | On | On (Mellanox) |
-| C2 (FW only, Willing=False) | FW LLDP on, Win off | IEEE (Mellanox) | On | On (Mellanox) |
+| Test | Win LLDP | FW LLDP | Host DCBX on egress (pktmon TX) | Cisco DCBX detected | PFC (mode on) | PFC (auto) |
+|---|---|---|---|---|---|---|
+| B1 (production) | Enabled | Enabled (TX) | firmware IEEE [INFERRED] | CIN | On | not tested |
+| A1 (baseline) | Enabled | Disabled | none, bare 802.3 [CONFIRMED] | CIN (switch default) | On | Off |
+| A2 (asserter) | Enabled | Disabled | none, bare 802.3 [CONFIRMED] | CIN (switch default) | On | Off |
+| C1 (FW only, Willing=True) | Disabled | Enabled (DCBX) | IEEE 802.1 [INFERRED: FW-generated, below host tap] | IEEE 802.1 | On | On |
+| C2 (FW only, Willing=False) | Disabled | Enabled (DCBX) | IEEE 802.1 [INFERRED] | IEEE 802.1 | On | On |
+
+The "Cisco DCBX detected" column is the switch's DCBX state-machine label, not
+proof of a host-transmitted dialect. In states A1/A2 the host sends no DCBX
+TLVs (CONFIRMED), so `CIN` there is the switch's local default, not a received
+CEE advertisement.
 
 Key conclusions from the matrix:
 - Forced PFC (`mode on`) works in every configuration. No exceptions.
-- Auto PFC only converges when the switch detects IEEE 802.1 DCBX.
-- Mellanox NIC firmware causes CIN detection (due to CEE TLVs) when
-  Windows LLDP is the active agent. Intel does not have this issue.
+- Auto PFC converges only when the firmware LLDP agent is the active DCBX
+  speaker and the switch detects IEEE 802.1 (states C1/C2).
+- With the Windows agent active and the firmware agent disabled (states A1/A2),
+  host egress is bare LLDP and the switch falls back to `CIN`; auto PFC does
+  not converge. This is identical on Mellanox and Intel.
 - The Willing flag (True vs False) has no effect on PFC convergence.
-- The Mellanox FW LLDP agent alone (C1, C2) produces IEEE detection and
-  auto PFC works, but this configuration loses Windows LLDP identity and
-  is not recommended for production.
+- The firmware LLDP agent alone (C1, C2) produces IEEE detection and working
+  auto PFC, but this configuration loses the Windows LLDP identity and is not
+  recommended for production.
 
-Wire-level evidence (pktmon LLDP captures):
-- Mellanox cluster: both IEEE (OUI `00:80:C2`) and CEE (OUI `00:1B:21`)
-  DCBX TLVs present in every frame, injected by NIC firmware below NDIS
-- Intel cluster: IEEE 802.3 and LLDP-MED TLVs only; no DCBX TLVs from
-  the Windows LLDP agent (DCBX is handled by the Intel NIC firmware at the
-  hardware level, sending IEEE-only)
-- `mlxconfig DCBX_CEE=0` has no runtime effect on ConnectX-6 Lx (tested
-  with PCIe reset, level 3 reset, and full OS reboot)
+Direction-split wire evidence (host `pktmon` captures, TX separated from RX):
+- Mellanox node, A1 state (Windows agent on, firmware agent off): host TX
+  (60 frames) carried IEEE 802.3 only, with no IEEE 802.1 and no CEE DCBX TLVs
+  (CONFIRMED). The IEEE 802.1 + CEE TLVs observed near the host were inbound
+  (switch RX), not host egress.
+- Intel node (Windows agent on), negative control: host TX (60 frames) carried
+  IEEE 802.3 only, with no DCBX TLVs (CONFIRMED), matching the Mellanox A1
+  result.
+- No host-side OUI-level decode was captured for the firmware-only states
+  (C1/C2); the firmware-supplied IEEE DCBX is inferred from the switch-side
+  detection.
+
+Aruba CX `multiple_peers` behavior referenced elsewhere in this guide is
+inferred from Brazil production data (2026-05-11); it was not reproduced in
+this Cisco test matrix.
 
 ## Appendix B: Switch-Side Command Reference
 
