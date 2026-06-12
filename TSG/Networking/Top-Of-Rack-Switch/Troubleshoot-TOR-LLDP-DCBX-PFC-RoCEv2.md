@@ -2873,7 +2873,7 @@ On Mellanox ConnectX, the firmware LLDP agent is the component that supplies
 IEEE 802.1 DCBX to the switch. When that firmware agent is the sole LLDP speaker
 on the port (the Windows agent disabled, Appendix A states C1/C2), a Cisco NX-OS
 10.3(4a) switch in auto mode detects `IEEE 802.1` and PFC converges. In every
-tested state where the Windows agent was active, by contrast, the switch
+observed state where the Windows agent was active, by contrast, the switch
 reported `Detected: CIN`: both the production dual-agent state (B1, firmware
 agent also enabled) and the remediated single-agent state (A1/A2, firmware agent
 disabled, host NDIS-layer egress bare LLDP with no DCBX TLVs, CONFIRMED on both
@@ -3009,7 +3009,7 @@ Key conclusions from the matrix:
   auto PFC, but this configuration loses the Windows LLDP identity and is not
   recommended for production.
 - The switch detected `IEEE 802.1` only when the firmware agent was the sole LLDP
-  speaker (Windows agent disabled, C1/C2). In both tested states where the Windows
+  speaker (Windows agent disabled, C1/C2). In both observed states where the Windows
   agent was active, the production dual-agent state (B1) and the remediated
   single-agent state (A1/A2), the switch detected `CIN`. Disabling the firmware
   agent alone did not change the auto-mode reading, so forced PFC at the switch,
