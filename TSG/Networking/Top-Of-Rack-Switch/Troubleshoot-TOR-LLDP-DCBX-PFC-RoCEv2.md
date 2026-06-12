@@ -9,6 +9,18 @@
 | **Audience** | Azure Local operators and network engineers |
 | **Document Version** | 1.0 (2026-06-10) |
 
+**What this guide does.** On Azure Local clusters carrying RoCEv2 storage
+traffic, Priority Flow Control (PFC) must stay enabled on the storage priority,
+or RDMA stalls and storage performance collapses. This guide explains why PFC
+silently drops on affected clusters (two LLDP/DCBX agents, the Windows host and
+the NIC firmware, compete and break PFC auto-negotiation), shows how to confirm
+the conflict with read-only diagnostics, and then makes the fix durable in three
+steps: make the Windows LLDP agent persistent (Resolution Step 1), force PFC
+statically on the top-of-rack switch (Resolution Step 2), and disable the NIC
+firmware LLDP/DCBX agent (Resolution Step 3). The objective is a configuration
+where PFC stays on across reboots, firmware events, and node servicing, with no
+reliance on DCBX auto-negotiation.
+
 > **Version naming used in this guide.** Each Azure Local release has an OS
 > baseline (for example, 23H2 or 24H2) and a solution (build) version written as
 > `MAJOR.YYMM`. The major number tracks the OS baseline: `11.xxxx` builds (for
