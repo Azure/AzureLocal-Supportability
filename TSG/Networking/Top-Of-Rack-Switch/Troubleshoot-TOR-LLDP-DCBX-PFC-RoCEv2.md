@@ -206,8 +206,8 @@ Mellanox firmware LLDP agent to resolve the dual-agent conflict (see
 Contributing Factors). In that single-agent state the host transmits bare LLDP with no DCBX
 TLVs at the NDIS layer (CONFIRMED by direction-split packet capture; see
 Appendix A), yet a switch in AUTO mode still detects the Mellanox host as `CIN`
-and PFC auto-negotiation does not converge (the switch is not detecting an IEEE
-802.1 DCBX peer on that port once the firmware agent is disabled; see
+and PFC auto-negotiation does not converge (the switch does not report an IEEE
+802.1 DCBX peer on that port in PFC auto mode; see
 Contributing Factors). Forcing PFC bypasses the DCBX handshake entirely and is
 dialect-independent, which makes it the safe universal configuration for both
 Mellanox and Intel clusters.
@@ -298,8 +298,8 @@ Operators may observe one or more of the following:
 - Switch-side `show lldp dcbx` shows `Detected: CIN` (instead of IEEE) on
   storage ports in PFC auto mode, while a port on the same host configured for
   forced PFC (`mode on`) shows `IEEE 802.1` (observed on Cisco NX-OS 10.3(4a)).
-  The switch is not detecting an IEEE 802.1 DCBX peer on that port once the
-  firmware agent is disabled; the precise reason for the `CIN` reading is not
+  The switch does not report an IEEE 802.1 DCBX peer on that port in PFC auto
+  mode; the precise reason for the `CIN` reading is not
   established (see Contributing Factors and Known Limitations).
 - Switch-side `show lldp neighbors` shows two different chassis-IDs per
   storage port (MAC-based from NIC firmware and hostname-based from Windows)
@@ -320,7 +320,7 @@ Operators may observe one or more of the following:
 | NIC | Mellanox ConnectX-6 Lx, ConnectX-6 Dx (runs a competing firmware LLDP agent) | Intel E810 (competing firmware LLDP agent not confirmed on tested adapters; see the Intel note in Step 3) |
 | RDMA Transport | RoCEv2 (requires PFC) | iWARP (PFC not required, but note: Intel E810 supports both iWARP and RoCEv2; if configured for RoCEv2, PFC is required) |
 | Switch: Aruba CX | Affected (multiple_peers deadlock) | N/A |
-| Switch: Cisco NX-OS 10.3(4a) | Affected: PFC auto does not converge (switch reports `Detected: CIN`; it is not detecting an IEEE peer on that port once the firmware agent is disabled, precise reason not established; see Contributing Factors) | Not affected when PFC mode on (forced) |
+| Switch: Cisco NX-OS 10.3(4a) | Affected: PFC auto does not converge (switch reports `Detected: CIN` and no IEEE peer on that port in auto mode, precise reason not established; see Contributing Factors) | Not affected when PFC mode on (forced) |
 | Switch: Dell OS10 / SONiC | Potentially affected (untested) | N/A |
 | Switch: Arista EOS | Potentially affected (untested) | N/A |
 
@@ -2558,9 +2558,9 @@ Option 3 is complete.
 **Effect:** Removes the firmware LLDP agent's separate identity (the MAC-based
 chassis-ID), collapsing each storage port to a single LLDP agent: the Windows
 agent (hostname chassis-ID, bare LLDP with no DCBX TLVs). This resolves the
-Aruba CX dual-agent `multiple_peers` deadlock. Because the host then presents
-no IEEE DCBX peer, a Cisco NX-OS switch in auto mode reports `Detected: CIN`
-with `Willing=No` (the switch is not detecting an IEEE peer on that port; see
+Aruba CX dual-agent `multiple_peers` deadlock. In this single-agent state a
+Cisco NX-OS switch in auto mode reports `Detected: CIN`
+with `Willing=No` (the switch does not report an IEEE peer on that port; see
 Contributing Factors) and PFC auto-negotiation will not
 converge. This is why Step 2 (forced PFC on the switch) is mandatory and is the
 actual PFC fix; Step 3 resolves the dual-agent deadlock, not the auto-negotiation
@@ -2827,8 +2827,11 @@ Cisco Intel Nuova (CIN) was the earliest implementation, developed jointly
 by Cisco, Intel, and Nuova Systems (acquired by Cisco in 2008). It uses
 proprietary TLV encoding. On Cisco NX-OS 10.3(4a), a storage port in PFC auto
 mode reports `Detected: CIN` with `Willing=No` against the affected Mellanox
-hosts in the remediated single-agent state. The switch is not detecting an IEEE
-peer on that port once the firmware agent is disabled. The recovered
+hosts. This reading was observed both in the production dual-agent state and in
+the remediated single-agent state (Appendix A, B1 and A1/A2), so disabling the
+firmware LLDP agent did not by itself change the auto-mode reading to
+`IEEE 802.1`; the switch does not report an IEEE 802.1 peer on that port in auto
+mode. The recovered
 direction-split capture shows no CIN-subtype (`0x01`) TLV on the wire from any
 device, so `CIN` here is a switch-internal reading rather than a received
 dialect; the precise reason for the `CIN` reading is not established (see
@@ -2865,14 +2868,19 @@ and on which priorities. If the switch has no IEEE 802.1 DCBX peer, it cannot
 converge PFC.
 
 On Mellanox ConnectX, the firmware LLDP agent is the component that supplies
-IEEE 802.1 DCBX to the switch. With that agent active, a Cisco NX-OS 10.3(4a)
-switch in auto mode detects `IEEE 802.1` and PFC converges (Appendix A, states
-C1/C2). Once the firmware agent is disabled to resolve the dual-agent conflict,
-the host NDIS-layer egress is bare LLDP with no DCBX TLVs (CONFIRMED on both
-Mellanox and Intel; Appendix A, states A1/A2), the switch reports `Detected:
-CIN` (it is not detecting an IEEE peer on that port; the precise reason for the
-`CIN` reading is not established, see Known Limitations), and PFC
-auto-negotiation does not converge.
+IEEE 802.1 DCBX to the switch. When that firmware agent is the sole LLDP speaker
+on the port (the Windows agent disabled, Appendix A states C1/C2), a Cisco NX-OS
+10.3(4a) switch in auto mode detects `IEEE 802.1` and PFC converges. In every
+tested state where the Windows agent was active, by contrast, the switch
+reported `Detected: CIN`: both the production dual-agent state (B1, firmware
+agent also enabled) and the remediated single-agent state (A1/A2, firmware agent
+disabled, host NDIS-layer egress bare LLDP with no DCBX TLVs, CONFIRMED on both
+Mellanox and Intel). Disabling the firmware agent therefore did not change the
+auto-mode reading away from `CIN`; the switch does not report an IEEE peer on
+that port in auto mode, and the precise reason for the `CIN` reading is not
+established (see Known Limitations). Auto PFC does not converge in the remediated
+single-agent state (A1/A2, CONFIRMED), which is why PFC must be forced at the
+switch.
 
 This is why forced PFC (`mode on`) is recommended: it bypasses DCBX
 negotiation entirely, so PFC activation does not depend on the host presenting
@@ -2998,6 +3006,12 @@ Key conclusions from the matrix:
 - The firmware LLDP agent alone (C1, C2) produces IEEE detection and working
   auto PFC, but this configuration loses the Windows LLDP identity and is not
   recommended for production.
+- The switch detected `IEEE 802.1` only when the firmware agent was the sole LLDP
+  speaker (Windows agent disabled, C1/C2). In both tested states where the Windows
+  agent was active, the production dual-agent state (B1) and the remediated
+  single-agent state (A1/A2), the switch detected `CIN`. Disabling the firmware
+  agent alone did not change the auto-mode reading, so forced PFC at the switch,
+  not a firmware change, is the PFC fix.
 
 Direction-split wire evidence (host `pktmon` full-frame captures, TX separated
 from RX by source MAC and OUI/subtype-decoded):
