@@ -2970,7 +2970,8 @@ ConnectX-6 Lx and 3-node Intel E810) with Cisco NX-OS 10.3(4a) Top-of-Rack
 (ToR) switches. Host DCBX on egress was measured with direction-split host
 `pktmon` captures (host TX separated from switch RX by source MAC, OUI-decoded
 on-box); the "Cisco DCBX detected" column is the DCBX state the switch
-reported.
+reported. Rows A1/A2/C1/C2 are lab tests on those clusters; row B1 reflects the
+production dual-agent state and was not lab-reproduced.
 
 | Test | Win LLDP | FW LLDP | Host DCBX on egress (pktmon TX) | Cisco DCBX detected | PFC (mode on) | PFC (auto) |
 |---|---|---|---|---|---|---|
