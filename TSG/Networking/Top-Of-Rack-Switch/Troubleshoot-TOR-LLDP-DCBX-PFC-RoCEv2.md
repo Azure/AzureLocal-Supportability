@@ -359,7 +359,9 @@ deployment:
 | Mellanox NIC firmware | NIC MAC address | ~30s | IEEE 802.1 DCBX (clean) | NIC firmware |
 
 The two agents race on each storage port. The switch sees one identity at
-a time (on Cisco NX-OS) or both simultaneously (on Aruba CX).
+a time (on Cisco NX-OS) or both simultaneously (on Aruba CX). Both agents are
+certain they speak for the link, and like any two parties equally certain they
+are right, they reach no agreement; PFC is the casualty.
 
 On Aruba CX, seeing two chassis-IDs on the same port causes the switch to
 enter `DCBx operational state: multiple_peers`, where it refuses to
@@ -2802,6 +2804,10 @@ TLVs inside LLDP frames.
 
 The problem is that DCBX was implemented by vendors BEFORE the IEEE
 finalized the standard, resulting in three incompatible dialects:
+
+> This is the classic engineering outcome of shipping a protocol before its
+> specification: a standard so widely adopted that three vendors each
+> implemented a different one.
 
 ### CIN
 Cisco Intel Nuova (CIN) was the earliest implementation, developed jointly
