@@ -1503,9 +1503,9 @@ Azure Local's pre-deployment Environment Validator enables the Windows LLDP
 agent. However, on the affected builds that enablement is written only to the
 active (in-memory) state and is lost when the node reboots, which silently
 disables the Windows LLDP agent and removes the host DCBX peer until it is
-re-enabled. This is a known issue that Microsoft is tracking, and a platform
-fix is being delivered in Azure Local 12.2607 (see below for which clusters the
-fix covers).
+re-enabled. Microsoft has confirmed this behavior as a known issue and is
+delivering the platform fix in Azure Local 12.2607 (see below for which clusters
+the fix covers).
 
 **Which clusters need this toggle.** The platform fix applies
 only to clusters **newly deployed** on Azure Local 12.2607 or later. A cluster
@@ -1912,6 +1912,14 @@ else {
     $storageAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -match 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
+    # Fully converged cluster (no dedicated Storage intent): every fabric NIC carries
+    # storage. Match the Step A fallback so converged is not misreported as a
+    # single-card storage plane. $converged drives a converged-specific verdict below.
+    $converged = -not $storageAdapters
+    if ($converged) {
+        $storageAdapters = @((Get-NetIntent).NetAdapterNamesAsList) |
+            ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ } | Sort-Object -Unique
+    }
     $mgmtAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -notmatch 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
@@ -1928,15 +1936,34 @@ else {
     $mgmtCards = @($phys | Where-Object { $mgmtAdapters -contains $_.Name } |
         ForEach-Object { Get-CardId $_.Name } | Where-Object { $_ } | Sort-Object -Unique)
 
-    "Storage plane spans $($storageCards.Count) card(s)."
-    "Mgmt/Compute plane spans $($mgmtCards.Count) card(s)."
-    ""
-    if ($storageCards.Count -ge 2 -and $mgmtCards.Count -ge 2) {
+    if ($converged) {
+        "Fully converged topology: storage, compute, and management share the same"
+        "$($storageCards.Count) card(s)."
+        ""
+        "VERDICT: CONVERGED."
+        if ($storageCards.Count -ge 2) {
+            "  Every plane rides every card, so a gated live PCIe card reset would keep"
+            "  traffic up on a surviving card. But on a converged design that card also"
+            "  carries live VM and management traffic, so draining first avoids any blip."
+        } else {
+            "  All traffic rides a single card; resetting it drops every plane."
+        }
+        "  ACTION: Drain the node first, then use Option 2 (drain + live PCIe card reset)"
+        "          or Option 3 (drain + reboot). Do NOT use Option 1 on a converged node."
+    }
+    elseif ($storageCards.Count -ge 2 -and $mgmtCards.Count -ge 2) {
+        "Storage plane spans $($storageCards.Count) card(s)."
+        "Mgmt/Compute plane spans $($mgmtCards.Count) card(s)."
+        ""
         "VERDICT: REDUNDANT (card-level)."
         "  Each plane spans 2 or more cards."
         "  A gated live PCIe card reset keeps both planes up."
         "  ACTION: Option 1 (live PCIe card reset, no drain) is safe."
-    } else {
+    }
+    else {
+        "Storage plane spans $($storageCards.Count) card(s)."
+        "Mgmt/Compute plane spans $($mgmtCards.Count) card(s)."
+        ""
         "VERDICT: NOT-REDUNDANT (card-level / SINGLE-CARD PLANE)."
         "  At least one plane is on a single card."
         "  Do NOT use Option 1."
@@ -2071,6 +2098,13 @@ else {
     $storageAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -match 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
+    # Fully converged cluster (no dedicated Storage intent): every fabric NIC carries
+    # storage. Match the Step A fallback so the storage recovery gate below is
+    # meaningful (otherwise $storageAdapters is empty and the gate is trivially true).
+    if (-not $storageAdapters) {
+        $storageAdapters = @((Get-NetIntent).NetAdapterNamesAsList) |
+            ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ } | Sort-Object -Unique
+    }
     $mgmtAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -notmatch 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
@@ -2283,6 +2317,13 @@ else {
     $storageAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -match 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
+    # Fully converged cluster (no dedicated Storage intent): every fabric NIC carries
+    # storage. Match the Step A fallback so the storage recovery gate below is
+    # meaningful (otherwise $storageAdapters is empty and the gate is trivially true).
+    if (-not $storageAdapters) {
+        $storageAdapters = @((Get-NetIntent).NetAdapterNamesAsList) |
+            ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ } | Sort-Object -Unique
+    }
     $mgmtAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -notmatch 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
