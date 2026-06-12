@@ -111,9 +111,9 @@ relying on DCBX negotiation. This does not disable DCBX on the switch; it
 only changes PFC from negotiated to locally enforced, so DCBX TLVs (including
 ETS and Application Priority) can still be exchanged for telemetry. Advertising
 the DCBX TLVs over LLDP may require a platform-specific option (for example, the
-`send-tlv` keyword on the `priority-flow-control` line on some Cisco NX-OS
-versions; consult your switch vendor's documentation for whether the option is
-supported on your firmware version and for the equivalent on Aruba CX or other
+`send-tlv` keyword on the `priority-flow-control` line, standard from Cisco NX-OS
+9.3(x) onward and dependent on DCBX being enabled on the switch; consult your
+switch vendor's documentation for the equivalent on Aruba CX or other
 platforms). When the switch is configured to advertise DCBX TLVs, set
 switch-side DCBX Willing to False so the host stays authoritative. See
 [Reference-TOR-QOS-Policy-Configuration.md](./Reference-TOR-QOS-Policy-Configuration.md)
@@ -158,7 +158,9 @@ configuration is:
     interface (priority 3 must be mapped to a lossless queue/pool, which the
     standard Azure Local Aruba template already configures)
   - Dell OS10: `priority-flow-control mode on`
-  - Arista EOS: `priority-flow-control mode on`
+  - Arista EOS: `priority-flow-control on`, plus
+    `priority-flow-control priority 3 no-drop` on each storage interface (Arista
+    marks the lossless priority inline and does not use the `mode` keyword)
 - Compute and management ports: set PFC **explicitly OFF**. These ports carry
   TCP traffic that handles retransmission at the transport layer, and Microsoft's
   traffic-class model places all management and VM/compute traffic in the default
@@ -172,7 +174,7 @@ configuration is:
   - Aruba CX (AOS-CX): no `flow-control priority` mapping on the interface (leave
     the lossless priority unconfigured on management/compute ports)
   - Dell OS10: `priority-flow-control mode off`
-  - Arista EOS: `priority-flow-control mode off`
+  - Arista EOS: `no priority-flow-control`
 
   > **Special case (converged topology):** The explicit-OFF guidance applies to a
   > disaggregated design, where storage runs on dedicated NICs and the
@@ -1012,6 +1014,12 @@ Invoke-Command -ComputerName $nodes -ScriptBlock {
     $storageAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -match 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
+    if (-not $storageAdapters) {
+        # Fully converged cluster (no dedicated Storage intent): every fabric NIC
+        # carries storage. Match the Step A fallback so converged is not misreported.
+        $storageAdapters = @((Get-NetIntent).NetAdapterNamesAsList) |
+            ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ } | Sort-Object -Unique
+    }
     $storageNics = Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
         Where-Object { $storageAdapters -contains $_.Name }
 
@@ -1084,6 +1092,12 @@ $pfc = Invoke-Command -ComputerName $nodes -ScriptBlock {
     $storageAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -match 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
+    if (-not $storageAdapters) {
+        # Fully converged cluster (no dedicated Storage intent): every fabric NIC
+        # carries storage. Match the Step A fallback so converged is not misreported.
+        $storageAdapters = @((Get-NetIntent).NetAdapterNamesAsList) |
+            ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ } | Sort-Object -Unique
+    }
     $storageNics = Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
         Where-Object { $storageAdapters -contains $_.Name }
 
@@ -1174,6 +1188,12 @@ $lldp = Invoke-Command -ComputerName $nodes -ScriptBlock {
     $storageAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -match 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
+    if (-not $storageAdapters) {
+        # Fully converged cluster (no dedicated Storage intent): every fabric NIC
+        # carries storage. Match the Step A fallback so converged is not misreported.
+        $storageAdapters = @((Get-NetIntent).NetAdapterNamesAsList) |
+            ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ } | Sort-Object -Unique
+    }
     $mgmtAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -notmatch 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
@@ -1512,7 +1532,11 @@ switch peer). Use `Set-NetLldpAgent` only; do not use
 its effect is wiped on the next reboot, while `Set-NetLldpAgent` writes a
 persistent state. The `Disable` then `Set` bounce below is required:
 `Set-NetLldpAgent` only writes the persistent state when `AdminStatus` actually
-changes, so the agent is forced to `Disabled` first, then set to `Enabled`.
+changes, so the agent is forced to `Disabled` first, then set to `Enabled`. If
+`Set-NetLldpAgent` is not available on an older build, do not improvise a
+persistent enable: the durable-state toggle does not apply on that build, so
+track the platform fix (12.2607 or later, 24H2-based) instead and rely on the
+forced-PFC step (Step 2), which protects PFC regardless of host LLDP state.
 
 ```powershell
 $nodes = (Get-ClusterNode).Name      # or list node names explicitly
@@ -1600,6 +1624,15 @@ should still be applied.
 > depends on DCBX negotiation, so the later removal of the firmware DCBX agent
 > (Step 3) cannot drop lossless behavior on the storage fabric.
 
+> **Switchless / 2-node direct-attached storage.** Steps 2 and 3 assume the storage
+> NICs connect through a ToR switch. On a 2-node switchless cluster the storage NICs
+> are cabled host-to-host, so there is no switch on which to force PFC. There, the
+> Step 2 substitute is confirming host-enforced PFC on both peers
+> (`Get-NetQosFlowControl -Priority 3` shows priority 3 enabled on each node), and
+> the "PFC is pinned on the switch" guarantee that makes Step 3 safe does not apply.
+> On that topology, the host PFC posture is the only thing keeping the fabric
+> lossless after the firmware agent is removed, so verify it before running Step 3.
+
 Configure PFC to be enforced locally on each **storage port**, independent
 of DCBX negotiation. This is the single most impactful step and works
 regardless of the host LLDP configuration. Force PFC ON for priority 3 on the
@@ -1672,8 +1705,8 @@ interface ethernet 1/1-20
   priority-flow-control mode off
 ```
 Aruba CX (AOS-CX): leave the lossless priority unmapped on these interfaces (do
-not apply `flow-control priority rxtx 3`). Dell OS10 and Arista EOS:
-`priority-flow-control mode off`.
+not apply `flow-control priority rxtx 3`). Dell OS10:
+`priority-flow-control mode off`. Arista EOS: `no priority-flow-control`.
 
 > **Special case (converged topology):** Do NOT set ports OFF if the deployment
 > is fully converged (a single intent where the same physical NICs carry storage,
@@ -1682,6 +1715,12 @@ not apply `flow-control priority rxtx 3`). Dell OS10 and Arista EOS:
 > Ports" section tells you which model you have. Guest (in-VM) RDMA is not an
 > exception: Guest RDMA is not supported on Azure Local, so tenant VM and AKS Arc
 > traffic on a disaggregated compute port never needs PFC.
+
+> **Caveat (host SMB Direct over converged adapters).** If the deployment runs host
+> SMB Direct (for example, RDMA-accelerated Live Migration) over converged
+> compute/management adapters, setting those ports explicitly OFF makes that RDMA
+> traffic lossy. On such deployments, treat the converged ports like storage ports
+> (PFC forced ON for the RDMA priority) rather than OFF.
 
 **Verification:**
 
@@ -1696,6 +1735,15 @@ Aruba:
 show interface 1/1/<port> flow-control
 ```
 Expected: priority-based flow control shown as enabled on priority 3.
+
+**Save the configuration.** Forced PFC above is applied to the running config only.
+Persist it so a later switch reload (power event, firmware upgrade) does not revert
+PFC to its default while the NIC firmware agent stays disabled, which would silently
+drop losslessness on the storage fabric with no DCBX fallback:
+
+- Cisco NX-OS: `copy running-config startup-config`
+- Dell OS10: `copy running-configuration startup-configuration`
+- Aruba CX (AOS-CX): `write memory`
 
 **Effect:** PFC is always on for the RDMA priority class, regardless of
 LLDP or DCBX state. ETS and Application Priority are still configured
@@ -1731,6 +1779,31 @@ any DCB parameter.
 > LLDP `ALL(2)`. A node already showing `OFF(0)` on every card is done; skip it. (In
 > the worked example, node ContosoNode-01 is already `OFF(0)` and needs no change, while node
 > ContosoNode-02 shows `ALL(2)` and is the node to remediate here.)
+
+> **MANDATORY STORAGE-HEALTH GATE (read-only).** Before remediating a node, and again
+> after each `Resume-ClusterNode` (Options 2 and 3) before you touch the next node,
+> confirm S2D is fully healthy and no repair/resync is in flight. Draining a node
+> moves its VM and CSV roles but does **not** remove its disks from the storage pool,
+> so S2D starts a resync after `Resume-ClusterNode`. Advancing to the next node while
+> that resync is still running compromises two nodes' copies of the same data at once
+> and can drop a volume below its resiliency threshold (CSV offline). Draining does
+> not protect storage resiliency; only this check does.
+
+```powershell
+# Run on the node before remediating it, and after each Resume-ClusterNode before
+# moving on. Proceed only when every virtual disk is Healthy/OK and Get-StorageJob
+# is empty (no repair or resync running). This block is read-only.
+$vdBad = Get-VirtualDisk -ErrorAction SilentlyContinue |
+    Where-Object { $_.HealthStatus -ne 'Healthy' -or $_.OperationalStatus -ne 'OK' }
+$jobs  = @(Get-StorageJob -ErrorAction SilentlyContinue)
+if ($vdBad -or $jobs) {
+    Write-Warning "Storage is not fully healthy or a repair/resync is in progress. Do NOT proceed until all virtual disks are Healthy/OK and Get-StorageJob is empty."
+    $vdBad | Format-Table FriendlyName, HealthStatus, OperationalStatus -AutoSize
+    $jobs  | Format-Table Name, JobState, BytesProcessed, BytesTotal -AutoSize
+} else {
+    Write-Host "Storage healthy and no active repair/resync. Safe to proceed on this node."
+}
+```
 
 With the Windows LLDP agent confirmed durable (Step 1), disable the firmware LLDP
 agent so the Windows agent becomes the sole LLDP speaker on each storage port.
@@ -1894,9 +1967,9 @@ self-contained, so you never need to read the other two.
   PCIe card reset would take a whole traffic plane down. You must drain first, then
   use Option 2 (recommended) or Option 3.
 - **Option 2 versus Option 3 (when you must drain):** Option 2 is faster and keeps
-  the node up after a short per-card interruption; choose Option 3 instead when
-  `mlxfwreset` reports that a live PCIe card reset is not supported on the NIC or
-  firmware, or when you simply prefer a full node reboot.
+  the node up after a short per-card interruption; choose Option 3 instead when a
+  live level-3 PCIe card reset is not supported on the NIC or firmware (the loop
+  stops with a non-zero exit), or when you simply prefer a full node reboot.
 
 All three options reach the same end state: the firmware LLDP/DCBX agent disabled
 on every Mellanox card on the node. They differ only in how the change is
@@ -1951,12 +2024,14 @@ else {
 }
 ```
 
-**2. Activate it with a live PCIe card reset, one card at a time.** This performs a PCIe reset of each
-Mellanox card (about 30 seconds offline per card) and waits for both traffic
-planes to recover before moving to the next card, so only one card is ever offline
-at once. If `mlxfwreset` reports that a live PCIe card reset is not supported on this NIC or
-firmware, stop and use Option 3 instead (the NVM setting is already saved and
-activates on the next boot).
+**2. Activate it with a live PCIe card reset, one card at a time.** This performs a level-3 PCIe reset of each
+Mellanox card and waits for both traffic planes to fully recover before moving to
+the next card, so only one card is ever offline at once. The card itself is offline
+only briefly during the reset, but a port can take longer to relink at the switch,
+so the loop polls for real recovery and waits up to 180 seconds per card. If a live
+level-3 PCIe card reset is not supported on this NIC or firmware, `mlxfwreset` exits
+non-zero and the loop stops; switch to Option 3 instead (the NVM setting is already
+saved and activates on the next boot).
 
 ```powershell
 # Requires WinMFT. The NVM write above must have completed on this node first.
@@ -1986,13 +2061,13 @@ else {
         Write-Warning "No Mellanox devices found via 'mst status'. Nothing to reset on this node."
     }
 
-    $resetRecoveryTimeout = 60   # max seconds to wait for both planes to recover before the next reset
+    $resetRecoveryTimeout = 180  # max seconds to wait for a plane to fully recover after a reset
     $resetPollInterval    = 5    # how often to re-check recovery while waiting
 
     # Identify the adapters in each traffic plane from the NetworkATC intents, so we
-    # wait for BOTH planes (storage and management/compute) to recover between resets
-    # rather than guessing a fixed delay or assuming "RDMA enabled" means storage
-    # (converged mgmt/compute Mellanox ports are RDMA-capable too).
+    # wait for BOTH planes (storage and management/compute) to recover after each
+    # reset rather than guessing a fixed delay or assuming "RDMA enabled" means
+    # storage (converged mgmt/compute Mellanox ports are RDMA-capable too).
     $storageAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -match 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
@@ -2004,6 +2079,11 @@ else {
         @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
             Where-Object { $Names -contains $_.Name -and $_.Status -eq 'Up' }).Count
     }
+    function Get-DownNames([string[]]$Names) {
+        @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
+            Where-Object { $Names -contains $_.Name -and $_.Status -ne 'Up' } |
+            Select-Object -ExpandProperty Name)
+    }
 
     # Default gateway, used as a management-plane reachability check between resets.
     $gateway = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
@@ -2011,41 +2091,72 @@ else {
 
     $baselineStorage = Get-UpCount $storageAdapters
     $baselineMgmt    = Get-UpCount $mgmtAdapters
+    # Capture the SMB Multichannel baseline. A healthy node often sits at 0 channels
+    # at rest, so require recovery back to this baseline rather than a hard-coded 1.
+    $baselineSmb     = @(Get-SmbMultichannelConnection -ErrorAction SilentlyContinue).Count
 
     for ($i = 0; $i -lt $devices.Count; $i++) {
         $dev = $devices[$i]
         Write-Host "Activating firmware change on $dev via live PCIe card reset ..."
 
-        # Live per-NIC PCIe reset (~30s offline for this NIC only) to apply the NVM setting.
-        .\mlxfwreset.exe -y -d $dev reset
+        # Pin the reset to level 3 (a PCIe card reset). Without an explicit level,
+        # mlxfwreset can silently escalate to a warm reboot on firmware that lacks
+        # PCI_RESET support, which would crash this node's workload. Level 3 instead
+        # fails cleanly (non-zero exit) so we can stop and fall back to Option 3.
+        .\mlxfwreset.exe -y -d $dev --level 3 reset
+        if ($LASTEXITCODE -ne 0) {
+            $notReset = @($devices[$i..($devices.Count - 1)])
+            Write-Warning ("STOPPED: mlxfwreset returned exit code $LASTEXITCODE for $dev. A live level-3 PCIe card reset is not supported on this NIC or firmware (or it failed). " +
+                "Cards NOT reset: $($notReset -join ', '). " +
+                "The NVM setting is already saved and activates on the next boot. " +
+                "This node was NOT drained (Option 1). Switch to Option 3: drain this node, reboot it to activate the firmware change, then resume it.")
+            break
+        }
 
-        # Wait for BOTH traffic planes to actually recover before resetting the next
-        # card, so only one card is ever down at a time. We poll for real recovery
-        # (storage and mgmt/compute adapters back to baseline Up count, SMB
-        # Multichannel re-established, and the default gateway reachable) instead of a
-        # blind sleep; $resetRecoveryTimeout is only the ceiling.
-        if ($i -lt $devices.Count - 1) {
-            Write-Host "Waiting for both planes to recover after $dev before the next card ..."
-            $deadline = (Get-Date).AddSeconds($resetRecoveryTimeout)
-            do {
-                Start-Sleep -Seconds $resetPollInterval
-                $upStorage = Get-UpCount $storageAdapters
-                $upMgmt    = Get-UpCount $mgmtAdapters
-                $smb       = @(Get-SmbMultichannelConnection -ErrorAction SilentlyContinue).Count
-                $gwOk      = if ($gateway) {
-                    Test-Connection -ComputerName $gateway -Count 1 -Quiet -ErrorAction SilentlyContinue
-                } else { $true }
-                $recovered = ($upStorage -ge $baselineStorage) -and
-                             ($upMgmt -ge $baselineMgmt) -and
-                             ($smb -ge 1) -and $gwOk
-            } until ($recovered -or (Get-Date) -gt $deadline)
+        # Verify BOTH planes recover after EVERY card (including the last) before
+        # touching the next card, so only one card is ever down at a time. Poll for
+        # real recovery (storage and mgmt/compute adapters back to their baseline Up
+        # count, SMB Multichannel not below baseline, and the default gateway
+        # reachable); $resetRecoveryTimeout is only the ceiling.
+        Write-Host "Waiting for both planes to recover after $dev ..."
+        $deadline = (Get-Date).AddSeconds($resetRecoveryTimeout)
+        do {
+            Start-Sleep -Seconds $resetPollInterval
+            $upStorage = Get-UpCount $storageAdapters
+            $upMgmt    = Get-UpCount $mgmtAdapters
+            $smb       = @(Get-SmbMultichannelConnection -ErrorAction SilentlyContinue).Count
+            $gwOk      = if ($gateway) {
+                Test-Connection -ComputerName $gateway -Count 1 -Quiet -ErrorAction SilentlyContinue
+            } else { $true }
+            $recovered = ($upStorage -ge $baselineStorage) -and
+                         ($upMgmt -ge $baselineMgmt) -and
+                         ($smb -ge $baselineSmb) -and $gwOk
+        } until ($recovered -or (Get-Date) -gt $deadline)
 
-            $status = "storage $upStorage/$baselineStorage, mgmt/compute $upMgmt/$baselineMgmt, SMB channels $smb, gateway $(if($gwOk){'ok'}else{'unreachable'})"
-            if (-not $recovered) {
-                Write-Warning "Both planes did not fully recover after $dev within $resetRecoveryTimeout s ($status). Verify node health before resetting the next card; do not proceed if the node has lost storage or management connectivity."
-            } else {
-                Write-Host "Both planes recovered ($status)."
-            }
+        $status = "storage $upStorage/$baselineStorage, mgmt/compute $upMgmt/$baselineMgmt, SMB channels $smb/$baselineSmb, gateway $(if($gwOk){'ok'}else{'unreachable'})"
+        if ($recovered) {
+            Write-Host "Both planes recovered after $dev ($status)."
+        }
+        else {
+            # A plane did not return to baseline within the timeout. Stop here so we
+            # never reset the next card while a plane is still degraded.
+            $downStorage = Get-DownNames $storageAdapters
+            $downMgmt    = Get-DownNames $mgmtAdapters
+            $downParts = @()
+            if ($downStorage) { $downParts += "storage [$($downStorage -join ', ')]" }
+            if ($downMgmt)    { $downParts += "mgmt/compute [$($downMgmt -join ', ')]" }
+            $downText = if ($downParts) { $downParts -join '; ' } else { 'none by name (a plane is below its baseline Up count for another reason)' }
+            $notYetReset = if ($i -lt $devices.Count - 1) { @($devices[($i + 1)..($devices.Count - 1)]) } else { @() }
+            $notYetText  = if ($notYetReset) { $notYetReset -join ', ' } else { 'none (this was the last card)' }
+
+            Write-Warning ("STOPPED after resetting $dev. A traffic plane did not return to its baseline within $resetRecoveryTimeout s ($status). " +
+                "Port(s) still down: $downText. " +
+                "Card just reset (this is the card whose port did not come back; it may need a second reset): $dev. " +
+                "Cards not yet reset: $notYetText. " +
+                "This node was NOT drained (Option 1), so the affected plane is degraded but still up on its surviving card. Do NOT reset any more cards. " +
+                "NEXT STEPS: (1) Find out why the down port(s) above did not relink within $resetRecoveryTimeout s: check the cable/SFP and the switch port for that adapter, run 'Get-NetAdapter -Name <name>' and 'Get-NetAdapterHardwareInfo -Name <name>', and review the System event log around the reset time. " +
+                "(2) To finish safely, switch to Option 3: drain this node, reboot it to activate the firmware change on the remaining cards, then resume it. A second PCIe reset of the already-reset card ($dev) is harmless: a PCIe reset is idempotent and the NVM setting is already written.")
+            break
         }
     }
 
@@ -2058,11 +2169,11 @@ else {
 > that card your RDP or SSH session to the node stalls and reconnects on its own.
 > Run this option from an out-of-band path (the server's iDRAC, BMC, or KVM
 > console) or from a session that tolerates a brief reconnect. The recovery poll
-> keeps a surviving card in every plane between resets, but if you see the timeout
-> warning, stop and confirm node health (`Get-VirtualDisk | Format-Table
-> FriendlyName, HealthStatus, OperationalStatus`; `Get-StorageJob`; and management
-> reachability) before continuing. If redundancy turns out thinner than expected,
-> switch to Option 2 and drain the node first.
+> keeps a surviving card in every plane between resets. If a plane does not return
+> to its baseline within the timeout, the loop stops itself and prints exactly
+> which card and which port did not recover, which cards were not yet reset, and
+> what to do next; follow that guidance before doing anything else. If redundancy
+> turns out thinner than expected, switch to Option 2 and drain the node first.
 
 The node was not drained, so there is nothing to resume. Option 1 is complete.
 
@@ -2124,12 +2235,15 @@ else {
 Suspend-ClusterNode -Name $env:COMPUTERNAME -Drain -Wait
 ```
 
-**3. Activate it with a live PCIe card reset, one card at a time.** This performs a PCIe reset of each
-Mellanox card (about 30 seconds offline per card) and waits for both traffic
-planes to recover before moving to the next card. Because the node is drained,
-these interruptions affect no workload. If `mlxfwreset` reports that a live PCIe card reset
-is not supported on this NIC or firmware, skip the loop, reboot the node instead
-(the NVM setting activates on boot), then continue to the resume command.
+**3. Activate it with a live PCIe card reset, one card at a time.** This performs a level-3 PCIe reset of each
+Mellanox card and waits for both traffic planes to fully recover before moving to
+the next card. Because the node is drained, these interruptions affect no workload.
+The card itself is offline only briefly during the reset, but a port can take longer
+to relink at the switch, so the loop polls for real recovery and waits up to 180
+seconds per card. If a live level-3 PCIe card reset is not supported on this NIC or
+firmware, `mlxfwreset` exits non-zero and the loop stops; switch to Option 3 (reboot
+the drained node to activate the change on boot), then continue to the resume
+command.
 
 ```powershell
 # Requires WinMFT. The NVM write above must have completed on this node first.
@@ -2159,13 +2273,13 @@ else {
         Write-Warning "No Mellanox devices found via 'mst status'. Nothing to reset on this node."
     }
 
-    $resetRecoveryTimeout = 60   # max seconds to wait for both planes to recover before the next reset
+    $resetRecoveryTimeout = 180  # max seconds to wait for a plane to fully recover after a reset
     $resetPollInterval    = 5    # how often to re-check recovery while waiting
 
     # Identify the adapters in each traffic plane from the NetworkATC intents, so we
-    # wait for BOTH planes (storage and management/compute) to recover between resets
-    # rather than guessing a fixed delay or assuming "RDMA enabled" means storage
-    # (converged mgmt/compute Mellanox ports are RDMA-capable too).
+    # wait for BOTH planes (storage and management/compute) to recover after each
+    # reset rather than guessing a fixed delay or assuming "RDMA enabled" means
+    # storage (converged mgmt/compute Mellanox ports are RDMA-capable too).
     $storageAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -match 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
@@ -2177,6 +2291,11 @@ else {
         @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
             Where-Object { $Names -contains $_.Name -and $_.Status -eq 'Up' }).Count
     }
+    function Get-DownNames([string[]]$Names) {
+        @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
+            Where-Object { $Names -contains $_.Name -and $_.Status -ne 'Up' } |
+            Select-Object -ExpandProperty Name)
+    }
 
     # Default gateway, used as a management-plane reachability check between resets.
     $gateway = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
@@ -2184,41 +2303,72 @@ else {
 
     $baselineStorage = Get-UpCount $storageAdapters
     $baselineMgmt    = Get-UpCount $mgmtAdapters
+    # Capture the SMB Multichannel baseline. A healthy node often sits at 0 channels
+    # at rest, so require recovery back to this baseline rather than a hard-coded 1.
+    $baselineSmb     = @(Get-SmbMultichannelConnection -ErrorAction SilentlyContinue).Count
 
     for ($i = 0; $i -lt $devices.Count; $i++) {
         $dev = $devices[$i]
         Write-Host "Activating firmware change on $dev via live PCIe card reset ..."
 
-        # Live per-NIC PCIe reset (~30s offline for this NIC only) to apply the NVM setting.
-        .\mlxfwreset.exe -y -d $dev reset
+        # Pin the reset to level 3 (a PCIe card reset). Without an explicit level,
+        # mlxfwreset can silently escalate to a warm reboot on firmware that lacks
+        # PCI_RESET support. The node is drained, but a level-3 reset still fails
+        # cleanly (non-zero exit) so we can stop and fall back to Option 3.
+        .\mlxfwreset.exe -y -d $dev --level 3 reset
+        if ($LASTEXITCODE -ne 0) {
+            $notReset = @($devices[$i..($devices.Count - 1)])
+            Write-Warning ("STOPPED: mlxfwreset returned exit code $LASTEXITCODE for $dev. A live level-3 PCIe card reset is not supported on this NIC or firmware (or it failed). " +
+                "Cards NOT reset: $($notReset -join ', '). " +
+                "The NVM setting is already saved and activates on the next boot, so the node is still drained: do NOT run the resume command yet. " +
+                "Use Option 3 (reboot the drained node) to activate the firmware change, then resume the node.")
+            break
+        }
 
-        # Wait for BOTH traffic planes to actually recover before resetting the next
-        # card, so only one card is ever down at a time. We poll for real recovery
-        # (storage and mgmt/compute adapters back to baseline Up count, SMB
-        # Multichannel re-established, and the default gateway reachable) instead of a
-        # blind sleep; $resetRecoveryTimeout is only the ceiling.
-        if ($i -lt $devices.Count - 1) {
-            Write-Host "Waiting for both planes to recover after $dev before the next card ..."
-            $deadline = (Get-Date).AddSeconds($resetRecoveryTimeout)
-            do {
-                Start-Sleep -Seconds $resetPollInterval
-                $upStorage = Get-UpCount $storageAdapters
-                $upMgmt    = Get-UpCount $mgmtAdapters
-                $smb       = @(Get-SmbMultichannelConnection -ErrorAction SilentlyContinue).Count
-                $gwOk      = if ($gateway) {
-                    Test-Connection -ComputerName $gateway -Count 1 -Quiet -ErrorAction SilentlyContinue
-                } else { $true }
-                $recovered = ($upStorage -ge $baselineStorage) -and
-                             ($upMgmt -ge $baselineMgmt) -and
-                             ($smb -ge 1) -and $gwOk
-            } until ($recovered -or (Get-Date) -gt $deadline)
+        # Verify BOTH planes recover after EVERY card (including the last) before
+        # touching the next card, so only one card is ever down at a time. Poll for
+        # real recovery (storage and mgmt/compute adapters back to their baseline Up
+        # count, SMB Multichannel not below baseline, and the default gateway
+        # reachable); $resetRecoveryTimeout is only the ceiling.
+        Write-Host "Waiting for both planes to recover after $dev ..."
+        $deadline = (Get-Date).AddSeconds($resetRecoveryTimeout)
+        do {
+            Start-Sleep -Seconds $resetPollInterval
+            $upStorage = Get-UpCount $storageAdapters
+            $upMgmt    = Get-UpCount $mgmtAdapters
+            $smb       = @(Get-SmbMultichannelConnection -ErrorAction SilentlyContinue).Count
+            $gwOk      = if ($gateway) {
+                Test-Connection -ComputerName $gateway -Count 1 -Quiet -ErrorAction SilentlyContinue
+            } else { $true }
+            $recovered = ($upStorage -ge $baselineStorage) -and
+                         ($upMgmt -ge $baselineMgmt) -and
+                         ($smb -ge $baselineSmb) -and $gwOk
+        } until ($recovered -or (Get-Date) -gt $deadline)
 
-            $status = "storage $upStorage/$baselineStorage, mgmt/compute $upMgmt/$baselineMgmt, SMB channels $smb, gateway $(if($gwOk){'ok'}else{'unreachable'})"
-            if (-not $recovered) {
-                Write-Warning "Both planes did not fully recover after $dev within $resetRecoveryTimeout s ($status). Verify node health before resetting the next card; do not proceed if the node has lost storage or management connectivity."
-            } else {
-                Write-Host "Both planes recovered ($status)."
-            }
+        $status = "storage $upStorage/$baselineStorage, mgmt/compute $upMgmt/$baselineMgmt, SMB channels $smb/$baselineSmb, gateway $(if($gwOk){'ok'}else{'unreachable'})"
+        if ($recovered) {
+            Write-Host "Both planes recovered after $dev ($status)."
+        }
+        else {
+            # A plane did not return to baseline within the timeout. Stop here so we
+            # never reset the next card while a plane is still degraded.
+            $downStorage = Get-DownNames $storageAdapters
+            $downMgmt    = Get-DownNames $mgmtAdapters
+            $downParts = @()
+            if ($downStorage) { $downParts += "storage [$($downStorage -join ', ')]" }
+            if ($downMgmt)    { $downParts += "mgmt/compute [$($downMgmt -join ', ')]" }
+            $downText = if ($downParts) { $downParts -join '; ' } else { 'none by name (a plane is below its baseline Up count for another reason)' }
+            $notYetReset = if ($i -lt $devices.Count - 1) { @($devices[($i + 1)..($devices.Count - 1)]) } else { @() }
+            $notYetText  = if ($notYetReset) { $notYetReset -join ', ' } else { 'none (this was the last card)' }
+
+            Write-Warning ("STOPPED after resetting $dev. A traffic plane did not return to its baseline within $resetRecoveryTimeout s ($status). " +
+                "Port(s) still down: $downText. " +
+                "Card just reset (this is the card whose port did not come back; it may need a second reset): $dev. " +
+                "Cards not yet reset: $notYetText. " +
+                "The node is still drained, so do NOT run the resume command yet. " +
+                "NEXT STEPS: (1) Find out why the down port(s) above did not relink within $resetRecoveryTimeout s: check the cable/SFP and the switch port for that adapter, run 'Get-NetAdapter -Name <name>' and 'Get-NetAdapterHardwareInfo -Name <name>', and review the System event log around the reset time. " +
+                "(2) Once that port shows Up again, re-run this whole sequence from the storage-health gate. Re-resetting the already-reset card ($dev) is harmless: a PCIe reset is idempotent and the NVM setting is already written. The loop then continues through the cards not yet reset ($notYetText). Alternatively, use Option 3: reboot the drained node to activate the firmware change on the remaining cards, then resume it.")
+            break
         }
     }
 
@@ -2231,9 +2381,10 @@ else {
 > the node still stalls and reconnects when the management/compute card resets, so
 > run this option from an out-of-band path (the server's iDRAC, BMC, or KVM
 > console) if you want to watch it. Wait for the loop to report both planes
-> recovered before moving on. If the loop prints the timeout warning, confirm node
-> health (`Get-VirtualDisk | Format-Table FriendlyName, HealthStatus,
-> OperationalStatus`; `Get-StorageJob`) before continuing.
+> recovered before moving on. If a plane does not return to its baseline within the
+> timeout, the loop stops itself and prints exactly which card and which port did
+> not recover, which cards were not yet reset, and what to do next; the node stays
+> drained, so follow that guidance before running the resume command below.
 
 **4. After all resets complete, return the node to service.**
 
@@ -2242,6 +2393,11 @@ Resume-ClusterNode -Name $env:COMPUTERNAME -Failback Immediate
 ```
 
 Option 2 is complete.
+
+> **Before the next node.** Re-run the storage-health gate from the top of Step 3 and
+> wait until every virtual disk is Healthy/OK and `Get-StorageJob` is empty before
+> remediating the next node. The resync that `Resume-ClusterNode` triggers must finish
+> first; do not advance while it is still running.
 
 #### Option 3: Drain, then reboot (any topology, most conservative)
 
@@ -2313,6 +2469,11 @@ Resume-ClusterNode -Name $env:COMPUTERNAME -Failback Immediate
 ```
 
 Option 3 is complete.
+
+> **Before the next node.** Re-run the storage-health gate from the top of Step 3 and
+> wait until every virtual disk is Healthy/OK and `Get-StorageJob` is empty before
+> remediating the next node. The resync that `Resume-ClusterNode` triggers must finish
+> first; do not advance while it is still running.
 
 #### Notes that apply to all three options
 
@@ -2712,7 +2873,9 @@ available). Both possibilities point to forcing PFC; see Contributing Factors
 and Known Limitations.
 
 Key conclusions from the matrix:
-- Forced PFC (`mode on`) works in every configuration. No exceptions.
+- Forced PFC (`mode on`) made PFC converge in every state tested in this matrix;
+  no tested state failed with forced PFC. The matrix covers Cisco NX-OS 10.3(4a);
+  the production dual-agent auto state (B1) was not lab-reproduced.
 - On the same Mellanox host, a Cisco port in PFC auto detected `CIN` while a
   port in forced PFC (`mode on`) detected `IEEE 802.1` and PFC stayed up
   (CONFIRMED). This per-port contrast is the practical basis for mandating
@@ -2722,7 +2885,9 @@ Key conclusions from the matrix:
 - With the Windows agent active and the firmware agent disabled (states A1/A2),
   host NDIS-layer egress is bare LLDP and the switch reports `CIN`; auto PFC
   does not converge. The host NDIS capture is identical on Mellanox and Intel.
-- The Willing flag (True vs False) has no effect on PFC convergence.
+- In the states where Willing was varied (C1/C2), the Willing flag (True vs False)
+  had no observed effect on PFC convergence; Willing was not varied in the other
+  tested states.
 - The firmware LLDP agent alone (C1, C2) produces IEEE detection and working
   auto PFC, but this configuration loses the Windows LLDP identity and is not
   recommended for production.
