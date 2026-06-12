@@ -206,15 +206,15 @@ Mellanox firmware LLDP agent to resolve the dual-agent conflict (see
 Contributing Factors). In that single-agent state the host transmits bare LLDP with no DCBX
 TLVs at the NDIS layer (CONFIRMED by direction-split packet capture; see
 Appendix A), yet a switch in AUTO mode still detects the Mellanox host as `CIN`
-and PFC auto-negotiation does not converge (the switch has no clean IEEE 802.1
-DCBX peer once the firmware agent is disabled, so the auto port reports its
-pre-standard `CIN` base state; see Contributing Factors). Forcing PFC bypasses the DCBX handshake entirely and is
+and PFC auto-negotiation does not converge (the switch is not detecting an IEEE
+802.1 DCBX peer on that port once the firmware agent is disabled; see
+Contributing Factors). Forcing PFC bypasses the DCBX handshake entirely and is
 dialect-independent, which makes it the safe universal configuration for both
 Mellanox and Intel clusters.
 
 **The Willing flag is not the cause of the PFC failure.** Whether the switch
-detects a clean IEEE 802.1 peer (rather than falling back to its pre-standard
-`CIN` base state) is what determines whether PFC auto-negotiation converges, not
+detects a clean IEEE 802.1 peer on the port (rather than reporting `CIN` and not
+converging) is what determines whether PFC auto-negotiation converges, not
 the DCBX Willing flag. Set the host Willing flag to False (host-authoritative);
 this is the required posture. Do not set Willing to True.
 
@@ -247,14 +247,12 @@ capture; see Appendix A). Even so, a Cisco switch port configured for PFC
 auto-negotiation detects the affected Mellanox host as `CIN` (Cisco/Intel/Nuova)
 and PFC does not converge, while a port on the same host configured for forced
 PFC (`mode on`) detects `IEEE 802.1` and PFC stays up (CONFIRMED on Cisco
-NX-OS 10.3(4a)). Cisco's `Detected:` field reports the port's own operational
-DCBX version, not the dialect of any frame received from the host: on the same
+NX-OS 10.3(4a)). The precise reason the switch reports `CIN` here is not
+established. What is CONFIRMED is the per-port contrast itself: on the same
 bare-egress host, a forced port reports `IEEE 802.1` while an auto port reports
-`CIN`. The auto port therefore sits in its pre-standard `CIN` base state for
-want of a clean IEEE peer once the firmware agent is disabled. This reading is
-consistent with the protocol structure and with the per-port contrast above,
-but it was not confirmed against a Cisco primary document, so it is presented as
-the leading hypothesis (see Known Limitations). Because auto-negotiation is
+`CIN`, so the reading tracks the port's PFC configuration, and auto PFC does not
+converge in the `CIN` state. We do not assert a specific Cisco mechanism for the
+`CIN` reading (see Known Limitations). Because auto-negotiation is
 unreliable in this state, PFC must be forced at the switch.
 
 Additionally, on Mellanox-based clusters two LLDP agents are typically active
@@ -300,9 +298,9 @@ Operators may observe one or more of the following:
 - Switch-side `show lldp dcbx` shows `Detected: CIN` (instead of IEEE) on
   storage ports in PFC auto mode, while a port on the same host configured for
   forced PFC (`mode on`) shows `IEEE 802.1` (observed on Cisco NX-OS 10.3(4a)).
-  The cause is the absence of a clean IEEE 802.1 DCBX peer once the firmware
-  agent is disabled, so the auto port reports its pre-standard `CIN` base state
-  (see Contributing Factors and Known Limitations).
+  The switch is not detecting an IEEE 802.1 DCBX peer on that port once the
+  firmware agent is disabled; the precise reason for the `CIN` reading is not
+  established (see Contributing Factors and Known Limitations).
 - Switch-side `show lldp neighbors` shows two different chassis-IDs per
   storage port (MAC-based from NIC firmware and hostname-based from Windows)
 - On Aruba CX: `DCBx operational state: multiple_peers` and
@@ -322,7 +320,7 @@ Operators may observe one or more of the following:
 | NIC | Mellanox ConnectX-6 Lx, ConnectX-6 Dx (runs a competing firmware LLDP agent) | Intel E810 (competing firmware LLDP agent not confirmed on tested adapters; see the Intel note in Step 3) |
 | RDMA Transport | RoCEv2 (requires PFC) | iWARP (PFC not required, but note: Intel E810 supports both iWARP and RoCEv2; if configured for RoCEv2, PFC is required) |
 | Switch: Aruba CX | Affected (multiple_peers deadlock) | N/A |
-| Switch: Cisco NX-OS 10.3(4a) | Affected: PFC auto does not converge (switch reports `Detected: CIN` because the host presents no clean IEEE peer once the firmware agent is disabled; see Contributing Factors) | Not affected when PFC mode on (forced) |
+| Switch: Cisco NX-OS 10.3(4a) | Affected: PFC auto does not converge (switch reports `Detected: CIN`; it is not detecting an IEEE peer on that port once the firmware agent is disabled, precise reason not established; see Contributing Factors) | Not affected when PFC mode on (forced) |
 | Switch: Dell OS10 / SONiC | Potentially affected (untested) | N/A |
 | Switch: Arista EOS | Potentially affected (untested) | N/A |
 
@@ -390,33 +388,31 @@ this state a Cisco port in PFC auto mode still reports `Detected: CIN` with
 configured for forced PFC reports `IEEE 802.1` and PFC stays up (CONFIRMED on
 Cisco NX-OS 10.3(4a)).
 
-The leading explanation for this `CIN` result is the absence of a clean IEEE
-peer. Cisco's `Detected:` field reports the port's own operational DCBX version,
-not the dialect of frames received from the host. With the firmware agent
-disabled, the host no longer presents a usable IEEE DCBX peer, so a switch port
-in auto mode has nothing to converge on and sits in its pre-standard `CIN` base
-state. The per-port contrast above is the direct evidence: on the same
-bare-egress host, a forced port reports `IEEE 802.1` while an auto port reports
-`CIN`, which means the reading reflects the port's own configured mode rather
-than anything the host sends. This reading is consistent with the DCBX protocol
-structure but was not confirmed against a Cisco primary document (the relevant
-Nexus DCBX state-machine references were not accessible), so it is presented as
-the leading hypothesis (see Known Limitations).
+What we can state from the evidence is observational, not a confirmed Cisco
+mechanism. On the same bare-egress Mellanox host, a Cisco port in forced PFC is
+detected as `IEEE 802.1` while a port in PFC auto is detected as `CIN`
+(CONFIRMED on Cisco NX-OS 10.3(4a)); auto PFC does not converge in the `CIN`
+state, and forced PFC does. The precise reason the switch reports `CIN` here is
+not established: the relevant Cisco DCBX state-machine and `show` references were
+not accessible, and Cisco's documented auto-negotiation behavior (negotiate the
+highest version common to both peers) does not by itself predict a `CIN` reading
+for this configuration. We therefore do not assert a specific Cisco mechanism.
+The actionable, CONFIRMED facts are the per-port contrast above and that forcing
+PFC resolves it (see Known Limitations).
 
 An earlier hypothesis, that the ConnectX firmware injects legacy CEE TLVs below
-the NDIS capture point, has been withdrawn. It does not hold for two independent
-reasons. First, the firmware's CEE emitter (`cee_dcbx_en`) is gated by the same
-NV parameter (`LLDP_NB_TX_MODE`) that disables the firmware LLDP agent, so a
-disabled agent cannot be the CEE source. Second, CEE and CIN share OUI
-`00:1B:21` but differ by TLV subtype (CIN subtype `0x01`, CEE subtype `0x02`), so
-a switch receiving CEE would report it as CEE, not `CIN`. The CEE TLVs seen near
-the host in the earlier non-direction-split capture were attributed by the later
-direction-split capture to the switch's own inbound advertisement (switch RX),
-not to host egress. Whatever the firmware contributes, it is not unconditional
-CEE: when the firmware agent is the sole active agent (states C1/C2), the switch
-detects clean IEEE 802.1, so auto PFC converges in that state.
+the NDIS capture point, has been withdrawn. The firmware's CEE emitter
+(`cee_dcbx_en`) is gated by the same NV parameter (`LLDP_NB_TX_MODE`) that
+disables the firmware LLDP agent, so once the agent is disabled the firmware
+cannot be the CEE source. (CEE and CIN are in any case distinct dialects that
+share Intel's OUI `00:1B:21` and differ by TLV subtype, CIN `0x01` and CEE
+`0x02`.) The CEE TLVs seen near the host in the earlier non-direction-split
+capture were attributed by the later direction-split capture to the switch's own
+inbound advertisement (switch RX), not to host egress. The firmware is also not
+an unconditional CEE source: when it is the sole active agent (states C1/C2),
+the switch detects clean IEEE 802.1 and auto PFC converges in that state.
 
-The practical consequence is the same under either mechanism: with the firmware
+The practical consequence is the same regardless of mechanism: with the firmware
 agent disabled, PFC must be forced at the switch so that activation does not
 depend on DCBX auto-negotiation.
 
@@ -1355,7 +1351,7 @@ show dcbx interface 1/1/<port>
 
 Interpret the output (either platform):
 - **GOOD:** `Detected: IEEE 802.1` = correct dialect, DCBX should converge.
-- **BAD:** `Detected: CIN` = the switch has no IEEE DCBX peer and fell back to its CIN default; PFC auto will not converge.
+- **BAD:** `Detected: CIN` = the switch is not detecting an IEEE DCBX peer on this port; PFC auto will not converge (force PFC at the switch instead, Step 2).
 - **BAD:** `DCBx operational state: multiple_peers` (Aruba) = dual-agent deadlock.
 
 ### Step 5: Check PFC Status on the Switch
@@ -2557,8 +2553,8 @@ chassis-ID), collapsing each storage port to a single LLDP agent: the Windows
 agent (hostname chassis-ID, bare LLDP with no DCBX TLVs). This resolves the
 Aruba CX dual-agent `multiple_peers` deadlock. Because the host then presents
 no IEEE DCBX peer, a Cisco NX-OS switch in auto mode reports `Detected: CIN`
-with `Willing=No` (the auto port sits in its pre-standard `CIN` base state for
-want of a clean IEEE peer; see Contributing Factors) and PFC auto-negotiation will not
+with `Willing=No` (the switch is not detecting an IEEE peer on that port; see
+Contributing Factors) and PFC auto-negotiation will not
 converge. This is why Step 2 (forced PFC on the switch) is mandatory and is the
 actual PFC fix; Step 3 resolves the dual-agent deadlock, not the auto-negotiation
 fallback.
@@ -2824,10 +2820,9 @@ Cisco Intel Nuova (CIN) was the earliest implementation, developed jointly
 by Cisco, Intel, and Nuova Systems (acquired by Cisco in 2008). It uses
 proprietary TLV encoding. On Cisco NX-OS 10.3(4a), a storage port in PFC auto
 mode reports `Detected: CIN` with `Willing=No` against the affected Mellanox
-hosts in the remediated single-agent state. The cause is the absence of a clean
-IEEE peer once the firmware agent is disabled: Cisco's `Detected:` field reports
-the port's own operational DCBX version, so an auto port with no IEEE peer sits
-in its pre-standard `CIN` base state (see Contributing Factors and Known
+hosts in the remediated single-agent state. The switch is not detecting an IEEE
+peer on that port once the firmware agent is disabled; the precise reason for
+the `CIN` reading is not established (see Contributing Factors and Known
 Limitations).
 
 ### CEE
@@ -2864,8 +2859,8 @@ switch in auto mode detects `IEEE 802.1` and PFC converges (Appendix A, states
 C1/C2). Once the firmware agent is disabled to resolve the dual-agent conflict,
 the host NDIS-layer egress is bare LLDP with no DCBX TLVs (CONFIRMED on both
 Mellanox and Intel; Appendix A, states A1/A2), the switch reports `Detected:
-CIN` (the auto port has no clean IEEE peer and sits in its pre-standard `CIN`
-base state; see Known Limitations), and PFC
+CIN` (it is not detecting an IEEE peer on that port; the precise reason for the
+`CIN` reading is not established, see Known Limitations), and PFC
 auto-negotiation does not converge.
 
 This is why forced PFC (`mode on`) is recommended: it bypasses DCBX
@@ -2874,33 +2869,34 @@ a DCBX peer.
 
 ## Known Limitations and Open Items
 
-**The Cisco `CIN` detection reflects the absence of a clean IEEE peer, not a
-confirmed wire dialect.** With the Windows LLDP agent active and the firmware
+**The reason for the Cisco `CIN` detection is not established; the per-port
+behavior is what is CONFIRMED.** With the Windows LLDP agent active and the firmware
 agent disabled, the host NDIS-layer egress is bare LLDP with no DCBX TLVs on both
 Mellanox and Intel (CONFIRMED by direction-split packet capture). On the same
 Mellanox host, a Cisco port in PFC auto mode is detected as `CIN` while a port in
 forced PFC is detected as `IEEE 802.1` (CONFIRMED on Cisco NX-OS 10.3(4a)). This
-per-port contrast shows that Cisco's `Detected:` field reports the port's own
-operational DCBX version, not the dialect of frames received from the host. The
-leading explanation is therefore that an auto port with no clean IEEE peer sits
-in its pre-standard `CIN` base state. This reading is consistent with the DCBX
-protocol structure but could not be confirmed against a Cisco primary document
-(the relevant Nexus DCBX state-machine references were not accessible), so it is
-presented as the leading hypothesis rather than documented Cisco behavior.
+per-port contrast shows that the `Detected:` reading tracks the port's own PFC
+configuration on this switch: the same bare-egress host is read as `CIN` on an
+auto port and `IEEE 802.1` on a forced port. The precise reason the switch
+reports `CIN` is not established. Cisco's documented DCBX auto-negotiation
+behavior (negotiate the highest version common to both peers) does not by itself
+predict a `CIN` reading for this configuration, and the relevant Cisco
+state-machine and `show` references were not accessible, so we do not assert a
+specific Cisco mechanism. What is CONFIRMED and actionable is the per-port
+contrast and that forcing PFC resolves it.
 
 An earlier hypothesis, that the ConnectX firmware injects legacy CEE DCBX TLVs to
-the wire below the host capture point, has been withdrawn. It does not hold for
-two independent reasons. First, the firmware's CEE emitter (`cee_dcbx_en`) is
-gated by the same NV parameter (`LLDP_NB_TX_MODE`) that disables the firmware
-LLDP agent, so once the agent is disabled the firmware is not the CEE source.
-Second, CEE and CIN share Intel's OUI `00:1B:21` and differ only by TLV subtype
-(CIN subtype `0x01`, CEE subtype `0x02`), so a switch that received CEE would
-report it as CEE, not `CIN`. An earlier non-direction-split capture near the host
+the wire below the host capture point, has been withdrawn. The firmware's CEE
+emitter (`cee_dcbx_en`) is gated by the same NV parameter (`LLDP_NB_TX_MODE`)
+that disables the firmware LLDP agent, so once the agent is disabled the firmware
+cannot be the CEE source. (CEE and CIN are in any case distinct dialects: they
+share Intel's OUI `00:1B:21` and differ by TLV subtype, CIN `0x01` and CEE
+`0x02`.) An earlier non-direction-split capture near the host
 showed both IEEE 802.1 (`00:80:C2`) and legacy CEE (`00:1B:21`) DCBX TLVs; the
 later direction-split capture attributed both to the switch's own inbound
 advertisement (switch RX), not to host egress. The remediation (force PFC at the
-switch) resolves the symptom regardless of mechanism. The firmware does not
-advertise CEE unconditionally: when it is the sole active agent (states C1/C2),
+switch) resolves the symptom regardless of mechanism. The firmware is also not an
+unconditional CEE source: when it is the sole active agent (states C1/C2),
 the switch detects clean IEEE 802.1. The `mlxconfig DCBX_CEE_P1` / `DCBX_CEE_P2`
 and `DCBX_IEEE` parameters were not used in the recommended remediation, which
 does not depend on suppressing CEE in firmware.
@@ -2958,12 +2954,12 @@ reported.
 | C2 (FW only, Willing=False) | Disabled | Enabled (DCBX) | IEEE 802.1 [INFERRED] | IEEE 802.1 | On | On |
 
 The "Cisco DCBX detected" column is the DCBX state the switch reported. In
-states A1/A2 the host NDIS-layer egress is bare (CONFIRMED). The `CIN` reading
-reflects the auto port sitting in its pre-standard `CIN` base state for want of a
-clean IEEE peer; Cisco's `Detected:` field reports the port's own operational
-DCBX version, not received TLVs (LIKELY; consistent with the per-port contrast
-but not confirmed against a Cisco primary document). See Contributing Factors
-and Known Limitations.
+states A1/A2 the host NDIS-layer egress is bare (CONFIRMED) and the switch
+reports `CIN`; in states C1/C2 the firmware supplies IEEE DCBX and the switch
+reports `IEEE 802.1`. The `Detected:` reading tracks the port's PFC
+configuration in the per-port contrast, but the precise reason for the `CIN`
+reading is not established (not confirmed against a Cisco primary document). See
+Contributing Factors and Known Limitations.
 
 Key conclusions from the matrix:
 - Forced PFC (`mode on`) made PFC converge in every state tested in this matrix;
