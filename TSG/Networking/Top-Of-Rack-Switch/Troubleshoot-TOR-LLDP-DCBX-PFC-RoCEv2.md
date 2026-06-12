@@ -32,7 +32,7 @@ reliance on DCBX auto-negotiation.
 > `Get-AzureStackHCI` (or check the Azure portal) and compare the reported OS and
 > solution versions to those cited here.
 
-> **Start here (TL;DR).** If your storage NICs are Mellanox ConnectX, your
+> **Quick summary.** If your storage NICs are Mellanox ConnectX, your
 > top-of-rack switches are Cisco NX-OS or Aruba CX, and you see PFC failing to
 > stay on or an Aruba `multiple_peers` LLDP error on storage ports, this guide
 > confirms a dual LLDP-agent conflict (Diagnosis Steps) and then fixes it in three
