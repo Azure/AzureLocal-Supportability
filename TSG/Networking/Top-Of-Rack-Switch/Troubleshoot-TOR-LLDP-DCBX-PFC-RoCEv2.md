@@ -2673,6 +2673,11 @@ end state is the Windows LLDP agent `Enabled` on every fabric NIC, host DCBX
 `Willing = False`, RDMA `True`, host PFC on priority 3 `True`, and every Mellanox
 port reporting firmware LLDP TX `OFF(0)` and firmware DCBX `False(0)`.
 
+Because the check covers every ATC fabric NIC, a management or compute port that
+still reports `Willing = True` appears as a `FAIL` even though it does not affect
+storage PFC; set those ports to `Willing = False` to match the cluster-wide
+host-authoritative posture in the Recommended Configuration.
+
 Sample (abbreviated; both nodes remediated, additional NIC and device rows
 omitted):
 
