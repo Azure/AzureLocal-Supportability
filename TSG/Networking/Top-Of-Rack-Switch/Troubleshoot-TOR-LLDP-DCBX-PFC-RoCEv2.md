@@ -778,6 +778,14 @@ $cardRedundancy = Invoke-Command -ComputerName $nodes -ScriptBlock {
     $storageAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -match 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
+    # Fully converged cluster (no dedicated Storage intent): every fabric NIC carries
+    # storage. Match the Step A fallback so converged is not misreported as a
+    # single-card (Storage cards: 0) storage plane. $converged drives the verdict below.
+    $converged = -not $storageAdapters
+    if ($converged) {
+        $storageAdapters = @((Get-NetIntent).NetAdapterNamesAsList) |
+            ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ } | Sort-Object -Unique
+    }
     $mgmtAdapters = @((Get-NetIntent |
         Where-Object { $_.IntentType -notmatch 'Storage' }).NetAdapterNamesAsList) |
         ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ }
@@ -798,13 +806,14 @@ $cardRedundancy = Invoke-Command -ComputerName $nodes -ScriptBlock {
     # but mark the action n/a and point to the switch-side neighbor check.
     $hasMlx = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
         Where-Object { $_.InterfaceDescription -match 'Mellanox|ConnectX|NVIDIA' }).Count -gt 0
-    $isRedundant = ($storageCards.Count -ge 2 -and $mgmtCards.Count -ge 2)
+    $isRedundant = (-not $converged) -and ($storageCards.Count -ge 2 -and $mgmtCards.Count -ge 2)
     [pscustomobject]@{
         Node            = $env:COMPUTERNAME
         'Storage cards' = $storageCards.Count
         'Mgmt cards'    = $mgmtCards.Count
-        Verdict         = if ($isRedundant) { 'REDUNDANT' } else { 'NOT-REDUNDANT' }
+        Verdict         = if ($converged) { 'CONVERGED' } elseif ($isRedundant) { 'REDUNDANT' } else { 'NOT-REDUNDANT' }
         'Reset action'  = if (-not $hasMlx)     { 'n/a; Step 3 reset/reboot is Mellanox-only (use switch-side neighbor check)' }
+                          elseif ($converged)   { 'DRAIN node first (converged: planes share cards; Option 2 or 3)' }
                           elseif ($isRedundant) { 'Live reset OK (no drain)' }
                           else                  { 'DRAIN node first (Option 2 or 3)' }
     }
