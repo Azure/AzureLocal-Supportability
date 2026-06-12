@@ -397,6 +397,10 @@ not established: the relevant Cisco DCBX state-machine and `show` references wer
 not accessible, and Cisco's documented auto-negotiation behavior (negotiate the
 highest version common to both peers) does not by itself predict a `CIN` reading
 for this configuration. We therefore do not assert a specific Cisco mechanism.
+The recovered direction-split capture additionally shows no CIN-subtype (`0x01`)
+TLV on the wire from any device, so the `CIN` reading is a switch-internal label
+rather than a received dialect; this corroborates treating the reason as
+unestablished rather than asserting a wire-level mechanism.
 The actionable, CONFIRMED facts are the per-port contrast above and that forcing
 PFC resolves it (see Known Limitations).
 
@@ -407,8 +411,11 @@ disables the firmware LLDP agent, so once the agent is disabled the firmware
 cannot be the CEE source. (CEE and CIN are in any case distinct dialects that
 share Intel's OUI `00:1B:21` and differ by TLV subtype, CIN `0x01` and CEE
 `0x02`.) The CEE TLVs seen near the host in the earlier non-direction-split
-capture were attributed by the later direction-split capture to the switch's own
-inbound advertisement (switch RX), not to host egress. The firmware is also not
+capture are confirmed, by OUI and subtype decode of the recovered
+direction-split capture, to be the switch's own inbound advertisement (switch
+RX): every `00:1B:21` DCBX TLV on the wire was sourced from the Cisco switch
+ports and decodes as CEE (subtype `0x02`), and no host frame carried a
+`00:1B:21` TLV. They are not host egress. The firmware is also not
 an unconditional CEE source: when it is the sole active agent (states C1/C2),
 the switch detects clean IEEE 802.1 and auto PFC converges in that state.
 
@@ -2821,9 +2828,11 @@ by Cisco, Intel, and Nuova Systems (acquired by Cisco in 2008). It uses
 proprietary TLV encoding. On Cisco NX-OS 10.3(4a), a storage port in PFC auto
 mode reports `Detected: CIN` with `Willing=No` against the affected Mellanox
 hosts in the remediated single-agent state. The switch is not detecting an IEEE
-peer on that port once the firmware agent is disabled; the precise reason for
-the `CIN` reading is not established (see Contributing Factors and Known
-Limitations).
+peer on that port once the firmware agent is disabled. The recovered
+direction-split capture shows no CIN-subtype (`0x01`) TLV on the wire from any
+device, so `CIN` here is a switch-internal reading rather than a received
+dialect; the precise reason for the `CIN` reading is not established (see
+Contributing Factors and Known Limitations).
 
 ### CEE
 Converged Enhanced Ethernet (CEE) was a later pre-standard draft developed
@@ -2832,12 +2841,14 @@ dialects differ by TLV subtype (CIN subtype `0x01`, CEE subtype `0x02`). In
 the scenarios this guide covers, CEE TLVs are not present on the host's
 NDIS-layer egress (CONFIRMED by direction-split packet capture; see Appendix A).
 An earlier non-direction-split capture near the host showed CEE alongside IEEE
-TLVs; the later direction-split capture attributed both to the switch's own
-inbound advertisement (switch RX), not to host egress. An earlier hypothesis
-that the firmware injects CEE below the host capture point has been withdrawn:
-the firmware's CEE emitter (`cee_dcbx_en`) is gated by the same NV parameter
-(`LLDP_NB_TX_MODE`) that disables the firmware LLDP agent, and a switch
-receiving CEE would report it as CEE, not `CIN` (see Known Limitations).
+TLVs; OUI and subtype decode of the recovered direction-split capture confirms
+both came from the switch's own inbound advertisement (switch RX), not host
+egress: every `00:1B:21` DCBX TLV on the wire was switch-sourced and decoded as
+CEE subtype `0x02`, and no host frame carried a `00:1B:21` TLV (CONFIRMED). An
+earlier hypothesis that the firmware injects CEE below the host capture point
+has been withdrawn: the firmware's CEE emitter (`cee_dcbx_en`) is gated by the
+same NV parameter (`LLDP_NB_TX_MODE`) that disables the firmware LLDP agent, and
+a switch receiving CEE would report it as CEE, not `CIN` (see Known Limitations).
 
 ### IEEE 802.1Qaz (2011, ratified standard)
 The Institute of Electrical and Electronics Engineers (IEEE) ratified this
@@ -2882,8 +2893,10 @@ reports `CIN` is not established. Cisco's documented DCBX auto-negotiation
 behavior (negotiate the highest version common to both peers) does not by itself
 predict a `CIN` reading for this configuration, and the relevant Cisco
 state-machine and `show` references were not accessible, so we do not assert a
-specific Cisco mechanism. What is CONFIRMED and actionable is the per-port
-contrast and that forcing PFC resolves it.
+specific Cisco mechanism. The recovered direction-split capture shows no
+CIN-subtype (`0x01`) TLV on the wire from any device, so the `CIN` reading is a
+switch-internal label rather than a received dialect. What is CONFIRMED and
+actionable is the per-port contrast and that forcing PFC resolves it.
 
 An earlier hypothesis, that the ConnectX firmware injects legacy CEE DCBX TLVs to
 the wire below the host capture point, has been withdrawn. The firmware's CEE
@@ -2892,9 +2905,13 @@ that disables the firmware LLDP agent, so once the agent is disabled the firmwar
 cannot be the CEE source. (CEE and CIN are in any case distinct dialects: they
 share Intel's OUI `00:1B:21` and differ by TLV subtype, CIN `0x01` and CEE
 `0x02`.) An earlier non-direction-split capture near the host
-showed both IEEE 802.1 (`00:80:C2`) and legacy CEE (`00:1B:21`) DCBX TLVs; the
-later direction-split capture attributed both to the switch's own inbound
-advertisement (switch RX), not to host egress. The remediation (force PFC at the
+showed both IEEE 802.1 (`00:80:C2`) and legacy CEE (`00:1B:21`) DCBX TLVs. The
+recovered direction-split capture resolves their origin at the byte level: every
+`00:1B:21` DCBX TLV on the wire was sourced from the Cisco switch ports and
+decodes as CEE (subtype `0x02`), while no host frame carried a `00:1B:21` TLV
+(CONFIRMED). This is the direct empirical basis for the withdrawal: the CEE on
+the wire is the switch's own advertisement, not a host-side or below-the-tap
+firmware injection. The remediation (force PFC at the
 switch) resolves the symptom regardless of mechanism. The firmware is also not an
 unconditional CEE source: when it is the sole active agent (states C1/C2),
 the switch detects clean IEEE 802.1. The `mlxconfig DCBX_CEE_P1` / `DCBX_CEE_P2`
@@ -2958,7 +2975,8 @@ states A1/A2 the host NDIS-layer egress is bare (CONFIRMED) and the switch
 reports `CIN`; in states C1/C2 the firmware supplies IEEE DCBX and the switch
 reports `IEEE 802.1`. The `Detected:` reading tracks the port's PFC
 configuration in the per-port contrast, but the precise reason for the `CIN`
-reading is not established (not confirmed against a Cisco primary document). See
+reading is not established (not confirmed against a Cisco primary document, and
+no CIN-subtype TLV appears on the wire to decode). See
 Contributing Factors and Known Limitations.
 
 Key conclusions from the matrix:
@@ -2981,14 +2999,21 @@ Key conclusions from the matrix:
   auto PFC, but this configuration loses the Windows LLDP identity and is not
   recommended for production.
 
-Direction-split wire evidence (host `pktmon` captures, TX separated from RX):
+Direction-split wire evidence (host `pktmon` full-frame captures, TX separated
+from RX by source MAC and OUI/subtype-decoded):
 - Mellanox node, A1 state (Windows agent on, firmware agent off): host TX
-  (60 frames) carried IEEE 802.3 only, with no IEEE 802.1 and no CEE DCBX TLVs
-  (CONFIRMED). The IEEE 802.1 + CEE TLVs observed near the host were inbound
-  (switch RX), not host egress.
-- Intel node (Windows agent on), negative control: host TX (60 frames) carried
-  IEEE 802.3 only, with no DCBX TLVs (CONFIRMED), matching the Mellanox A1
-  result.
+  carried IEEE 802.3 TLVs only, with no IEEE 802.1 (`00:80:C2`) and no Intel
+  (`00:1B:21`) DCBX TLVs (CONFIRMED). The IEEE 802.1 + CEE DCBX TLVs observed
+  near the host were inbound (switch RX), not host egress.
+- Byte-level decode of the switch's inbound advertisement: every Intel
+  `00:1B:21` DCBX TLV on the wire originated from the Cisco switch ports and
+  decodes as `DCBx Protocol: 1.01 CEE` (subtype `0x02`), carried alongside the
+  switch's IEEE 802.1Qaz (`00:80:C2`) DCBX TLVs. No host frame carried a
+  `00:1B:21` TLV, and no CIN (`0x01`) TLV appeared on the wire from any device
+  (CONFIRMED). The switch's LLDP System Description TLV in the same capture
+  self-identifies as Cisco Nexus NX-OS 10.3(4a), matching the tested platform.
+- Intel node (Windows agent on), negative control: host TX carried IEEE 802.3
+  only, with no DCBX TLVs (CONFIRMED), matching the Mellanox A1 result.
 - No host-side OUI-level decode was captured for the firmware-only states
   (C1/C2); the firmware-supplied IEEE DCBX is inferred from the switch-side
   detection.
