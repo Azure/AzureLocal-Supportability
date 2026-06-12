@@ -379,14 +379,16 @@ The Mellanox firmware LLDP agent is the component that supplies clean IEEE
 `IEEE 802.1` and PFC auto-negotiation succeeds (CONFIRMED on Cisco NX-OS
 10.3(4a); see Appendix A, states C1/C2).
 
-Disabling the firmware agent to resolve the dual-agent conflict (Factor 1)
-removes that clean IEEE speaker. Direction-split packet capture confirms that
-the Windows OS agent transmits bare LLDP with no DCBX TLVs at the host NDIS
-layer, on both Mellanox and Intel (CONFIRMED; Appendix A, states A1/A2). Yet in
-this state a Cisco port in PFC auto mode still reports `Detected: CIN` with
-`Willing=No` and PFC does not converge, while a port on the same Mellanox host
+In the remediated single-agent state, direction-split packet capture confirms
+that the Windows OS agent transmits bare LLDP with no DCBX TLVs at the host NDIS
+layer, on both Mellanox and Intel (CONFIRMED; Appendix A, states A1/A2). A Cisco
+port in PFC auto mode still reports `Detected: CIN` with `Willing=No` in this
+state and PFC does not converge, while a port on the same Mellanox host
 configured for forced PFC reports `IEEE 802.1` and PFC stays up (CONFIRMED on
-Cisco NX-OS 10.3(4a)).
+Cisco NX-OS 10.3(4a)). The switch also reports `CIN` in the production
+dual-agent state (B1), where the firmware IEEE speaker is still active, so
+removing the firmware speaker is not what produces the `CIN` reading; see
+Appendix A and the "Why DCBX state matters" block.
 
 What we can state from the evidence is observational, not a confirmed Cisco
 mechanism. On the same bare-egress Mellanox host, a Cisco port in forced PFC is
