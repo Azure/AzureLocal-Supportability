@@ -100,7 +100,7 @@ This should return no results, confirming the workaround is in place.
 
 ## Applicable Versions
 
-- **Affected**: EnvironmentChecker 10.2509.0.2010 and all releases prior to 2607
+- **Affected**: EnvironmentChecker 10.2509.0.2010 through 2606
 - **Fixed in**: 2607 - the fix adds a null-check so supplemental-only policy configurations no longer crash the validator
 
 ## Related
