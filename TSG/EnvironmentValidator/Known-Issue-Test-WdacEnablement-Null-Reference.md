@@ -57,8 +57,10 @@ If this returns one or more `.cip` files but the system does not have customer-c
 
 ### Step 2: Temporarily rename the supplemental policy files
 
-On **each cluster node** (not just the seed node), rename the supplemental `.cip` files so the validator no longer detects them:
+> [!WARNING]
+> Renaming active `.cip` files can change WDAC enforcement. Only use this workaround if you have confirmed WDAC is **not** intentionally configured/enforced in your environment.
 
+On **each cluster node** (not just the seed node), rename the supplemental `.cip` files so the validator no longer detects them:
 ```powershell
 $cipPath = "$env:SystemRoot\System32\CodeIntegrity\CiPolicies\Active"
 $cipFiles = Get-ChildItem -Path $cipPath -Filter *.cip |
