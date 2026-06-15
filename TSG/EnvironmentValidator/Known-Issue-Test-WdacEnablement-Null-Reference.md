@@ -67,9 +67,14 @@ $cipFiles = Get-ChildItem -Path $cipPath -Filter *.cip |
     Where-Object { $_.Name -imatch "^\{[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}\}\.cip$" }
 
 foreach ($file in $cipFiles) {
-    $backupName = $file.FullName + ".backup"
-    Rename-Item -Path $file.FullName -NewName $backupName
-    Write-Host "Renamed: $($file.Name) -> $($file.Name).backup"
+    try {
+        Rename-Item -Path $file.FullName -NewName ($file.Name + ".backup") -ErrorAction Stop
+        Write-Host "Renamed: $($file.Name) -> $($file.Name).backup"
+    }
+    catch {
+        Write-Host "Failed to rename $($file.FullName): $($_.Exception.Message)" -ForegroundColor Red
+        throw
+    }
 }
 ```
 
