@@ -15,6 +15,7 @@ This folder contains the TSG's related to Environment Validators.
 * [Known Issue: Pre-Update Health Check fails with AllResults property error](Known-Issue-AllResults-property-error-during-Pre-Update-Health-Check.md)
 * [Known Issue: Test-Cluster Administrative Privileges Failure During Deployment](Known-Issue-Test-Cluster-Administrative-Privileges-Failure.md)
 * [Known Issue: Test-WdacEnablement Fails with Null-Reference Error During Upgrade Validation](Known-Issue-Test-WdacEnablement-Null-Reference.md)
+* [Known Issue: Test-Cluster Access Denied or WMI Error During Deployment](Known-Issue-Test-Cluster-Access-Denied-WMI-Error.md)
 
 ## Networking
 
