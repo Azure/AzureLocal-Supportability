@@ -1,4 +1,4 @@
-# TSG: Hub MA Config Failure — `V2FaultsIBC` storeType Conflict (Monitoring Agent crash loop)
+# TSG | Hub Empty Admin Portal Display: Monitoring Agent crash loop
 
 ## 1. Summary
 
@@ -13,7 +13,10 @@ A related misconfiguration exists for `V2FaultsFRP` in `FRP-Monitoring.xml` (`st
 `CentralBond`, not `Local`/empty). This TSG harmonizes **both** fault events to `CentralBond` across
 **all** init-config files so the agent compiles and starts cleanly.
 
-### Diagnostic signature (how to confirm a node is affected)
+### Symptoms
+In the Azure Stack Hub Admin Portal under Infrastructure -> Capacity, Physical Memory and Hyper-Converged
+Storage Capacity will show zeroes.
+![emptyportal.png](./emptyportal.png)
 
 In `C:\Monitoring\agent\Logs\MonAgentHost*.log` (and the MA event-table dumps) you will see this
 error repeating every few seconds, with the agent restarting each time:
@@ -666,6 +669,8 @@ Compress-Archive -Path 'C:\MASLogs\RepairMAConfig_<timestamp>' -DestinationPath 
 | `Error` | Per-file failure (see `Error` column / log). |
 | `NodeError` | Could not connect to / run on the node. |
 
+### Example Output Screenshot
+![example repair script output](examplerepairoutput.png)
 ---
 
 ## 7. Validation — confirm the agent recovers
