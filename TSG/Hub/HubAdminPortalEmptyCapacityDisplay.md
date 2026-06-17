@@ -186,7 +186,6 @@ Save the following as `Repair-MAFaultStoreType.ps1` on the active ERCS VM.
     [xml] DOM, no [regex]/[string] static methods. ECEClient discovery, however, uses .NET method
     calls and requires FullLanguage; if the host is in CLM, pass -NodeNames explicitly instead.
     When launching with -Command, pass -NodeNames @('node1','node2',...) as a normal array; the
-    -File form cannot bind an array parameter.
 
 .PARAMETER NodeNames
     Optional. Explicit list of node names to process. If omitted, the script discovers xrp/ercs
@@ -596,7 +595,7 @@ try { Stop-Transcript | Out-Null } catch { }
 > script and it discovers the nodes itself. If it is in CLM (or discovery fails), pass `-NodeNames`
 > explicitly. If a PowerShell profile interferes with command resolution, launch from `cmd`/RDP
 > with `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& '<path>' ..."`; the
-> `-Command` form (unlike `-File`) lets you pass `-NodeNames @('node1','node2',...)` as a normal
+> `-Command` form lets you pass `-NodeNames @('node1','node2',...)` as a normal
 > array.
 
 1. **RDP / connect to the active ERCS VM** and open an **elevated** PowerShell 5.1 console.
@@ -796,7 +795,7 @@ specific older version manually — copy the desired `.bak` content back to
   CLM, so auto-discovery needs FullLanguage; the repair/fan-out logic stays CLM-safe regardless.
   When launching a clean process, use `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command
   "& '<path>' -NodeNames @('node1','node2',...)"`; the `-Command` form accepts a normal `@(...)`
-  array (the `-File` form does not bind array parameters).
+  array.
 - The script is **idempotent** and safe to re-run.
 - Auto-discovery requires running on an **ERCS** VM (ECEClient is not present on XRP VMs); if the
   host is in CLM or you already know the node names, pass them straight to `-NodeNames`.
