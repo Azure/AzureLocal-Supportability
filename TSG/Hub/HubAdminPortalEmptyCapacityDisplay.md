@@ -264,7 +264,7 @@ function Write-Log {
 
 try { Start-Transcript -Path $transcript -Force | Out-Null } catch { }
 
-Write-Log "=== MA Config Reversion run started ==="
+Write-Log "=== MA Config Repair run started ==="
 Write-Log "Run folder : $runFolder"
 Write-Log "ConfigPath : $ConfigPath"
 Write-Log "Events     : $($EventNames -join ', ')"
