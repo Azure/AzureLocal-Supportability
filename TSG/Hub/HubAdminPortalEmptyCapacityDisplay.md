@@ -144,13 +144,7 @@ Init-config folder on each node: `C:\Monitoring\agent\initconfig\2.0\Standard`.
 
 ## 4. The script
 
-Save the following as `Repair-MAFaultStoreType.ps1` on the active ERCS VM.
-
-The script **discovers the xrp/ercs nodes automatically** via ECEClient when run on the active
-ERCS VM (FullLanguage), so `-NodeNames` is optional. ECEClient discovery uses .NET method calls
-and requires FullLanguage; if the host is in ConstrainedLanguage mode, or you already know the
-nodes, pass them explicitly with `-NodeNames` (the repair/fan-out logic itself is CLM-safe). The
-discovery it performs is equivalent to:
+If Powershell is run in constrained language mode, run the following script to discover the xrp and ercs nodes. If run in full language mode, node discovery is automatically performed.
 
 ```powershell
 Import-Module -Name ECEClient.psm1 -Verbose:$false -DisableNameChecking
@@ -167,6 +161,7 @@ $customerConfig.CustomerConfiguration.Role.Roles.Role.Roles.Role.Nodes.Node |
 This yields the fabric's xrp/ercs nodes. The exact count varies by stamp — there may be any number
 of xrp and ercs VMs (e.g. `<prefix>-Xrp01 … <prefix>-XrpNN`, `<prefix>-ERCS01 … <prefix>-ERCSNN`).
 
+Save the following as `Repair-MAFaultStoreType.ps1` on the active ERCS VM.
 ```powershell
 #requires -Version 5.1
 <#
