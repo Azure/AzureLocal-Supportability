@@ -144,7 +144,7 @@ Init-config folder on each node: `C:\Monitoring\agent\initconfig\2.0\Standard`.
 
 ## 4. The script
 
-If Powershell is run in constrained language mode, run the following script to discover the xrp and ercs nodes. If run in full language mode, node discovery is automatically performed.
+If PowerShell is running in **FullLanguage** mode on the active ERCS VM, you can use the following script to discover the XRP and ERCS nodes. If the host is in ConstrainedLanguage mode (CLM), ECEClient discovery will fail — in that case, supply the node names explicitly via `-NodeNames` (see §5).
 
 ```powershell
 Import-Module -Name ECEClient.psm1 -Verbose:$false -DisableNameChecking
