@@ -83,14 +83,14 @@ mpclaim -s -d
 Get-MPIOAvailableHW
 ```
 
-If `Get-MSDSMSupportedHW` does **not** list your array's VendorId/ProductId, MPIO has not claimed the LUNs. Register the array, enable auto-claim for iSCSI, then restart so MPIO re-enumerates the paths:
+If `Get-MSDSMSupportedHW` does **not** list your array's VendorId/ProductId, MPIO has not claimed the LUNs. You can register the array, enable auto-claim for iSCSI, then reboot so MPIO re-enumerates the paths.
 
-```powershell
-New-MSDSMSupportedHW -VendorId "<VendorId>" -ProductId "<ProductId>"
-Enable-MSDSMAutomaticClaim -BusType iSCSI     # iSCSI only
-Restart-Computer                              # required for MPIO claim changes to take effect
-```
+> [!WARNING]
+> The commands below change MPIO configuration and reboot the server. Run them only during a maintenance window and follow your change-control process.
 
+    New-MSDSMSupportedHW -VendorId "<VendorId>" -ProductId "<ProductId>"
+    Enable-MSDSMAutomaticClaim -BusType iSCSI     # iSCSI only
+    Restart-Computer                              # reboot required for MPIO claim changes to take effect
 > [!IMPORTANT]
 > Supported SAN vendors for Azure Local are **NetApp, Pure, HPE, Dell, Hitachi, and Lenovo**. Use the **exact** VendorId/ProductId your array reports - run `Get-MPIOAvailableHW` to read them.
 > Notes: NetApp ONTAP in C-Mode reports its ProductId as `LUN C-Mode` (with the trailing ` C-Mode`), **not** `LUN`. Hitachi VSP arrays are registered with `mpclaim` instead of `New-MSDSMSupportedHW`: `mpclaim -r -i -d "HITACHI OPEN-V"` (then restart). Lenovo ThinkSystem DM/DG arrays are NetApp ONTAP-based and report the NetApp IDs. The complete per-vendor registration table is in the [Connect an external storage array to Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/deploy/enable-external-storage) setup guide.
