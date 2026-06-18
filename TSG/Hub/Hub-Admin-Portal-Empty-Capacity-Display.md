@@ -28,7 +28,7 @@ A related misconfiguration exists for `V2FaultsFRP` in `FRP-Monitoring.xml` (`st
 ### Symptoms
 In the Azure Stack Hub Admin Portal under Infrastructure -> Capacity, Physical Memory and Hyper-Converged
 Storage Capacity will show zeroes.
-![emptyportal.png](./emptyportal.png)
+![emptyportal.png](./images/emptyportal.png)
 
 In `C:\Monitoring\agent\Logs\MonAgentHost*.log` (and the MA event-table dumps) you will see this
 error repeating every few seconds, with the agent restarting each time:
@@ -143,8 +143,6 @@ Init-config folder on each node: `C:\Monitoring\agent\initconfig\2.0\Standard`.
   and left untouched.
 - **Handles missing/empty/inherited `storeType`:** the explicit `CentralBond` is applied whether the
   current value on the event tag is `Local`, empty, or absent (inherited from the provider).
-- **Targeted text edit, formatting preserved.** The `storeType` attribute is changed/inserted on the
-  `<Event>` tag via scoped `-replace` passes; the rest of the file is left byte-for-byte intact.
 - **ConstrainedLanguage-safe:** runs under Hub WDAC/AppLocker CLM (cmdlets + operators only; no
   `New-Object`, XML DOM, or .NET static methods).
 - **`-DryRun` switch:** reports exactly what *would* change without writing anything.
@@ -677,7 +675,7 @@ Compress-Archive -Path 'C:\MASLogs\RepairMAConfig_<timestamp>' -DestinationPath 
 | `NodeError` | Could not connect to / run on the node. |
 
 ### Example Output Screenshot
-![example repair script output](examplerepairoutput.png)
+![example repair script output](./images/examplerepairoutput.png)
 ---
 
 ## 7. Validation — confirm the agent recovers
