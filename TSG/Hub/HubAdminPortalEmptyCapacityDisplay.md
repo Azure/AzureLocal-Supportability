@@ -1,5 +1,17 @@
 # TSG | Hub Empty Admin Portal Display: Monitoring Agent crash loop
 
+## Table of Contents
+
+- [1. Summary](#1-summary)
+- [2. Before you start](#2-before-you-start)
+- [3. Behavior & safety](#3-behavior--safety)
+- [4. The script](#4-the-script)
+- [5. How to run](#5-how-to-run)
+- [6. Output / what to share](#6-output--what-to-share)
+- [7. Validation — confirm the agent recovers](#7-validation--confirm-the-agent-recovers)
+- [8. Rollback](#8-rollback)
+- [9. Notes & assumptions](#9-notes--assumptions)
+
 ## 1. Summary
 
 On Azure Stack Hub **ERCS** and **XRP** VMs, the Monitoring Agent (MA) **fails to start** and
@@ -144,7 +156,8 @@ Init-config folder on each node: `C:\Monitoring\agent\initconfig\2.0\Standard`.
 
 ## 4. The script
 
-If PowerShell is running in **FullLanguage** mode on the active ERCS VM, you can use the following script to discover the XRP and ERCS nodes. If the host is in ConstrainedLanguage mode (CLM), ECEClient discovery will fail — in that case, supply the node names explicitly via `-NodeNames` (see §5).
+If PowerShell is running in **FullLanguage** mode on the active ERCS VM, you can use the following script to discover the XRP and ERCS nodes. If the host is in ConstrainedLanguage mode (CLM), ECEClient discovery will fail — in that case, supply the node names explicitly via `-NodeNames` (see §5).
+
 
 ```powershell
 Import-Module -Name ECEClient.psm1 -Verbose:$false -DisableNameChecking
