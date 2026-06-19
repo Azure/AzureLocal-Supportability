@@ -35,9 +35,9 @@ system is mostly empty.
 
 The single most important step is to **determine whether the affected volumes are
 fixed or thin provisioned before taking any action**, because the space
-reclamation procedure (`Optimize-Volume -SlabConsolidate` followed by
-`Optimize-StoragePool`) **does nothing on a fixed-provisioned volume** and only
-applies to thin-provisioned volumes.
+reclamation procedure (`Optimize-Volume -SlabConsolidate`, then waiting for the
+ReFS background unmap to release the freed slabs) **does nothing on a
+fixed-provisioned volume** and only applies to thin-provisioned volumes.
 
 ## Symptoms
 
@@ -182,7 +182,12 @@ Get-StorageSubSystem -FriendlyName Clus* |
 ```
 
 > [!WARNING]
-> Suppressing the alert hides a **real** safety signal. The underlying capacity
+> This setting is applied at the **storage subsystem level**
+> (`Get-StorageSubSystem ... | Set-StorageHealthSetting`), so it suppresses the
+> capacity threshold alert **cluster-wide — for every pool in the subsystem**, not
+> just the affected pool or volume.
+>
+> Suppressing the alert also hides a **real** safety signal. The underlying capacity
 > risk (no reserve for repair jobs after a drive loss) still exists. Only do this
 > when the customer has explicitly accepted that risk, and document it.
 
@@ -320,7 +325,7 @@ data into fewer slabs and releases the emptied slabs back to the pool.
 | Fixed | Remove unneeded volumes | A3 — shrink/remove (ReFS = evacuate + recreate) |
 | Fixed | Stop the alert (risk accepted) | A4 — disable the Health Service alert |
 | Fixed | Move the alert threshold | A5 — raise `ThinProvisioningAlertThresholds` |
-| Thin | Return deleted-data capacity to the pool | Path B — SlabConsolidate + Optimize-StoragePool |
+| Thin | Return deleted-data capacity to the pool | Path B — SlabConsolidate + ReFS unmap |
 
 ## Verify
 
@@ -336,8 +341,8 @@ Get-StoragePool | Where-Object IsPrimordial -eq $false |
 # Any in-flight storage jobs
 Get-StorageJob
 
-# Health faults
-Get-StorageSubSystem -FriendlyName Clus* | Debug-StorageSubSystem
+# Active health faults across the cluster
+Get-HealthFault
 ```
 
 For an upgrade, re-run the solution update readiness check and confirm the
