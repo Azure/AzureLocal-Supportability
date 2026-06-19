@@ -16,6 +16,7 @@ This folder contains the TSG's related to Environment Validators.
 * [Known Issue: Test-Cluster Administrative Privileges Failure During Deployment](Known-Issue-Test-Cluster-Administrative-Privileges-Failure.md)
 * [Known Issue: Test-WdacEnablement Fails with Null-Reference Error During Upgrade Validation](Known-Issue-Test-WdacEnablement-Null-Reference.md)
 * [Known Issue: Test-Cluster Access Denied or WMI Error During Deployment](Known-Issue-Test-Cluster-Access-Denied-WMI-Error.md)
+* [Known Issue: SAN LUN Visibility Check Fails During Deployment or Add Node](Known-Issue-SAN-LUN-Visibility-Failure.md)
 
 ## Networking
 
