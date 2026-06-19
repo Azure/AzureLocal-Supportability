@@ -153,11 +153,16 @@ After conversion, run [Path B](#path-b--thin-provisioned-volumes-reclaim-unused-
 to release the now-unused capacity back to the pool.
 
 > [!IMPORTANT]
-> In-place conversion of an existing fixed volume to thin requires **Azure Local
-> 23H2 (build 2311.2) or later**. On earlier releases, do not attempt the
-> conversion — instead create a new thin volume and migrate the data, then remove
-> the old fixed volume. Always confirm the conversion path is supported on the
-> cluster's current build before recommending it to a customer.
+> Microsoft publishes **no minimum build** for in-place fixed-to-thin conversion.
+> The linked procedure (`Set-VirtualDisk -ProvisioningType Thin` plus a volume
+> remount) is documented for Azure Stack HCI 21H2/22H2 and is now archived under
+> `/previous-versions/` because of the Azure Stack HCI to Azure Local rename — not
+> a documented removal of the feature. However, the current Azure Local 23H2/24H2
+> volume docs do not re-publish an in-place conversion procedure, so confirm it is
+> still supported on the cluster's current build (against current guidance or with
+> the storage team) before recommending it to a customer. If you cannot confirm
+> support, create a new thin volume and migrate the data instead, then remove the
+> old fixed volume.
 
 ### Option A3 — Shrink or remove volumes — [MEDIUM RISK]
 
