@@ -240,9 +240,12 @@ because it briefly stops the Windows Update (`wuauserv`) and BITS services. Outs
 an active update there is no workload impact.
 
 ```powershell
-Stop-Service wuauserv, bits
-Remove-Item 'C:\Windows\SoftwareDistribution\Download\*' -Recurse -Force -ErrorAction SilentlyContinue
-Start-Service wuauserv, bits
+Stop-Service wuauserv, bits -ErrorAction Stop
+try {
+    Remove-Item 'C:\Windows\SoftwareDistribution\Download\*' -Recurse -Force -ErrorAction SilentlyContinue
+} finally {
+    Start-Service wuauserv, bits
+}
 ```
 
 **c. Remove crash dumps.** Collect them first only if you have an open support case
@@ -285,7 +288,7 @@ you are trying to reclaim. Delete the export once you confirm you no longer need
 
 ```powershell
 $log  = 'Microsoft-Windows-FailoverClustering/Diagnostic'   # example
-$dest = 'D:\logbackup'                                       # any non-C: volume or share
+$dest = '<NON_C_DRIVE_OR_SHARE>'                             # e.g. E:\logbackup or \\server\share (must not be C:)
 New-Item -ItemType Directory $dest -Force | Out-Null
 wevtutil export-log $log (Join-Path $dest (($log -replace '/','_') + '.evtx')) /overwrite:true
 wevtutil clear-log $log
