@@ -371,3 +371,5 @@ Open a support case if any of the following are true:
 - [Known Issue: High Disk Space Usage in TEMP](./Known-Issue-High-Disk-Space-usage-in-TEMP.md)
 - General Environment Checker remediation link shown in the validator output:
   https://aka.ms/hci-envch
+- Azure Local low-capacity requirements:
+  https://aka.ms/azurelocallowcapacityrequirements
