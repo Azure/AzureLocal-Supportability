@@ -66,8 +66,8 @@ shows up in Azure Update Manager:
    Local** resource and its **Updates** page.
 2. In the system list, select the **Update readiness** status. A system that needs
    attention shows a **Critical** or **Warning** state.
-3. Review the list of readiness checks. This one appears as **Test System Drive
-   Free Space**.
+3. Review the list of readiness checks. On current builds this appears as **System
+   Drive Free Space** (earlier builds: **Test System Drive Free Space**).
 4. Select the link under **Details**. The details pane shows the per-machine
    results and a **Remediation** link (`https://aka.ms/hci-envch`).
 
@@ -94,7 +94,7 @@ result on a machine:
 
 ```powershell
 Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath '*[System[(EventID=17205)]]' -MaxEvents 2000 |
-    Where-Object { $_.Message -match 'AzStackHci_Hardware_Test_SystemDrive_Free_Space' } |
+    Where-Object { $_.Message -match 'AzStackHci_Hardware_(Test_SystemDrive_Free_Space|SystemDriveFreeSpace)' } |
     Select-Object -First 1 -ExpandProperty Message
 ```
 
@@ -114,9 +114,9 @@ In both sources the result for this check looks like this:
 
 ```json
 {
-  "Name": "AzStackHci_Hardware_Test_SystemDrive_Free_Space",
-  "DisplayName": "Test System Drive Free Space",
-  "Title": "Test System Drive Free Space",
+  "Name": "AzStackHci_Hardware_SystemDriveFreeSpace",
+  "DisplayName": "System Drive Free Space",
+  "Title": "System Drive Free Space",
   "Severity": "Critical",
   "Status": "FAILURE",
   "Description": "Checking System Drive Free Space",
@@ -130,6 +130,13 @@ In both sources the result for this check looks like this:
   }
 }
 ```
+
+> [!NOTE]
+> The `Name`, `DisplayName`, and `Title` vary by build. Current builds emit the
+> telemetry / health-scanner name shown above (`AzStackHci_Hardware_SystemDriveFreeSpace` /
+> `System Drive Free Space`); earlier builds emit the env-checker name
+> (`AzStackHci_Hardware_Test_SystemDrive_Free_Space` / `Test System Drive Free Space`). The
+> `Detail` line is identical on both, and the `Get-WinEvent` filter above matches either name.
 
 The `Detail` line is the key part. It names the machine (`AzL-Node-01` above), the
 free space it found (25 GB), and the minimum it expected (30 GB). A passing result
