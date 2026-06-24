@@ -361,6 +361,14 @@ appears](#where-this-failure-appears): the portal readiness checks, the
 `AzStackHciEnvironmentChecker` event log (Event ID 17205), or the newest
 `HealthCheckResult.EnvironmentChecker.*.json` on the infrastructure share.
 
+> **The portal can show a stale failure right after you reclaim space.** The
+> portal readiness view and the `HealthCheckResult.EnvironmentChecker.*.json` file
+> report the result of the *last* health check, so they keep showing the failure
+> until that result is refreshed, either by the pre-update health check above or by
+> the next scheduled periodic health check (roughly once a day). The fast targeted
+> check reflects the machine's live free space immediately, so use it to confirm
+> your fix and do not wait on the portal to update.
+
 If it still fails, repeat step 2 to see what refilled the drive. A drive that
 refills quickly is usually caused by a backed-up `GMACache` (a connectivity
 problem) or a runaway log, not a one-time pile of files.
