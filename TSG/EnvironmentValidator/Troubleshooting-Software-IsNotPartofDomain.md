@@ -76,8 +76,8 @@ Two on-box sources carry the result.
 
 **Run the single validator (fastest).** The Environment Checker module ships on every
 Azure Local machine, so you can run this one Software check directly and read the
-result in a few seconds. This check is excluded from the default Software validation
-run, so include it explicitly:
+result in a few seconds. Use `-Include Test-IsNotPartofDomain` to run only this check,
+so you do not have to run the full Software validation suite:
 
 ```powershell
 $r = Invoke-AzStackHciSoftwareValidation -Include Test-IsNotPartofDomain -PassThru
@@ -152,7 +152,34 @@ If `PartOfDomain` is `True`, this check will fail on that machine, and `Domain` 
 the domain it is joined to. A machine that is ready for deployment shows
 `PartOfDomain` of `False` and a workgroup name (for example `WORKGROUP`).
 
-### 2. Remove the machine from the domain
+### 2. Make sure you can sign in locally after the unjoin
+
+The next step unjoins the machine and restarts it, so it comes back up as a workgroup
+member and the next sign-in must use a **local** account. On a machine that has been
+domain-joined, the built-in local `Administrator` account is often disabled or has an
+unknown password, so confirm you have a working local administrator sign-in **before**
+you unjoin. Otherwise the restart can lock you out of the machine.
+
+```powershell
+# Is the built-in local Administrator enabled?
+Get-LocalUser -Name Administrator | Select-Object Name, Enabled
+# Who else is a local administrator?
+Get-LocalGroupMember -Group Administrators
+```
+
+If the local `Administrator` is disabled, or no local administrator has a password you
+know, enable the account and set a known password before continuing (run as an
+administrator):
+
+```powershell
+Enable-LocalUser -Name Administrator
+Set-LocalUser  -Name Administrator -Password (Read-Host -AsSecureString 'New local Administrator password')
+```
+
+Do not proceed to the unjoin until at least one local administrator sign-in is known to
+work on this machine.
+
+### 3. Remove the machine from the domain
 
 Unjoin the machine from the domain and restart it, so it comes back up in a workgroup.
 This is the remediation the validator itself recommends. It is reversible (the machine
@@ -163,19 +190,19 @@ preparation window.
 ```powershell
 # Supply a domain account allowed to remove this machine from the domain.
 Remove-Computer -UnjoinDomainCredential (Get-Credential) -Force -PassThru
-Restart-Computer
+Restart-Computer -Force
 ```
 
 Notes:
 
-- After the restart, sign in with the machine's **local** administrator account, since
-  the machine is now a workgroup member rather than a domain member.
+- After the restart, sign in with the **local** administrator account you confirmed in
+  step 2, since the machine is now a workgroup member rather than a domain member.
 - The machine keeps its computer name; only its domain membership changes.
 - Make sure nothing will automatically rejoin the machine to the domain before
   deployment (for example a Group Policy, an imaging or provisioning task, or a
   scheduled join). If the machine rejoins the domain, this check fails again.
 
-### 3. Verify the fix
+### 4. Verify the fix
 
 First confirm the machine is no longer domain-joined:
 
@@ -212,4 +239,5 @@ Open a support case if any of the following are true:
 - General Environment Checker remediation link shown in the validator output:
   https://aka.ms/hci-envch
 - Azure Local deployment prerequisites (machines must start in a workgroup; the
-  deployment performs the domain join).
+  deployment performs the domain join):
+  https://learn.microsoft.com/azure/azure-local/deploy/deployment-local-identity-with-key-vault
