@@ -52,9 +52,11 @@ UEFI mode at all, `Confirm-SecureBootUEFI` reports that the platform does not su
 the cmdlet, which is treated as the machine not meeting the Secure Boot requirement.
 
 While this check is failing, deployment is blocked at the Hardware validation stage and
-the machine cannot proceed. This is a pre-deployment gate, so it does not change the
-state of a cluster that is already running; it stops a machine from being deployed (or
-added) while Secure Boot is off.
+the machine cannot proceed. This is primarily a pre-deployment gate that stops a machine
+from being deployed (or added) while Secure Boot is off. If you instead need to enable
+Secure Boot on a machine that is already a deployed, encrypted cluster member, follow the
+cluster-member drain steps below so the firmware reboot does not disrupt workloads or
+storage.
 
 ## Where this failure appears
 
@@ -138,11 +140,37 @@ In both sources the result for this check looks like this:
 ## How to fix it
 
 Secure Boot is a firmware (UEFI/BIOS) setting, so the fix is made in the machine's
-firmware setup, not from Windows. The high-level steps are: (optionally) suspend
-BitLocker so the firmware change does not trip the drive into recovery, enable Secure
-Boot in firmware, then re-run the check.
+firmware setup, not from Windows. The high-level steps are: if the machine is an
+already-deployed cluster member, drain it first; if it has BitLocker on, suspend BitLocker
+so the firmware change does not trip the drive into recovery; enable Secure Boot in
+firmware; resume BitLocker; and resume the node. Then re-run the check.
 
-### 1. If the machine has BitLocker enabled, suspend it first
+### 1. If the machine is an already-deployed cluster member, drain it first
+
+If this machine has BitLocker on, it has almost certainly already been deployed into a
+cluster (Azure Local turns on encryption during deployment). Enabling Secure Boot requires
+a reboot into firmware, which takes this node down, so drain it first and do **one node at
+a time**. This is a [MEDIUM RISK] change: draining live-migrates VMs off the node, and the
+node is unavailable until you resume it.
+
+```powershell
+# Confirm the cluster is healthy and can lose this one node before you start.
+Get-ClusterNode | Select-Object Name, State          # every other node should be Up
+Get-VirtualDisk | Select-Object FriendlyName, HealthStatus, OperationalStatus  # all Healthy / OK
+Get-StorageJob                                       # should be empty (no active repair/resync)
+```
+
+Only continue when every other node is `Up`, all virtual disks are Healthy, and
+`Get-StorageJob` returns nothing. Then pause and drain this node so its VMs live-migrate
+off:
+
+```powershell
+Suspend-ClusterNode -Name <node> -Drain
+# Confirm the node is Paused and its roles have moved before you reboot it.
+Get-ClusterNode -Name <node> | Select-Object Name, State   # State should be Paused
+```
+
+### 2. If the machine has BitLocker enabled, suspend it first
 
 Changing Secure Boot alters the machine's measured-boot state (it is measured into TPM
 PCR 7). On a machine where **BitLocker is enabled, the next boot after the change will
@@ -166,11 +194,11 @@ Suspend-BitLocker -MountPoint "C:" -RebootCount 0
 # Suspend-BitLocker -MountPoint "C:\ClusterStorage\Volume1" -RebootCount 0
 ```
 
-You will resume BitLocker in step 4, after Secure Boot is confirmed. Confirm the
+You will resume BitLocker in step 5, after Secure Boot is confirmed. Confirm the
 recovery key is available (escrowed) before you start, so the machine is recoverable
 even if something interrupts the change.
 
-### 2. Enable Secure Boot in firmware (UEFI/BIOS)
+### 3. Enable Secure Boot in firmware (UEFI/BIOS)
 
 1. Reboot the machine and enter firmware setup (the key varies by vendor, commonly
    `F2`, `F10`, `Del`, or via the BMC / iDRAC / iLO / XClarity remote console).
@@ -186,7 +214,7 @@ even if something interrupts the change.
 The exact menu names are vendor-specific; consult your hardware vendor's documentation
 for the precise location of the Secure Boot and boot-mode settings.
 
-### 3. Confirm Secure Boot is on
+### 4. Confirm Secure Boot is on
 
 ```powershell
 Confirm-SecureBootUEFI
@@ -194,7 +222,7 @@ Confirm-SecureBootUEFI
 
 This should now return `True`.
 
-### 4. Resume BitLocker (only if you suspended it in step 1)
+### 5. Resume BitLocker (only if you suspended it in step 2)
 
 ```powershell
 Resume-BitLocker -MountPoint "C:"
@@ -204,6 +232,20 @@ Resume-BitLocker -MountPoint "C:"
 
 Resuming reseals the BitLocker key to the new (Secure Boot enabled) measurements, and the
 machine boots normally from then on.
+
+### 6. Resume the cluster node (only if you drained it in step 1)
+
+Bring the node back into the cluster and let storage resync before you touch the next node.
+
+```powershell
+Resume-ClusterNode -Name <node>
+# Wait for resync to finish before moving on; do not drain the next node until this clears.
+Get-StorageJob                                       # wait until empty
+Get-VirtualDisk | Select-Object FriendlyName, HealthStatus   # back to Healthy
+```
+
+Repeat steps 1 through 6 for each remaining machine, one node at a time, so the cluster
+always keeps quorum and storage resiliency.
 
 ## Verify the fix
 
@@ -240,3 +282,5 @@ Open a support case if any of the following are true:
 - [Azure Local security features and baseline](https://learn.microsoft.com/azure/azure-local/concepts/security-features)
 - [Secure Boot (Windows hardware security)](https://learn.microsoft.com/windows-hardware/design/device-experiences/oem-secure-boot)
 - [Suspend-BitLocker before firmware changes](https://learn.microsoft.com/powershell/module/bitlocker/suspend-bitlocker)
+- [Suspend-ClusterNode (pause and drain a node)](https://learn.microsoft.com/powershell/module/failoverclusters/suspend-clusternode)
+- [Resume-ClusterNode](https://learn.microsoft.com/powershell/module/failoverclusters/resume-clusternode)
