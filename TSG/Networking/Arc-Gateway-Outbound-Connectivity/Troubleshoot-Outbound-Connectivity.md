@@ -30,6 +30,8 @@ If you are finding it difficult to isolate the cause of the network related issu
 
 To help with troubleshooting or root causing network connectivity issues, you can use the **Test-AzureLocalConnectivity** function which is included in the **AzStackHCI.DiagnosticSettings** module. This function can help automate testing that connectivity is working correctly from Azure Local physical machines to the required public endpoints. The function supports Arc Gateway scenarios and has an `-AzureRegion` parameter to allow testing against a specific Azure region that matches your Azure Local instance deployment.
 
+> Note: This article documents version **0.6.7** of the module. Version 0.6.7 adds cluster-wide testing (`-Scope Cluster`), faster endpoint sweeps using HTTP HEAD requests (`-RequestMethod`) and parallel workers (`-Parallelism`), and richer `-PassThru` objects for automation. See [Run tests across all cluster nodes](#run-tests-across-all-cluster-nodes--scope-cluster), [Faster testing: HEAD requests and parallel workers](#faster-testing-head-requests-and-parallel-workers), and [Programmatic use with -PassThru](#programmatic-use-with--passthru-automation) below.
+
 The 'Test-AzureLocalConnectivity' function has a dependency on the Azure Local Environment Checker module being installed, which is installed by default on all Azure Local physical machines. If Environment Checker module (_AzStackHci.EnvironmentChecker_) is not installed on the device running the connectivity test, you will be prompted to install the module first. The device used to install the AzStackHCI.DiagnosticSettings module and test connectivity must have access to the PowerShell Gallery, in order to download the module (_nuget package_) to install it.
 
 ### Install and run connectivity tests
@@ -51,6 +53,33 @@ Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -KeyVaultURL "https
 # function above, which will output full diagnostic level responses from the remote
 # endpoint web server.
 # The output from the function is automatically saved in the PowerShell transcript.
+```
+
+### Run tests across all cluster nodes (`-Scope Cluster`)
+
+By default the function tests connectivity from the **current node only** (`-Scope Node`). When you run the command from a node that is a member of an active Azure Local (failover) cluster, you can add `-Scope Cluster` to enumerate every cluster node and run the same connectivity test on each node, then aggregate the per-node results into a single tabbed HTML report.
+
+Cluster mode requirements:
+
+* The **AzStackHci.DiagnosticSettings** module must be installed (at the same version) on every cluster node. If a node is missing the module or has a different version, the run fails fast and lists the affected nodes — unless you add `-InstallMissingModuleOnNodes` (see below).
+* Standard Kerberos / `Invoke-Command` remoting is used (no CredSSP or TrustedHosts changes are required).
+* The orchestrating session must be elevated (Administrator) and have remote access to every node.
+
+```PowerShell
+# Run the connectivity test on every node in the cluster and produce a
+# single, tabbed cluster HTML report.
+# /// ACTION: Update <AzureRegionName> to match your Azure Region.
+Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -Scope Cluster
+```
+
+Each node runs its own Layer-7 sweep in parallel (per-node default `-Parallelism 8`), so the orchestrator only holds one lightweight remoting job per node. To automatically copy (side-load) the orchestrator's exact module version to any node that is missing it or has a different version, add `-InstallMissingModuleOnNodes`. This is opt-in by design (it never modifies remote nodes silently) and copies from the orchestrator's installed module folder, so it does **not** require PowerShell Gallery or internet access on the nodes:
+
+```PowerShell
+# Cluster test, automatically side-loading the orchestrator's module version
+# to any node that is missing it or has a version mismatch (drift).
+Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
+    -Scope Cluster `
+    -InstallMissingModuleOnNodes
 ```
 
 ### Arc Gateway deployments
@@ -78,6 +107,26 @@ Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
     -KeyVaultURL "https://<YourKeyVaultName>.vault.azure.net" `
     -IncludeOEMUrls "<YourOEMPartner>"
 ```
+
+### Faster testing: HEAD requests and parallel workers
+
+Two parameters can reduce the wall-clock time of a full endpoint sweep:
+
+* **`-RequestMethod`** controls the HTTP method used to test each endpoint:
+  * `Auto` (**default**) — try an HTTP `HEAD` request first (status line and headers only, no body download) and automatically fall back to `GET` for any endpoint that rejects or under-answers `HEAD` (for example a `405 Method Not Allowed`, `400 Bad Request`, or an ambiguous `403`). This gives the speed of `HEAD` with `GET` as a safety net.
+  * `Get` — always use `GET` (full body download). This preserves the behaviour of versions prior to 0.6.7 and is useful for baseline comparisons.
+  * `Head` — always use `HEAD` with no fallback. Fastest, but some endpoints (certain storage SAS URLs and CDN edge nodes) respond differently to `HEAD` than `GET`.
+* **`-Parallelism`** (1–16, default `1`) fans the Layer-7 endpoint sweep out across that many process-isolated background workers. At `1` the test runs sequentially (identical to earlier behaviour). With `-Scope Cluster`, each node uses a per-node default of `8`.
+
+```PowerShell
+# Faster sweep: HEAD-first with GET fallback (default) and 8 parallel workers.
+Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -Parallelism 8
+
+# Preserve pre-0.6.7 behaviour (GET only, sequential).
+Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -RequestMethod Get -Parallelism 1
+```
+
+Output ordering is preserved regardless of `-Parallelism` (results are re-sorted before the report is written), so the report contents are comparable between sequential and parallel runs.
 
 ### Supported Azure regions
 
@@ -133,6 +182,68 @@ Output files generated:
 | `AzureLocal_ConnectivityTest_<Region>_<Hostname>_<DateTime>.html` | HTML report (default) or `.csv` if `-OutputFormat CSV` is used |
 | `AzureLocal_ConnectivityTest_<Region>_<Hostname>_<DateTime>.json` | JSON test results with summary metadata (always generated) |
 | `Transcript_AzureLocal_ConnectivityTest_<Region>_<Hostname>_<DateTime>.log` | PowerShell transcript log |
+
+## Programmatic use with `-PassThru` (automation)
+
+The `-PassThru` switch returns the test results to the PowerShell pipeline so you can act on them programmatically (for example, to fail a CI pipeline) without re-parsing the JSON report file. In v0.6.7 the returned objects were enhanced for automation.
+
+> **Caller contract:** assign the result directly (`$results = Test-AzureLocalConnectivity ... -PassThru`). Do **not** wrap the call in `@( ... )` — doing so collapses the returned collection and breaks indexing and property access.
+
+### Node scope (`-Scope Node`, default)
+
+`-PassThru` returns the results collection. Each **row** now includes a `ResultCategory` field that classifies the outcome, so you no longer need to parse free-text notes to tell a genuine connectivity failure apart from a configuration gap:
+
+| `ResultCategory` | Meaning |
+|------------------|---------|
+| `Success` | Endpoint reachable. |
+| `ConnectivityFailure` | Endpoint could not be reached (DNS / TCP / Layer-7 failure). |
+| `ConfigGap` | A required parameter was not supplied (for example `-KeyVaultURL` left unsubstituted) — a setup issue, not a blocked endpoint. |
+| `SSLInspected` | SSL/TLS inspection was detected on the path to the endpoint. |
+| `PrivateLink` | Endpoint resolved to a private (RFC1918) address — possible Private Link configuration. |
+| `Skipped` | Endpoint was not tested (for example, skipped under Arc Gateway, or an untested wildcard placeholder). |
+
+The returned collection also carries run-level summary values as properties, including `RequestMethod`, `Parallelism`, `TotalDurationSeconds`, `Layer7WallClockSeconds`, `Layer7TotalDurationSeconds`, `Layer7TestedEndpoints`, `DownloadSpeed`, and the diagnostic state flags `SSLInspectionDetected` / `SSLInspectedURLs`, `PrivateLinkDetected` / `PrivateLinkCriticalArray` / `PrivateLinkProxyBypassArray`, and `CRLOfflineDetected` / `CRLOfflineURLs`.
+
+```PowerShell
+# Capture results and fail an automation run on any connectivity failure.
+$results = Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -NoOutput -PassThru
+
+# Per-row classification
+$results | Where-Object ResultCategory -eq 'ConnectivityFailure' |
+    Format-Table URL, Port, Layer7Status, ResultCategory -AutoSize
+
+# Run-level flags
+if ($results.PrivateLinkCriticalArray.Count -gt 0) {
+    throw "Arc endpoint(s) resolved to a private IP: $($results.PrivateLinkCriticalArray -join ', ')"
+}
+```
+
+### Cluster scope (`-Scope Cluster`)
+
+With `-Scope Cluster -PassThru`, the function returns a single cluster summary object (`[pscustomobject]`) instead of a flat results collection. Key properties:
+
+| Property | Description |
+|----------|-------------|
+| `ClusterName` | Cluster name from `Get-Cluster`. |
+| `OrchestratorMachine` | Node that orchestrated the run. |
+| `RunGuid` | Unique identifier for the cluster run. |
+| `StartTime` / `EndTime` / `Duration` | Orchestration timing. |
+| `Nodes` | Hashtable keyed by node name; each value is that node's results collection. |
+| `NodeDurations` | Per-node test duration. |
+| `NodeDownloadSpeeds` | Per-node measured download speed. |
+| `NodeTelemetry` | Per-node run-level timing and `RequestMethod`. |
+| `Errors` | Per-node error messages (empty when the node succeeded). |
+| `ExportPath` | Folder containing the cluster report and per-node output. |
+
+```PowerShell
+# Run a cluster test and inspect per-node results programmatically.
+$cluster = Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -Scope Cluster -PassThru
+
+foreach ($node in $cluster.Nodes.Keys) {
+    $failures = $cluster.Nodes[$node] | Where-Object ResultCategory -eq 'ConnectivityFailure'
+    Write-Host "$node : $($failures.Count) connectivity failure(s)"
+}
+```
 
 ## Share test results with Microsoft (Optional)
 
@@ -194,19 +305,50 @@ param (
     # Valid values: DataOn, Dell, HPE, Hitachi, Lenovo, TestAll
     [string]$IncludeOEMUrls,
 
-    # Skip automatic module version check against PowerShell Gallery.
+    # Skip the PowerShell Gallery update check AND skip downloading endpoint
+    # lists from GitHub (uses cached endpoint files bundled with the module).
+    # Use in air-gapped environments or CI pipelines.
     [switch]$NoAutoUpdate,
+
+    # Opt in to auto-installing a newer module version from PowerShell Gallery
+    # before running. Default behaviour is notify-only (non-destructive).
+    [switch]$AutoUpdate,
 
     # Suppress all console output from the function.
     [switch]$NoOutput,
 
-    # Return the $Results array object for further processing in PowerShell.
+    # Return the $Results object (Node scope) or the cluster summary object
+    # (Cluster scope) for further processing in PowerShell.
     [switch]$PassThru,
 
     # Output report format. Default is HTML. CSV is also available.
     # JSON is always generated in addition to the selected format.
     [ValidateSet('HTML', 'CSV')]
-    [string]$OutputFormat = 'HTML'
+    [string]$OutputFormat = 'HTML',
+
+    # HTTP request method for each endpoint test.
+    #   'Auto' (default) - HEAD first, GET fallback on 405/400/ambiguous response.
+    #   'Get'  - GET only (pre-0.6.7 byte-identical behaviour).
+    #   'Head' - HEAD only, no fallback (fastest; some endpoints reject HEAD).
+    [ValidateSet('Get', 'Head', 'Auto')]
+    [string]$RequestMethod = 'Auto',
+
+    # Number of parallel workers for the Layer-7 endpoint sweep (1-16).
+    # Default 1 (sequential). With -Scope Cluster the per-node default is 8.
+    [ValidateRange(1, 16)]
+    [int]$Parallelism = 1,
+
+    # Test scope. 'Node' (default) tests the current node only. 'Cluster'
+    # enumerates Get-ClusterNode and runs the test on every node, aggregating
+    # the per-node results into a tabbed HTML report.
+    [ValidateSet('Node', 'Cluster')]
+    [string]$Scope = 'Node',
+
+    # Only valid with -Scope Cluster. Side-load the orchestrator's exact module
+    # version to nodes that are missing it or have a different version. Opt-in;
+    # never mutates remote nodes silently. No PowerShell Gallery / internet
+    # dependency (copies from the orchestrator's installed module folder).
+    [switch]$InstallMissingModuleOnNodes
 )
 ```
 
@@ -214,16 +356,22 @@ param (
 
 | Change | Details |
 |--------|---------|
+| `-Scope` | **New in 0.6.7.** `Node` (default) tests the current node only; `Cluster` enumerates `Get-ClusterNode` and runs the test on every node via `Invoke-Command`, aggregating per-node results into a tabbed HTML report. |
+| `-InstallMissingModuleOnNodes` | **New in 0.6.7.** Only valid with `-Scope Cluster`. Side-loads the orchestrator's exact module version to nodes that are missing it or have a version mismatch (drift). Opt-in; no PowerShell Gallery / internet dependency. |
+| `-Parallelism` | **New in 0.6.7.** Fans the Layer-7 sweep out across 1–16 process-isolated workers. Default `1` (sequential). Per-node default is `8` under `-Scope Cluster`. |
+| `-RequestMethod` | **New in 0.6.7.** `Auto` (default), `Get`, or `Head`. **Behaviour change:** the default is now `Auto` (HEAD-first with GET fallback). Use `-RequestMethod Get` to preserve pre-0.6.7 behaviour. |
+| `-PassThru` | **Enhanced in 0.6.7.** Node scope returns results with a per-row `ResultCategory` field and run-level summary properties; Cluster scope returns a cluster summary object. See [Programmatic use with -PassThru](#programmatic-use-with--passthru-automation). |
+| `-AutoUpdate` | **New in 0.6.7.** Opt in to auto-installing a newer module version from PowerShell Gallery. Default is notify-only (non-destructive). |
 | `-ArcGatewayDeployment` and `-ArcGatewayURL` | Now a **mandatory parameter set** — both must be specified together. Previously they were independent optional parameters. |
-| `-OutputFormat` | **New parameter.** Controls the report format: `HTML` (default) or `CSV`. JSON is always generated alongside. |
-| `-IncludeOEMUrls` | **New parameter.** Allows testing OEM hardware partner specific endpoints (DataOn, Dell, HPE, Hitachi, Lenovo, or TestAll). |
-| `-NoAutoUpdate` | **New parameter.** Skips automatic version check against PowerShell Gallery. |
-| `-NoOutput` | **New parameter.** Suppresses all console output for automation/scripting scenarios. |
-| `USGovVirginia` | **New Azure region** added to the `-AzureRegion` validated set. |
-| HTML output | **Default output format changed** from CSV to HTML with color-coded rows and summary section. |
+| `-OutputFormat` | Controls the report format: `HTML` (default) or `CSV`. JSON is always generated alongside. |
+| `-IncludeOEMUrls` | Allows testing OEM hardware partner specific endpoints (DataOn, Dell, HPE, Hitachi, Lenovo, or TestAll). |
+| `-NoAutoUpdate` | Skips the PowerShell Gallery update check **and** skips downloading endpoint lists from GitHub (uses cached endpoint files). Use in air-gapped environments. |
+| `-NoOutput` | Suppresses all console output for automation/scripting scenarios. |
+| `USGovVirginia` | Azure region included in the `-AzureRegion` validated set. |
+| HTML output | Default output format is HTML with color-coded rows and summary section. |
 | JSON output | **Always generated** alongside the primary report format. |
-| Download speed test | Now uses **parallel multi-session downloads** for more accurate bandwidth measurement. |
-| Private Link detection | **New feature.** Detects and warns if endpoints resolve to RFC1918 private IP addresses (possible Private Link configuration). |
+| Download speed test | Uses **parallel multi-session downloads** for more accurate bandwidth measurement. |
+| Private Link detection | Detects and warns if endpoints resolve to RFC1918 private IP addresses (possible Private Link configuration). |
 
 ## Appendix
 
