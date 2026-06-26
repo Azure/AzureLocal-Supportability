@@ -53,6 +53,23 @@ and the machine cannot proceed to cluster deployment. This is a pre-deployment g
 so it does not affect a cluster that is already deployed; it stops a new machine from
 being deployed while it is still attached to a domain.
 
+## Before you start: who should do this, and is it safe?
+
+- **Who owns this.** This is a customer Windows / Active Directory task (the server or
+  identity admin, or the deployment partner). It is **not** a networking task and **not** a
+  hardware-vendor (OEM) issue, so do not route it to the network team or escalate it to your
+  server vendor.
+- **Confirm this is a pre-deployment machine, not a live cluster member.** This check runs
+  only before deployment, so the machine it flags should be a host you are preparing to
+  deploy. **Do not unjoin a machine that is already a deployed Azure Local cluster member.**
+  If you are not sure whether this machine is already part of a running cluster, stop and
+  confirm with the cluster owner first; unjoining and restarting a live node is disruptive
+  and is not what this check is for.
+- **You will restart the machine and must sign in locally afterward.** Removing the machine
+  from the domain requires a restart, after which you can sign in only with a local account.
+  Confirm a working local administrator sign-in **before** you unjoin (see step 2 below).
+  Otherwise the restart can lock you out of the machine.
+
 ## Where this failure appears
 
 You can see this failure in two places, the Azure portal and the machine itself. Both
