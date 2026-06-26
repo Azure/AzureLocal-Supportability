@@ -181,18 +181,29 @@ the machine's firmware setup (or with the vendor's management tooling), not from
   switched at all** and would have to be replaced. Consult your hardware vendor's TPM
   documentation for your exact model before proceeding.
 
-### Before you start: confirm a TPM 2.0 switch is possible on your hardware
+### Before you start: decide whether and how this can be fixed (and who does it)
 
-The single most platform-variable fact is whether your model can switch to TPM 2.0 at all,
-so settle it first. Read the current state (step 1 below, non-disruptive), then consult your
-hardware vendor's TPM documentation for your exact model to confirm whether the TPM can be
-switched from 1.2 to 2.0, and if so whether the switch is reversible or subject to a toggle
-limit.
+The single most platform-variable fact is whether your exact server model can switch to TPM
+2.0 at all, so settle that first. Read the current state (step 1 below, non-disruptive), then
+consult your hardware vendor's TPM documentation for your model and use this table to decide
+the path and the owner **before** any disruptive change:
 
-If the machine has **no TPM**, or its TPM is a **fixed module that cannot report 2.0**, the
-firmware steps below will not help. Confirm the machine is on the Azure Local supported
-hardware list and engage your hardware vendor (the module or machine has to be brought to
-spec). Do not start any disruptive change until you have confirmed the switch is possible.
+| What your hardware reports / the vendor says | What it means | Who owns the action | What to do |
+| --- | --- | --- | --- |
+| TPM already reports **2.0** | This check should pass | No change needed | Re-confirm with step 1; if it still fails, see [When to escalate](#when-to-escalate) |
+| TPM present, reports **1.2**, vendor says it is **switchable to 2.0** | A firmware switch is possible (it clears the TPM) | Server / firmware admin; Windows admin confirms BitLocker | Escrow the BitLocker key first, then follow [How to fix it](#how-to-fix-it) |
+| TPM **1.2**, switch is **one-way or limited** (for example a toggle-count cap) | You can switch but cannot easily go back | Server / firmware admin **with hardware-vendor sign-off** | Confirm with the vendor, then treat it as a one-time change |
+| TPM is a **fixed module** that cannot report 2.0 | Cannot be fixed in firmware | Hardware vendor (OEM) | Engage the OEM; the module or machine must be brought to spec. Expect lead time |
+| **No TPM present** | Not deployable (this version check will not fail, but `Test-TpmProperties` will) | Hardware vendor (OEM) plus procurement | Confirm the machine is on the Azure Local supported hardware list; add or replace the TPM |
+
+**Do not start any disruptive change until you have confirmed all three:** the switch is
+supported on your exact model, the **BitLocker recovery key is escrowed**, and (if this machine
+is already a deployed cluster member) it has been **drained** first. A TPM switch clears the
+module and is sometimes irreversible, so if any of the three is unknown, stop and confirm.
+
+> **Setting expectations:** a firmware switch is usually quick, but a fixed-module or
+> unsupported-hardware case means a hardware change or replacement with real lead time and
+> possible procurement. Surface that to the customer early so the deployment schedule reflects it.
 
 ### 1. Confirm the current TPM state
 
