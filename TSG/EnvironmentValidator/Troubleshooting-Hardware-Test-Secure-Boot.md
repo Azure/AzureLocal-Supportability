@@ -116,7 +116,7 @@ machine:
 
 ```powershell
 Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath '*[System[(EventID=17205)]]' -MaxEvents 2000 |
-    Where-Object { $_.Message -match 'AzStackHci_Hardware_Test_Secure_Boot' } |
+    Where-Object { $_.Message -match 'AzStackHci_Hardware_(Test_Secure_Boot|SecureBoot)' } |
     Select-Object -First 1 -ExpandProperty Message
 ```
 
