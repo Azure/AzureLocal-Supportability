@@ -139,6 +139,33 @@ In both sources the result for this check looks like this:
 }
 ```
 
+## Before you start: who does this, and confirm it is safe
+
+- **Who owns this.** Enabling Secure Boot is a firmware change, so it is done by the **server
+  or hardware administrator** with firmware / BMC (iDRAC / iLO / XClarity) access. The
+  **Windows administrator** confirms and suspends BitLocker; the **network team** can provide
+  BMC access but does not own this change. If you are first-line or temporary staff, do not
+  change firmware without the machine's owner.
+- **Confirm all of these before you reboot into firmware** (skipping any one is how machines
+  get stranded):
+  - The **BitLocker recovery key is escrowed** and you can retrieve it (see step 1). A Secure
+    Boot change is measured into TPM PCR 7 and can trip an encrypted volume into the recovery
+    screen.
+  - The machine boots in **UEFI mode with a GPT system disk**, not legacy BIOS / MBR. Switching
+    boot mode alone will not boot an OS that was installed in legacy/MBR mode.
+
+    ```powershell
+    # A GPT boot disk means the OS was installed in UEFI mode.
+    Get-Disk | Where-Object IsBoot | Select-Object Number, PartitionStyle
+    # If Confirm-SecureBootUEFI errors with "Cmdlet not supported on this platform",
+    # the machine is in legacy BIOS / CSM mode, not UEFI.
+    ```
+
+  - If this machine is **already a deployed cluster member** (encrypted or not), the firmware
+    reboot takes a live node down, so drain it first (see [If the machine is already a deployed,
+    encrypted cluster member](#if-the-machine-is-already-a-deployed-encrypted-cluster-member)).
+    One node at a time.
+
 ## How to fix it
 
 This check runs during **pre-deployment validation**, so the machine it flags is normally a
