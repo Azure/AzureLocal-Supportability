@@ -41,7 +41,8 @@ This validator checks that each Azure Local machine is **not** joined to an Acti
 Directory domain before deployment. Azure Local requires every machine to be in a
 workgroup at the start of deployment; the deployment process performs the domain join
 itself, as part of standing up the cluster. The check fails when a machine is already
-domain-joined.
+domain-joined. Azure Local also refers to these machines as **nodes** (including in the
+validator detail you match against below); the two terms mean the same thing here.
 
 It runs by querying `(Get-WmiObject Win32_ComputerSystem).PartOfDomain` on each
 machine. A machine that is part of a domain returns a **FAILURE**; a machine in a
@@ -86,7 +87,8 @@ $r.AdditionalData.Detail
 ```
 
 A machine that is still domain-joined returns `Status` of `FAILURE` and a detail line
-of the form:
+of the form (the machine name, `AzL-Node-01` here, is an example; your output shows the
+actual name):
 
 ```
 'AzL-Node-01' is part of a domain. Please remove 'AzL-Node-01' from the domain.
@@ -187,6 +189,9 @@ can be rejoined later if needed), but it does change machine state and requires 
 restart, so treat it as a [MEDIUM RISK] change and run it during your deployment
 preparation window.
 
+You will be prompted for a domain account that can remove this machine from the domain
+(enter it as `DOMAIN\username`), and then asked to confirm the unjoin. Confirm to proceed.
+
 ```powershell
 # Supply a domain account allowed to remove this machine from the domain.
 Remove-Computer -UnjoinDomainCredential (Get-Credential) -PassThru
@@ -219,7 +224,7 @@ $r.AdditionalData.Detail
 ```
 
 A workgroup machine returns `Status` of `SUCCESS` and a detail line of
-`'<NODE>' is not part of a domain.` Once every machine you are deploying reports
+`'AzL-Node-01' is not part of a domain.` Once every machine you are deploying reports
 success, re-run the deployment validation; the **Domain Membership** check should now
 pass and deployment can proceed.
 
