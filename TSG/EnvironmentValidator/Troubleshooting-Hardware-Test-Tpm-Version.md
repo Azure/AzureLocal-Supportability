@@ -7,7 +7,7 @@
   </tr>
   <tr>
     <th style="text-align:left;">Display name</th>
-    <td>TPM Version</td>
+    <td>TPM Version (the aggregated name shown in the portal). The per-machine result JSON and event log carry the verbose form <code>Test TPM Version &lt;machine&gt;</code>; both refer to this same check.</td>
   </tr>
   <tr>
     <th style="text-align:left;">Validator / test</th>
@@ -27,7 +27,7 @@
   </tr>
   <tr>
     <th style="text-align:left;">Applicable Scenarios</th>
-    <td>Deployment, Add Node, and Upgrade (pre-deployment / readiness validation).</td>
+    <td>Deployment and Add Node (pre-deployment readiness validation).</td>
   </tr>
   <tr>
     <th style="text-align:left;">Affected Versions</th>
@@ -60,6 +60,13 @@ While this check is failing, deployment is blocked at the Hardware validation st
 the machine cannot proceed. Unlike a software setting, the fix is a **firmware and
 hardware** change that is specific to your server model, and on some platforms it is
 limited, irreversible, or not possible at all (see [How to fix it](#how-to-fix-it)).
+
+This check runs during **pre-deployment validation** (the Deployment and Add Node readiness
+checks), so the machine it evaluates is normally a **host being validated to become a cluster
+node**, not an existing cluster member. The remediation is usually short (set the TPM to 2.0
+in firmware and re-validate), but two cautions apply: a host being vetted may have been
+**recycled from another project and could already have BitLocker enabled**, and the
+cluster-drain precaution is needed only if the machine is already a live, deployed member.
 
 ## Where this failure appears
 
@@ -145,12 +152,25 @@ In both sources the result for this check looks like this:
 }
 ```
 
+> **A note on names across surfaces.** The portal shows the aggregated display name
+> **TPM Version**, while the per-machine result JSON and the event log carry the verbose form
+> **Test TPM Version `<machine>`**. The underlying `Name`,
+> `AzStackHci_Hardware_Test_Tpm_Version`, is the same on both, so if you are matching strings
+> between the portal and the on-box output, expect the two forms.
+
 ## How to fix it
 
-The TPM specification version is a firmware and hardware property, so the fix is made in
+This check runs during **pre-deployment validation**, so the machine it flags is normally a
+**host being prepared to become a cluster node**, not a running cluster member: there is
+usually no cluster to keep in quorum. Do not assume the host is otherwise "clean", though.
+A host being vetted may have been **recycled from another project and could already have
+BitLocker enabled**, and a TPM change trips an encrypted volume into recovery, so check for
+BitLocker before you touch firmware (step 2). The cluster-drain precaution only applies in
+the uncommon case that the machine is already a live, deployed cluster member.
+
+The TPM specification version is a firmware and hardware property, so the change is made in
 the machine's firmware setup (or with the vendor's management tooling), not from Windows.
-**Before you change anything, read the warnings in this section.** Unlike most validator
-fixes, changing a TPM's version is platform-specific and has serious side effects:
+**Before you change anything, read these two warnings:**
 
 - **Switching a TPM clears it.** Moving a TPM between specification versions (for example
   1.2 to 2.0) re-provisions the module and **erases the keys it holds**. Any key sealed to
@@ -161,10 +181,18 @@ fixes, changing a TPM's version is platform-specific and has serious side effect
   switched at all** and would have to be replaced. Consult your hardware vendor's TPM
   documentation for your exact model before proceeding.
 
-The high-level order is: if the machine is an already-deployed cluster member, drain it
-first; if it has BitLocker on, suspend BitLocker and confirm the recovery key is escrowed;
-enable the TPM and set it to TPM 2.0 in firmware per your vendor's documentation; confirm;
-resume BitLocker; and resume the node. Then re-run the check.
+### Before you start: confirm a TPM 2.0 switch is possible on your hardware
+
+The single most platform-variable fact is whether your model can switch to TPM 2.0 at all,
+so settle it first. Read the current state (step 1 below, non-disruptive), then consult your
+hardware vendor's TPM documentation for your exact model to confirm whether the TPM can be
+switched from 1.2 to 2.0, and if so whether the switch is reversible or subject to a toggle
+limit.
+
+If the machine has **no TPM**, or its TPM is a **fixed module that cannot report 2.0**, the
+firmware steps below will not help. Confirm the machine is on the Azure Local supported
+hardware list and engage your hardware vendor (the module or machine has to be brought to
+spec). Do not start any disruptive change until you have confirmed the switch is possible.
 
 ### 1. Confirm the current TPM state
 
@@ -181,61 +209,34 @@ Get-Tpm | Select-Object TpmPresent, TpmReady, TpmEnabled
 - If a TPM is present but `SpecVersion` starts with something other than `2.0`, continue
   below.
 
-### 2. If the machine is an already-deployed cluster member, drain it first
+### 2. Check for BitLocker, and suspend it if present
 
-If this machine has BitLocker on, it has almost certainly already been deployed into a
-cluster (Azure Local turns on encryption during deployment). Changing the TPM requires a
-reboot into firmware, which takes this node down, so drain it first and do **one node at a
-time**. This is a [MEDIUM RISK] change: draining live-migrates VMs off the node, and the
-node is unavailable until you resume it.
-
-```powershell
-# Confirm the cluster is healthy and can lose this one node before you start.
-Get-ClusterNode | Select-Object Name, State          # every other node should be Up
-Get-VirtualDisk | Select-Object FriendlyName, HealthStatus, OperationalStatus  # all Healthy / OK
-Get-StorageJob                                       # should be empty (no active repair/resync)
-```
-
-Only continue when every other node is `Up`, all virtual disks are Healthy, and
-`Get-StorageJob` returns nothing. Then pause and drain this node so its VMs live-migrate
-off:
+Do this even on a fresh pre-deployment host. A host you are vetting may have been **recycled
+from a previous project with BitLocker already enabled**, and a TPM version change clears the
+module, which invalidates the TPM-sealed BitLocker key. If a protected volume is left armed,
+**the next boot after the change stops at the BitLocker recovery screen** and asks for the
+48-digit recovery password, which can strand the machine.
 
 ```powershell
-Suspend-ClusterNode -Name <node> -Drain
-# Confirm the node is Paused and its roles have moved before you reboot it.
-Get-ClusterNode -Name <node> | Select-Object Name, State   # State should be Paused
-```
-
-### 3. If the machine has BitLocker enabled, suspend it first
-
-Changing the TPM alters (and in the version-switch case **clears**) the hardware root of
-trust that BitLocker seals its key to. On a machine where **BitLocker is enabled, the next
-boot after the change will stop at the BitLocker recovery screen** and ask for the 48-digit
-recovery password, which can strand the machine. Azure Local enables data-at-rest
-encryption (BitLocker) by default, so a machine that has already been deployed (or any
-machine with drive encryption) is affected. A fresh, pre-deployment machine that has never
-been encrypted is not.
-
-If BitLocker is on, suspend it **before** you change firmware, and resume it **after** the
-machine is back and the TPM is confirmed. Use `-RebootCount 0` so the suspend holds across
-the firmware change and reboot until you explicitly resume it:
-
-```powershell
-# Are any volumes protected?
+# Are any volumes protected? (On a truly clean, never-encrypted host this is empty.)
 Get-BitLockerVolume | Select-Object MountPoint, ProtectionStatus, VolumeStatus
-
-# Suspend each protected volume indefinitely (until you resume it).
-Suspend-BitLocker -MountPoint "C:" -RebootCount 0
-# Repeat for any data volumes that report ProtectionStatus = On, for example:
-# Suspend-BitLocker -MountPoint "C:\ClusterStorage\Volume1" -RebootCount 0
 ```
 
-You will resume BitLocker in step 6, after the TPM is confirmed. **Confirm the recovery
-key is available (escrowed) before you start**, because a TPM version switch clears the
-module and the machine must be recoverable with the recovery key if anything is
-interrupted.
+If every volume reports `ProtectionStatus = Off`, there is nothing to suspend; go to step 3.
+If any volume is protected, **confirm its recovery key is escrowed first**, then suspend it
+with `-RebootCount 0` so the suspend holds across the firmware change and reboot until you
+explicitly resume it:
 
-### 4. Enable the TPM and set it to TPM 2.0 in firmware
+```powershell
+Suspend-BitLocker -MountPoint "C:" -RebootCount 0
+# Repeat for any data volume that reports ProtectionStatus = On, for example:
+# Suspend-BitLocker -MountPoint "D:" -RebootCount 0
+```
+
+### 3. Enable the TPM and set it to TPM 2.0 in firmware
+
+> If this machine is already a deployed, encrypted cluster member, do **not** reboot it into
+> firmware yet. Follow [If the machine is already a deployed cluster member](#if-the-machine-is-already-a-deployed-encrypted-cluster-member) first so you take the node down safely.
 
 1. Reboot the machine and enter firmware setup (the key varies by vendor, commonly `F2`,
    `F10`, `Del`, or via the BMC / iDRAC / iLO / XClarity remote console).
@@ -244,16 +245,16 @@ interrupted.
 3. Make sure the TPM is **enabled** and visible to the operating system.
 4. If the platform supports selecting the TPM specification version and the TPM is in 1.2
    mode, set it to **2.0** (often labelled "TPM Device Version", "TCG Spec Version", or
-   similar), following your vendor's documented procedure. **Heed the warnings in this
-   section first**: the switch clears the TPM and may be limited or one-way on your model.
+   similar), following your vendor's documented procedure. **Heed the warnings above**: the
+   switch clears the TPM and may be limited or one-way on your model.
 5. Save and exit, and let the machine boot back into the OS.
 
 The exact menu names and the availability of a version switch are vendor-specific. If your
-platform's TPM is a fixed module that cannot report 2.0, it cannot be remediated in
-firmware and the module (or machine) must be brought to spec by your hardware vendor;
-confirm the machine is on the Azure Local supported hardware list.
+platform's TPM is a fixed module that cannot report 2.0, it cannot be remediated in firmware
+and the module (or machine) must be brought to spec by your hardware vendor; confirm the
+machine is on the Azure Local supported hardware list.
 
-### 5. Confirm the TPM now reports version 2.0
+### 4. Confirm the TPM now reports version 2.0
 
 ```powershell
 Get-Tpm | Select-Object TpmPresent, TpmReady, TpmEnabled
@@ -262,31 +263,51 @@ Get-Tpm | Select-Object TpmPresent, TpmReady, TpmEnabled
 
 The first segment of `SpecVersion` should now be `2.0`.
 
-### 6. Resume BitLocker (only if you suspended it in step 3)
+### 5. Resume BitLocker (only if you suspended it in step 2)
 
 ```powershell
 Resume-BitLocker -MountPoint "C:"
-# And any data volumes you suspended, for example:
-# Resume-BitLocker -MountPoint "C:\ClusterStorage\Volume1"
+# And any data volume you suspended, for example:
+# Resume-BitLocker -MountPoint "D:"
 ```
 
-Resuming reseals the BitLocker key to the current TPM. If the TPM was cleared by the
-version switch, make sure the volume re-protects cleanly and a fresh recovery key is
-escrowed.
+Resuming reseals the BitLocker key to the new TPM. Because the version switch cleared the
+module, make sure each volume re-protects cleanly and a fresh recovery key is escrowed.
 
-### 7. Resume the cluster node (only if you drained it in step 2)
+### If the machine is already a deployed, encrypted cluster member
 
-Bring the node back into the cluster and let storage resync before you touch the next node.
+Because this is a pre-deployment check, it does not normally fire on a machine that is
+already a deployed cluster node: the machine must have reported TPM 2.0 to deploy, and the
+version does not change on its own. But if you are changing the TPM on a machine that is
+**already a live, encrypted cluster member** for any reason, add one precaution to the steps
+above: the firmware reboot takes a running node down, so **drain it first** and do this
+**one node at a time**.
+
+This is a [MEDIUM RISK] change: draining live-migrates VMs off the node, and the node is
+unavailable until you resume it.
+
+```powershell
+# Confirm the cluster is healthy and can lose this one node before you start.
+Get-ClusterNode | Select-Object Name, State          # every other node should be Up
+Get-VirtualDisk | Select-Object FriendlyName, HealthStatus, OperationalStatus  # all Healthy / OK
+Get-StorageJob                                       # should be empty (no active repair/resync)
+
+# Only when the cluster is healthy, pause and drain this node so its VMs live-migrate off.
+Suspend-ClusterNode -Name <node> -Drain
+Get-ClusterNode -Name <node> | Select-Object Name, State   # State should be Paused
+```
+
+Then run steps 2 through 5 above (suspend BitLocker, change firmware, confirm, resume
+BitLocker). Finally bring the node back and let storage resync before the next one:
 
 ```powershell
 Resume-ClusterNode -Name <node>
-# Wait for resync to finish before moving on; do not drain the next node until this clears.
 Get-StorageJob                                       # wait until empty
 Get-VirtualDisk | Select-Object FriendlyName, HealthStatus   # back to Healthy
 ```
 
-Repeat steps 1 through 7 for each remaining machine, one node at a time, so the cluster
-always keeps quorum and storage resiliency.
+Repeat for each remaining member, one node at a time, so the cluster always keeps quorum and
+storage resiliency.
 
 ## Verify the fix
 
