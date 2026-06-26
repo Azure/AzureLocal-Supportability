@@ -189,7 +189,7 @@ preparation window.
 
 ```powershell
 # Supply a domain account allowed to remove this machine from the domain.
-Remove-Computer -UnjoinDomainCredential (Get-Credential) -Force -PassThru
+Remove-Computer -UnjoinDomainCredential (Get-Credential) -PassThru
 Restart-Computer -Force
 ```
 
@@ -238,6 +238,5 @@ Open a support case if any of the following are true:
 
 - General Environment Checker remediation link shown in the validator output:
   https://aka.ms/hci-envch
-- Azure Local deployment prerequisites (machines must start in a workgroup; the
-  deployment performs the domain join):
-  https://learn.microsoft.com/azure/azure-local/deploy/deployment-local-identity-with-key-vault
+- [Azure Local deployment prerequisites](https://learn.microsoft.com/azure/azure-local/deploy/deployment-local-identity-with-key-vault)
+  (machines must start in a workgroup; the deployment performs the domain join).
