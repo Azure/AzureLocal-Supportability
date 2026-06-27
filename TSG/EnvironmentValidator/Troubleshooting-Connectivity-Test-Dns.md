@@ -38,6 +38,13 @@ hardware vendor or a Microsoft product fix. A Microsoft support engineer can gui
 the customer through it, but the change itself is made in the customer's DNS
 infrastructure or in a node's network configuration.
 
+**Where a node's DNS comes from.** A node's DNS servers are set at deployment time from
+the deployment configuration's management network settings and applied to the management
+network adapter; they are not baked into the OEM factory image. If you are an OEM or
+field engineer checking your own imaging process, confirm the image does not pin DNS
+servers and leaves them to be set by deployment, so each cluster picks up the customer's
+intended DNS rather than a stale value carried over from imaging.
+
 ## Requirements
 
 - Administrative (local administrator) access to each Azure Local node, or a remote
