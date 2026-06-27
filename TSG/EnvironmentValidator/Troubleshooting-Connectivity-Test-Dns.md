@@ -235,13 +235,8 @@ that can (step 2 below), or add an external-resolving forwarder on the current s
 (step 4 below). The numbered steps confirm which of these applies; most failures are
 resolved by one of the two.
 
-> **Terms used here:**
-> - **A record:** the DNS record that maps a name to an IPv4 address. This check expects
->   at least one A record back for the external name.
-> - **Forwarder:** a setting on a DNS server that passes queries it cannot answer itself
->   (such as external/public names) to another resolver that can.
-> - **WinHTTP proxy:** a system-level outbound proxy. When one is configured on a node,
->   the node routes outbound traffic through it and this check self-skips on that node.
+_New to any DNS term used below (A record, forwarder, split-horizon, WinHTTP proxy)? See
+the [Glossary](#glossary) at the end of this guide._
 
 1. List the DNS servers currently configured on the node:
 
@@ -337,3 +332,27 @@ to a different DNS server or a different node that needs the same fix.
 > on a targeted per-node re-test. The portal can therefore lag a just-applied fix until
 > the next precheck or the periodic (roughly daily) health check, so confirm the fix
 > on-node with `Resolve-DnsName` rather than waiting on the portal.
+
+## Glossary
+
+Plain-language definitions of the DNS terms used in this guide. Experienced readers can
+skip this section; it is here so the steps above stay short.
+
+- **A record:** the basic DNS record that maps a name (such as `microsoft.com`) to an
+  IPv4 address. This check passes only when a configured DNS server returns at least one
+  A record for the external name.
+- **DNS server / resolver:** the server a node asks to turn a name into an address. Each
+  node lists one or more on its network adapters; this check tests each one.
+- **Forwarder:** a setting on a DNS server that hands off queries it cannot answer itself
+  (such as external or public names) to another resolver that can. An internal-only DNS
+  server usually needs a forwarder to resolve external names.
+- **Conditional forwarder:** a forwarder that applies only to a specific domain, so a
+  server can send just some queries (for example external names) to a particular
+  resolver.
+- **Split-horizon (split-brain) DNS:** a setup where the same DNS name resolves
+  differently for internal versus external clients. An internal-only zone can shadow an
+  external name, so the server answers internal lookups but returns nothing for the
+  public name this check asks for.
+- **WinHTTP proxy:** a system-level outbound proxy configured on a node. When one is set,
+  the node routes outbound traffic through it, and this DNS check self-skips on that node
+  and reports success.
