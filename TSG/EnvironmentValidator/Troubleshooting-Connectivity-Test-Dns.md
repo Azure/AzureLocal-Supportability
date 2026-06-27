@@ -228,6 +228,20 @@ name `microsoft.com`. The fix is a customer-side DNS change, either on the node'
 DNS-client configuration or on the upstream DNS server. Work through this on each node
 identified in Step 3.
 
+**Most common fix (start here).** The usual cause is a node pointed at a DNS server that
+cannot resolve external names. Re-point that node's management adapter at a DNS server
+that can (step 2 below), or add an external-resolving forwarder on the current server
+(step 4 below). The numbered steps confirm which of these applies; most failures are
+resolved by one of the two.
+
+> **Terms used here:**
+> - **A record:** the DNS record that maps a name to an IPv4 address. This check expects
+>   at least one A record back for the external name.
+> - **Forwarder:** a setting on a DNS server that passes queries it cannot answer itself
+>   (such as external/public names) to another resolver that can.
+> - **WinHTTP proxy:** a system-level outbound proxy. When one is configured on a node,
+>   the node routes outbound traffic through it and this check self-skips on that node.
+
 1. List the DNS servers currently configured on the node:
 
    ```powershell
@@ -280,6 +294,9 @@ identified in Step 3.
      DNS server to a resolver that can answer external queries, or otherwise enable
      external resolution on it. This change is made on the DNS server, not on the
      Azure Local node, so coordinate with whoever owns that server.
+   - If the server resolves internal names but returns nothing for the external name,
+     an internal-only or split-horizon DNS zone may be shadowing external resolution;
+     add a forwarder or otherwise enable external resolution as above.
    - Confirm that DNS traffic on port 53 from the nodes to the DNS servers is not
      blocked by a firewall.
 
@@ -313,3 +330,9 @@ Resolve-DnsName -Name microsoft.com -Type A
 A result containing one or more A records means external DNS resolution is working. If
 Step 1 still shows failures, re-read the new `Detail` text: the failure may have moved
 to a different DNS server or a different node that needs the same fix.
+
+> **Note:** the Azure portal readiness view and the cluster-wide `HealthCheckResult`
+> file refresh only when a full health check or `Invoke-SolutionUpdatePrecheck` runs, not
+> on a targeted per-node re-test. The portal can therefore lag a just-applied fix until
+> the next precheck or the periodic (roughly daily) health check, so confirm the fix
+> on-node with `Resolve-DnsName` rather than waiting on the portal.
