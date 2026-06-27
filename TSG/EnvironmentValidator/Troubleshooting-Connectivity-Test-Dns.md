@@ -21,9 +21,14 @@ expects at least one A record back. If any configured DNS server returns no reco
   pre-update health check. In practice you will most often see it block a pending
   Azure Local update.
 - **Newer builds:** on recent Azure Local builds this external-DNS test was moved
-  into a dedicated DNS validator and is reported as
-  `AzStackHci_DNS_Test_External_Hostname_Resolution`. The cause and the fix in this
-  guide are the same; only the validator name differs.
+  into a dedicated DNS validator and is reported under one of two names,
+  `AzStackHci_DNS_ExternalDnsResolution` or
+  `AzStackHci_DNS_Test_External_Hostname_Resolution` (both are in use across current
+  builds, so search the health-check results for either). The dedicated validator
+  resolves `management.azure.com` rather than `microsoft.com` and retries before it
+  fails, so its `Detail` adds an `(Attempt: n/3)` suffix and lists each failing node
+  as its own bullet. The cause and the fix in this guide are the same; only the
+  validator name and the queried hostname differ.
 
 **Who owns this fix.** This is a customer network and DNS configuration check. The
 owner is the customer's network or DNS administrator. It is not a Microsoft software
@@ -85,8 +90,9 @@ else {
 ```
 
 Each row is one currently-failing DNS server on one node. The `Detail` column is the
-precise error string; the `Remediation` column points at the public deployment
-network-requirements documentation.
+precise error string; the `Remediation` column points at the public
+[Azure Local network requirements](https://learn.microsoft.com/azure/azure-local/concepts/firewall-requirements)
+documentation.
 
 #### Option B: `Get-SolutionUpdate` (is an update being blocked?)
 
@@ -153,6 +159,19 @@ addresses, for example `Result returned 1 A records: <address>, expected at leas
 > node and reported as success, with a `Detail` of
 > `Skipping DNS resolution test on <node> because a proxy is configured.` That is
 > expected behavior, not a failure.
+
+On builds that use the dedicated DNS validator (see "Newer builds" in the overview),
+the same failure reads slightly differently: it resolves `management.azure.com`,
+retries up to three times, and lists each failing node as its own bullet, for example:
+
+```
+- AzL-Node-01
+  - Queried dns server 10.0.0.10 for management.azure.com on AzL-Node-01 (Attempt: 3/3). Result returned 0 A records. Expected at least 1. Error:
+```
+
+The meaning is the same as the first signature above (the server was reached but
+returned no A records); only the queried hostname, the `(Attempt: n/3)` suffix, and
+the per-node bullet layout differ.
 
 ### 3. Identify the affected nodes
 
