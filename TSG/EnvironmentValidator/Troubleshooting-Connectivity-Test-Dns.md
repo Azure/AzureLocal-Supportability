@@ -64,16 +64,24 @@ if (-not (Test-Path $base)) {
         Where-Object { Test-Path $_ } | Select-Object -First 1
 }
 
-$latest = Get-ChildItem $base -Filter 'HealthCheckResult.*.json' -ErrorAction SilentlyContinue |
-    Sort-Object LastWriteTime -Descending | Select-Object -First 1
-Write-Host "Reading: $($latest.FullName)"
+$latest = $null
+if ($base) {
+    $latest = Get-ChildItem $base -Filter 'HealthCheckResult.*.json' -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+}
 
-Get-Content $latest.FullName -Raw | ConvertFrom-Json |
-    Where-Object { $_.Name -eq 'AzStackHci_Connectivity_Test_Dns' -and $_.Status -ne 0 -and $_.Status -ne 'SUCCESS' } |
-    Select-Object Severity,
-        @{ n = 'Source';      e = { $_.AdditionalData.Source } },
-        @{ n = 'Detail';      e = { $_.AdditionalData.Detail } },
-        Remediation
+if (-not $latest) {
+    Write-Warning "No HealthCheck result file found on this node (the folder is missing or no health check has run yet). Use Option B, C, or D, or run this on a different node."
+}
+else {
+    Write-Host "Reading: $($latest.FullName)"
+    Get-Content $latest.FullName -Raw | ConvertFrom-Json |
+        Where-Object { $_.Name -eq 'AzStackHci_Connectivity_Test_Dns' -and $_.Status -ne 0 -and $_.Status -ne 'SUCCESS' } |
+        Select-Object Severity,
+            @{ n = 'Source';      e = { $_.AdditionalData.Source } },
+            @{ n = 'Detail';      e = { $_.AdditionalData.Detail } },
+            Remediation
+}
 ```
 
 Each row is one currently-failing DNS server on one node. The `Detail` column is the
@@ -154,17 +162,32 @@ server:
 ```powershell
 Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
     $base = 'C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\HealthCheck\System'
-    if (-not (Test-Path $base)) { return }
-    $latest = Get-ChildItem $base -Filter 'HealthCheckResult.*.json' -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if (-not $latest) { return }
-    Get-Content $latest.FullName -Raw | ConvertFrom-Json |
+    if (-not (Test-Path $base)) {
+        # Same fallback as Step 1 Option A: walk all ClusterStorage volumes.
+        $base = Get-ChildItem 'C:\ClusterStorage' -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName 'Shares\SU1_Infrastructure_1\Updates\HealthCheck\System' } |
+            Where-Object { Test-Path $_ } | Select-Object -First 1
+    }
+    $latest = $null
+    if ($base) {
+        $latest = Get-ChildItem $base -Filter 'HealthCheckResult.*.json' -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    }
+    if (-not $latest) {
+        # Emit an explicit NO DATA row so this node is never silently treated as passing.
+        return [pscustomobject]@{ Detail = 'NO DATA: no HealthCheck result file on this node (use Option C, the event log)' }
+    }
+    $failing = Get-Content $latest.FullName -Raw | ConvertFrom-Json |
         Where-Object { $_.Name -eq 'AzStackHci_Connectivity_Test_Dns' -and $_.Status -ne 0 -and $_.Status -ne 'SUCCESS' } |
         Select-Object @{ n = 'Detail'; e = { $_.AdditionalData.Detail } }
+    if ($failing) { $failing }
+    else { [pscustomobject]@{ Detail = 'PASS: no failing DNS result in the latest health check' } }
 } | Sort-Object PSComputerName | Select-Object PSComputerName, Detail
 ```
 
-Nodes that do not appear have the check passing.
+Every node now reports one of three things: a failing `Detail` (the node is failing,
+fix it), `PASS` (the check passed on that node), or `NO DATA` (the result could not be
+read on that node, so confirm it with Option C rather than assuming it passed).
 
 ### 4. Consequences if you do not fix this
 
