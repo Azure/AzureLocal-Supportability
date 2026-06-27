@@ -4,6 +4,7 @@
 > - **Owner:** the customer's network or DNS administrator. This is not a Microsoft software defect and not an OEM hardware or firmware issue.
 > - **Impact:** Critical. It blocks Azure Local deployment and updates until external DNS resolution works on every node.
 > - **Effort and downtime:** small. A per-node DNS change applies immediately, with no reboot, no cluster drain, and no impact to running VMs or live migration.
+> - **Typical time to resolve:** about 15 to 30 minutes per affected node for a DNS-client fix once you have the correct DNS server addresses. Allow longer if the fix is an upstream DNS server change (a forwarder or firewall rule) that must be coordinated with whoever owns that server.
 > - **Before you change anything:** do not guess DNS server IP addresses. Get the cluster's intended DNS servers from your network or DNS administrator first.
 
 ## Overview
