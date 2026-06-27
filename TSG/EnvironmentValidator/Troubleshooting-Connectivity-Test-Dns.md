@@ -239,13 +239,25 @@ identified in Step 3.
 2. Confirm these are the DNS servers the cluster is supposed to use, comparing against
    your documented management DNS servers. If the node has no DNS server on its
    management adapter (the `No DNS server configured` signature), or the configured
-   servers are wrong, set the correct ones (per node, applies immediately, no reboot):
+   servers are wrong, set the correct ones (per node, applies immediately, no reboot).
+
+   First identify which adapter is the management adapter, so the placeholders below are
+   concrete. It is the up adapter whose IPv4 address is the node's management IP; match
+   that IP to an `InterfaceAlias` here, then reuse the same `InterfaceAlias` from Step 1
+   to see the DNS servers currently on it:
+
+   ```powershell
+   Get-NetIPConfiguration | Where-Object { $_.IPv4Address } |
+       Select-Object InterfaceAlias, @{ n = 'IPv4'; e = { $_.IPv4Address.IPAddress -join ', ' } }
+   ```
+
+   The correct `<dns1>`,`<dns2>` are your deployment's documented management DNS servers
+   (the same ones the healthy nodes resolve against). Record the original values first so
+   the change can be rolled back, then set them on the management adapter:
 
    ```powershell
    Set-DnsClientServerAddress -InterfaceAlias '<ManagementAdapter>' -ServerAddresses '<dns1>','<dns2>'
    ```
-
-   Record the original values first so the change can be rolled back.
 
 3. Test each configured DNS server the same way the validator does, resolving the
    external name directly against that server:
