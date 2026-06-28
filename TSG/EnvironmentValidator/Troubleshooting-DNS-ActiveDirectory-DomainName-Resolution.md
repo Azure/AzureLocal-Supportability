@@ -90,7 +90,7 @@ $names = 'AzStackHci_DNS_ActiveDirectoryDomainName','AzStackHci_DNS_Test_ActiveD
 
 $latest = $null
 if ($base) {
-    $latest = Get-ChildItem $base -Filter 'HealthCheckResult.*.json' -ErrorAction SilentlyContinue |
+    $latest = Get-ChildItem $base -Filter 'HealthCheckResult.EnvironmentChecker.*.json' -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
 }
 
@@ -135,7 +135,7 @@ Event ID 17205, or from PowerShell:
 
 ```powershell
 $names = 'AzStackHci_DNS_ActiveDirectoryDomainName','AzStackHci_DNS_Test_ActiveDirectory_DomainName_Resolution'
-Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath "*[System[(EventID=17205)]]" |
+Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath "*[System[(EventID=17205)]]" -MaxEvents 2000 |
     ForEach-Object {
         try { $r = $_.Message | ConvertFrom-Json } catch { return }
         if ($r.Name -in $names -and $r.Status -ne 0 -and $r.Status -ne 'SUCCESS') {
@@ -206,7 +206,7 @@ Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
     $names = 'AzStackHci_DNS_ActiveDirectoryDomainName','AzStackHci_DNS_Test_ActiveDirectory_DomainName_Resolution'
     $latest = $null
     if ($base) {
-        $latest = Get-ChildItem $base -Filter 'HealthCheckResult.*.json' -ErrorAction SilentlyContinue |
+        $latest = Get-ChildItem $base -Filter 'HealthCheckResult.EnvironmentChecker.*.json' -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
     }
     if (-not $latest) {
