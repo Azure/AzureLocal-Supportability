@@ -179,7 +179,12 @@ the machine's firmware setup (or with the vendor's management tooling), not from
   reversible firmware switch (sometimes with a documented limit on how many times it can be
   done), some allow only a one-way move, and some ship a **fixed module that cannot be
   switched at all** and would have to be replaced. Consult your hardware vendor's TPM
-  documentation for your exact model before proceeding.
+  documentation for your exact model before proceeding. The switch limit (the toggle-count
+  cap) is documented per model in the server's BIOS/firmware or TPM configuration guide,
+  usually under a "TPM switching", "TPM provisioning", or "Change TPM mode" topic (for
+  example in Dell iDRAC/BIOS, HPE iLO/UEFI, or Lenovo XClarity/UEFI documentation); some
+  platforms also surface the remaining count in the BIOS TPM menu or the vendor's
+  server-management tooling.
 
 ### Before you start: decide whether and how this can be fixed (and who does it)
 
