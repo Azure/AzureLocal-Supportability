@@ -159,6 +159,9 @@ In both sources the result for this check looks like this:
     Get-Disk | Where-Object IsBoot | Select-Object Number, PartitionStyle
     # If Confirm-SecureBootUEFI errors with "Cmdlet not supported on this platform",
     # the machine is in legacy BIOS / CSM mode, not UEFI.
+    # Cross-check the boot mode from Windows: a winload.efi boot path means UEFI,
+    # winload.exe means legacy BIOS. (msinfo32 also reports "BIOS Mode: UEFI" or "Legacy".)
+    bcdedit /enum '{current}' | Select-String 'path'
     ```
 
   - If this machine is **already a deployed cluster member** (encrypted or not), the firmware
@@ -221,7 +224,17 @@ Suspend-BitLocker -MountPoint "C:" -RebootCount 0
 4. Save and exit, and let the machine boot back into the OS.
 
 The exact menu names are vendor-specific; consult your hardware vendor's documentation
-for the precise location of the Secure Boot and boot-mode settings.
+for the precise location of the Secure Boot and boot-mode settings. As a starting point,
+Secure Boot and boot mode usually live here:
+
+| Vendor (tool) | Where Secure Boot and boot mode usually live |
+| --- | --- |
+| Dell (iDRAC / BIOS Setup) | System BIOS > System Security > Secure Boot; boot mode under System BIOS > Boot Settings > Boot Mode |
+| HPE (iLO / UEFI System Utilities) | System Configuration > BIOS/Platform Configuration (RBSU) > Server Security > Secure Boot; boot mode under Boot Options |
+| Lenovo (XClarity / UEFI Setup) | UEFI Setup > Security > Secure Boot; boot mode under Boot Manager / Startup |
+
+These paths vary by model and firmware version, so confirm them against your server's
+current firmware documentation rather than treating them as exact.
 
 ### 3. Confirm Secure Boot is on
 
