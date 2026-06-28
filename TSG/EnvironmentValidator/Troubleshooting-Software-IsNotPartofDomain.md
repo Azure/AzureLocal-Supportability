@@ -220,6 +220,10 @@ Notes:
 - After the restart, sign in with the **local** administrator account you confirmed in
   step 2, since the machine is now a workgroup member rather than a domain member.
 - The machine keeps its computer name; only its domain membership changes.
+- Unjoining does not delete the machine's computer account in Active Directory; that
+  object stays until a domain administrator removes it. It is harmless for deployment
+  (the machine starts fresh in a workgroup), but the AD administrator may want to clean
+  up the stale computer object, especially if the machine will not rejoin this domain.
 - Make sure nothing will automatically rejoin the machine to the domain before
   deployment (for example a Group Policy, an imaging or provisioning task, or a
   scheduled join). If the machine rejoins the domain, this check fails again.
