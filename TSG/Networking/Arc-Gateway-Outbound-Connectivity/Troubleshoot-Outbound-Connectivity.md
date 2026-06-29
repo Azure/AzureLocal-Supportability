@@ -16,7 +16,8 @@ There are several symptoms or issues that will occur if the required endpoints a
 1. Physical machines show their "Azure Arc" status as "Disconnected" in Azure portal experience (_Arc agent not connected_).
 1. Deployment of new Azure Local VMs fails with RPC failure in Azure portal as the ARM deployment status.
 1. Updates fail at "update ARB and extensions" step with "SSL: CERTIFICATE_VERIFY_FAILED" shown in Azure portal update blade.
-1. There are many other network related issues that could occur when the required endpoints are not accessible from the management (_physical machines and ARB_) network address space.
+
+Many other network related issues can also occur when the required endpoints are not accessible from the management (_physical machines and ARB_) network address space.
 
 ## Issue Validation
 
@@ -28,18 +29,25 @@ If you are finding it difficult to isolate the cause of the network related issu
 
 ## Mitigation Details
 
-To help with troubleshooting or root causing network connectivity issues, you can use the **Test-AzureLocalConnectivity** function which is included in the **AzStackHCI.DiagnosticSettings** module. This function can help automate testing that connectivity is working correctly from Azure Local physical machines to the required public endpoints. The function supports Arc Gateway scenarios and has an `-AzureRegion` parameter to allow testing against a specific Azure region that matches your Azure Local instance deployment.
+To help with troubleshooting or root causing network connectivity issues, you can use the **Test-AzureLocalConnectivity** function which is included in the **AzStackHci.DiagnosticSettings** module. This function is intended for operators and Customer Service and Support (CSS) engineers, either to validate connectivity before deployment or to isolate a blocked firewall/proxy endpoint during active troubleshooting. It automates testing that connectivity is working correctly from Azure Local physical machines to the required public endpoints. The function supports Arc Gateway scenarios and has an `-AzureRegion` parameter to allow testing against a specific Azure region that matches your Azure Local instance deployment.
+
+Unlike the built-in readiness checks, which report an overall pass/fail, this function gives deeper per-endpoint diagnostics that are useful when isolating a blocked or intercepted endpoint:
+
+* **Per-endpoint results** — every required URL is tested individually for DNS, TCP, and Layer-7 (HTTP/HTTPS) reachability, so you can pinpoint exactly which endpoint is blocked.
+* **SSL inspection detection** — flags endpoints where the certificate was substituted by a proxy, the typical cause of `SSL: CERTIFICATE_VERIFY_FAILED`, and captures the leaf/intermediate/root certificate chain.
+* **Private Link / RFC1918 detection** — warns when an endpoint resolves to a private IP, helping distinguish intentional Private Link from a misconfiguration.
+* **Scenario-aware endpoint list** — automatically adjusts for Arc Gateway, Azure region, and your hardware OEM partner endpoints.
 
 > Note: This article documents version **0.6.7** of the module. Version 0.6.7 adds cluster-wide testing (`-Scope Cluster`), faster endpoint sweeps using HTTP HEAD requests (`-RequestMethod`) and parallel workers (`-Parallelism`), and richer `-PassThru` objects for automation. See [Run tests across all cluster nodes](#run-tests-across-all-cluster-nodes--scope-cluster), [Faster testing: HEAD requests and parallel workers](#faster-testing-head-requests-and-parallel-workers), and [Programmatic use with -PassThru](#programmatic-use-with--passthru-automation) below.
 
-The 'Test-AzureLocalConnectivity' function has a dependency on the Azure Local Environment Checker module being installed, which is installed by default on all Azure Local physical machines. If Environment Checker module (_AzStackHci.EnvironmentChecker_) is not installed on the device running the connectivity test, you will be prompted to install the module first. The device used to install the AzStackHCI.DiagnosticSettings module and test connectivity must have access to the PowerShell Gallery, in order to download the module (_nuget package_) to install it.
+The 'Test-AzureLocalConnectivity' function has a dependency on the Azure Local Environment Checker module being installed, which is installed by default on all Azure Local physical machines. If Environment Checker module (_AzStackHci.EnvironmentChecker_) is not installed on the device running the connectivity test, you will be prompted to install the module first. The device used to install the AzStackHci.DiagnosticSettings module and test connectivity must have access to the PowerShell Gallery, in order to download the module (_nuget package_) to install it.
 
 ### Install and run connectivity tests
 
-To install the AzStackHCI.DiagnosticSettings module and perform connectivity tests for a support or troubleshooting scenario, use the commands below:
+To install the AzStackHci.DiagnosticSettings module and perform connectivity tests for a support or troubleshooting scenario, use the commands below:
 
 ```PowerShell
-# Install the AzStackHCI.DiagnosticSettings module, this can be on an Azure Local
+# Install the AzStackHci.DiagnosticSettings module, this can be on an Azure Local
 # physical machine (recommended), or any device inside your network (if it is using
 # the same firewall / proxy configuration as your Azure Local instance).
 Install-Module -Name "AzStackHci.DiagnosticSettings" -Repository PSGallery
