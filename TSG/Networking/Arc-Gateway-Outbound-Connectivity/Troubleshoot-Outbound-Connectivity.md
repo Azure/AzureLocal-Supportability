@@ -175,6 +175,12 @@ Test-AzureLocalConnectivity -AzureRegion "EastUS" -OutputFormat CSV
 
 All output files are saved to: `C:\ProgramData\AzStackHci.DiagnosticSettings\`
 
+To copy the run's output files to an additional location (for example a network share), use the `-ExportPath` parameter. Files are still always saved to `C:\ProgramData\AzStackHci.DiagnosticSettings\` and copied to the specified path in addition:
+
+```PowerShell
+Test-AzureLocalConnectivity -AzureRegion "EastUS" -ExportPath "\\fileshare\AzureLocalDiagnostics"
+```
+
 Output files generated:
 
 | File | Description |
@@ -348,7 +354,13 @@ param (
     # version to nodes that are missing it or have a different version. Opt-in;
     # never mutates remote nodes silently. No PowerShell Gallery / internet
     # dependency (copies from the orchestrator's installed module folder).
-    [switch]$InstallMissingModuleOnNodes
+    [switch]$InstallMissingModuleOnNodes,
+
+    # Optional additional path to copy the report/transcript/JSON to. Results
+    # are ALWAYS saved to C:\ProgramData\AzStackHci.DiagnosticSettings; when a
+    # different path is specified the run folder is additionally copied there
+    # (never instead of ProgramData).
+    [string]$ExportPath = 'C:\ProgramData\AzStackHci.DiagnosticSettings'
 )
 ```
 
@@ -358,6 +370,7 @@ param (
 |--------|---------|
 | `-Scope` | **New in 0.6.7.** `Node` (default) tests the current node only; `Cluster` enumerates `Get-ClusterNode` and runs the test on every node via `Invoke-Command`, aggregating per-node results into a tabbed HTML report. |
 | `-InstallMissingModuleOnNodes` | **New in 0.6.7.** Only valid with `-Scope Cluster`. Side-loads the orchestrator's exact module version to nodes that are missing it or have a version mismatch (drift). Opt-in; no PowerShell Gallery / internet dependency. |
+| `-ExportPath` | **New in 0.6.7.** Optional additional folder to copy the report, transcript, and JSON to. Results are **always** saved to `C:\ProgramData\AzStackHci.DiagnosticSettings`; a different path is copied there *in addition*, never instead. |
 | `-Parallelism` | **New in 0.6.7.** Fans the Layer-7 sweep out across 1–16 process-isolated workers. Default `1` (sequential). Per-node default is `8` under `-Scope Cluster`. |
 | `-RequestMethod` | **New in 0.6.7.** `Auto` (default), `Get`, or `Head`. **Behaviour change:** the default is now `Auto` (HEAD-first with GET fallback). Use `-RequestMethod Get` to preserve pre-0.6.7 behaviour. |
 | `-PassThru` | **Enhanced in 0.6.7.** Node scope returns results with a per-row `ResultCategory` field and run-level summary properties; Cluster scope returns a cluster summary object. See [Programmatic use with -PassThru](#programmatic-use-with--passthru-automation). |
