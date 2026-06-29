@@ -1,5 +1,7 @@
 # Azure Local - Troubleshoot Outbound Network Connectivity
 
+> **TL;DR:** Run `Test-AzureLocalConnectivity` from the **AzStackHci.DiagnosticSettings** module to validate (and pinpoint) outbound connectivity from your Azure Local nodes to the required Azure endpoints.
+
 ## Overview
 
 Connected instances of Azure Local require outbound / egress network connectivity from the management network of each Azure Local instance to a list of public endpoints. Network connectivity to these endpoints is required for Azure Local to use Azure as a reliable management and control plane, such as for initial instance deployment, applying updates and for workload provisioning operational capabilities. Allowing connectivity to the list of endpoints is a prerequisite for deployment, but ongoing connectivity to the list of endpoints is vital for support, manageability and licensing compliance. The list of required endpoints varies depending on the customer scenario, for example the list of endpoints is reduced when using an Azure Arc Gateway, and varies (slightly) based on which Azure region is selected.
