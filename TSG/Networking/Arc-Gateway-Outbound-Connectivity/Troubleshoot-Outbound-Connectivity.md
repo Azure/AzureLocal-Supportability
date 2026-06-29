@@ -1,6 +1,6 @@
 # Azure Local - Troubleshoot Outbound Network Connectivity
 
-> **TL;DR:** Run `Test-AzureLocalConnectivity` from the **AzStackHci.DiagnosticSettings** module to validate (and pinpoint) outbound connectivity from your Azure Local nodes to the required Azure endpoints.
+> **TL;DR:** You can use the `Test-AzureLocalConnectivity` function from the **AzStackHci.DiagnosticSettings** module, to validate / troubleshoot outbound connectivity issues from Azure Local nodes to the required Azure endpoints.
 
 ## Overview
 
