@@ -79,7 +79,7 @@ if (-not (Test-Path $base)) {
 
 $latest = $null
 if ($base) {
-    $latest = Get-ChildItem $base -Filter 'HealthCheckResult.*.json' -ErrorAction SilentlyContinue |
+    $latest = Get-ChildItem $base -Filter 'HealthCheckResult.EnvironmentChecker.*.json' -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
 }
 
@@ -123,7 +123,7 @@ The same data is written to the Windows event log on each node. In Event Viewer,
 Event ID 17205, or from PowerShell:
 
 ```powershell
-Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath "*[System[(EventID=17205)]]" |
+Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath "*[System[(EventID=17205)]]" -MaxEvents 2000 |
     ForEach-Object {
         try { $r = $_.Message | ConvertFrom-Json } catch { return }
         if ($r.Name -eq 'AzStackHci_Connectivity_Test_Dns' -and $r.Status -ne 0 -and $r.Status -ne 'SUCCESS') {
@@ -197,7 +197,7 @@ Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
     }
     $latest = $null
     if ($base) {
-        $latest = Get-ChildItem $base -Filter 'HealthCheckResult.*.json' -ErrorAction SilentlyContinue |
+        $latest = Get-ChildItem $base -Filter 'HealthCheckResult.EnvironmentChecker.*.json' -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
     }
     if (-not $latest) {
