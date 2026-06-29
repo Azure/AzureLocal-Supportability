@@ -19,9 +19,9 @@
 ## Overview
 Azure Local Deployment with Local Identity Supports deployment without Active Directory and No External DNS within the local network.
 
-In the DNS Service configuration during Azure Local Deployment, there are 2 options:
+In the DNS Service configuration during Azure Local deployment, there are two options:
 - Yes - there is an existing DNS
-- No - thjere is NO existing DNS
+- No - there is no existing DNS
 
 ![DNS Service Configuration](dnsService.png)
 
