@@ -6,6 +6,7 @@ This folder contains the TSG's related to Environment Validators.
 * [Troubleshooting Test NetAdapter API Failure](./Troubleshooting-Test-NetAdapter-API.md)
 * [Troubleshooting Test PhysicalDisk API Failure](./Troubleshooting-Test-PhysicalDisk-API.md)
 * [Troubleshooting Test System Drive Free Space](./Troubleshooting-Test-SystemDrive-Free-Space.md)
+* [Troubleshooting Secure Boot (Hardware Test Secure Boot)](./Troubleshooting-Hardware-Test-Secure-Boot.md)
 * [Troubleshooting Domain Membership (Software IsNotPartofDomain)](./Troubleshooting-Software-IsNotPartofDomain.md)
 * [Troubleshooting TestPowerShell Module Version](./Troubleshooting-Test-PowerShell-Module-Version.md)
 * [Troubleshooting Module Versions](Troubleshooting-Module-Versions.md)
