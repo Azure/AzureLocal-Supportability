@@ -308,10 +308,10 @@ the [Glossary](#glossary) at the end of this guide._
    proxy is present, this check self-skips and reports success. Only do this if a
    proxy is genuinely part of the design.
 
-**Risk:** LOW for re-pointing a node's DNS client, which is per-node, immediate, and
-reversible by restoring the previous servers. MEDIUM for changes on an upstream DNS
-server, which can affect other systems that use it, so coordinate with its owner. No
-node drain or reboot is required for DNS-client changes.
+Re-pointing a node's DNS client is a [LOW RISK] change: it is per-node, immediate, and
+reversible by restoring the previous servers. Changing an upstream DNS server is a
+[MEDIUM RISK] change, because it can affect other systems that use it, so coordinate with
+its owner. No node drain or reboot is required for DNS-client changes.
 
 ### 6. Verification: prove the failure cleared
 
