@@ -318,10 +318,10 @@ split-horizon)? See the [Glossary](#glossary) at the end of this guide._
    - Confirm that DNS traffic on port 53 from the nodes to the DNS servers is not blocked
      by a firewall.
 
-**Risk:** LOW for re-pointing a node's DNS client, which is per-node, immediate, and
-reversible by restoring the previous servers. MEDIUM for changes on an upstream DNS
-server or domain controller, which can affect other systems that use it, so coordinate
-with its owner. No node drain or reboot is required for DNS-client changes.
+Re-pointing a node's DNS client is a [LOW RISK] change: it is per-node, immediate, and
+reversible by restoring the previous servers. Changing an upstream DNS server or domain
+controller is a [MEDIUM RISK] change, because it can affect other systems that use it, so
+coordinate with its owner. No node drain or reboot is required for DNS-client changes.
 
 ### 6. Verification: prove the failure cleared
 
