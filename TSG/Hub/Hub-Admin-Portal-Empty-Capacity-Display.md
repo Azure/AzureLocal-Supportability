@@ -30,7 +30,7 @@ In the Azure Stack Hub Admin Portal under Infrastructure -> Capacity, Physical M
 Storage Capacity will show zeroes.
 ![emptyportal.png](./images/emptyportal.png)
 
-In `C:\Monitoring\agent\Logs\MonAgentHost*.log` (and the MA event-table dumps) you will see this
+In `C:\Monitoring\data\MonAgentHost*.log` (and the MA event-table dumps) you will see this
 error repeating every few seconds, with the agent restarting each time:
 
 ```
@@ -723,7 +723,7 @@ Invoke-Command -ComputerName $node -ScriptBlock {
         Select-Object Name, Id, StartTime
 
     # The fatal config error should no longer appear after the fix timestamp.
-    $log = Get-ChildItem 'C:\Monitoring\agent\Logs\MonAgentHost*.log' -ErrorAction SilentlyContinue |
+    $log = Get-ChildItem 'C:\Monitoring\data\MonAgentHost*.log' -ErrorAction SilentlyContinue |
            Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($log) {
         Select-String -LiteralPath $log.FullName -Pattern 'Cannot define an event multiple times' |
