@@ -88,16 +88,16 @@ Open the resource group(s) in the [Azure portal](https://portal.azure.com/) and 
 
 ## Step 2: Remove Resource Locks
 
-By default, deployment applies **DoNotDelete** locks to the resources it creates; governance policies may also apply **ReadOnly** locks. Either kind blocks deletion, and locks can be **inherited** from the subscription or management-group scope, not just the resource or its resource group.
+By default, deployment applies **DoNotDelete** locks to the resources it creates; governance policies may also apply **ReadOnly** locks. Either kind blocks deletion, and locks can be **inherited** from a parent subscription scope, not just the resource or its resource group.
 
 1. In the Azure portal, open the resource group, expand **Settings**, and select **Locks**.
 2. Delete the **DoNotDelete** and **ReadOnly** locks on the resources you are about to remove. If a delete later fails with a lock error, check parent scopes for an inherited lock.
 
 ## Step 3: Delete Workload Resources First
 
-Delete every resource that depends on the custom location / Arc resource bridge **before** touching those platform resources, working **from the inside out** — resources that live inside or attach to another must go first, or they orphan when their container is deleted:
+Delete every resource that depends on the custom location / Arc resource bridge **before** touching those platform resources. Work top-down: delete the top-level workloads (VMs, then AKS clusters) first, then the resources they used (network interfaces, data disks), then the containers those lived in (storage paths, logical networks). Deleting a container before the resources inside it orphans them:
 
-1. **Azure Local VMs**, then **AKS Arc clusters** — the top-level workloads. Deleting a VM also removes the OS disk and the NICs/disks created with it.
+1. **Azure Local VMs**, then **AKS Arc clusters** — the top-level workloads. Deleting an Azure Local VM does **not** remove its network interfaces or data disks; those are separate resources you must delete yourself (steps below). In the portal, use **Show hidden types** on the resource group to reveal resources a VM delete left behind.
 2. **VM images**.
 3. **Network interfaces**, then **virtual hard disks** (data disks) that were attached to the VMs.
 4. **Network security groups**.
@@ -116,6 +116,9 @@ CLI equivalents use the `az stack-hci-vm` command group — for example `az stac
 > | project name, type, resourceGroup, subscriptionId
 > ```
 
+> [!NOTE]
+> For "zero rows" to be trustworthy, set the Resource Graph scope to **Directory** (all subscriptions you can access) — workload resources can live in a different subscription than the platform. Azure Resource Graph is eventually consistent and can lag ARM by a few minutes, so re-run after a short wait and cross-check the resource group blade in the portal. Confirm any AKS Arc clusters are gone independently; their child resources may not surface as top-level rows.
+
 ## Step 4: Delete the Arc Resource Bridge, Then the Custom Location
 
 Only after Step 3 and the checkpoint above are complete, delete the platform resources in this order:
@@ -123,7 +126,7 @@ Only after Step 3 and the checkpoint above are complete, delete the platform res
 1. **Arc resource bridge**
 2. **Custom location**
 
-Microsoft documents this order: the custom location must be deleted only **after** the Arc resource bridge has been deleted.
+Microsoft documents this order for Azure Local: *"The custom location should only be deleted after the Arc resource bridge has been deleted"* ([What is Azure Local VM management?](https://learn.microsoft.com/azure/azure-local/manage/azure-arc-vm-management-overview), Components). Remove the Arc resource bridge with `az arcappliance delete hci` — the supported method, which deletes the on-premises appliance VM **and** the Arc resource bridge Azure resource together (deleting only the Azure resource from the portal leaves the on-premises appliance VM on the cluster). With its host gone, the custom location is then removed as a separate, trivial resource delete.
 
 ```azurecli
 az arcappliance delete hci --config-file "<path>\<resourceName>-appliance.yaml"
@@ -131,13 +134,13 @@ az customlocation delete --name <custom-location-name> --resource-group <resourc
 ```
 
 > [!NOTE]
-> If you delete the Arc resource bridge from the portal and an on-premises appliance VM (named `*-control-plane-*`) remains on the cluster, follow the Azure Local VMs wiki guidance to remove the residual MOC/ARB appliance and metadata from the nodes.
+> Deleting the Arc resource bridge from the **portal** leaves the on-premises appliance VM (named `*-control-plane-*`) on the cluster; `az arcappliance delete hci` (above) removes it. If the appliance VM remains, the [Step 6](#step-6-reimage-and-redeploy) reimage removes it and all MOC/ARB metadata from the nodes, so no separate cleanup is needed for a redeploy. To remove it **without** reimaging (for example, an in-place decommission), contact Microsoft Support.
 
 ## Step 5: Delete the Infrastructure and Registration Resources
 
 With workloads and the platform projection removed, delete the remaining resources:
 
-1. **Azure Local** instance resource (this removes the cluster's Azure registration in 23H2 — there is no separate unregister cmdlet).
+1. **Azure Local** instance resource — deleting this resource removes the cluster's Azure registration; in 23H2 this portal/CLI resource delete is the supported cleanup path.
 2. **Machine - Azure Arc** resources (one per node). See [Manage the Azure Connected Machine agent](https://learn.microsoft.com/azure/azure-arc/servers/manage-agent) to disconnect a machine and delete its Arc resource.
 3. **Key vault** and its secrets — **only if** the key vault is dedicated to this deployment. Do **not** delete a key vault shared with other Azure Local systems.
 4. **Storage accounts** — the key vault audit-log account and the cloud witness account (if used).
@@ -184,12 +187,12 @@ A redeployment starts from a clean operating system on each machine.
 ### A VM was deleted in Azure but still runs on-premises (orphaned VM)
 
 **Symptoms:** The Arc VM no longer appears in Azure but is still running on the cluster.
-**Solution:** Recreate the Arc VM from the Azure portal using the **same** resource group, VM name, VM image, and admin credentials as the original (uncheck guest management; do not attach NICs or disks), then delete it again from the portal — this pushes the delete through to the cluster. Do this **before** deleting the Arc resource bridge. This is the known workaround for a specific class of deletion issue (see [Arc VMs deletion](../ArcVMs/arc-vm-deletion.md)); orphaning can have other causes, so if it does not resolve the VM, contact Microsoft Support.
+**Solution:** Recreate the Arc VM from the Azure portal using the **same** resource group, VM name, VM image, and admin credentials as the original (uncheck guest management; do not attach NICs or disks), then delete it again from the portal — this pushes the delete through to the cluster. Do this **before** deleting the VM image, custom location, and Arc resource bridge — all of which must still exist to recreate the VM. This is the known workaround for a specific class of deletion issue (see [Arc VMs deletion](../ArcVMs/arc-vm-deletion.md)); orphaning can have other causes, so if it does not resolve the VM, contact Microsoft Support.
 
 ### A delete fails because a resource is locked
 
 **Symptoms:** Delete returns an error about a **DoNotDelete** or **ReadOnly** lock.
-**Solution:** Return to [Step 2](#step-2-remove-resource-locks) and remove the lock on that resource and its resource group, and check the subscription / management-group scope for an inherited lock, then retry.
+**Solution:** Return to [Step 2](#step-2-remove-resource-locks) and remove the lock on that resource and its resource group, and check the subscription scope for an inherited lock, then retry.
 
 ### The custom location or Arc resource bridge was deleted before the workload resources
 
@@ -198,7 +201,7 @@ A redeployment starts from a clean operating system on each machine.
 
 ### An on-premises Arc resource bridge appliance VM remains after deletion
 
-**Symptoms:** The Arc resource bridge resource is gone from Azure, but a `*-control-plane-*` appliance VM remains on the cluster.
-**Solution:** Remove the residual MOC/ARB appliance and metadata from the nodes using the Azure Local VMs wiki MOC/ARB cleanup guidance, then proceed with the reimage.
+**Symptoms:** The Arc resource bridge resource is gone from Azure, but a `*-control-plane-*` appliance VM remains on the cluster (typically because the bridge was deleted from the portal rather than with `az arcappliance delete hci`).
+**Solution:** For a redeploy, the [Step 6](#step-6-reimage-and-redeploy) reimage removes the residual appliance and all MOC/ARB metadata from the nodes — no separate cleanup is required. If you must remove it **without** reimaging, contact Microsoft Support.
 
 ---
