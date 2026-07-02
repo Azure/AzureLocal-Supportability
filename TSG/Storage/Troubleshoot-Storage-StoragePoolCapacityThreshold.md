@@ -313,7 +313,7 @@ data into fewer slabs and releases the emptied slabs back to the pool.
 > close to `Size × resiliency`). If footprint matches the data actually written,
 > there is nothing to reclaim.
 
-**Procedure (requires a brief offline window for VMs on the affected volume):** — [MEDIUM RISK]
+**Procedure (requires an offline window for VMs on the affected volume; the window lasts through slab consolidation, which can take hours on large volumes):** — [MEDIUM RISK]
 
 1. *(Optional, no downtime)* Merge Hyper-V checkpoints that are no longer needed
    (`Get-VM | Get-VMSnapshot`, then `Remove-VMSnapshot`). Checkpoint files pin
