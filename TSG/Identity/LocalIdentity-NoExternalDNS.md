@@ -53,6 +53,7 @@ Get-DnsClient
 Set-DnsClient -InterfaceIndex <specific-interace-index> -ConnectionSpecificSuffix "<Your Zone Name, example: store1.contoso.com>"
 ```
 Note: the DNS Suffix should be set up on the network adapter select for the primary intent.
+
 ![Network Adapter Selection](./images/network.png)
 
 ## Verification
@@ -64,6 +65,7 @@ Get-DnsClient
 
 ## Deployment Failure Symptom - if DNS Suffix is not setup on the server hosts
 During Deployment, there will be an validation Error on Azure Local Cluster Validation:
+
 ![Deployment Validation Error](./images/validation.png)
 
 When opening the details, there will be error with error code and the error detail will have info about "WinRM client cannot process the request"
