@@ -142,17 +142,19 @@ the redirect target, and treats a redirect that lands on a search engine as a fa
 # Use the endpoint URL from the failure Description in step 1.
 $sbeEndpoint = '<endpoint-from-step-1>'
 try {
-    $r = Invoke-WebRequest -Uri $sbeEndpoint -UseBasicParsing -TimeoutSec 15 -PassThru -OutFile ([System.IO.Path]::GetTempFileName())
+    $r = Invoke-WebRequest -Uri $sbeEndpoint -UseBasicParsing -TimeoutSec 15
     [pscustomobject]@{ StatusCode = $r.StatusCode; FinalUri = $r.BaseResponse.ResponseUri.AbsoluteUri }
 } catch {
     "Failed: $($_.Exception.Message)"
 }
 ```
 
-A reachable endpoint returns `StatusCode = 200`, and `FinalUri` shows the real host the `aka.ms`
-link redirects to (the host you must also allow in step 3). A failure here reproduces exactly what
-the check saw: the same connection error, non-`200` code, **no response at all**, or a `FinalUri`
-that points at a search engine.
+This uses only `-UseBasicParsing`, which returns a response object on the default node shell
+(Windows PowerShell 5.1) so `.StatusCode` and `.BaseResponse.ResponseUri.AbsoluteUri` are both
+populated. A reachable endpoint returns `StatusCode = 200`, and `FinalUri` shows the real host the
+`aka.ms` link redirects to (the host you must also allow in step 3). A failure here reproduces
+exactly what the check saw: the same connection error, non-`200` code, **no response at all**, or a
+`FinalUri` that points at a search engine.
 
 ### 3. Fix the reachability (firewall / proxy)
 
@@ -222,6 +224,13 @@ the next validation pass.
 
 ## Related
 
+- **Firewall blocks SBE update discovery** (internal SBE connectivity guide with the per-vendor
+  `aka.ms/AzureStackSBEUpdate/<vendor>` endpoints and how to discover the active endpoint with
+  `Get-SolutionDiscoveryDiagnosticInfo`):
+  [Firewall-blocks-update-discovery.md](../SolutionExtension/Firewall-blocks-update-discovery.md)
+- **Firewall blocks SBE validation** (internal guide covering the SBE manifest endpoint, its
+  `redirectiontool.trafficmanager.net` redirect target, and the firewall allow-list):
+  [Firewall-blocks-SBE-validation.md](../SolutionExtension/Firewall-blocks-SBE-validation.md)
 - **Rerun a deployment / update after fixing prerequisites** (Azure Local deployment
   troubleshooting): https://learn.microsoft.com/en-us/azure-stack/hci/deploy/deployment-tool-troubleshoot#rerun-deployment
 - **Solution Builder Extension** overview and partner content:
