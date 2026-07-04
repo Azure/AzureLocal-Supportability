@@ -48,13 +48,13 @@ field engineer checking your own imaging process, confirm the image does not pin
 servers and leaves them to be set by deployment, so each cluster picks up the customer's
 intended DNS rather than a stale value carried over from imaging.
 
-> **Full companion guide.** This guide is focused on the `management.azure.com` dedicated
-> DNS validator. The root cause, the complete multi-entry-point discovery options, the
-> per-node fan-out script, and a plain-language DNS glossary are shared with the legacy
-> connectivity test and are documented once, in depth, in the companion TSG
+> **Related guide.** This guide is self-contained for the dedicated `management.azure.com`
+> DNS validator: the discovery, per-node fan-out, remediation, verification, and a DNS
+> glossary are all below. A related guide covers the legacy connectivity DNS test
+> `AzStackHci_Connectivity_Test_Dns` (which resolves `microsoft.com`); the root cause and
+> fix are the same, so consult it only if you also see that older check. It is a separate,
+> in-progress supportability PR, so this guide does not depend on it:
 > [Troubleshooting AzStackHci_Connectivity_Test_Dns](https://github.com/Azure/AzureLocal-Supportability/blob/main/TSG/EnvironmentValidator/Troubleshooting-Connectivity-Test-Dns.md).
-> Use this guide for the `management.azure.com` specifics below; use the companion for the
-> full walkthrough. (The companion link resolves once that guide is merged.)
 
 ## Requirements
 
@@ -70,9 +70,9 @@ intended DNS rather than a stale value carried over from imaging.
 ## Where this failure appears
 
 The same failure surfaces in several places; they all converge on the same `Detail`
-string. The health-check result file is the recommended entry point; for the event-log
-and portal alternatives, and a `Get-SolutionUpdate` "is an update being blocked?" check,
-see the companion TSG linked above.
+string. The health-check result file is the recommended entry point (below); the Windows
+event log (Event ID 17205) and the Azure portal **Updates** tab show the same failure and
+are covered right after it.
 
 Read the newest health-check result file on the cluster's infrastructure share and
 filter to this check. The on-box result stores the human-readable status and message
@@ -111,9 +111,10 @@ else {
 
 Each row is one currently-failing DNS server on one node. On the Windows event log the
 same record is written to `AzStackHciEnvironmentChecker` as Event ID 17205; filter its
-`Name` the same way (`-like '*ExternalDnsResolution*'`) and read `AdditionalData.Detail`.
-In the Azure portal, open the Azure Local cluster then the **Updates** tab; a failing
-pre-update health check names the failing validator there.
+`Name` the same way, matching BOTH result names
+(`$_.Name -like '*ExternalDnsResolution*' -or $_.Name -like '*Test_External_Hostname_Resolution*'`),
+and read `AdditionalData.Detail`. In the Azure portal, open the Azure Local cluster then
+the **Updates** tab; a failing pre-update health check names the failing validator there.
 
 ### What it looks like: example failure signature
 
@@ -134,6 +135,39 @@ passing node reports a count of one or more and lists the resolved addresses.
 > and reported as success, with a `Detail` of `Skipping DNS resolution test on <node>
 > because a proxy is configured.` That is expected behavior, not a failure.
 
+### Identify every affected node
+
+Run across all cluster nodes so you see exactly which ones are failing and against which
+DNS server, matching both result names:
+
+```powershell
+Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
+    $base = 'C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\HealthCheck\System'
+    if (-not (Test-Path $base)) {
+        $base = Get-ChildItem 'C:\ClusterStorage' -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName 'Shares\SU1_Infrastructure_1\Updates\HealthCheck\System' } |
+            Where-Object { Test-Path $_ } | Select-Object -First 1
+    }
+    $latest = $null
+    if ($base) {
+        $latest = Get-ChildItem $base -Filter 'HealthCheckResult.EnvironmentChecker.*.json' -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    }
+    if (-not $latest) {
+        # Emit an explicit NO DATA row so this node is never silently treated as passing.
+        return [pscustomobject]@{ Detail = 'NO DATA: no HealthCheck result file on this node (read the event log instead)' }
+    }
+    $failing = Get-Content $latest.FullName -Raw | ConvertFrom-Json |
+        Where-Object { ($_.Name -like '*ExternalDnsResolution*' -or $_.Name -like '*Test_External_Hostname_Resolution*') -and $_.AdditionalData.Status -eq 'FAILURE' } |
+        Select-Object @{ n = 'Detail'; e = { $_.AdditionalData.Detail } }
+    if ($failing) { $failing } else { [pscustomobject]@{ Detail = 'PASS: no failing DNS result in the latest health check' } }
+} | Sort-Object PSComputerName | Select-Object PSComputerName, Detail
+```
+
+Every node reports one of three things: a failing `Detail` (fix it), `PASS` (the check
+passed there), or `NO DATA` (the result could not be read, so confirm it with the event
+log rather than assuming it passed).
+
 ## Consequences if you do not fix this
 
 This check is Critical. When it fails on a node and no proxy is configured, the validator
@@ -148,9 +182,9 @@ local workloads keep running.
 
 The check fails when a DNS server configured on a node cannot resolve the external name
 `management.azure.com`. The fix is a customer-side DNS change, either on the node's
-DNS-client configuration or on the upstream DNS server. The essential steps are below;
-the companion TSG carries the full per-node fan-out and the option-by-option decision
-tree.
+DNS-client configuration or on the upstream DNS server. The essential steps are below,
+including a per-node fan-out to find every affected node and an option-by-option decision
+tree for the fix.
 
 **Most common fix (start here).** The usual cause is a node pointed at a DNS server that
 cannot resolve external names. Re-point that node's management adapter at a DNS server
@@ -159,7 +193,7 @@ server (step 3, second option). The numbered steps confirm which applies; most f
 are resolved by one of those two.
 
 _New to any DNS term used here (A record, forwarder, split-horizon, WinHTTP proxy)? See
-the Glossary in the companion TSG linked in the overview._
+the [Glossary](#glossary) at the end of this guide._
 
 1. List the DNS servers currently configured on the affected node:
 
@@ -249,3 +283,26 @@ DNS server or a different node that needs the same fix.
 > targeted per-node re-test. The portal can therefore lag a just-applied fix until the
 > next precheck or the periodic (roughly daily) health check, so confirm the fix on-node
 > with `Resolve-DnsName` rather than waiting on the portal.
+
+## Glossary
+
+Plain-language definitions of the DNS terms used in this guide. Experienced readers can
+skip this section.
+
+- **A record:** the basic DNS record that maps a name (such as `management.azure.com`) to
+  an IPv4 address. This check passes only when a configured DNS server returns at least one
+  A record for the external name.
+- **DNS server / resolver:** the server a node asks to turn a name into an address. Each
+  node lists one or more on its network adapters; this check tests each one.
+- **Forwarder:** a setting on a DNS server that hands off queries it cannot answer itself
+  (such as external or public names) to another resolver that can. An internal-only DNS
+  server usually needs a forwarder to resolve external names.
+- **Conditional forwarder:** a forwarder that applies only to a specific domain, so a
+  server can send just some queries (for example external names) to a particular resolver.
+- **Split-horizon (split-brain) DNS:** a setup where the same DNS name resolves differently
+  for internal versus external clients. An internal-only zone can shadow an external name,
+  so the server answers internal lookups but returns nothing for the public name this check
+  asks for.
+- **WinHTTP proxy:** a system-level outbound proxy configured on a node. When one is set,
+  the node routes outbound traffic through it, and this DNS check self-skips on that node
+  and reports success.
