@@ -97,7 +97,7 @@ on a node with:
 ```powershell
 Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath '*[System[(EventID=17205)]]' -MaxEvents 2000 |
     ForEach-Object { $_.Message | ConvertFrom-Json } |
-    Where-Object { $_.Name -like 'Test-SolutionExtensionModule*' } |
+    Where-Object { $_.Name -like '*Test-SolutionExtensionModule*' } |
     Select-Object -First 1 Name, Status, Severity, Description, @{n='Detail';e={$_.AdditionalData.Detail}}
 ```
 
