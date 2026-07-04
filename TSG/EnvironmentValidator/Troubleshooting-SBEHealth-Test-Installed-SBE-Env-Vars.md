@@ -120,13 +120,20 @@ on a node with:
 Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath '*[System[(EventID=17205)]]' -MaxEvents 2000 |
     ForEach-Object { $_.Message | ConvertFrom-Json } |
     Where-Object { $_.Name -like '*Test-Installed-SBE-Env-Vars*' } |
-    Select-Object -First 1 Name, Status, Severity, Description, @{n='Detail';e={$_.AdditionalData.Detail}}
+    Select-Object -First 1 Name,
+        @{n='Status';e={$_.AdditionalData.Status}},
+        Severity,
+        @{n='Detail';e={$_.AdditionalData.Detail}}
 ```
 
 The `Name` on the node carries a domain prefix (`AzStackHci_SBEHealth_`) and can carry a node
 suffix, so the query uses `-like '*Test-Installed-SBE-Env-Vars*'` (leading and trailing
-wildcard) to match it. When the state is inconsistent, `Severity` is `WARNING` and `Detail`
-reads *"Inconsistent SBE ENV vars!! content: [...], metadata: [...], sbeVersion [...]"*, which
+wildcard) to match it. In this JSON the human-readable status and message live under
+`AdditionalData` (the top-level `Status` and `Severity` are numeric enums, and the top-level
+`Description` is a generic check description). This check keeps `AdditionalData.Status` =
+`SUCCESS` even when the state is inconsistent, flagging the problem through the numeric `Severity`
+(a non-zero Warning value) and the detail, so the reliable signal is `AdditionalData.Detail`
+reading *"Inconsistent SBE ENV vars!! content: [...], metadata: [...], sbeVersion [...]"*, which
 tells you exactly which paths and version the check saw.
 
 You can also read the two environment variables directly on the node to see the mismatch:
@@ -214,9 +221,10 @@ guidance under **Related** for more on the readiness / precheck step.
 ### 4. Verify the fix
 
 Re-read the Event ID 17205 result (step 1). A reconciled node reports `Test-Installed-SBE-Env-Vars`
-with **no `WARNING` severity** and a detail of either *"Detected SBE `<version>` is installed."*
-(both variables now set) or *"No SBE installed."* (both now cleared). Re-reading the two
-environment variables shows them **both set** or **both empty**, never one without the other.
+with an `AdditionalData.Detail` of either *"Detected SBE `<version>` is installed."* (both variables
+now set) or *"No SBE installed."* (both now cleared), and no longer the *"Inconsistent SBE ENV vars"*
+detail (the numeric `Severity` returns to its non-warning value). Re-reading the two environment
+variables shows them **both set** or **both empty**, never one without the other.
 If you re-ran the check with `-SystemHealth` (step 3), confirm the overall result with
 `Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate` and check that
 `HealthState` is `Success` (not `Failure`). In the portal, the SBE health warning clears on the
