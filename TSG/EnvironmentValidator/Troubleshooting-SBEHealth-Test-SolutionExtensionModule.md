@@ -75,6 +75,10 @@ manifest), not with the cluster hardware itself.
 - **This is safe to investigate read-only.** Reading the validator result, the event log, and
   the integrity error report changes nothing. The remediation (re-staging the SBE and
   re-running the precheck) is a normal deployment/update action.
+- **It does not restart nodes or bounce running workloads.** This is a deployment/update
+  validation gate, not a runtime operation. Reading the check and re-staging the SBE content do
+  not restart cluster nodes or move running VMs. On an already-deployed cluster a failure blocks
+  the in-progress update from proceeding, but it does not by itself disrupt running workloads.
 
 ## Where this failure appears
 
@@ -134,11 +138,23 @@ Run the Event ID 17205 query above (or open the `HealthCheckResult.*.json`) and 
 
 ### 2. Re-stage the correct partner SBE package
 
-Do not patch the staged files. Instead, obtain the exact SBE package your solution expects from
-the hardware partner (OEM) and re-stage it through the normal path (the deployment/update SBE
-source your solution uses). Confirm the SBE version matches what the cluster expects, and that
-the transfer completed (no partial extraction, no added files). This replaces the corrupt or
-incomplete stage with content that matches the manifest.
+Do not patch the staged files. Replace the **whole** SBE package with the exact one your solution
+expects from the hardware partner (OEM), staged through the same path the operation uses. Which
+path depends on the operation:
+
+- **During an update** (the SBE arrives as a solution update): re-add or re-download the SBE
+  update through the same channel you used to add it (the Azure Local update / Solution Builder
+  Extension flow), so the staged copy is replaced with the correct partner content. Then re-run
+  the readiness check with `Invoke-SolutionUpdatePrecheck`.
+- **During deployment** (the SBE comes from your deployment media / source): replace the SBE
+  content in that deployment source with the OEM-provided package, then re-run the deployment
+  validation step.
+
+In both cases, confirm the SBE version matches what the cluster expects and that the transfer
+completed (no partial extraction, no added files). If you did not stage this SBE yourself (most
+customers do not; the deployment or partner engineer, or the OEM, does), hand this off to them
+along with the `SBEContentIntegrityErrors_*.txt` report and the SBE version. For the exact
+per-solution steps, see the Solution Builder Extension guidance under **Related**.
 
 ### 3. Re-run the check
 
@@ -159,7 +175,11 @@ next run. In the portal, the SBE health check clears from red on the next valida
 - The **OEM-provided** SBE package fails the integrity check even after a clean re-stage from
   the partner source. That points at a bad partner package rather than a staging problem;
   escalate to the hardware partner (OEM) with the `SBEContentIntegrityErrors_*.txt` report and
-  the SBE version.
+  the SBE version. The package the OEM returns must satisfy all three of the module's validation
+  requirements, which the OEM can confirm before handing it back: its content matches the SBE
+  manifest (passes the integrity check), the `SolutionExtension` module is signed with a valid
+  partner (OEM) certificate, and the module manifest (`SolutionExtension.psd1`) declares the
+  `HealthServiceIntegration` tag.
 - The module is present and intact but fails certificate validation. That is a partner signing
   issue; escalate to the OEM.
 - The sibling SBE health checks also fail (see **Related**), which can indicate a broader SBE
