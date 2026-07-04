@@ -102,8 +102,16 @@ on a node with:
 Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath '*[System[(EventID=17205)]]' -MaxEvents 2000 |
     ForEach-Object { $_.Message | ConvertFrom-Json } |
     Where-Object { $_.Name -like '*Test-SolutionExtensionModule*' } |
-    Select-Object -First 1 Name, Status, Severity, Description, @{n='Detail';e={$_.AdditionalData.Detail}}
+    Select-Object -First 1 Name,
+        @{n='Status';e={$_.AdditionalData.Status}},
+        @{n='Detail';e={$_.AdditionalData.Detail}}
 ```
+
+In this JSON the human-readable status and message live under `AdditionalData` (the top-level
+`Status` and `Severity` are numeric enums, and the top-level `Description` is a generic check
+description), so the query projects `AdditionalData.Status` and `AdditionalData.Detail`. When the
+module cannot be validated, `AdditionalData.Status` is `FAILURE` and `AdditionalData.Detail` reads
+*"The SolutionExtension module could not be validated ..."*.
 
 When the failure is an **integrity** mismatch, the check also writes a detailed report next to
 the SBE metadata, named `SBEContentIntegrityErrors_<NODE>_<timestamp>.txt`. The failure detail
@@ -166,8 +174,8 @@ does not implement health tests).
 
 ### 4. Verify the fix
 
-Re-read the Event ID 17205 result (step 1). A fixed check reports `Status = SUCCESS` for
-`Test-SolutionExtensionModule`, and no new `SBEContentIntegrityErrors_*.txt` is written on the
+Re-read the Event ID 17205 result (step 1). A fixed check reports `AdditionalData.Status = SUCCESS`
+for `Test-SolutionExtensionModule`, and no new `SBEContentIntegrityErrors_*.txt` is written on the
 next run. In the portal, the SBE health check clears from red on the next validation pass.
 
 ## When to escalate
