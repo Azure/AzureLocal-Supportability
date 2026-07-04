@@ -109,14 +109,20 @@ the infrastructure share. Read this check's most recent result on a node with:
 Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath '*[System[(EventID=17205)]]' -MaxEvents 2000 |
     ForEach-Object { $_.Message | ConvertFrom-Json } |
     Where-Object { $_.Name -like '*Test-Endpoint-Matches-ModelSKU*' } |
-    Select-Object -First 1 Name, Status, Severity, Description, @{n='Detail';e={$_.AdditionalData.Detail}}
+    Select-Object -First 1 Name,
+        @{n='Status';e={$_.AdditionalData.Status}},
+        @{n='Detail';e={$_.AdditionalData.Detail}}
 ```
 
 The `Name` on the node carries a domain prefix (`AzStackHci_SBEHealth_`) and can carry a node
 suffix, so the query uses `-like '*Test-Endpoint-Matches-ModelSKU*'` (leading and trailing wildcard)
-to match it. When the model/SKU is not supported, `Status` is `FAILURE`, `Description` reads *"System
-model '...' is not supported by SBE. Supported models: ..."*, and it lists the models the manifest
-does support (so you can see whether this server's model is simply absent).
+to match it. In this JSON the human-readable status and message live under `AdditionalData` (the
+top-level `Status` and `Severity` are numeric enums, and the top-level `Description` is a generic
+check description), which is why the query projects `AdditionalData.Status` and
+`AdditionalData.Detail`. When the model/SKU is not supported, `AdditionalData.Status` is `FAILURE`
+and `AdditionalData.Detail` reads *"System model '...' is not supported by SBE. Supported models:
+..."*, listing the models the manifest does support (so you can see whether this server's model is
+simply absent).
 
 ## Troubleshooting Steps
 
@@ -138,9 +144,9 @@ values so you know what the manifest must list:
 }
 ```
 
-Note the exact model and SKU strings. The failure `Description` (step in **Where this failure
-appears**) also lists the models the manifest currently supports, so compare that list against this
-model.
+Note the exact model and SKU strings. The failure detail (`AdditionalData.Detail`, from the step in
+**Where this failure appears**) also lists the models the manifest currently supports, so compare
+that list against this model.
 
 **This is per server.** Model and SKU are read per node, so on a **mixed-hardware cluster** some
 nodes may match the manifest while others do not. Check each node's model and SKU against the
@@ -204,9 +210,9 @@ The `-SystemHealth` switch is what actually re-runs the health checks (a bare
 ### 5. Verify the fix
 
 Re-read the Event ID 17205 result (see **Where this failure appears**). A fixed check reports
-`Test-Endpoint-Matches-ModelSKU` with `Status = SUCCESS` and a detail that the manifest *"has
-matching entries for the server model ... and SKU ..."* (or a benign skip, if you reset to the
-default endpoint). If you re-ran with `-SystemHealth`, confirm the overall result with
+`Test-Endpoint-Matches-ModelSKU` with `AdditionalData.Status = SUCCESS` and an `AdditionalData.Detail`
+that the manifest *"has matching entries for the server model ... and SKU ..."* (or a benign skip, if
+you reset to the default endpoint). If you re-ran with `-SystemHealth`, confirm the overall result with
 `Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate` and check that
 `HealthState` is `Success` (not `Failure`). In the portal, the SBE health check clears on the next
 validation pass.
