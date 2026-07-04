@@ -195,9 +195,21 @@ restore consistent SBE state."*
 Re-run the same **update readiness** check that first surfaced this warning, and let it
 re-evaluate SBE health. If you are not sure what that means: in the Azure portal, open the
 cluster's **Updates** page and run the update readiness (validation) check again; or on a node,
-an administrator can run `Invoke-SolutionUpdatePrecheck`. Either way it re-reads the two
-environment variables and re-classifies the installed-SBE state. See the Azure Local update
-troubleshooting guidance under **Related** for more on the readiness / precheck step.
+an administrator can trigger a fresh system health check with `Invoke-SolutionUpdatePrecheck
+-SystemHealth`:
+
+```powershell
+# Trigger a fresh system health check (this re-runs the SBE health checks)
+Invoke-SolutionUpdatePrecheck -SystemHealth
+
+# Wait a few minutes, then check the health state
+Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate
+```
+
+The `-SystemHealth` switch is what actually re-runs the health checks (a bare
+`Invoke-SolutionUpdatePrecheck` does not re-evaluate them); it re-reads the two environment
+variables and re-classifies the installed-SBE state. See the Azure Local update troubleshooting
+guidance under **Related** for more on the readiness / precheck step.
 
 ### 4. Verify the fix
 
@@ -205,7 +217,10 @@ Re-read the Event ID 17205 result (step 1). A reconciled node reports `Test-Inst
 with **no `WARNING` severity** and a detail of either *"Detected SBE `<version>` is installed."*
 (both variables now set) or *"No SBE installed."* (both now cleared). Re-reading the two
 environment variables shows them **both set** or **both empty**, never one without the other.
-In the portal, the SBE health warning clears on the next validation pass.
+If you re-ran the check with `-SystemHealth` (step 3), confirm the overall result with
+`Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate` and check that
+`HealthState` is `Success` (not `Failure`). In the portal, the SBE health warning clears on the
+next validation pass.
 
 ## When to escalate
 
