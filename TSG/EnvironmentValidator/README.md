@@ -10,6 +10,7 @@ This folder contains the TSG's related to Environment Validators.
 * [Troubleshooting TestPowerShell Module Version](./Troubleshooting-Test-PowerShell-Module-Version.md)
 * [Troubleshooting Module Versions](Troubleshooting-Module-Versions.md)
 * [Troubleshooting MSI Does Not Have Access to Subscription](Troubleshooting-MSI-Does-Not-Have-Access-To-Subscription.md)
+* [Troubleshooting SBE Health: SBE Version Supports the Operation-Type Health Tests](./Troubleshooting-SBEHealth-Test-Version-Supports-OperationType-Tests.md)
 * [Troubleshooting Services Version Failure](../Update/Test-ServicesVersion-Failure-Mitigation-In-HealthCheck.md)
 * [Known Issue: High Disk Space Usage in TEMP](Known-Issue-High-Disk-Space-usage-in-TEMP.md)
 * [Known Issue: WinRM cannot process the configuration request](Known-Issue-WinRM-cannot-process-the-configuration-request.md)
