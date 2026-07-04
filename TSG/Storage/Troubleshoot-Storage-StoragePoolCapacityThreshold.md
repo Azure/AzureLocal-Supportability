@@ -356,18 +356,30 @@ data into fewer slabs and releases the emptied slabs back to the pool.
    > agent / Arc Resource Bridge view of the VM state. Once workloads on the volume
    > are stopped cluster-wide, proceed with consolidation.
 
-3. **Consolidate slabs** on the volume. For a cluster shared volume (CSV),
-   address it by path and run on the CSV owner node — `-FileSystemLabel` resolves
-   against the local node's volume cache and can miss or mismatch a CSV owned by
-   another node:
+3. **Consolidate slabs** on the volume. Run this on the CSV **owner node**.
+   Resolve the CSV's `C:\ClusterStorage\<volume>` path to its volume object with
+   `Get-Volume -FilePath`, confirm it is the volume you intend, then pipe it to
+   `Optimize-Volume`:
 
    ```powershell
-   # Identify the CSV owner node
+   # Identify the CSV owner node, and run the rest on that node
    Get-ClusterSharedVolume | Select-Object Name, OwnerNode
 
-   # On the owner node, consolidate by path
-   Optimize-Volume -Path "C:\ClusterStorage\<volume>" -SlabConsolidate -Verbose
+   $csv = "C:\ClusterStorage\<volume>"
+   $vol = Get-Volume -FilePath $csv
+   $vol | Format-List FileSystemLabel, Size, SizeRemaining, Path   # confirm this is the intended CSV
+   $vol | Optimize-Volume -SlabConsolidate -Verbose
    ```
+
+   > [!IMPORTANT]
+   > Resolve the CSV with `Get-Volume -FilePath`. Do **not** pass the CSV mount to
+   > `Optimize-Volume -Path "C:\ClusterStorage\<volume>"`: `-Path` matches a
+   > volume's own device path, not a CSV mount/access path, so it fails with
+   > `No MSFT_Volume objects found with property 'Path' equal to
+   > 'C:\ClusterStorage\<volume>'`. Other selectors (`-DriveLetter`,
+   > `-FileSystemLabel`) are also unreliable for a CSV mount. `Get-Volume
+   > -FilePath` returns the correct volume object and pipes it straight into
+   > `Optimize-Volume`.
 
    > [!IMPORTANT]
    > Do **not** add `-ReTrim`. On thin-provisioned ReFS, `-ReTrim` does nothing
@@ -409,10 +421,14 @@ data into fewer slabs and releases the emptied slabs back to the pool.
    ```
 
 > [!NOTE]
-> In some cases, even after a correct consolidation pass with workloads offline,
-> a final batch of slabs may remain committed and the pool does not drop as far as
-> expected. If the pool stays above the threshold after a clean consolidation
-> pass, open a Microsoft support case rather than repeating the procedure.
+> A consolidation pass can legitimately return little or no capacity — most often
+> because the volume's footprint already matches the data actually written (there
+> is nothing to reclaim; see the note at the start of Path B), or because slabs
+> are still pinned by data in use (confirm every VM on the volume is stopped in
+> Step 2 and that stale checkpoints were merged in Step 1). If real interior free
+> space exists, all workloads were offline, and checkpoints were merged, but the
+> pool still does not drop after the unmap wait (Step 4), open a Microsoft support
+> case rather than repeating the procedure.
 
 ## Choose the right option
 
