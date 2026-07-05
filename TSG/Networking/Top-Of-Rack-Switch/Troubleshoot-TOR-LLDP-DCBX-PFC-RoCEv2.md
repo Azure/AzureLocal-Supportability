@@ -2012,10 +2012,11 @@ else {
 }
 ```
 
-**Your topology verdict decides which options are safe; the table lists the three
-from least to most conservative (fastest to slowest).** Pick one, then go to that
-option's section below and run it from top to bottom. Each option section is
-self-contained, so you never need to read the other two.
+**Your topology verdict decides which reset/reboot options are safe. The table lists
+Options 1 to 3 from least to most conservative (fastest to slowest); Option 4 instead
+stages the change and defers activation to a scheduled solution update.** Pick one, then
+go to that option's section below and run it from top to bottom. Each option section is
+self-contained, so you never need to read the other three.
 
 | Option | Drain node first? | Activation method | Node stays online during the change? | Speed | When to use it |
 |--------|-------------------|-------------------|--------------------------------------|-------|----------------|
