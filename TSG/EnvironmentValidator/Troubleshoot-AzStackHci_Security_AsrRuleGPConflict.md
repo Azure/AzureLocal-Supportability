@@ -1,5 +1,24 @@
 # AzStackHci_Security_AsrRuleGPConflict
 
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
+  <tr>
+    <th style="text-align:left; width: 200px;">Name</th>
+    <td><strong>AzStackHci_Security_AsrRuleGPConflict</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Validator / test</th>
+    <td><code>Test-AsrRuleGPConflict</code> (run with <code>Invoke-AzStackHciSecurityValidation</code>)</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Component</th>
+    <td>Security (Environment Validator / Environment Checker)</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Severity</th>
+    <td><strong>Informational</strong>: the status is always SUCCESS. A Group Policy-managed ASR rule reports a <strong>WARNING</strong> (the actionable signal), not an outage.</td>
+  </tr>
+</table>
+
 > **At a glance**
 > - **What it is:** an Environment Validator (Environment Checker) security check that reports whether Windows Defender **Attack Surface Reduction (ASR)** rules are also managed by **Group Policy** on a node.
 > - **Why it matters:** on Azure Local the Defender settings (including ASR) are meant to be governed by the platform's **OSConfig security baseline**. An ASR rule set through Group Policy **overrides** the OSConfig-managed Defender configuration, and that conflict can cause a **Solution Update to fail**.
