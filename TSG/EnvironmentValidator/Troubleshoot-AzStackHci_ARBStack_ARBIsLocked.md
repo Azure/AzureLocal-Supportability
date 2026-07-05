@@ -66,7 +66,7 @@ else {
         Where-Object { $_.Name -like '*ARBIsLocked*' } |
         ForEach-Object {
             [pscustomobject]@{
-                Status = $_.Status
+                Status = $_.AdditionalData.Status
                 Detail = $_.AdditionalData.Detail
             }
         }
@@ -160,7 +160,7 @@ After the lock is removed, re-run the Azure Local solution update; it will proce
 
 For the full background on the update-time failure this prevents (including the exact `ApplianceResourceScopeLocked` error and the retry step), see the canonical guides:
 
-- [Type 'UpdateArbAndExtensions' fails with ApplianceResourceScopeLocked](../Update/UpgradeArbAndExtensions_fails_ApplianceResourceScopeLocked.md)
+- [ARB upgrade fails with ApplianceResourceScopeLocked (appliance scope lock)](../Update/UpgradeArbAndExtensions_fails_ApplianceResourceScopeLocked.md)
 - [Known issue: ScopeLockedError during ARB Upgrade](../Upgrade/Known-issue-ScopeLockedError-ARB-Upgrade.md)
 
 **Risk:** [LOW RISK] removing an Azure resource lock is a metadata change that does not affect the running ARB. Confirm with the lock's owner first, since the lock may have been applied deliberately to protect the resource.
