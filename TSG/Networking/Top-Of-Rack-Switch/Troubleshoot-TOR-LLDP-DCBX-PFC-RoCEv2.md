@@ -9,6 +9,12 @@
 | **Audience** | Azure Local operators and network engineers |
 | **Document Version** | 1.0 (2026-06-10) |
 
+> **Impact at a glance** (for a quick read before the technical detail):
+> - **What breaks:** Priority Flow Control (PFC) silently drops on the storage priority, so RoCEv2 storage RDMA stalls and storage performance degrades or collapses.
+> - **Customer-visible symptom:** slow, stalling, or dropped storage; RDMA / SMB Direct errors; or an Aruba `multiple_peers` LLDP error on storage ports. This is a performance and availability issue, not data corruption, and there is no data loss.
+> - **Root nature:** an interoperability and configuration issue (two LLDP/DCBX agents, the Windows host and the NIC firmware, compete and break PFC auto-negotiation), not an Azure Local product defect. The fix is a durable configuration change, not a patch.
+> - **Effort and disruption:** the diagnosis is read-only and safe during production hours; the fix is applied node by node in a maintenance window (budget at least 4 hours for a 4-node cluster, see "Plan a maintenance window" below).
+
 **What this guide does.** On Azure Local clusters carrying RoCEv2 storage
 traffic, Priority Flow Control (PFC) must stay enabled on the storage priority,
 or RDMA stalls and storage performance collapses. This guide explains why PFC
@@ -47,6 +53,13 @@ reliance on DCBX auto-negotiation.
 > (single card per plane), where each node must be drained and rebooted in
 > sequence. The Diagnosis steps are read-only and safe during production hours;
 > the Resolution steps are not.
+
+> **Start here (fast path).** If you just need to get moving, follow these five moves; each links to the section with the full detail.
+> 1. **Match the symptom.** Storage RDMA/PFC not staying on, or an Aruba `multiple_peers` LLDP error on storage ports, on a Mellanox or Intel RoCEv2 cluster? If yes, continue.
+> 2. **Confirm it (read-only, safe in production).** Work the [Diagnosis Steps](#diagnosis-steps) to confirm the dual LLDP-agent conflict. If PFC is already correct, stop here.
+> 3. **Fix it (in a maintenance window).** Apply [Resolution](#resolution) Step 1 (make the Windows LLDP agent durable), Step 2 (force PFC at the switch), and Step 3 (disable the Mellanox firmware LLDP agent).
+> 4. **Pick your Step 3 activation method.** Your topology (REDUNDANT vs NOT-REDUNDANT) and NIC generation decide which of Options 1 to 4 is safe; use the option table in Resolution Step 3.
+> 5. **Verify.** Run [Verification After Remediation](#verification-after-remediation) on both the host and the switch.
 
 ## Contents
 
@@ -1026,7 +1039,7 @@ skip this and the Mellanox-specific steps.)
    Use the exact device name from `mst status` in the firmware commands below.
 
    **Important:** The `mt<model>` prefix varies by NIC model (for example,
-   `mt4125` = ConnectX-6 Lx, `mt4127` = ConnectX-6 Dx, `mt4129` = ConnectX-7).
+   `mt4125` = ConnectX-6 Dx, `mt4127` = ConnectX-6 Lx, `mt4129` = ConnectX-7).
    The firmware commands in this guide auto-discover every device by parsing
    `mst status`, so you normally do not need to type a device name. If you run a
    single `mlxconfig` command by hand, substitute the device name that
@@ -1844,7 +1857,10 @@ With the Windows LLDP agent confirmed durable (Step 1), disable the firmware LLD
 agent so the Windows agent becomes the sole LLDP speaker on each storage port.
 This eliminates the dual-agent race condition. The `mlxconfig` change is written
 to NIC firmware (NVM) and persists across reboots, but it takes effect only after
-the NIC receives a PCIe card reset, either by a live `mlxfwreset` or by a full node reboot.
+the NIC is reset. Depending on the ConnectX generation, that reset is a live
+`mlxfwreset` PCIe card reset, a warm/OS reboot, or (on ConnectX-4 Lx) a cold power
+cycle. See NIC generation determines how the firmware change activates below before
+you pick an option.
 
 #### How card-level redundancy decides which option is safe
 
@@ -2009,22 +2025,24 @@ else {
 }
 ```
 
-**Your topology verdict decides which options are safe; the table lists the three
-from least to most conservative (fastest to slowest).** Pick one, then go to that
-option's section below and run it from top to bottom. Each option section is
-self-contained, so you never need to read the other two.
+**Your topology verdict decides which reset/reboot options are safe. The table lists
+Options 1 to 3 from least to most conservative (fastest to slowest); Option 4 instead
+stages the change and defers activation to a scheduled solution update.** Pick one, then
+go to that option's section below and run it from top to bottom. Each option section is
+self-contained, so you never need to read the other three.
 
 | Option | Drain node first? | Activation method | Node stays online during the change? | Speed | When to use it |
 |--------|-------------------|-------------------|--------------------------------------|-------|----------------|
 | Option 1 | No | Live PCIe card reset, one card at a time | Yes, throughout | Fastest | Only when the verdict is REDUNDANT |
 | Option 2 | Yes | Live PCIe card reset, one card at a time | No, the node is drained | Medium | Any topology; the recommended choice for a single-card plane |
 | Option 3 | Yes | Full node reboot | No, the node is drained and rebooted | Slowest | Any topology; the most conservative fallback |
+| Option 4 | The update drains each node | Ride a scheduled solution update's per-node reboots | No, the update reboots each node | No extra reboot | ConnectX-6 (warm-activating NICs) with a solution update planned; zero extra maintenance window |
 
 **How to choose:**
 
-- **Verdict REDUNDANT (each plane spans 2 or more cards):** all three options are
-  safe. Option 1 is fastest and needs no drain; pick Option 2 or Option 3 only if
-  you would rather drain the node first.
+- **Verdict REDUNDANT (each plane spans 2 or more cards):** all three reset/reboot
+  options (1 to 3) are safe. Option 1 is fastest and needs no drain; pick Option 2 or
+  Option 3 only if you would rather drain the node first.
 - **Verdict NOT-REDUNDANT (single-card plane):** do **not** use Option 1, because a
   PCIe card reset would take a whole traffic plane down. You must drain first, then
   use Option 2 (recommended) or Option 3.
@@ -2032,11 +2050,63 @@ self-contained, so you never need to read the other two.
   the node up after a short per-card interruption; choose Option 3 instead when a
   live level-3 PCIe card reset is not supported on the NIC or firmware (the loop
   stops with a non-zero exit), or when you simply prefer a full node reboot.
+- **Option 4 (defer to a scheduled solution update):** on ConnectX-6 (Lx and Dx), or
+  any generation where a warm/OS reboot activates the change, you can STAGE the change
+  now and let a planned Azure Local solution update activate it through the update's own
+  per-node reboots, one reboot per node, with no separate maintenance window. Not for
+  ConnectX-4 Lx (a warm reboot does not activate it there). See Option 4 below.
 
-All three options reach the same end state: the firmware LLDP/DCBX agent disabled
-on every Mellanox card on the node. They differ only in how the change is
-activated (a live PCIe card reset versus a full node reboot) and whether the node
-is drained first. Run your chosen option on the node being remediated.
+Options 1 to 3 reach the same end state immediately: the firmware LLDP/DCBX agent
+disabled on every Mellanox card on the node. They differ only in how the change is
+activated (a live PCIe card reset versus a full node reboot) and whether the node is
+drained first. Option 4 stages the identical change and defers activation to a scheduled
+solution update's per-node reboots. Run your chosen option on the node being remediated.
+
+**Workload impact of each option** (what the running cluster feels while you activate the change):
+
+- **Option 1 (REDUNDANT topology only):** the live PCIe card reset briefly drops the two ports on the card being reset, but because each plane spans two cards, a surviving card keeps every plane up. Storage RDMA rides the surviving storage port (SMB Multichannel re-establishes), and running VMs keep running on the surviving management/compute port, so there is no node outage and no storage-availability gap. The node is never drained.
+- **Options 2 and 3 (any topology):** the drain is what protects the workload. `Suspend-ClusterNode -Drain` live-migrates running VMs off the node and moves storage (CSV) ownership away before the storage plane drops, so resetting a single-card plane (Option 2) or rebooting the node (Option 3) causes no VM interruption and no storage-availability loss. The node itself is out of service for its own local role during the change; the rest of the cluster keeps serving.
+- **Option 4 (deferred to a solution update):** no workload impact beyond what the solution update already incurs. The update drains and reboots each node in turn (live-migrating VMs and moving storage ownership as part of normal rolling servicing), and the staged firmware change simply rides those reboots.
+
+In every option, wait for S2D to return fully healthy (`Get-StorageJob` empty, all virtual disks Healthy) before advancing to the next node, per the readiness gate below.
+
+#### NIC generation determines how the firmware change activates
+
+The redundancy verdict above decides whether you must drain the node (Option 1
+versus Option 2 or 3). A second, independent factor decides whether a plain reboot
+is enough to activate the staged change or a stronger reset is required: the
+ConnectX generation. The `mlxconfig` value is written to NVM the same way on every
+generation; they differ only in the event that makes the staged NextBoot value take
+effect. This was validated in-house by staging an `mlxconfig` delta and re-reading
+the Current versus NextBoot columns after each activation method.
+
+| NIC generation | Warm / OS reboot activates it? | Cold power cycle needed? | `mlxfwreset -l3` PCIe reset activates it (no reboot)? |
+|---|---|---|---|
+| ConnectX-4 Lx | No | Yes | Yes |
+| ConnectX-5 Ex | Yes | Not needed | Yes |
+| ConnectX-6 Lx | Yes | Not needed | Yes |
+| ConnectX-6 Dx | Yes | Not needed | Yes |
+| ConnectX-7 | Yes | Not needed | Yes |
+
+What this means for the four options:
+
+- **ConnectX-6 Lx and ConnectX-6 Dx:** a warm/OS reboot activates the change, so all
+  four options work as written. Option 3's `Restart-Computer` activates it, and so do
+  the node reboots that a normal Azure Local rolling solution update performs (Option 4),
+  so a staged firmware-LLDP change is applied by the update one reboot per node, with no
+  extra reboot and no cold power cycle.
+- **ConnectX-4 Lx:** a warm/OS reboot does NOT activate the change; the staged value
+  stays pending. Use Option 1 or Option 2 (the `mlxfwreset -l3` PCIe reset, which
+  activates it with no reboot), or, on the reboot path, perform a COLD power cycle
+  (full power off, then on, for example from the BMC/iDRAC) rather than
+  `Restart-Computer`. A plain warm `Restart-Computer` in Option 3 leaves a
+  ConnectX-4 Lx card still advertising firmware LLDP, and for the same reason Option 4
+  (which relies on the update's warm reboots) will not activate it on ConnectX-4 Lx.
+- **ConnectX-5 Ex and ConnectX-7:** a warm/OS reboot activates the change, and so does the
+  `mlxfwreset -l3` PCIe reset with no reboot. Both behave like ConnectX-6, so all four
+  options work as written.
+
+Both `mlxfwreset`-based options need the WinMFT tooling (see Prerequisites: Mellanox Firmware Tools).
 
 #### Option 1: Live PCIe card reset, no drain (REDUNDANT topology only)
 
@@ -2483,11 +2553,14 @@ Option 2 is complete.
 
 Use this on any topology, including a single-card plane, when you prefer a reboot
 over a live PCIe card reset (for example, if `mlxfwreset` reports that a live PCIe card reset is not
-supported on this NIC or firmware). The firmware change activates on boot, so
-there is no PCIe card reset loop. Run these commands in order.
+supported on this NIC or firmware). On ConnectX-6 (Lx and Dx) the firmware change
+activates on a warm/OS reboot, so there is no PCIe card reset loop. On ConnectX-4 Lx a
+warm reboot does NOT activate it: use Option 1 or Option 2 instead, or substitute a
+COLD power cycle for the `Restart-Computer` in step 3 (see NIC generation determines
+how the firmware change activates). Run these commands in order.
 
 **1. Write the firmware setting to NVM.** Persists across reboots; activates on
-the next boot.
+the next boot (on ConnectX-4 Lx, on the next cold power cycle, not a warm reboot).
 
 > This is the same NVM-write block shown in Options 1 and 2. It is repeated here so
 > you can follow Option 3 top to bottom; there is no hidden difference to spot.
@@ -2536,7 +2609,10 @@ else {
 Suspend-ClusterNode -Name $env:COMPUTERNAME -Drain -Wait
 ```
 
-**3. Reboot the node.** The setting written above activates during boot.
+**3. Reboot the node.** On ConnectX-6 (Lx and Dx) the setting written above activates
+during this boot. On ConnectX-4 Lx a warm `Restart-Computer` will NOT activate it:
+perform a cold power cycle (full power off, then on) instead, or use Option 1 or
+Option 2.
 
 ```powershell
 Restart-Computer -Force
@@ -2555,7 +2631,84 @@ Option 3 is complete.
 > remediating the next node. The resync that `Resume-ClusterNode` triggers must finish
 > first; do not advance while it is still running.
 
-#### Notes that apply to all three options
+#### Option 4: Stage the change, let a scheduled solution update activate it (no extra reboot)
+
+Use this on ConnectX-6 (Lx and Dx), or any generation where a warm/OS reboot activates the
+change (see NIC generation determines how the firmware change activates), when you have an
+Azure Local solution update (platform or SBE) coming. You STAGE the firmware setting now and
+let the update's own per-node reboots activate it, one reboot per node, with no separate
+maintenance window. Do NOT use this on ConnectX-4 Lx: a warm reboot does not activate the
+change there, so the update's reboots would leave it staged (use Option 1, Option 2, or a
+cold power cycle instead).
+
+This was validated in-house on a two-node ConnectX-6 (Lx + Dx) cluster: a normal solution
+update (platform and SBE) activated the staged firmware-LLDP disable on every card on both
+nodes as each node took its update reboot, and the setting persisted through the update's SBE
+firmware flash. It is the lowest-disruption path when a maintenance window is already planned,
+the change rides the reboots the update performs anyway.
+
+**1. Write the firmware setting to NVM on every Mellanox node (stage only; do not reset or
+reboot to activate).**
+
+> This is the same NVM-write block shown in Options 1 to 3. It is non-disruptive on its own:
+> it sets the next-boot value while the current value stays live, so nothing changes on the
+> fabric until the update reboots the node. Because staging does not disrupt the node, you do
+> not drain or reboot at this point; run it on every Mellanox node before the update.
+
+```powershell
+# Requires WinMFT (Mellanox Firmware Tools); see Prerequisites.
+$mstDir = 'C:\Program Files\Mellanox\WinMFT'
+if (-not (Test-Path (Join-Path $mstDir 'mst.exe'))) {
+    if (Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
+            Where-Object { $_.InterfaceDescription -match 'Mellanox|ConnectX|NVIDIA' }) {
+        Write-Warning "WinMFT (mst.exe) is not installed, but this node has Mellanox NICs. Install WinMFT (see Prerequisites) and re-run this block."
+    }
+    else {
+        Write-Host "No Mellanox NICs on this node. Step 3 is Mellanox-specific and does not apply here; skip it."
+    }
+}
+else {
+    Push-Location $mstDir
+    $devices = @(
+        (.\mst.exe status 2>&1) |
+            Select-String -Pattern 'mt\d+_pciconf\d+' -AllMatches |
+            ForEach-Object { $_.Matches.Value } |
+            Sort-Object -Unique
+    )
+    if (-not $devices) {
+        Write-Warning "No Mellanox devices found via 'mst status'. Nothing to do on this node."
+    }
+    foreach ($dev in $devices) {
+        Write-Host "Staging firmware LLDP/DCBX-off setting on $dev (activates on the next update reboot) ..."
+        .\mlxconfig.exe -y -d $dev set LLDP_NB_TX_MODE_P1=0 LLDP_NB_TX_MODE_P2=0 LLDP_NB_RX_MODE_P1=0 LLDP_NB_RX_MODE_P2=0 LLDP_NB_DCBX_P1=0 LLDP_NB_DCBX_P2=0
+    }
+    Pop-Location
+}
+```
+
+**2. Confirm the change is staged (not yet active).** Re-run the Diagnosis Step 6 query. The
+next-boot column should show the disabled value (`OFF(0)` / `False(0)`) while the current
+column still shows the old value, so the change is pending and the fabric is unchanged.
+
+**3. Run the Azure Local solution update.** Start it the normal way, or let a scheduled update
+run. Its Cluster-Aware Updating orchestration drains and reboots each node in turn, and that
+per-node reboot activates the staged setting on that node. You do not run any extra reboot or
+PCIe card reset.
+
+**4. After the update completes, verify the change activated and persisted.** Re-run the
+Diagnosis Step 6 query on every node: the current column should now show the disabled value on
+every card. A firmware or NVM component in the update package can in principle reset the
+setting to defaults, so this post-update re-check is mandatory. It was preserved in the
+in-house ConnectX-6 validation, but confirm on your hardware.
+
+> **Watch the update, not just the NIC.** Activating through a solution update means the update
+> itself must succeed. The update's SBE applicability scan queries each node's baseboard
+> management controller (Dell iDRAC) over Redfish; a wedged controller can stall the update
+> independently of this change (see Known Limitations and Open Items, "Activating via an Azure
+> Local solution update can stall on a wedged BMC"). That is a controller issue, not a
+> consequence of the firmware LLDP change.
+
+#### Notes that apply to all four options
 
 **Effect:** Removes the firmware LLDP agent's separate identity (the MAC-based
 chassis-ID), collapsing each storage port to a single LLDP agent: the Windows
@@ -2572,12 +2725,18 @@ fallback.
 switch must force PFC locally (Step 2).
 
 **Persistence:** The `mlxconfig` change is written to NIC firmware (NVM) and
-persists across reboots. It takes effect only after the NIC receives a PCIe card reset.
+persists across reboots. It takes effect only after the NIC is reset: a live
+`mlxfwreset` PCIe card reset on any validated generation, a warm/OS reboot on
+ConnectX-6 (Lx and Dx), or a cold power cycle on ConnectX-4 Lx (a warm reboot does
+not activate it there). See NIC generation determines how the firmware change
+activates.
 
 **NetworkATC interaction:** NetworkATC does not manage `mlxconfig` firmware
-settings, so it will not revert this change. However, NIC firmware updates
-delivered through SBE or OEM update packages may reset the firmware LLDP
-settings to defaults. Re-check after any firmware update.
+settings, so it will not revert this change. In-house validation on ConnectX-6 found
+that an Azure Local solution (SBE) update preserved the disabled firmware-LLDP setting
+across the update (it was not reset to default). A NIC firmware or NVM update can in
+principle reset it, so re-check the firmware LLDP state after any firmware update
+(Diagnosis Step 6).
 
 **What you lose:** Disabling the firmware LLDP agent removes the host's only
 DCBX speaker (the firmware-supplied IEEE DCBX). The switch will no longer
@@ -2954,6 +3113,30 @@ switch model deployed in your environment before applying. Per the AOS-CX
 CLI Bank Command History, the `flow-control priority rxtx <list>` syntax was
 finalized in AOS-CX 10.10; it is current as of the 2025 documentation and
 applies to the 10.13 and 10.16 releases referenced elsewhere in this guide.
+
+**Activating via an Azure Local solution update can stall on a wedged BMC (Dell
+iDRAC).** When you let a rolling Azure Local solution (SBE) update reboot the nodes to
+activate the firmware change (the ConnectX-6 path above), the update's SBE
+applicability scan queries each node's local BMC over Redfish. In-house validation hit
+a case where one node's Dell iDRAC returned HTTP 500 on its Thermal endpoint while the
+iDRAC overall health was OK, and the update failed at roughly 47 percent, during the
+pre-apply scan, before any node was drained or any firmware was flashed. This is a
+single-node BMC fault, not a result of the LLDP or firmware change. Because it fails in
+the scan phase, nothing was applied, so nothing reverts: the SBE stays at the prior
+version until a fixed retry moves it forward. To recover: confirm the failing step is
+the SBE scan and the BMC is returning 500 (not a genuine firmware failure); localize
+the node whose iDRAC Thermal endpoint returns 500 while its peers return 200; reset
+only that iDRAC (a BMC-only Manager.Reset, which does not touch the host OS or the
+cluster node); wait for the endpoint to return 200; then retry the update. The
+platform's own scan auto-retry does not clear a wedged iDRAC, so the BMC reset is the
+actual fix.
+
+**Firmware-LLDP activation is validated across ConnectX-4 Lx, ConnectX-5 Ex, ConnectX-6
+(Lx and Dx), and ConnectX-7.** The activation matrix in Step 3 (NIC generation determines
+how the firmware change activates) reflects in-house testing on all four generations. Only
+ConnectX-4 Lx requires a cold power cycle on the reboot path; ConnectX-5 Ex, ConnectX-6, and
+ConnectX-7 activate on a warm reboot, and every generation activates via the
+`mlxfwreset -l3` PCIe reset with no reboot.
 
 ## References
 
