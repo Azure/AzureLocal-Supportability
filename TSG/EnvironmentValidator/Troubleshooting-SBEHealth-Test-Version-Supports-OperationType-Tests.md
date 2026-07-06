@@ -192,9 +192,9 @@ HealthState, HealthCheckDate`.
 ## Related
 
 - **Rerun a deployment / update after fixing prerequisites** (Azure Local deployment troubleshooting):
-  https://learn.microsoft.com/en-us/azure-stack/hci/deploy/deployment-tool-troubleshoot#rerun-deployment
+  https://learn.microsoft.com/azure/azure-local/manage/troubleshoot-deployment#restart-the-deployment-via-azure-portal
 - **Solution Builder Extension** overview and partner content:
-  https://learn.microsoft.com/en-us/azure-stack/hci/update/solution-builder-extension
+  https://learn.microsoft.com/azure/azure-local/update/solution-builder-extension
 - Sibling SBE health checks that validate other parts of the same SBE:
   `Test-Installed-SBE-Env-Vars` (the installed-SBE environment variables are consistent),
   `Test-Endpoint-Connectivity` (the node can reach the SBE manifest endpoint),
