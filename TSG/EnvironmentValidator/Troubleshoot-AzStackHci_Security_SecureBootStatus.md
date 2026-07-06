@@ -141,9 +141,9 @@ On Azure Local the 2023 Secure Boot certificates are installed by the **platform
 **Background and step-by-step remediation (read these):**
 
 - [Troubleshooting guide: Azure Local UEFI 2023 Secure Boot Update](https://github.com/Azure/AzureLocal-Supportability/blob/main/TSG/Security/TSG-Azure-Local-UEFI-2023-Secure-Boot-Update.md): the step-by-step completion checks, the per-OEM minimum-BIOS table, and the reboot/BIOS cases.
-- [Manage Secure Boot updates (Microsoft Learn)](https://learn.microsoft.com/en-us/azure/azure-local/manage/manage-secure-boot-updates): how Azure Local orchestrates the rollout, monitoring, and the recommended before/during/after workflow.
+- [Manage Secure Boot updates (Microsoft Learn)](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-boot-updates): how Azure Local orchestrates the rollout, monitoring, and the recommended before/during/after workflow.
 
-**Risk:** [MEDIUM RISK] the rollout is a measured-boot change with reboots and a BitLocker-recovery risk if the recovery key is not backed up; the DBX revocation stage is irreversible while Secure Boot stays enabled, so let the platform orchestration sequence it and follow the canonical TSG rather than forcing it by hand.
+This is a [MEDIUM RISK] change: the rollout is a measured-boot change with reboots and a BitLocker-recovery risk if the recovery key is not backed up; the DBX revocation stage is irreversible while Secure Boot stays enabled, so let the platform orchestration sequence it and follow the canonical TSG rather than forcing it by hand.
 
 ### 6. Verification: prove the failure cleared
 
