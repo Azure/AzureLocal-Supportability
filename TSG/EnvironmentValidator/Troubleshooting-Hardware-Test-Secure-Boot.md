@@ -7,7 +7,7 @@
   </tr>
   <tr>
     <th style="text-align:left;">Display name</th>
-    <td>Secure Boot</td>
+    <td>Secure Boot (the aggregated name shown in the portal). The per-machine result JSON and event log carry the verbose form <code>Test Secure Boot &lt;machine&gt;</code>; both refer to this same check.</td>
   </tr>
   <tr>
     <th style="text-align:left;">Validator / test</th>
@@ -125,19 +125,25 @@ In both sources the result for this check looks like this:
 ```json
 {
   "Name": "AzStackHci_Hardware_Test_Secure_Boot",
-  "DisplayName": "Secure Boot",
-  "Title": "Secure Boot",
+  "DisplayName": "Test Secure Boot AzL-Node-01",
+  "Title": "Test Secure Boot",
   "Severity": "Critical",
   "Status": "FAILURE",
-  "Description": "Validates that UEFI Secure Boot is enabled on each machine by running Confirm-SecureBootUEFI. Secure Boot must be enabled before Azure Local deployment.",
-  "TargetResourceName": "AzL-Node-01",
-  "Remediation": "Enable UEFI Secure Boot in the machine firmware and re-run the check. The machine must be in UEFI boot mode for Secure Boot to apply.",
+  "Description": "Checking Secure Boot is enabled",
+  "TargetResourceName": "Machine: AzL-Node-01, SecureBoot",
+  "Remediation": "https://aka.ms/hci-envch",
   "AdditionalData": {
     "Detail": "SecureBoot is 'False' on AzL-Node-01. Expected 'True'. Ensure SecureBoot is supported and enabled on AzL-Node-01.",
     "Status": "FAILURE"
   }
 }
 ```
+
+> **A note on names across surfaces.** The portal shows the aggregated display name
+> **Secure Boot**, while the per-machine result JSON and the event log carry the verbose form
+> **Test Secure Boot `<machine>`**. The underlying `Name`,
+> `AzStackHci_Hardware_Test_Secure_Boot`, is the same on both, so if you are matching strings
+> between the portal and the on-box output, expect the two forms.
 
 ## Before you start: who does this, and confirm it is safe
 
