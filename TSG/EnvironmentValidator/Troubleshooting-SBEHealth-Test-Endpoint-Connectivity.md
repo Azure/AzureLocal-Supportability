@@ -240,9 +240,9 @@ the next validation pass.
   `redirectiontool.trafficmanager.net` redirect target, and the firewall allow-list):
   [Firewall-blocks-SBE-validation.md](../SolutionExtension/Firewall-blocks-SBE-validation.md)
 - **Rerun a deployment / update after fixing prerequisites** (Azure Local deployment
-  troubleshooting): https://learn.microsoft.com/en-us/azure-stack/hci/deploy/deployment-tool-troubleshoot#rerun-deployment
+  troubleshooting): https://learn.microsoft.com/azure/azure-local/manage/troubleshoot-deployment#restart-the-deployment-via-azure-portal
 - **Solution Builder Extension** overview and partner content:
-  https://learn.microsoft.com/en-us/azure-stack/hci/update/solution-builder-extension
+  https://learn.microsoft.com/azure/azure-local/update/solution-builder-extension
 - Sibling SBE health checks that validate other parts of the same SBE:
   `Test-Endpoint-Matches-ModelSKU` (the SBE manifest at the endpoint matches this hardware model
   and SKU), `Test-Installed-SBE-Env-Vars` (the installed-SBE environment variables are consistent),
