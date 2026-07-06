@@ -54,7 +54,7 @@ intended DNS rather than a stale value carried over from imaging.
 > `AzStackHci_Connectivity_Test_Dns` (which resolves `microsoft.com`); the root cause and
 > fix are the same, so consult it only if you also see that older check. It is a separate,
 > in-progress supportability PR, so this guide does not depend on it:
-> [Troubleshooting AzStackHci_Connectivity_Test_Dns](https://github.com/Azure/AzureLocal-Supportability/blob/main/TSG/EnvironmentValidator/Troubleshooting-Connectivity-Test-Dns.md).
+> [Troubleshooting AzStackHci_Connectivity_Test_Dns](./Troubleshooting-Connectivity-Test-Dns.md).
 
 ## Requirements
 
