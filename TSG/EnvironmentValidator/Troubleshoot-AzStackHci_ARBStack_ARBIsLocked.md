@@ -163,7 +163,7 @@ For the full background on the update-time failure this prevents (including the 
 - [ARB upgrade fails with ApplianceResourceScopeLocked (appliance scope lock)](../Update/UpgradeArbAndExtensions_fails_ApplianceResourceScopeLocked.md)
 - [Known issue: ScopeLockedError during ARB Upgrade](../Upgrade/Known-issue-ScopeLockedError-ARB-Upgrade.md)
 
-**Risk:** [LOW RISK] removing an Azure resource lock is a metadata change that does not affect the running ARB. Confirm with the lock's owner first, since the lock may have been applied deliberately to protect the resource.
+Removing an Azure resource lock is a [LOW RISK] metadata change that does not affect the running ARB. Confirm with the lock's owner first, since the lock may have been applied deliberately to protect the resource.
 
 ### 6. Verification: prove the failure cleared
 
