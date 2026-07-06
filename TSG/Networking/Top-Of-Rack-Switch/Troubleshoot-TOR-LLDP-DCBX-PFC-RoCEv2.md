@@ -9,6 +9,12 @@
 | **Audience** | Azure Local operators and network engineers |
 | **Document Version** | 1.0 (2026-06-10) |
 
+> **Impact at a glance** (for a quick read before the technical detail):
+> - **What breaks:** Priority Flow Control (PFC) silently drops on the storage priority, so RoCEv2 storage RDMA stalls and storage performance degrades or collapses.
+> - **Customer-visible symptom:** slow, stalling, or dropped storage; RDMA / SMB Direct errors; or an Aruba `multiple_peers` LLDP error on storage ports. This is a performance and availability issue, not data corruption, and there is no data loss.
+> - **Root nature:** an interoperability and configuration issue (two LLDP/DCBX agents, the Windows host and the NIC firmware, compete and break PFC auto-negotiation), not an Azure Local product defect. The fix is a durable configuration change, not a patch.
+> - **Effort and disruption:** the diagnosis is read-only and safe during production hours; the fix is applied node by node in a maintenance window (budget at least 4 hours for a 4-node cluster, see "Plan a maintenance window" below).
+
 **What this guide does.** On Azure Local clusters carrying RoCEv2 storage
 traffic, Priority Flow Control (PFC) must stay enabled on the storage priority,
 or RDMA stalls and storage performance collapses. This guide explains why PFC
@@ -47,6 +53,13 @@ reliance on DCBX auto-negotiation.
 > (single card per plane), where each node must be drained and rebooted in
 > sequence. The Diagnosis steps are read-only and safe during production hours;
 > the Resolution steps are not.
+
+> **Start here (fast path).** If you just need to get moving, follow these five moves; each links to the section with the full detail.
+> 1. **Match the symptom.** Storage RDMA/PFC not staying on, or an Aruba `multiple_peers` LLDP error on storage ports, on a Mellanox or Intel RoCEv2 cluster? If yes, continue.
+> 2. **Confirm it (read-only, safe in production).** Work the [Diagnosis Steps](#diagnosis-steps) to confirm the dual LLDP-agent conflict. If PFC is already correct, stop here.
+> 3. **Fix it (in a maintenance window).** Apply [Resolution](#resolution) Step 1 (make the Windows LLDP agent durable), Step 2 (force PFC at the switch), and Step 3 (disable the Mellanox firmware LLDP agent).
+> 4. **Pick your Step 3 activation method.** Your topology (REDUNDANT vs NOT-REDUNDANT) and NIC generation decide which of Options 1 to 4 is safe; use the option table in Resolution Step 3.
+> 5. **Verify.** Run [Verification After Remediation](#verification-after-remediation) on both the host and the switch.
 
 ## Contents
 
@@ -2048,6 +2061,14 @@ disabled on every Mellanox card on the node. They differ only in how the change 
 activated (a live PCIe card reset versus a full node reboot) and whether the node is
 drained first. Option 4 stages the identical change and defers activation to a scheduled
 solution update's per-node reboots. Run your chosen option on the node being remediated.
+
+**Workload impact of each option** (what the running cluster feels while you activate the change):
+
+- **Option 1 (REDUNDANT topology only):** the live PCIe card reset briefly drops the two ports on the card being reset, but because each plane spans two cards, a surviving card keeps every plane up. Storage RDMA rides the surviving storage port (SMB Multichannel re-establishes), and running VMs keep running on the surviving management/compute port, so there is no node outage and no storage-availability gap. The node is never drained.
+- **Options 2 and 3 (any topology):** the drain is what protects the workload. `Suspend-ClusterNode -Drain` live-migrates running VMs off the node and moves storage (CSV) ownership away before the storage plane drops, so resetting a single-card plane (Option 2) or rebooting the node (Option 3) causes no VM interruption and no storage-availability loss. The node itself is out of service for its own local role during the change; the rest of the cluster keeps serving.
+- **Option 4 (deferred to a solution update):** no workload impact beyond what the solution update already incurs. The update drains and reboots each node in turn (live-migrating VMs and moving storage ownership as part of normal rolling servicing), and the staged firmware change simply rides those reboots.
+
+In every option, wait for S2D to return fully healthy (`Get-StorageJob` empty, all virtual disks Healthy) before advancing to the next node, per the readiness gate below.
 
 #### NIC generation determines how the firmware change activates
 
