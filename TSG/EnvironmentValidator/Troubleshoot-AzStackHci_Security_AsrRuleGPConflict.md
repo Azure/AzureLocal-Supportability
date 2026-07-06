@@ -40,7 +40,7 @@ The check inspects the node's **Resultant Set of Policy (RSoP)** for any of the 
 
 - Administrative (local administrator) access to each Azure Local node.
 - Access to view and edit the Group Policy that configures ASR: the Group Policy Management Console (GPMC) and rights on the reported scope for a **domain** GPO, or `gpedit.msc` on the node for a **local** group policy.
-- Familiarity with your Azure Local security baseline (the OSConfig-managed Defender configuration). See the [manage the security baseline](https://learn.microsoft.com/en-us/azure/azure-local/manage/manage-secure-baseline) guidance.
+- Familiarity with your Azure Local security baseline (the OSConfig-managed Defender configuration). See the [manage the security baseline](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-baseline) guidance.
 
 ## Troubleshooting Steps
 
@@ -166,11 +166,11 @@ Remove the Attack Surface Reduction configuration from **every Group Policy scop
 
    Re-run the RSoP query from Step 1 and confirm it returns no rows under the ASR key.
 
-Let the Azure Local security baseline (OSConfig) manage Defender ASR rather than configuring ASR through Group Policy on these nodes. See [Manage the Azure Local security baseline](https://learn.microsoft.com/en-us/azure/azure-local/manage/manage-secure-baseline) and the [Azure Local security features overview](https://learn.microsoft.com/en-us/azure/azure-local/concepts/security-features) for how the baseline governs Defender and Attack Surface Reduction.
+Let the Azure Local security baseline (OSConfig) manage Defender ASR rather than configuring ASR through Group Policy on these nodes. See [Manage the Azure Local security baseline](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-baseline) and the [Azure Local security features overview](https://learn.microsoft.com/azure/azure-local/concepts/security-features) for how the baseline governs Defender and Attack Surface Reduction.
 
 > **Note:** the Remediation link that this check prints (`aka.ms/azurelocalsecuritydefenderpolicyTSG`) does not currently resolve to a document. Use the guidance in this TSG and the security-baseline links above.
 
-**Risk:** [LOW RISK] removing an ASR rule from Group Policy so the OSConfig-managed Defender baseline applies. Coordinate with whoever owns the reported GPO, and confirm the OSConfig security baseline is the intended source of the Defender configuration for these nodes.
+Removing an ASR rule from Group Policy so the OSConfig-managed Defender baseline applies is a [LOW RISK] change. Coordinate with whoever owns the reported GPO, and confirm the OSConfig security baseline is the intended source of the Defender configuration for these nodes.
 
 ### 6. Verification: prove the failure cleared
 
@@ -197,7 +197,7 @@ Confirm `HealthState` is `Success` with a current `HealthCheckDate`, then re-rea
 ## Glossary
 
 - **ASR (Attack Surface Reduction):** a set of Microsoft Defender rules (each identified by a GUID) that block or audit common attack behaviors, such as Office applications spawning child processes.
-- **OSConfig security baseline:** the Azure Local platform's managed security configuration, including the Defender settings, applied and maintained by the platform. On Azure Local this is the intended source of the Defender/ASR configuration. See [Manage the Azure Local security baseline](https://learn.microsoft.com/en-us/azure/azure-local/manage/manage-secure-baseline).
+- **OSConfig security baseline:** the Azure Local platform's managed security configuration, including the Defender settings, applied and maintained by the platform. On Azure Local this is the intended source of the Defender/ASR configuration. See [Manage the Azure Local security baseline](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-baseline).
 - **Group Policy conflict:** when ASR is configured by both Group Policy and the OSConfig baseline, Group Policy wins, so the effective state no longer matches the OSConfig-managed configuration. That mismatch is what this check reports.
 - **RSoP (Resultant Set of Policy):** the computed result of all Group Policy applied to a node. This check reads RSoP (WMI namespace `root\rsop\computer`) to see which ASR rules Group Policy set and from where.
 - **Scope / SOM (scope of management):** where a Group Policy setting was applied from, reported as an Active Directory distinguished name (a domain or organizational-unit GPO) or `Local` for a local group policy on the node.
