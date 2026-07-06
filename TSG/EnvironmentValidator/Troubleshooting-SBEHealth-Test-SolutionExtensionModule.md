@@ -196,10 +196,10 @@ next run. In the portal, the SBE health check clears from red on the next valida
 ## Related
 
 - **Rerun a deployment / update after fixing prerequisites** (Azure Local deployment
-  troubleshooting): https://learn.microsoft.com/en-us/azure-stack/hci/deploy/deployment-tool-troubleshoot#rerun-deployment
+  troubleshooting): https://learn.microsoft.com/azure/azure-local/manage/troubleshoot-deployment#restart-the-deployment-via-azure-portal
 - Sibling SBE health checks that validate other parts of the same SBE:
   `Test-SBEPropertiesValid` (partner property values match the SBE manifest; remediated with
   `Set-SolutionExtensionProperty`) and `Test-SBECredentialsValid` (SBE credentials in the secret
   store match the SBE manifest).
 - **Solution Builder Extension** overview and partner content:
-  https://learn.microsoft.com/en-us/azure-stack/hci/update/solution-builder-extension
+  https://learn.microsoft.com/azure/azure-local/update/solution-builder-extension
