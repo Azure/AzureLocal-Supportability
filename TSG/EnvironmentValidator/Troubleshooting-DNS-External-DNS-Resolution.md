@@ -17,9 +17,8 @@ times before it fails, and it lists each failing node as its own bullet. If any
 configured DNS server returns no records (or no DNS server is configured at all), the
 check fails for that node.
 
-- **Severity:** Critical. When this check fails on a node and no proxy is in use, the
-  validator stops the remaining connectivity tests for that node, so a single DNS
-  failure can also hide other connectivity findings.
+- **Severity:** Critical. When this check fails on a node and no proxy is in use, it
+  reports a FAILURE for that node and fails the pre-update health check overall.
 - **When it runs:** pre-deployment readiness, deployment, add-node, and the pre-update
   health check. In practice you will most often see it block a pending Azure Local
   update.
@@ -170,9 +169,8 @@ log rather than assuming it passed).
 
 ## Consequences if you do not fix this
 
-This check is Critical. When it fails on a node and no proxy is configured, the validator
-stops the remaining connectivity tests for that node, so one DNS failure can mask other
-connectivity problems and fails the pre-update health check overall. A pending Azure
+This check is Critical. When it fails on a node and no proxy is configured, it reports a
+FAILURE for that node and fails the pre-update health check overall. A pending Azure
 Local update or a deployment that runs this readiness check will not proceed until
 external DNS resolution succeeds on every node, and the cluster's cloud-managed lifecycle
 (Arc, updates, billing, telemetry) is impaired until external DNS works, even though
