@@ -28,12 +28,18 @@ Implementing QoS is mandatory for Azure Local deployments that support Storage i
 
 | Setting                | Default Value                                      | Description                                                                                                       |
 | ---------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| DCBX                   | Enabled                                            | Data Center Bridging Exchange protocol is enabled for LLDP configuration notification only.                       |
 | Priority Flow Control  | Enabled                                            | PFC (IEEE 802.1Qbb) is enabled for lossless transport on storage traffic.                                         |
 | ETS (Bandwidth)        | Storage 50%<br>Cluster 1-2%<br>Default (Remainder) | Bandwidth reservations <br>Cluster Heartbeat:<br>2% if the adapter are <=10Gbps<br>1% if the adapter are >10 Gbps |
 | ECN                    | Enabled                                            | Explicit Congestion Notification is enabled for RDMA/Storage traffic.                                             |
 | VLAN                   | 711<br>712                                         | Default Storage Intent VLAN assignments. These values can be customized.                                          |
 | CoS (Class of Service) | Storage: 3<br>Cluster: 7<br>Default: 0             | Default CoS values for traffic classification.  These values can be customized.                                   |
+
+> [!IMPORTANT]
+> Azure Local does not configure DCBX. The host has no DCBX settings and does not send DCB TLVs back to the switch. DCB (PFC, ETS) is configured statically on both the host and the switch.
+>
+> On Cisco Nexus, the `send-tlv` option used with `priority-flow-control` typically requires DCBX to be enabled on the switch so the required TLVs can be advertised over LLDP (see [Azure Local Network Requirements][AzureLocalPhysicalNetworkRequirements]). When DCBX is enabled on the switch for this purpose, **DCBX willing mode must be False**. From Azure Local's perspective, the advertised TLVs are used for telemetry only — not for DCB negotiation.
+>
+> Dynamic changes to host-level DCB settings would disrupt RDMA traffic and impact the storage layer. This requirement has been in place since Storage Spaces Direct originally launched.
 
 > [!NOTE]
 > These defaults can be overridden using [Network ATC][NetworkAtc] custom settings. For more details, see [Manage Network ATC][NetworkAtcOverride].
@@ -246,7 +252,7 @@ interface Ethernet1/17
 
 In this example, the key points are the use of `priority-flow-control` and `service-policy`.
 
-- `priority-flow-control mode on send-tlv`: PFC (IEEE 802.1Qbb) allows you to pause traffic on specific CoS (Class of Service) lanes instead of pausing all traffic on the link. This is crucial for lossless Ethernet, especially for storage traffic (like RDMA), which is sensitive to packet loss.
+- `priority-flow-control mode on send-tlv`: Enables PFC (IEEE 802.1Qbb) on the interface and advertises the PFC TLV over LLDP. PFC allows you to pause traffic on specific CoS (Class of Service) lanes instead of pausing all traffic on the link, which is crucial for lossless Ethernet and storage traffic (like RDMA) that is sensitive to packet loss. On Cisco Nexus, enabling `send-tlv` typically requires DCBX to be enabled on the switch to advertise the TLVs. If DCBX is enabled, **willing mode must be False**. See the DCB note under [Azure Local Defaults](#azure-local-defaults) — Azure Local uses these TLVs for telemetry only and does not participate in DCBX negotiation.
 - `service-policy type qos input AZLocal_SERVICES`: Applies a QoS policy, which maps storage and cluster traffic to a specific CoS value that PFC will act upon.
 
 ## Terminology

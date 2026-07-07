@@ -442,5 +442,130 @@ If you see entries for either `wsman/<ClusterName>` or `wsman/<ClusterName>.<FQD
 Remove the entries for `wsman/<ClusterName>` and `wsman/<ClusterName>.<FQDN>`
 ```Powershell
 setspn -D wsman/<ClusterName> <ClusterName>
-setspn -D wsman/<ClusterName><FQDN> <ClusterName>
+setspn -D wsman/<ClusterName>.<FQDN> <ClusterName>
 ```
+
+## Access Denied because remote logon related GPO policy is applied
+### Symptoms
+#### Symptom 1
+Deployment fails with `Access is Denied` during `AddAsZHostToDomain` step, right after node is joined to domain. An example of error message can be:
+```
+Type 'AddAsZHostToDomain' of Role 'BareMetal' raised an exception: Unable to connect to the <NODE_IP> using .\Administrator credentials. Please check the .\Administrator credentials.
+```
+
+
+#### Symptom 2
+When you recently made Group Policy change and applied to Azure Local clusters, your admin account, either local admin or domain account added to node's local `Administrators` group, fails to remotely logon to a node and gets `Access is Denied` error. 
+
+### Issue Validation
+Please run the following script on your node through BMC console, or through another user that can still remotely connect (i.e., via PowerShell session or RDP) to the impacted node.
+
+```powershell
+$ErrorActionPreference = 'Stop'
+
+# SIDs to check
+$Sid_LocalAdminCapability = 'S-1-5-114'
+$Sid_AdministratorsGroup  = 'S-1-5-32-544'
+$isBlocked = $false
+
+$TempCfg = Join-Path $env:TEMP 'secpol.cfg'
+
+Write-Host "=== Checking SeDenyNetworkLogonRight ==="
+
+# Export effective user rights
+secedit /export /areas USER_RIGHTS /cfg $TempCfg | Out-Null
+
+$denyLine = Select-String -Path $TempCfg `
+    -Pattern '^SeDenyNetworkLogonRight\s*=' `
+    -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+
+Remove-Item $TempCfg -Force -ErrorAction SilentlyContinue
+
+if (-not $denyLine) {
+    Write-Host "SeDenyNetworkLogonRight: NOT configured"
+    Write-Host "Local admins blocked: NO"
+}
+else {
+    Write-Host "SeDenyNetworkLogonRight: CONFIGURED"
+    Write-Host "Raw value:"
+    Write-Host "  $($denyLine.Line)"
+
+    $assignedSids = (($denyLine.Line -split '=', 2)[1] -split ',') |
+        ForEach-Object { $_.Trim().TrimStart('*') }
+
+    Write-Host "Assigned SIDs:"
+    foreach ($sid in $assignedSids) {
+        Write-Host "  - $sid"
+    }
+
+    $blocked114 = $assignedSids -contains $Sid_LocalAdminCapability
+    $blocked544 = $assignedSids -contains $Sid_AdministratorsGroup
+    $isBlocked = $blocked114 -or $blocked544
+
+    if ($isBlocked) {
+        Write-Host "Local admins blocked: YES"
+    }
+    else {
+        Write-Host "Local admins blocked: NO"
+    }
+}
+
+if ($isBlocked)
+{
+    Write-Host ""
+    Write-Host "=== Identifying applying GPO(s) ==="
+
+    $gpresultText = gpresult /scope computer /Z 2>$null
+
+    $gpos = $gpresultText |
+        Select-String 'Policy:\s+DenyNetworkLogonRight' -Context 3,3 |
+        ForEach-Object {
+            $_.Context.PreContext |
+                Select-String 'GPO:' |
+                ForEach-Object {
+                    ($_ -split 'GPO:\s*')[1].Trim()
+                }
+        } |
+        Select-Object -Unique
+
+    if ($gpos) {
+        foreach ($gpo in $gpos) {
+            Write-Host "GPO that contains the DenyNetworkLogonRight policy: $gpo"
+        }
+    }
+    else {
+        Write-Host "GPO that contains the DenyNetworkLogonRight policy: UNKNOWN (Run gpresult /scope computer /Z manually to confirm, or it may not be applied via Group Policy)"
+    }
+}
+Write-Host "=== Done ==="
+```
+If you see `Local admins blocked: YES` in the output, that means the issue is validated.
+
+### Mitigation
+Here is an example output from the validation script that validated the issue.
+
+```
+=== Checking SeDenyNetworkLogonRight ===
+SeDenyNetworkLogonRight: CONFIGURED
+Raw value:
+  SeDenyNetworkLogonRight = *S-1-5-32-544
+Assigned SIDs:
+  - S-1-5-32-544
+Local admins blocked: YES
+
+=== Identifying applying GPO(s) ===
+GPO that contains the DenyNetworkLogonRight policy: Test-GPO
+=== Done ===
+```
+
+Please check the last section and find the GPO name that contains this  `DenyNetworkLogonRight` policy. In Group Policy console it is displayed as `Deny Access to this computer from the network`. Go to the Group Policy management console and find the GPO with that name. Either uncheck the `Define these policy settings` checkbox for this policy, or remove `Administrators` group from the policy value. 
+
+Location where you can find the policy: 
+![Image](./images/access-denied-gpo-location.png)
+
+Once finished, run
+```powershell
+gpupdate /force
+```
+on each impacted node. This will help mitigate the issue. Once this is done on all impacted nodes, you can then retry the failed action.
