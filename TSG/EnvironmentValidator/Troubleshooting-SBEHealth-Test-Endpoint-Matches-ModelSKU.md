@@ -158,10 +158,10 @@ This check only fails when a **custom (override)** endpoint is configured, so co
 cluster is using:
 
 ```powershell
-(Get-SolutionDiscoveryDiagnosticInfo).SbeManifestResult | Format-List ManifestSource, *
+(Get-SolutionDiscoveryDiagnosticInfo).Configuration.ComponentUris["SBE"]
 ```
 
-`ManifestSource` is the endpoint the manifest was read from. If it is the default Microsoft-hosted
+`ComponentUris["SBE"]` is the SBE manifest endpoint the validator reads. If it is the default Microsoft-hosted
 `aka.ms/AzureStackSBEUpdate/<vendor>` URL, this check would have skipped; a FAILURE means the
 endpoint is an override that differs from the default.
 
