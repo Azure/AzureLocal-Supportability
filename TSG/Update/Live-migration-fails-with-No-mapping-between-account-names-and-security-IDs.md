@@ -2,9 +2,9 @@
 
 ## Overview
 
-On an Azure Local 24H2 cluster running a solution version **earlier than 12.2605 (2026.05B)**, live migration of certain virtual machines fails with the error **"No mapping between account names and security IDs was done" (0x80070534)**. Because a solution update drains each node by moving its VMs to another node, this same failure can also cause a **Cluster Aware Updating (CAU) run or solution update to fail** when an affected VM cannot be live migrated off a node.
+On an Azure Local 24H2 cluster running a solution version **earlier than 12.2605**, live migration of certain virtual machines fails with the error **"No mapping between account names and security IDs was done" (0x80070534)**. Because a solution update drains each node by moving its VMs to another node, this same failure can also cause a **Cluster Aware Updating (CAU) run or solution update to fail** when an affected VM cannot be live migrated off a node.
 
-The fix is included in the Azure Local **12.2605 (2026.05B)** solution update and is enabled automatically when the cluster is updated. It removes an account validation step that live migration does not actually need (see Cause). This article explains how to confirm you are hitting this issue, how to resolve it by updating, and an interim quick migration workaround that lets you complete the update to the fixed version and then be turned back off.
+The fix is included in the Azure Local **12.2605** solution update and is enabled automatically when the cluster is updated. It removes an account validation step that live migration does not actually need (see Cause). This article explains how to confirm you are hitting this issue, how to resolve it by updating, and an interim quick migration workaround that lets you complete the update to the fixed version and then be turned back off.
 
 **Severity:** High. An affected VM cannot be live migrated, and a solution update or CAU run can fail when that VM cannot be drained off a node. The interim workaround below keeps the cluster serviceable until you reach the fixed version.
 
@@ -65,11 +65,11 @@ Before live migrating a VM, Azure Local builds earlier than 12.2605 validate the
 
 In either case the security setup step of the live migration fails with `0x80070534`, "No mapping between account names and security IDs was done", and the migration is aborted.
 
-**What the fix changes.** Validating the account that created the VM is not necessary for a live migration to succeed. On builds earlier than 12.2605 this unnecessary validation caused live migrations to fail needlessly for the two cases above. The Azure Local **12.2605 (2026.05B)** solution update removes that validation, and it is enabled automatically when the cluster is updated, so live migration no longer depends on resolving the account that created the VM. Clusters below 12.2605 still perform the unnecessary validation, which is why an affected VM still fails to live migrate there.
+**What the fix changes.** Validating the account that created the VM is not necessary for a live migration to succeed. On builds earlier than 12.2605 this unnecessary validation caused live migrations to fail needlessly for the two cases above. The Azure Local **12.2605** solution update removes that validation, and it is enabled automatically when the cluster is updated, so live migration no longer depends on resolving the account that created the VM. Clusters below 12.2605 still perform the unnecessary validation, which is why an affected VM still fails to live migrate there.
 
 ## Resolution
 
-Update the cluster to Azure Local **12.2605 (2026.05B) or later**. The solution update enables the fix on every node automatically. There is nothing to set manually, and no VM needs to be recreated. You can see the cluster's current Azure Local version in the Azure portal on the Azure Local resource, or in the cluster's Updates view. After the update:
+Update the cluster to Azure Local **12.2605 or later**. The solution update enables the fix on every node automatically. There is nothing to set manually, and no VM needs to be recreated. You can see the cluster's current Azure Local version in the Azure portal on the Azure Local resource, or in the cluster's Updates view. After the update:
 
 - Affected VMs live migrate correctly in both directions.
 - If you applied the quick migration workaround below, revert the affected VMs back to live migration (see the workaround section).
@@ -124,11 +124,11 @@ foreach ($vm in $affectedVMs) {
 }
 ```
 
-With the affected VMs set to quick migration, proceed with the solution update to 12.2605 (2026.05B) or later. The cluster uses quick migration to drain those VMs during each node's update, so the update completes instead of failing on the SID lookup.
+With the affected VMs set to quick migration, proceed with the solution update to 12.2605 or later. The cluster uses quick migration to drain those VMs during each node's update, so the update completes instead of failing on the SID lookup.
 
 ### Disable the workaround after updating
 
-Once the cluster is on 12.2605 (2026.05B) or later, the permanent fix is enabled and the affected VMs live migrate correctly. Revert them to the default (live migration):
+Once the cluster is on 12.2605 or later, the permanent fix is enabled and the affected VMs live migrate correctly. Revert them to the default (live migration):
 
 ```powershell
 foreach ($vm in $affectedVMs) {
