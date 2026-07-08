@@ -4,6 +4,8 @@
 
 On an Azure Local 24H2 cluster running a solution version **earlier than 12.2605**, live migration of certain virtual machines fails with the error **"No mapping between account names and security IDs was done" (0x80070534)**. Because a solution update drains each node by moving its VMs to another node, this same failure can also cause a **Cluster Aware Updating (CAU) run or solution update to fail** when an affected VM cannot be live migrated off a node.
 
+This issue affects Azure Local **24H2 only**. Azure Local 24H2 solution versions are numbered **12.25xx and 12.26xx** (for example 12.2604 and 12.2605), and the fix ships in **12.2605** and later. Azure Local **23H2** clusters, whose solution versions are numbered **11.25xx**, are not affected: the account validation that causes this failure was introduced with 24H2.
+
 The fix is included in the Azure Local **12.2605** solution update and is enabled automatically when the cluster is updated. It removes an account validation step that live migration does not actually need (see Cause). This article explains how to confirm you are hitting this issue, how to resolve it by updating, and an interim quick migration workaround that lets you complete the update to the fixed version and then be turned back off.
 
 **Severity:** High. An affected VM cannot be live migrated, and a solution update or CAU run can fail when that VM cannot be drained off a node. The interim workaround below keeps the cluster serviceable until you reach the fixed version.
@@ -53,6 +55,7 @@ Event **21024** ("failed at migration source") names the affected VM, and the me
 
 - The VM was **created or imported under a local (non-domain) administrator account** on a cluster node (for example the built in Administrator, or another local account). A local account SID exists only on that node and can never be resolved through Active Directory.
 - The VM was created by a **domain account that has since been removed (deleted) from the domain**. Once the account is deleted, its SID is orphaned and no longer resolves in Active Directory.
+- The VM was **migrated or imported into Azure Local from VMware or Hyper-V** (for example using Azure Migrate). If the migration registered the VM under a local node administrator account rather than a domain account, the recorded owner SID is a local account that exists only on that node and cannot be resolved through Active Directory.
 
 VMs created under a normal domain account that still exists are not affected and migrate correctly regardless of solution version.
 
@@ -60,7 +63,7 @@ VMs created under a normal domain account that still exists are not affected and
 
 Before live migrating a VM, Azure Local builds earlier than 12.2605 validate the account that originally created or imported the VM by resolving its Security Identifier (SID). On 24H2 that resolution goes through Active Directory. The live migration fails whenever the creating account's SID cannot be resolved in Active Directory, which happens for two reasons:
 
-1. The VM was created or imported under a **local node administrator** account instead of an Active Directory account. A local account exists only on the one node that owns it and is never present in Active Directory.
+1. The VM was created or imported under a **local node administrator** account instead of an Active Directory account. A local account exists only on the one node that owns it and is never present in Active Directory. This commonly happens when a VM is **migrated into Azure Local from VMware or Hyper-V** (for example using Azure Migrate) and the migration registers the VM under a local administrator, or when a VM is created directly under the built in Administrator or another local account.
 2. The VM was created or imported under an **Active Directory administrator account that no longer exists**. Once that account is deleted, its SID is orphaned and no longer resolves in Active Directory.
 
 In either case the security setup step of the live migration fails with `0x80070534`, "No mapping between account names and security IDs was done", and the migration is aborted.
