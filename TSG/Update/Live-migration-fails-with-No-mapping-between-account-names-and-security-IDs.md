@@ -87,13 +87,13 @@ Both methods move a running VM to another node without a reboot and without data
 | | Live migration | Quick migration |
 |---|---|---|
 | VM during the move | Stays running the whole time | Saved to disk, briefly paused, then resumed on the destination |
-| Downtime | None. The final switchover is sub second and not noticeable | A short pause while the VM state is saved and restored |
+| Downtime | None. The final switchover is sub-second and not noticeable | A short pause while the VM state is saved and restored |
 | Length of the pause | Not applicable | Scales with the VM's assigned memory. Typically a few seconds to a few tens of seconds |
-| In guest impact | None | The guest is frozen during the pause. Time sensitive sessions may notice a brief stall; most network connections survive a pause of a few seconds |
+| In-guest impact | None | The guest is frozen during the pause. Time-sensitive sessions may notice a brief stall; most network connections survive a pause of a few seconds |
 | Reboot or data loss | No | No. State is saved and restored, so the VM resumes exactly where it left off |
 | Result on a cluster below 12.2605 (affected VM) | Fails with 0x80070534 | Succeeds |
 
-For most workloads the brief pause of a quick migration is acceptable, and it is far preferable to a failed update or a VM that cannot be moved off a node. For a latency sensitive workload, plan the move (and any update that drains its node) for a maintenance window. If the pause is not acceptable for a particular VM, keep that VM on a single node until the cluster is updated to 12.2605, then live migration works normally.
+For most workloads the brief pause of a quick migration is acceptable, and it is far preferable to a failed update or a VM that cannot be moved off a node. For a latency-sensitive workload, plan the move (and any update that drains its node) for a maintenance window. If the pause is not acceptable for a particular VM, keep that VM on a single node until the cluster is updated to 12.2605, then live migration works normally.
 
 ### Apply the workaround
 
@@ -145,4 +145,4 @@ Confirm the fix by live migrating a previously affected VM between nodes. It sho
 
 - The `DefaultMoveType` setting is stored in the cluster database, so it persists across node reboots and through the phases of an orchestrated solution update. It is not reverted by the update, so remember to reset it after the cluster reaches 12.2605.
 - No VM needs to be recreated. The update fixes migration for existing affected VMs in place.
-- This issue is distinct from [Live migrations may fail when upgrading OS from 22H2 to 23H2](../Upgrade/Known%2Dissue-%2D-Live-migrations-may-fail-when-upgrading-OS-from-22H2-to-23H2.md), which is caused by VMs that use dynamic memory and is resolved by a different registry setting. If your migrations fail with the `0x80070534` "No mapping between account names and security IDs" error, use this article.
+- This issue is distinct from [Live migrations may fail when upgrading OS from 22H2 to 23H2](../Upgrade/Known%252Dissue-%252D-Live-migrations-may-fail-when-upgrading-OS-from-22H2-to-23H2.md), which is caused by VMs that use dynamic memory and is resolved by a different registry setting. If your migrations fail with the `0x80070534` "No mapping between account names and security IDs" error, use this article.
