@@ -39,12 +39,16 @@ To confirm the scenario you are encountering is the issue documented in this art
 **1. Confirm the error signature.** On the node that was the **source** of the failed migration, check the Hyper-V VMMS logs. The two confirming events come from **different logs**, so query both:
 
 ```powershell
+# The definitive signal is the error message text, logged on the migration SOURCE node.
+# It can appear in either the Admin or the Operational Hyper-V VMMS channel, so scan both.
+# FilterHashtable scans server-side by time, so a busy log cannot push the event out of a
+# fixed -MaxEvents window; tighten StartTime to the time of the failed migration if you want.
+$since = (Get-Date).AddDays(-7)
 foreach ($log in 'Microsoft-Windows-Hyper-V-VMMS-Admin',
                  'Microsoft-Windows-Hyper-V-VMMS-Operational') {
-    Get-WinEvent -LogName $log -MaxEvents 200 -ErrorAction SilentlyContinue |
+    Get-WinEvent -FilterHashtable @{ LogName = $log; StartTime = $since } -ErrorAction SilentlyContinue |
       Where-Object {
-        $_.Id -eq 21024 -or
-        $_.Id -eq 1106 -or
+        $_.Id -eq 21024 -or $_.Id -eq 1106 -or
         $_.Message -match 'No mapping between account names' -or
         $_.Message -match '80070534'
       } |
@@ -53,10 +57,12 @@ foreach ($log in 'Microsoft-Windows-Hyper-V-VMMS-Admin',
 }
 ```
 
-Two events together confirm the issue, and they live in different logs:
+On the migration **source** node the failure produces two events, in different logs:
 
-- Event **21024** in the **Microsoft-Windows-Hyper-V-VMMS-Admin** log is the failure *marker*: "Virtual machine migration operation for '&lt;VMName&gt;' failed at migration source '&lt;NodeName&gt;'". It names the affected VM but does **not** itself contain the SID error text.
-- Event **1106** in the **Microsoft-Windows-Hyper-V-VMMS-Operational** log carries the *definitive signature*: "No mapping between account names and security IDs was done", with the HRESULT rendered as the bare code `80070534` (note: no `0x` prefix, and not in the Admin log). This is the event that confirms the cause.
+- **Event 1106** in the **Microsoft-Windows-Hyper-V-VMMS-Operational** log carries the **definitive signature**: "No mapping between account names and security IDs was done", with the HRESULT rendered as the bare code `80070534` (no `0x` prefix). This is the event that confirms the cause.
+- **Event 21024** in the **Microsoft-Windows-Hyper-V-VMMS-Admin** log is the accompanying "failed at migration source" marker that names the affected VM; it does not itself contain the SID error text.
+
+These event IDs (21024 in the Admin log, 1106 in the Operational log) were **validated during a live reproduction of this failure on an affected Azure Local 24H2 cluster**. The query above also matches on the message text, which stays reliable if a different build happens to log the same failure under a different event ID.
 
 > To collect for Microsoft Support: export the **Microsoft-Windows-Hyper-V-VMMS-Admin**, **Microsoft-Windows-Hyper-V-VMMS-Operational**, and **Microsoft-Windows-Hyper-V-High-Availability-Admin** logs from the source node, and note the failing VM name and the cluster's Azure Local solution version.
 
@@ -109,30 +115,46 @@ For most workloads the brief pause of a quick migration is acceptable, and it is
 
 ### Apply the workaround
 
-Identify the affected VMs (the VMs that fail live migration with this error, named in the Event 21024 entries, or the VMs that match the two creation conditions above). Set each of them to use quick migration. Replace `VM1`, `VM2`, `VM3` with the names of your affected VMs.
+Identify the affected VMs (the VMs that fail live migration with this error, surfaced by the query in Issue Validation above, or the VMs that match the two creation conditions above). Set each of them to use quick migration. Replace `VM1`, `VM2`, `VM3` with the names of your affected VMs.
 
 ```powershell
-# Set the affected VMs to quick migration.
+# Set the affected VMs to quick migration. Replace VM1/VM2/VM3 with your affected VM names.
 $affectedVMs = @("VM1", "VM2", "VM3")
+if (-not $affectedVMs) { Write-Warning "Set `$affectedVMs to your affected VM names first."; return }
+
+$notSet = @()
 foreach ($vm in $affectedVMs) {
-    $vmObj = Get-VM -Name $vm -ComputerName (Get-ClusterGroup $vm).OwnerNode
-    $res   = Get-ClusterResource -VMId $vmObj.VMId
-    $res | Set-ClusterParameter -Name DefaultMoveType -Value 1
-    $current = ($res | Get-ClusterParameter DefaultMoveType).Value
-    Write-Host "$vm : DefaultMoveType = $current"
+    try {
+        $group = Get-ClusterGroup -Name $vm -ErrorAction Stop
+        $vmObj = Get-VM -Name $vm -ComputerName $group.OwnerNode -ErrorAction Stop
+        $res   = Get-ClusterResource -VMId $vmObj.VMId -ErrorAction Stop
+        $res | Set-ClusterParameter -Name DefaultMoveType -Value 1 -ErrorAction Stop
+        $current = ($res | Get-ClusterParameter DefaultMoveType).Value
+        Write-Host "$vm : DefaultMoveType = $current"
+    } catch {
+        $notSet += $vm
+        Write-Warning "$vm : could not set DefaultMoveType -- $($_.Exception.Message)"
+    }
 }
+if ($notSet) { Write-Warning "NOT set (check the VM / cluster-group name): $($notSet -join ', ')" }
 ```
 
-A `DefaultMoveType` of **1** means quick migration. The system default of **4294967295** means live migration.
+A `DefaultMoveType` of **1** means quick migration. The system default of **4294967295** (0xFFFFFFFF) means "use the cluster's default move type", which is live migration.
 
 Verify the setting:
 
 ```powershell
+# Re-declare the list if you are in a new session.
+$affectedVMs = @("VM1", "VM2", "VM3")
+if (-not $affectedVMs) { Write-Warning "Set `$affectedVMs to your affected VM names first."; return }
 foreach ($vm in $affectedVMs) {
-    $vmObj = Get-VM -Name $vm -ComputerName (Get-ClusterGroup $vm).OwnerNode
-    $val   = (Get-ClusterResource -VMId $vmObj.VMId |
-              Get-ClusterParameter DefaultMoveType).Value
-    Write-Host "$vm : DefaultMoveType = $val"
+    try {
+        $vmObj = Get-VM -Name $vm -ComputerName (Get-ClusterGroup -Name $vm -ErrorAction Stop).OwnerNode -ErrorAction Stop
+        $val   = (Get-ClusterResource -VMId $vmObj.VMId | Get-ClusterParameter DefaultMoveType).Value
+        Write-Host "$vm : DefaultMoveType = $val"
+    } catch {
+        Write-Warning "$vm : could not read DefaultMoveType -- $($_.Exception.Message)"
+    }
 }
 ```
 
@@ -143,12 +165,24 @@ With the affected VMs set to quick migration, proceed with the solution update t
 Once the cluster is on 12.2605 or later, the permanent fix is enabled and the affected VMs live migrate correctly. Revert them to the default (live migration):
 
 ```powershell
+# Re-declare the list -- this step usually runs in a NEW session after the update
+# (every node has rebooted), so $affectedVMs from the Apply step is gone.
+$affectedVMs = @("VM1", "VM2", "VM3")
+if (-not $affectedVMs) { Write-Warning "Set `$affectedVMs to your affected VM names first."; return }
+$notReset = @()
 foreach ($vm in $affectedVMs) {
-    $vmObj = Get-VM -Name $vm -ComputerName (Get-ClusterGroup $vm).OwnerNode
-    $res   = Get-ClusterResource -VMId $vmObj.VMId
-    $res | Set-ClusterParameter -Name DefaultMoveType -Value 4294967295
-    Write-Host "$vm : reset to default (live migration)"
+    try {
+        $group = Get-ClusterGroup -Name $vm -ErrorAction Stop
+        $vmObj = Get-VM -Name $vm -ComputerName $group.OwnerNode -ErrorAction Stop
+        $res   = Get-ClusterResource -VMId $vmObj.VMId -ErrorAction Stop
+        $res | Set-ClusterParameter -Name DefaultMoveType -Value 4294967295 -ErrorAction Stop
+        Write-Host "$vm : reset to default (live migration)"
+    } catch {
+        $notReset += $vm
+        Write-Warning "$vm : could not reset DefaultMoveType -- $($_.Exception.Message)"
+    }
 }
+if ($notReset) { Write-Warning "NOT reset (still pinned to quick migration): $($notReset -join ', ')" }
 ```
 
 Confirm the fix by live migrating a previously affected VM between nodes. It should now succeed in both directions.
