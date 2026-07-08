@@ -4,7 +4,9 @@
 
 On an Azure Local 24H2 cluster running a solution version **earlier than 12.2605**, live migration of certain virtual machines fails with the error **"No mapping between account names and security IDs was done" (0x80070534)**. Because a solution update drains each node by moving its VMs to another node, this same failure can also cause a **Cluster Aware Updating (CAU) run or solution update to fail** when an affected VM cannot be live migrated off a node.
 
-This issue affects Azure Local **24H2 only**. Azure Local 24H2 solution versions are numbered **12.25xx and 12.26xx** (for example 12.2604 and 12.2605), and the fix ships in **12.2605** and later. Azure Local **23H2** clusters, whose solution versions are numbered **11.25xx**, are not affected: the account validation that causes this failure was introduced with 24H2.
+This issue is specific to Azure Local **24H2**, and only before solution update **12.2605**. The two OS generations are told apart by the leading number of the Azure Local version (shown on the Azure Local resource in the Azure portal, or from `Get-StampInformation`): **23H2** versions begin with **10.** or **11.** (for example 11.2510), and **24H2** versions begin with **12.** (for example 12.2604 or 12.2605).
+
+On **23H2** (a 10.x or 11.x version) this is **not** a problem, and the affected VMs live migrate normally. The failure appears only after a cluster is **updated to 24H2** (a 12.x version), as an upgrade regression, and it then persists on 24H2 until the cluster is updated to **12.2605 or later**, which restores correct live migration. In short: 23H2 (10.x or 11.x) works; 24H2 (12.x) below 12.2605 fails; 24H2 at 12.2605 or later works again.
 
 The fix is included in the Azure Local **12.2605** solution update and is enabled automatically when the cluster is updated. It removes an account validation step that live migration does not actually need (see Cause). This article explains how to confirm you are hitting this issue, how to resolve it by updating, and an interim quick migration workaround that lets you complete the update to the fixed version and then be turned back off.
 
@@ -34,22 +36,29 @@ The fix is included in the Azure Local **12.2605** solution update and is enable
 
 To confirm the scenario you are encountering is the issue documented in this article, confirm both of the following.
 
-**1. Confirm the error signature.** On the node that was the **source** of the failed migration, check the Hyper-V VMMS log for the failure:
+**1. Confirm the error signature.** On the node that was the **source** of the failed migration, check the Hyper-V VMMS logs. The two confirming events come from **different logs**, so query both:
 
 ```powershell
-Get-WinEvent -LogName 'Microsoft-Windows-Hyper-V-VMMS-Admin' -MaxEvents 200 |
-  Where-Object {
-    $_.Id -eq 21024 -or
-    $_.Message -match 'No mapping between account names' -or
-    $_.Message -match '0x80070534'
-  } |
-  Select-Object TimeCreated, Id, LevelDisplayName, Message |
-  Format-List
+foreach ($log in 'Microsoft-Windows-Hyper-V-VMMS-Admin',
+                 'Microsoft-Windows-Hyper-V-VMMS-Operational') {
+    Get-WinEvent -LogName $log -MaxEvents 200 -ErrorAction SilentlyContinue |
+      Where-Object {
+        $_.Id -eq 21024 -or
+        $_.Id -eq 1106 -or
+        $_.Message -match 'No mapping between account names' -or
+        $_.Message -match '80070534'
+      } |
+      Select-Object TimeCreated, LogName, Id, LevelDisplayName, Message |
+      Format-List
+}
 ```
 
-Event **21024** ("failed at migration source") names the affected VM, and the message contains "No mapping between account names and security IDs was done" or `0x80070534`.
+Two events together confirm the issue, and they live in different logs:
 
-> To collect for Microsoft Support: export the **Microsoft-Windows-Hyper-V-VMMS-Admin** and **Microsoft-Windows-Hyper-V-High-Availability-Admin** logs from the source node, and note the failing VM name and the cluster's Azure Local solution version.
+- Event **21024** in the **Microsoft-Windows-Hyper-V-VMMS-Admin** log is the failure *marker*: "Virtual machine migration operation for '&lt;VMName&gt;' failed at migration source '&lt;NodeName&gt;'". It names the affected VM but does **not** itself contain the SID error text.
+- Event **1106** in the **Microsoft-Windows-Hyper-V-VMMS-Operational** log carries the *definitive signature*: "No mapping between account names and security IDs was done", with the HRESULT rendered as the bare code `80070534` (note: no `0x` prefix, and not in the Admin log). This is the event that confirms the cause.
+
+> To collect for Microsoft Support: export the **Microsoft-Windows-Hyper-V-VMMS-Admin**, **Microsoft-Windows-Hyper-V-VMMS-Operational**, and **Microsoft-Windows-Hyper-V-High-Availability-Admin** logs from the source node, and note the failing VM name and the cluster's Azure Local solution version.
 
 **2. Confirm the VM is exposed to this issue.** The affected VM was created or imported under an account whose Security Identifier (SID) does not resolve in Active Directory. This happens in either of these cases:
 
