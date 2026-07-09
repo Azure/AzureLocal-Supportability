@@ -19,6 +19,78 @@
   </tr>
 </table>
 
+> **In plain terms:** the storage *pool* — the shared disk capacity behind every
+> volume on the cluster — is filling up. Deciding what to do is a capacity task for
+> the **cluster / storage administrator**; it is usually not urgent, but if the pool
+> is genuinely allowed to fill, virtual machines can pause or go offline. Run the
+> **Quick triage** below to find which of two fixes applies.
+
+## At a glance
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
+  <tr>
+    <th style="text-align:left; width: 200px;">Business impact</th>
+    <td><strong>Usually low</strong> — a reserve-capacity and update-readiness early
+    warning. (The page severity <em>Medium</em> reflects the signal, not day-to-day
+    impact.) <strong>High only if the pool is allowed to fill</strong>: thin-volume
+    writes can then fail and affected VMs can pause or go offline (unplanned outage).</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Who owns this</th>
+    <td>The customer's <strong>cluster / storage administrator</strong> (capacity
+    management). It is <strong>not</strong> a networking issue, and not an OEM issue
+    unless you are adding or replacing physical disks.</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Typical time to resolve</th>
+    <td>Triage: minutes. Adding disks (A1) or adjusting the alert (A4/A5): low and
+    online. Converting fixed&rarr;thin (A2) or the thin reclaim (Path B): a
+    maintenance window — slab consolidation can take <strong>hours</strong> on large
+    volumes.</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Downtime / maintenance window</th>
+    <td>Triage and the add-capacity / alert options (A1, A4, A5) are
+    <strong>online</strong>. <strong>A2</strong> (convert, then Path B),
+    <strong>A3</strong> (evacuate + recreate a volume), and <strong>Path B</strong>
+    require data movement or a VM-offline window; Path B's window lasts through slab
+    consolidation.</td>
+  </tr>
+</table>
+
+## Quick triage (start here)
+
+Run this on any cluster node. It shows how full the pool is and, crucially, whether
+the volumes are **Fixed** or **Thin** — which decides the entire remediation path:
+
+```powershell
+# 1) How full is the pool? (allocation vs total size)
+Get-StoragePool | Where-Object IsPrimordial -eq $false |
+    Format-Table FriendlyName, Size, AllocatedSize,
+        @{N='UsedPct';E={[math]::Round(100*$_.AllocatedSize/$_.Size,1)}} -AutoSize
+
+# 2) Are the volumes Fixed or Thin? (this decides the fix)
+Get-VirtualDisk | Format-Table FriendlyName, ProvisioningType, Size, FootprintOnPool -AutoSize
+
+# 3) Any active storage health faults?
+Get-HealthFault
+```
+
+Then branch on `ProvisioningType`:
+
+- **`Fixed`** &rarr; the pool footprint is committed by design; the fix is to add
+  capacity, convert to thin, or adjust the alert &mdash; go to
+  [Path A](#path-a--fixed-provisioned-volumes).
+- **`Thin`** &rarr; capacity from deleted data can be reclaimed &mdash; go to
+  [Path B](#path-b--thin-provisioned-volumes-reclaim-unused-capacity) (needs a
+  maintenance window).
+
+> [!NOTE]
+> This is the short form of
+> [Step 1](#step-1--determine-the-provisioning-type-required-first), surfaced up top.
+> The full guide below explains *why* and covers every option in detail — read on if
+> triage alone does not resolve it.
+
 ## Overview
 
 This guide explains the Storage Spaces Direct (S2D) **storage pool capacity
@@ -38,6 +110,31 @@ fixed or thin provisioned before taking any action**, because the space
 reclamation procedure (`Optimize-Volume -SlabConsolidate`, then waiting for the
 ReFS background unmap to release the freed slabs) **does nothing on a
 fixed-provisioned volume** and only applies to thin-provisioned volumes.
+
+## Terminology
+
+Short definitions for the terms used in this guide:
+
+- **Storage pool** — the cluster-wide set of physical drives that Storage Spaces
+  Direct (S2D) manages as one unit. Every volume is carved out of the pool.
+- **S2D (Storage Spaces Direct)** — the Azure Local software-defined storage layer
+  that pools each server's local drives into shared, resilient storage.
+- **CSV (Cluster Shared Volume)** — a volume mounted under `C:\ClusterStorage\` that
+  every node can use at once; where VM disks (`.vhdx`) live.
+- **ReFS (Resilient File System)** — the file system used for Azure Local volumes.
+- **Thin vs Fixed provisioning** — a **thin** volume consumes pool capacity only as
+  data is written; a **fixed** volume reserves its full size in the pool the moment
+  it is created (see
+  [Why fixed-provisioned volumes hit this so easily](#why-fixed-provisioned-volumes-hit-this-so-easily)).
+- **Footprint (`FootprintOnPool`)** — how much pool capacity a volume actually
+  occupies, *including* its resiliency copies (for example, a three-way mirror uses
+  3&times; the written data).
+- **Slab** — the 256 MB unit S2D allocates pool capacity in. A slab returns to the
+  pool only when every block in it is free.
+- **Unmap** — the background ReFS operation that returns emptied slabs to the pool
+  after data is deleted or consolidated.
+- **Primordial pool** — the built-in pool of drives not yet added to an S2D pool;
+  filter it out with `Where-Object IsPrimordial -eq $false`.
 
 ## Symptoms
 
@@ -126,7 +223,7 @@ Two different capacity signals exist, and they are frequently conflated:
 The pool has **no automatic 80/90/95 capacity ladder and no capacity-based
 read-only "block."** At the pool level the platform raises only two advisory,
 Warning-class health faults — `StoragePool.PoolCapacityThresholdExceeded` (the
-configurable 70% thin-provisioning alert) and `StoragePool.InsufficientReserveCapacity`
+configurable 70% thin-provisioning alert) and `StoragePool.InsufficientReserveCapacityFault`
 — and neither takes automatic action. A Storage Spaces pool is set **read-only**
 only on **quorum loss** (too many drives offline — operational state `Incomplete`)
 or by **administrator policy** (`Policy`), never from a capacity percentage. See
@@ -462,6 +559,105 @@ Get-HealthFault
 For an upgrade, re-run the solution update readiness check and confirm the
 capacity finding is resolved or accepted.
 
+## Data to Collect Before Opening a Support Case
+
+Collect the following from the cluster and attach it to the case. It captures which
+capacity signal fired, the pool / volume / disk state, and the event-log history of
+the threshold crossing and any allocation failures.
+
+**Health faults.** The pool-capacity signals surface as Storage Spaces health
+faults. Collect the on-box faults with `Get-HealthFault`, and — for an Arc-connected
+cluster — also check the resource's **Resource Health** / Insights health view in
+the Azure portal:
+
+```powershell
+Get-HealthFault
+```
+
+The fault types to look for (both Warning class):
+
+| Fault type | Meaning | Where it surfaces |
+|---|---|---|
+| `Microsoft.Health.FaultType.StoragePool.InsufficientReserveCapacityFault` | The pool no longer has the minimum reserve (about two drives' worth) needed to repair resiliency after a drive or node loss. | On-box `Get-HealthFault` (documented). |
+| `Microsoft.Health.FaultType.StoragePool.PoolCapacityThresholdExceeded` | The storage pool is running out of capacity (the configurable thin-provisioning alert, default 70%). | Azure portal **Resource Health** / Insights health view; the on-box correlate is **EventID 103** below. |
+
+**Event log.** Collect these Storage Spaces events from
+`Microsoft-Windows-StorageSpaces-Driver/Operational` on **every node** (the pool
+owner logs them, and ownership can move between nodes):
+
+| EventID | Level | Meaning |
+|---|---|---|
+| **103** | Error | Pool capacity consumption exceeded the threshold set on the pool (the alert firing). |
+| **104** | Information | Pool capacity consumption dropped back below the threshold (the alert clearing). |
+| **310** | Error | An allocation for a virtual disk failed for lack of pool capacity; the disk can be taken offline / read-only until capacity is added. |
+
+> [!NOTE]
+> These IDs are read from the Storage Spaces provider's own event manifest (confirm
+> on the build with `wevtutil gp Microsoft-Windows-StorageSpaces-Driver /ge /gm:true`);
+> they are not enumerated in public documentation and can vary by build. Do not
+> confuse **310** with the documented **311** (*"virtual disk ... requires a data
+> integrity scan"*), which is unrelated to capacity.
+
+```powershell
+# Storage Spaces pool-capacity events (run on each node)
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Microsoft-Windows-StorageSpaces-Driver/Operational'
+    Id      = 103, 104, 310
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, LevelDisplayName, Message |
+    Format-Table -AutoSize -Wrap
+```
+
+**Pool, volume, and disk state, plus the cluster log:**
+
+```powershell
+Get-StoragePool -IsPrimordial $false |
+    Format-List FriendlyName, Size, AllocatedSize, ThinProvisioningAlertThresholds, OperationalStatus, HealthStatus, ReadOnlyReason
+Get-VirtualDisk  | Format-List FriendlyName, ProvisioningType, Size, FootprintOnPool, OperationalStatus, HealthStatus
+Get-PhysicalDisk | Format-Table FriendlyName, MediaType, Size, HealthStatus, Usage -AutoSize
+Get-StorageJob
+
+# Last 2 hours of cluster log to C:\Temp
+Get-ClusterLog -Destination C:\Temp -TimeSpan 120
+```
+
+Also capture: the pool name and node count; whether the alert settings were changed
+from default (`System.Storage.StoragePool.ThresholdAlert.Enabled`,
+`System.Storage.StoragePool.CheckPoolReserveCapacity.Enabled`, and the pool's
+`ThinProvisioningAlertThresholds`); and, for deeper analysis, the
+[Support Diagnostics Tool](./Troubleshooting-Storage-With-Support-Diagnostics-Tool.md)
+storage report.
+
+## When to escalate
+
+Most capacity warnings are resolved by the paths above. Escalate when one of these
+firm conditions is met — do not simply re-run the procedure.
+
+**Escalate to the hardware vendor / OEM when:**
+
+- The durable fix is to add capacity
+  ([Option A1](#option-a1--add-capacity-recommended-when-growth-is-expected--low-risk)),
+  but the OEM-supported drives are unavailable or the drive model is no longer
+  supported.
+- Physical disks have failed or retired and pool capacity dropped as a result — the
+  reserve cannot be restored until the hardware is replaced (a drive replacement is
+  an OEM action).
+
+**Escalate to Microsoft support when:**
+
+- **EventID 310 appears, or a thin volume has gone read-only / offline** — the pool
+  reached true exhaustion and there is data-path impact. Collect the data above and
+  open the case now; do not wait for the pool to recover on its own. (If the pool
+  *operational state* is `Incomplete` / read-only from a drive-quorum loss rather
+  than capacity, that is a separate, higher-severity problem — escalate immediately.)
+- **Path B completed with every precondition met** (confirmed real interior free
+  space, every VM on the volume stopped, checkpoints merged) and you waited out the
+  ReFS unmap, but pool `AllocatedSize` still does not drop.
+- The reserve-capacity fault (`InsufficientReserveCapacityFault`) **persists after**
+  you have added capacity or reduced footprint.
+
+Include the data-collection output above with any Microsoft support case.
+
 ## Related Issues
 
 - [How to add physical disks to an existing Azure Local cluster](./HowTo-Storage-AddPhysicalDisksToS2DPool.md)
@@ -476,6 +672,7 @@ capacity finding is resolved or accepted.
 - [Optimize-StoragePool](https://learn.microsoft.com/powershell/module/storage/optimize-storagepool)
 - [Troubleshoot Storage Spaces Direct health and operational states](https://learn.microsoft.com/windows-server/storage/storage-spaces/storage-spaces-states)
 - [Azure Local Health Service settings (volume and pool capacity thresholds)](https://learn.microsoft.com/azure/azure-local/manage/health-service-settings)
+- [Azure Local Health Service faults reference (`Get-HealthFault` fault types)](https://learn.microsoft.com/azure/azure-local/manage/health-service-faults)
 - [Set-VM (automatic stop action)](https://learn.microsoft.com/powershell/module/hyper-v/set-vm)
 
 ---
