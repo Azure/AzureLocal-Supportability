@@ -223,7 +223,7 @@ Two different capacity signals exist, and they are frequently conflated:
 The pool has **no automatic 80/90/95 capacity ladder and no capacity-based
 read-only "block."** At the pool level the platform raises only two advisory,
 Warning-class health faults — `StoragePool.PoolCapacityThresholdExceeded` (the
-configurable 70% thin-provisioning alert) and `StoragePool.InsufficientReserveCapacityFault`
+configurable 70% thin-provisioning alert) and `StoragePool.InsufficientReserveCapacity`
 — and neither takes automatic action. A Storage Spaces pool is set **read-only**
 only on **quorum loss** (too many drives offline — operational state `Incomplete`)
 or by **administrator policy** (`Policy`), never from a capacity percentage. See
@@ -578,7 +578,7 @@ The fault types to look for (both Warning class):
 
 | Fault type | Meaning | Where it surfaces |
 |---|---|---|
-| `Microsoft.Health.FaultType.StoragePool.InsufficientReserveCapacityFault` | The pool no longer has the minimum reserve (about two drives' worth) needed to repair resiliency after a drive or node loss. | On-box `Get-HealthFault` (documented). |
+| `Microsoft.Health.FaultType.StoragePool.InsufficientReserveCapacity` | The pool no longer has the minimum reserve (about two drives' worth) needed to repair resiliency after a drive or node loss. | On-box `Get-HealthFault`. |
 | `Microsoft.Health.FaultType.StoragePool.PoolCapacityThresholdExceeded` | The storage pool is running out of capacity (the configurable thin-provisioning alert, default 70%). | Azure portal **Resource Health** / Insights health view; the on-box correlate is **EventID 103** below. |
 
 **Event log.** Collect these Storage Spaces events from
@@ -653,7 +653,7 @@ firm conditions is met — do not simply re-run the procedure.
 - **Path B completed with every precondition met** (confirmed real interior free
   space, every VM on the volume stopped, checkpoints merged) and you waited out the
   ReFS unmap, but pool `AllocatedSize` still does not drop.
-- The reserve-capacity fault (`InsufficientReserveCapacityFault`) **persists after**
+- The reserve-capacity fault (`InsufficientReserveCapacity`) **persists after**
   you have added capacity or reduced footprint.
 
 Include the data-collection output above with any Microsoft support case.
