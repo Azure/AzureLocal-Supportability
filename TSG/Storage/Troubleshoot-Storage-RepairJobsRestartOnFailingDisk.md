@@ -19,6 +19,12 @@
   </tr>
 </table>
 
+**TL;DR (fastest path):** Confirm the stuck repair (`Get-StorageJob` jobs resetting, a volume at `No Redundancy`), find the failing drive (`Get-HealthFault` shows a `PhysicalDisk.HighLatency` / `HighErrorCount` outlier, and `Get-PhysicalDisk` shows it `Healthy` but `"Abnormal Latency"`), confirm the pool has free reserve, then `Set-PhysicalDisk -UniqueId <id> -Usage Retired` and watch the rebuild drain to zero. Full detail follows; unfamiliar terms are defined in the Glossary.
+
+**Impact and ownership:** A volume is running without redundancy, so this is data-at-risk, but no VM or cluster downtime is needed to fix it: the retire and rebuild run online. Owner: customer or partner IT runs the retire; the OEM or hardware vendor physically replaces the drive. Duration: the rebuild usually takes from tens of minutes to a few hours, depending on how much data was on the drive.
+
+**Scope:** This guide is for a failing physical disk. If instead you see network or RDMA faults (for example `StorageSubsystem.RDMA.Alert`) with healthy disks, that is a storage-network problem, not this one; use the networking storage TSGs.
+
 ## Overview
 
 On a Storage Spaces Direct (S2D) cluster, a virtual disk (CSV volume) can become stuck in a state where its `Repair` and `Regeneration` storage jobs start, make little or no progress, then restart from the beginning and never converge to zero. The affected volume commonly reports `OperationalStatus = No Redundancy` and `HealthStatus = Unhealthy`, which is a data-at-risk condition.
@@ -107,7 +113,18 @@ Under heavy write I/O, the same non-completing drive can leave a storage complet
 Why capacity is a red herring here:
 
 - The pool capacity warning (`PoolCapacityThresholdExceeded`) is a `Minor` fault and is usually incidental. A repair that only needs to resync a few gigabytes is not blocked by a pool that is 85 percent full when there is still free reserve capacity.
-- On thin-provisioned volumes, deleting files frees space inside the volume but does not immediately return the freed slabs to the pool. `Optimize-Volume -ReTrim` issues the unmap but pool reclaim can still lag. Do not expect deleting data to create rebuild headroom quickly.
+- On thin-provisioned volumes, deleting files frees space inside the volume but does not necessarily return the freed slabs to the pool. `Optimize-Volume -ReTrim` issues the unmap, but the pool may not reclaim the capacity for a long time, if at all, within a maintenance window. Do not expect deleting data to create rebuild headroom quickly.
+
+## Glossary
+
+- **Three-way mirror**: the volume keeps three copies of every block on three different servers, so it survives two failures.
+- **Fault domain**: a failure boundary, here a server (node). Copies of a block are placed in different fault domains.
+- **Slab**: the unit of capacity S2D allocates from the pool (a chunk of a virtual disk).
+- **Reserve capacity**: pool space left free on purpose so S2D can rebuild a failed or retired drive in place. S2D uses this instead of a dedicated hot spare.
+- **Thin provisioning**: the volume consumes pool capacity only as data is written. Deleting data does not promptly return that capacity to the pool.
+- **No Redundancy**: a volume state where some regions have no available copy. The volume is online but at risk of data loss if another failure occurs.
+- **Repair and Regeneration**: the two S2D jobs that restore a volume's copies after a drive is lost or retired.
+- **Retire and Remove**: `Retire` marks a drive do-not-use and evacuates its data (the drive stays in the pool). `Remove` pulls the evacuated drive out of the pool for physical replacement.
 
 ## Resolution
 
@@ -124,7 +141,7 @@ The fix is to mark the failing drive `Retired` so S2D stops using it and rebuild
 Run through this list before Step 4. Most stuck or unsafe retires trace back to skipping one of these.
 
 - **All nodes up.** Confirm `Get-ClusterNode` shows every node `Up`. Retiring a drive while a node is down removes a fault domain and can block the rebuild or drop below resiliency.
-- **Only one fault domain affected.** Confirm no other drive is already `Retired`, failed, or `Lost Communication` on a *different* node: `Get-PhysicalDisk | Where-Object { $_.HealthStatus -ne 'Healthy' -or $_.Usage -eq 'Retired' }`. Retiring a second drive in a second fault domain while a three-way mirror is already degraded can cause data loss.
+- **Only one fault domain affected.** A second failing drive can read as `Healthy` while its `OperationalStatus` is `Abnormal Latency` or `Lost Communication`, which is exactly the condition this guide describes, so filter on operational status too, not just `HealthStatus` and `Usage`, and note each suspect drive's node: `Get-PhysicalDisk | Where-Object { $_.Usage -eq 'Retired' -or $_.HealthStatus -ne 'Healthy' -or (($_.OperationalStatus -join ',') -ne 'OK') } | Select-Object FriendlyName, SerialNumber, HealthStatus, @{n='Op';e={$_.OperationalStatus -join ','}}, PhysicalLocation` (identify a suspect drive's node with `Get-PhysicalDisk -SerialNumber <SerialNumber> | Get-StorageNode -PhysicallyConnected`). Retiring a second drive in a second fault domain while a three-way mirror is already degraded can cause data loss.
 - **Enough free reserve (Step 3).** Pool free must exceed the drive's used capacity, with reserve left over. Do not rely on deleting data to create it at the last minute; thin reclaim is slow.
 - **Check for last-copy data.** Run `Get-VirtualDisk -FriendlyName <VolumeName> | Get-PhysicalDisk -NoRedundancy`. If the failing drive is returned, some regions have no other copy; retiring is still correct but is a data-at-risk operation (see the Step 4 caveat). Also check `ReadErrorsUncorrected` on the drive: non-zero uncorrected read errors on a last-copy drive is the worst case.
 - **Not during an update or CAU run.** Do not retire a drive while a solution update, Cluster-Aware Updating run, or node maintenance is in progress. Wait for a quiet window so the rebuild is not competing with reboots and storage maintenance.
@@ -187,17 +204,22 @@ Get-StoragePool -FriendlyName <PoolName> |
     @{n='UsedPct';e={[math]::Round(100*$_.AllocatedSize/$_.Size,1)}},
     @{n='FreeTB';e={[math]::Round(($_.Size-$_.AllocatedSize)/1e12,2)}}
 
-# 3. Per-drive fill. No single healthy capacity drive should be at or near 100 percent,
-#    and the surviving nodes must have room to take the rebuilt copies.
-Get-PhysicalDisk | Where-Object Usage -eq 'Auto-Select' |
-  Select-Object FriendlyName,
+# 3. Per-surviving-drive free capacity WITH its node. Exclude the drive being retired and do
+#    NOT truncate: each surviving node must have room for the rebuilt copies, so one near-full
+#    drive on a single node can stall the rebuild even when the pool total looks adequate.
+#    (Pool free can also include unusable free extents on the drive being retired, so count
+#    only surviving disks.)
+Get-PhysicalDisk | Where-Object { $_.Usage -eq 'Auto-Select' -and $_.SerialNumber -ne '<SerialNumber>' } |
+  Select-Object @{n='Node';e={($_ | Get-StorageNode -PhysicallyConnected | Select-Object -First 1).Name}},
+    FriendlyName, SerialNumber,
+    @{n='FreeGB';e={[math]::Round(($_.Size-$_.AllocatedSize)/1e9,1)}},
     @{n='PctAlloc';e={[math]::Round(100*$_.AllocatedSize/$_.Size,1)}} |
-  Sort-Object PctAlloc -Descending | Select-Object -First 5
+  Sort-Object Node, PctAlloc
 ```
 
 The check: **pool free space must exceed the failing drive's used capacity**, and you should still have reserve left afterward (about one capacity drive per node). Because three-way mirror places copies across three nodes, the free space also has to be distributed so the surviving nodes can each hold their share. If one node's drives are all near 100 percent, the rebuild for slabs that need that node stalls even when the pool total looks fine.
 
-Worked example from a real case: the failing 2.4 TB drive held about 2.0 TB of data (its used capacity), and the pool had about 10.8 TB free (roughly 86 percent full). Free space (10.8 TB) comfortably exceeded both the ~2.0 TB that had to be rebuilt and the ~9.6 TB reserve target (one 2.4 TB drive per node across four nodes), so the retire was safe and the rebuild completed.
+Worked example from a real case: the failing 2.4 TB drive held about 2.0 TB of data, and the pool reported about 10.8 TB free (roughly 86 percent full). That 10.8 TB still included the ~2.4 TB sitting on the drive being retired, so the surviving disks held only about 8.4 TB free. The ~2.0 TB that had to be relocated fit easily into that 8.4 TB, so there was enough evacuation headroom and the rebuild completed and restored redundancy. Note, however, that 8.4 TB is below the ~9.6 TB full-reserve target (one 2.4 TB drive per node across four nodes): the pool ran with less than the recommended repair reserve until the failed drive was physically replaced, so add the replacement promptly to restore full reserve.
 
 If the pool has essentially no free reserve (for example above roughly 95 percent with no per-node headroom), retiring the drive can leave S2D with nowhere to rebuild and the volume stays degraded. In that case add capacity or reduce data first, then retire. Remember that on thin volumes, deleting data does not free pool space quickly, so plan the reserve ahead of time rather than deleting at the last minute.
 
@@ -216,6 +238,8 @@ Caveat when the drive is a last-copy holder (Step 2 returned it under `-NoRedund
 #### Step 5: Monitor the rebuild
 
 Retiring the drive starts an evacuation. You will see a pair of jobs, `<Volume>-Repair` and `<Volume>-Regeneration`, for **every** virtual disk that had data on the retired drive (typically all of the UserStorage volumes plus the small `Infrastructure_1` and `ClusterPerformanceHistory` volumes). `Repair` restores resiliency and `Regeneration` rebuilds the missing copies. They run in parallel, should climb monotonically toward 100 percent, then disappear as the job count drops to zero. This is the opposite of the reset loop in Step 1: real, increasing `BytesProcessed` against a stable `BytesTotal`.
+
+Workload impact: the rebuild runs online, so VMs and CSV volumes stay available; expect elevated storage latency until it finishes.
 
 ```powershell
 # Repair/Regeneration jobs should now show a real, monotonically climbing scope
@@ -245,11 +269,18 @@ Only after the rebuild jobs reach zero and the volumes are Healthy:
 # Turn on the location indicator (if supported) to find the drive in the chassis.
 Get-PhysicalDisk -UniqueId <DiskUniqueId> | Enable-PhysicalDiskIndication
 
-# Remove the retired drive from the pool, then physically swap it.
-Remove-PhysicalDisk -UniqueId <DiskUniqueId> -StoragePoolFriendlyName <PoolName>
+# Remove the retired drive from the pool, then physically swap it. Remove-PhysicalDisk has
+# no -UniqueId parameter, so resolve the disk object and pass it via -PhysicalDisks.
+Remove-PhysicalDisk -PhysicalDisks (Get-PhysicalDisk -UniqueId <DiskUniqueId>) -StoragePoolFriendlyName <PoolName>
 ```
 
-A replacement drive of a supported model is claimed automatically (or add it manually per the Add-Physical-Disks TSG). No manual repair trigger is normally required; S2D rebalances onto the new drive.
+The physical drive replacement is a hardware task: engage the OEM or your hardware vendor and follow their drive-replacement procedure for the chassis (the location indicator above lights the drive bay on Dell, HPE, and Lenovo servers). Expected end state: a replacement drive of a supported model is claimed automatically, S2D rebalances onto it, and every drive and volume returns to Healthy. No manual repair trigger is normally required. To add the replacement manually, see the Add-Physical-Disks TSG.
+
+## When to escalate
+
+- **To the OEM or your hardware vendor**: for the physical drive replacement, and for any drive reporting non-zero *uncorrected* read/write errors or repeated surprise-removal, which indicates hardware failure.
+- **To Microsoft Support**: if the rebuild does not progress even though reserve capacity is available and no drive is failing, or if a volume stays at `No Redundancy` after the retire and rebuild complete.
+- Collect the data in the section below before escalating.
 
 ## Prevention
 
