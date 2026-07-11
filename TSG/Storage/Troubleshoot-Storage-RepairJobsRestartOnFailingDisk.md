@@ -19,26 +19,26 @@
   </tr>
 </table>
 
-**TL;DR (fastest path):** Confirm the stuck repair (`Get-StorageJob` jobs resetting, a volume at `No Redundancy`), find the failing drive (`Get-HealthFault` shows a `PhysicalDisk.HighLatency` / `HighErrorCount` outlier, and `Get-PhysicalDisk` shows it `Healthy` but `"Abnormal Latency"`), confirm the pool has free reserve, then `Set-PhysicalDisk -UniqueId <id> -Usage Retired` and watch the rebuild drain to zero. Full detail follows; unfamiliar terms are defined in the Glossary.
-
-**Impact and ownership:** A volume is running without redundancy, so this is data-at-risk, but no VM or cluster downtime is needed to fix it: the retire and rebuild run online. Owner: customer or partner IT runs the retire; the OEM or hardware vendor physically replaces the drive. Duration: the rebuild usually takes from tens of minutes to a few hours, depending on how much data was on the drive.
-
-**Scope:** This guide is for a failing physical disk. If instead you see network or RDMA faults (for example `StorageSubsystem.RDMA.Alert`) with healthy disks, that is a storage-network problem, not this one; use the networking storage TSGs.
-
 ## Overview
 
-On a Storage Spaces Direct (S2D) cluster, a virtual disk (CSV volume) can become stuck in a state where its `Repair` and `Regeneration` storage jobs start, make little or no progress, then restart from the beginning and never converge to zero. The affected volume commonly reports `OperationalStatus = No Redundancy` and `HealthStatus = Unhealthy`, which is a data-at-risk condition.
+On a Storage Spaces Direct (S2D) cluster, a data volume's `Repair` and `Regeneration` storage jobs can start, make little or no progress, then restart from the beginning and never reach zero. The affected volume commonly reports `OperationalStatus = No Redundancy` (or `Incomplete`) and `HealthStatus = Unhealthy`, which is a data-at-risk condition.
 
 The usual contributing factor is a single physical disk that is failing with extremely high latency and a high I/O error rate, but which the health service has not yet marked as failed (it still reports `HealthStatus = Healthy` with `OperationalStatus = "OK, Abnormal Latency"`). Because S2D still considers the drive usable, every repair attempt that must read from or write to that drive times out, and the job requeues. The volume cannot restore redundancy because the healthy copies cannot be rebuilt through the dying drive.
 
 The same failing drive can also hang the storage completion path under heavy write I/O and trip a `DPC_WATCHDOG_VIOLATION` (bugcheck `0x133`) on the node that hosts the drive, so a node crash and the stuck repair are often two symptoms of one underlying disk fault.
+
+**How to resolve it (at a glance).** Confirm the stuck repair, identify the failing drive (a `Get-PhysicalDisk` disk that is still `Healthy` but reports `"Abnormal Latency"` or `Lost Communication`, and on physical hardware a `Get-HealthFault` `PhysicalDisk.HighLatency` / `HighErrorCount` outlier), confirm the pool has free reserve, then mark the drive do-not-use with `Set-PhysicalDisk -Usage Retired` and watch the rebuild drain to zero. The detailed steps, safety checks, and a glossary of terms follow below.
+
+**Impact and ownership.** A volume is running without full redundancy, so this is data-at-risk, but no VM or cluster downtime is needed to fix it: the retire and rebuild run online. Owner: customer or partner IT runs the retire; the OEM or hardware vendor physically replaces the drive. Duration: the rebuild usually takes from tens of minutes to a few hours, depending on how much data was on the drive and the volume's resiliency type.
+
+**Scope.** This guide is for a failing physical disk on an S2D pool. If instead you see network or RDMA faults (for example `StorageSubsystem.RDMA.Alert`) with healthy disks, that is a storage-network problem, not this one; use the networking storage TSGs.
 
 An important trap: this scenario is frequently misread as a capacity problem, because the pool is often also over its capacity warning threshold. Freeing space does not resolve the stuck repair, and on thin volumes deleting data does not quickly return capacity to the pool. The failing disk is the actual blocker.
 
 ## Symptoms
 
 - `Get-StorageJob` shows one or more `<Volume>-Repair` and `<Volume>-Regeneration` jobs that reset: `PercentComplete` returns to `0`, `BytesTotal` shrinks or changes between samples, and the job's elapsed time resets. Job count never drops to zero.
-- `Get-VirtualDisk` shows a volume at `OperationalStatus = {No Redundancy, InService}` and `HealthStatus = Unhealthy`.
+- `Get-VirtualDisk` shows a volume at `OperationalStatus = {No Redundancy, InService}` (or `{Incomplete, InService}` on a two-copy volume) and `HealthStatus = Unhealthy`.
 - `Get-PhysicalDisk` shows one drive with `OperationalStatus = "OK, Abnormal Latency"` while `HealthStatus` is still `Healthy`.
 - `Get-HealthFault` reports a combination of:
   - `Microsoft.Health.FaultType.PhysicalDisk.HighLatency.Outlier.AverageIO` (average latency thousands to millions of times the peer drives).
@@ -106,7 +106,26 @@ For an Arc-connected Azure Local cluster, the physical-disk and virtual-disk hea
 
 ## What and Why
 
-Storage Spaces Direct keeps three copies of three-way mirror data spread across three fault domains (nodes). When a drive begins to fail slowly, its SMART and health state can still read as `Healthy`, so S2D keeps scheduling I/O to it. Repair and regeneration jobs that touch slabs on that drive issue reads and writes that never complete within the storage timeout, the job is aborted and requeued, and you observe the restart loop. If the failing drive holds the only currently readable copy of a region, that region shows as `No Redundancy` and appears in `Get-PhysicalDisk -NoRedundancy` for the affected volume.
+### Resiliency types (and why the drive was not automatically failed)
+
+S2D stores each volume with a resiliency type that keeps redundant data across fault domains (usually nodes). **On Azure Local the default is three-way mirror (three copies) for clusters of three or more nodes, and two-way mirror (two copies) for two-node clusters.** That default is not the only option, and the volume you are repairing may use a different scheme:
+
+- **Two-way / three-way mirror** — two or three full copies across nodes (the defaults above); the volume shows `ResiliencySettingName = Mirror` with `NumberOfDataCopies` 2 or 3.
+- **Nested resiliency** (two-node clusters) — nested two-way mirror, or nested mirror-accelerated parity, which survives two concurrent hardware failures on a two-node cluster.
+- **Parity / dual parity** (erasure coding, four or more nodes) — space-efficient; reconstructs data from parity rather than a full copy (`ResiliencySettingName = Parity`).
+- **Mirror-accelerated parity** — one volume that combines a mirror tier and a parity tier.
+- **Simple (no resiliency)** — not recommended and never an Azure Local default; a single disk loss means the data on that volume's affected regions is lost.
+
+Confirm the actual scheme before you act: `Get-VirtualDisk -FriendlyName <vol> | Select-Object FriendlyName, ResiliencySettingName, NumberOfDataCopies, PhysicalDiskRedundancy`.
+
+**Why the drive was not automatically failed (this is scheme-independent).** S2D auto-retires a drive only when its own health/SMART state marks it failed. A drive that is merely slow or erroring, or that dropped its connection but still enumerates, can stay `HealthStatus = Healthy` (`OperationalStatus = "OK, Abnormal Latency"`, or `Lost Communication`), so S2D keeps scheduling I/O to it. Repair and regeneration jobs that must touch that drive's slabs time out and requeue, and you observe the restart loop, regardless of the resiliency scheme.
+
+**How the fix applies per scheme.**
+
+- **Any resilient scheme (mirror, parity, nested, mirror-accelerated parity):** retiring the failing drive is the correct action. S2D reconstructs the affected slabs from the surviving copies (mirror) or from parity (parity) onto free reserve capacity, and the volume returns to full redundancy. The amount of reserve and the reconstruction cost differ by scheme (a mirror rebuilds a copy; parity recomputes across the remaining columns), but the retire -> rebuild flow is the same.
+- **Simple / no-resiliency volume:** there is no second copy or parity to rebuild from, so retiring the drive cannot restore the lost regions. The only path is to remove the failed drive, recreate the volume, and restore its data from backup. Check `ResiliencySettingName` first so you do not wait on a rebuild that cannot happen.
+
+If the failing drive holds the last currently-available copy (or a required parity element) of a region, that region shows as `No Redundancy` (or `Incomplete` on a two-copy volume), and the drive appears in `Get-PhysicalDisk -NoRedundancy` for the affected volume.
 
 Under heavy write I/O, the same non-completing drive can leave a storage completion routine holding the processor dispatch level too long, which trips the DPC watchdog and bugchecks the node. That is why a node crash and a stuck repair frequently share one cause.
 
@@ -117,7 +136,7 @@ Why capacity is a red herring here:
 
 ## Glossary
 
-- **Three-way mirror**: the volume keeps three copies of every block on three different servers, so it survives two failures.
+- **Resiliency type**: how a volume keeps redundant data (mirror, parity, nested, or mirror-accelerated parity). The Azure Local default is three-way mirror on clusters of three or more nodes (three copies, survives two failures) and two-way mirror on two-node clusters; see What and Why for the full list.
 - **Fault domain**: a failure boundary, here a server (node). Copies of a block are placed in different fault domains.
 - **Slab**: the unit of capacity S2D allocates from the pool (a chunk of a virtual disk).
 - **Reserve capacity**: pool space left free on purpose so S2D can rebuild a failed or retired drive in place. S2D uses this instead of a dedicated hot spare.
