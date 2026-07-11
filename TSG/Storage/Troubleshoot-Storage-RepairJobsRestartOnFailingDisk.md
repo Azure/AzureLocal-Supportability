@@ -293,7 +293,7 @@ Get-PhysicalDisk -UniqueId <DiskUniqueId> | Enable-PhysicalDiskIndication
 Remove-PhysicalDisk -PhysicalDisks (Get-PhysicalDisk -UniqueId <DiskUniqueId>) -StoragePoolFriendlyName <PoolName>
 ```
 
-The physical drive replacement is a hardware task: engage the OEM or your hardware vendor and follow their drive-replacement procedure for the chassis (the location indicator above lights the drive bay on Dell, HPE, and Lenovo servers). Expected end state: a replacement drive of a supported model is claimed automatically, S2D rebalances onto it, and every drive and volume returns to Healthy. No manual repair trigger is normally required. To add the replacement manually, see the Add-Physical-Disks TSG.
+The physical drive replacement is a hardware task: engage the OEM or your hardware vendor and follow their drive-replacement procedure for the chassis (the location indicator above lights the drive bay on Dell, HPE, and Lenovo servers). Expected end state: a replacement drive of a supported model is claimed automatically, S2D rebalances onto it, and every drive and volume returns to Healthy. No manual repair trigger is normally required. To add the replacement manually, see the guide for adding physical disks to the S2D pool: `TSG/Storage/HowTo-Storage-AddPhysicalDisksToS2DPool.md`.
 
 ## When to escalate
 
