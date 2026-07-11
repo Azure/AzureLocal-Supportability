@@ -187,7 +187,7 @@ Risk: [LOW RISK]. Restoring outbound connectivity or a proxy setting does not di
 **Sub-mode: not registered** (`Azure Stack HCI is not registered with Azure`, or no subscription found).
 
 1. Confirm the cluster's Azure registration. A cluster that lost its registration must be re-registered with Azure before this check can pass.
-2. Follow the current Azure Local registration guidance at [https://aka.ms/UpgradeRequirements](https://aka.ms/UpgradeRequirements) and the Azure Local registration documentation to re-register the cluster to the correct subscription and resource group.
+2. Re-register the cluster with Azure using `Register-AzStackHCI`, which creates or repairs the `Microsoft.AzureStackHCI` cloud resource and binds the cluster to the correct subscription and resource group. For a cluster that was registered but whose registration was lost or corrupted, use the repair path (`Register-AzStackHCI -RepairRegistration`). See [Register-AzStackHCI (Az.StackHCI)](https://learn.microsoft.com/en-us/powershell/module/az.stackhci/register-azstackhci), which documents both the registration and repair-registration parameters, and the Azure Local requirements at [https://aka.ms/UpgradeRequirements](https://aka.ms/UpgradeRequirements).
 3. If registration succeeds but the check still fails, re-read the `Detail` (step 1): the state may have moved to the "not Active" or "cannot connect" sub-mode, which have their own fixes above.
 
 Risk: [MEDIUM RISK]. Re-registration changes the cluster's Azure identity binding; confirm the target subscription and resource group with the operator before re-registering.
