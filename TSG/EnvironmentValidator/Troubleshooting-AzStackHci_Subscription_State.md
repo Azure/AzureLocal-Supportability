@@ -89,6 +89,13 @@ Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath "*[System[(Event
   Select-Object -First 10 Status, @{n='Source';e={$_.AdditionalData.Source}}, @{n='Detail';e={$_.AdditionalData.Detail}}
 ```
 
+**The Environment Checker also writes its own log and report on the node that ran the check.** By default these are under the running account's `%USERPROFILE%\.AzStackHci\` folder: the text log `AzStackHciEnvironmentChecker.log` and the machine-readable `AzStackHciEnvironmentReport.json` (and `.xml`). The failing check appears there as an `AzStackHci_Subscription_State` result with `Status = FAILURE` and the same `Detail` string. These files are local to the node that executed the check (the pre-update health check runs on one node), so read them on that node; the cluster-wide record above (HealthCheckResult JSON and Event ID 17205) is the consolidated view.
+
+```powershell
+Get-ChildItem C:\Users\*\.AzStackHci\AzStackHciEnvironmentChecker.log -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1 | Get-Content -Tail 40
+```
+
 If the customer noticed this because a pending update will not start, confirm it is the blocker:
 
 ```powershell
