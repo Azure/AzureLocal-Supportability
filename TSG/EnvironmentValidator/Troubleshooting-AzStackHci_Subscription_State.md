@@ -106,6 +106,13 @@ Get-AzureStackHCISubscriptionStatus | Where-Object SubscriptionName -like 'Azure
 
 `Status = Active` is healthy. Any other value (or an error, or no row returned) is the failure this check reports.
 
+**Where this does NOT appear.** This is an Azure registration/billing signal, not a Windows failover-cluster state, so do not spend time looking for it in the cluster tooling:
+
+- **Cluster logs**: not evident in `Get-ClusterLog` (a subscription-state result is not a failover-cluster event and is never written there).
+- **Windows Failover Cluster Manager**: not evident in Failover Cluster Manager (the subscription is not a clustered role, resource, or node property).
+- **Windows Admin Center (standalone host)**: not evident for this check (a standalone Windows Admin Center may show a general Azure-connection or registration warning, but does not distinctly flag the `AzStackHci_Subscription_State` result; confirm via the on-box cmdlet above or the Azure portal).
+- **Windows Admin Center in the Azure portal**: not evident for this check (use the cluster's **Updates** blade or the subscription's status in the Azure portal instead).
+
 ### 2. What it looks like: example failure signatures
 
 A healthy node reads:
