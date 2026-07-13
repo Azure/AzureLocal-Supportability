@@ -102,7 +102,12 @@ For an Arc-connected Azure Local cluster, the physical-disk and virtual-disk hea
 ### Failover Cluster Manager and Windows Admin Center
 
 - **Failover Cluster Manager** shows the cluster and CSV state. A degraded volume appears under Storage with the CSV in an online-degraded or warning state. FCM does not surface per physical-disk latency well.
-- **Windows Admin Center** (the recommended GUI for S2D) shows per-drive health under the cluster Drives view, including the Warning status and latency, and offers Retire and Locate actions directly.
+- **Windows Admin Center (standalone host)** (the recommended GUI for S2D) shows per-drive health under the cluster Drives view, including the Warning status and latency, and offers Retire and Locate actions directly.
+- **Windows Admin Center in the Azure portal**: for an Arc-connected cluster, opening Windows Admin Center in the Azure portal shows the same cluster Drives view, so the failing drive's Warning status and latency are visible there too without a separate WAC gateway.
+
+### Storage diagnostic logs (on disk)
+
+The storage subsystem also writes its own logs that a support case relies on. `Get-SDDCDiagnosticInfo` (the SDDC diagnostic tool) and the Support Diagnostics Tool collect the cluster's storage on-disk logs (the health service log, the Storage Spaces driver operational log, and the per-node cluster logs) into a single diagnostic log archive for the failing drive's node. Use these when you need the raw component logs for escalation; see the Support Diagnostics Tool guide referenced under Related Issues.
 
 ## What and Why
 
@@ -110,11 +115,11 @@ For an Arc-connected Azure Local cluster, the physical-disk and virtual-disk hea
 
 S2D stores each volume with a resiliency type that keeps redundant data across fault domains (usually nodes). **On Azure Local the default is three-way mirror (three copies) for clusters of three or more nodes, and two-way mirror (two copies) for two-node clusters.** That default is not the only option, and the volume you are repairing may use a different scheme:
 
-- **Two-way / three-way mirror** — two or three full copies across nodes (the defaults above); the volume shows `ResiliencySettingName = Mirror` with `NumberOfDataCopies` 2 or 3.
-- **Nested resiliency** (two-node clusters) — nested two-way mirror, or nested mirror-accelerated parity, which survives two concurrent hardware failures on a two-node cluster.
-- **Parity / dual parity** (erasure coding, four or more nodes) — space-efficient; reconstructs data from parity rather than a full copy (`ResiliencySettingName = Parity`).
-- **Mirror-accelerated parity** — one volume that combines a mirror tier and a parity tier.
-- **Simple (no resiliency)** — not recommended and never an Azure Local default; a single disk loss means the data on that volume's affected regions is lost.
+- **Two-way / three-way mirror**: two or three full copies across nodes (the defaults above); the volume shows `ResiliencySettingName = Mirror` with `NumberOfDataCopies` 2 or 3.
+- **Nested resiliency** (two-node clusters): nested two-way mirror, or nested mirror-accelerated parity, which survives two concurrent hardware failures on a two-node cluster.
+- **Parity / dual parity** (erasure coding, four or more nodes): space-efficient; reconstructs data from parity rather than a full copy (`ResiliencySettingName = Parity`).
+- **Mirror-accelerated parity**: one volume that combines a mirror tier and a parity tier.
+- **Simple (no resiliency)**: not recommended and never an Azure Local default; a single disk loss means the data on that volume's affected regions is lost.
 
 Confirm the actual scheme before you act: `Get-VirtualDisk -FriendlyName <vol> | Select-Object FriendlyName, ResiliencySettingName, NumberOfDataCopies, PhysicalDiskRedundancy`.
 
