@@ -55,7 +55,7 @@ Invoke-AzStackHciConnectivityValidation
 
 Look for the **Azure Kubernetes Service -> Cluster connect** target in the output. A failing target is shown as **Needs Attention / Critical** with the relay URL and a help link. The run also writes its own log and report (see below), and the failing URL to `FailedUrls.txt`.
 
-> **Note:** this target is validated as part of the cluster's **pre-update / deployment readiness** run, and on newer builds it may not appear in every ad-hoc standalone `Invoke-AzStackHciConnectivityValidation` run (the connectivity target set is versioned). So the **authoritative** confirmation for this specific check is the pre-update health-check result below (the `HealthCheckResult.*.json`, Event ID 17205, or the portal Updates tab), which is populated by the readiness run that actually evaluates it. Use the standalone run to test raw reachability to the relay endpoint (`Test-NetConnection azgnrelay-<region>-l1.servicebus.windows.net -Port 443`), and the health-check result to confirm the check's own pass/fail.
+> **Note:** this target is validated as part of the cluster's **pre-update / deployment readiness** run, and on newer builds it may not appear in every ad-hoc standalone `Invoke-AzStackHciConnectivityValidation` run (the connectivity target set is versioned). So the **authoritative** confirmation for this specific check is the pre-update health-check result below (the `HealthCheckResult.EnvironmentChecker.*.json`, Event ID 17205, or the portal Updates tab), which is populated by the readiness run that actually evaluates it. Use the standalone run to test raw reachability to the relay endpoint (`Test-NetConnection azgnrelay-<region>-l1.servicebus.windows.net -Port 443`), and the health-check result to confirm the check's own pass/fail.
 
 **Read the newest health-check result on a node** and flag this check:
 
@@ -68,7 +68,10 @@ if (-not (Test-Path $base)) {
 }
 $latest = $null
 if ($base) {
-    $latest = Get-ChildItem $base -Filter 'HealthCheckResult.*.json' -ErrorAction SilentlyContinue |
+    # Use the Environment Checker result file specifically. The folder also holds
+    # HealthCheckResult.CheckCloudHealth.*.json (other checks), so a broad filter could
+    # pick a newer unrelated file and wrongly report no match for this validator.
+    $latest = Get-ChildItem $base -Filter 'HealthCheckResult.EnvironmentChecker.*.json' -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
 }
 if (-not $latest) {
@@ -76,10 +79,10 @@ if (-not $latest) {
 }
 else {
     Get-Content $latest.FullName -Raw | ConvertFrom-Json |
-        Where-Object { $_.Name -eq 'Azure_Kubernetes_Service_Cluster_connect' -and $_.Status -ne 0 -and $_.Status -ne 'SUCCESS' } |
+        Where-Object { $_.Name -like '*Azure_Kubernetes_Service_Cluster_connect*' -and $_.Status -ne 0 -and $_.Status -ne 'SUCCESS' } |
         ForEach-Object {
             [pscustomobject]@{
-                Status = $_.Status
+                Status = if ($_.AdditionalData.Status) { $_.AdditionalData.Status } else { $_.Status }
                 Source = $_.AdditionalData.Source
                 Target = $_.TargetResourceID
                 Detail = $_.AdditionalData.Detail
@@ -228,7 +231,16 @@ Risk: [LOW RISK]. Excluding the endpoint from interception does not disrupt runn
 
 ### 6. Verification: prove the failure cleared
 
-Re-run the connectivity validator on the affected nodes and confirm the target is healthy:
+**Re-run the actual check (authoritative for every sub-mode).** The validator makes the real HTTPS request to the endpoint, so it is the only reliable confirmation for the proxy and TLS-inspection sub-modes (where the TCP layer already succeeds while HTTPS still fails). Re-run the pre-update health check so the validator re-evaluates and refreshes the cluster-wide readiness record:
+
+```powershell
+Invoke-SolutionUpdatePrecheck -SystemHealth
+Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate
+```
+
+Confirm `HealthState` is `Success` with a current `HealthCheckDate`. You can also re-run `Invoke-AzStackHciConnectivityValidation` on an affected node and confirm the **Cluster connect** target now reports `Overall Result: True`.
+
+**Quick lower-layer check (DNS and firewall/TCP sub-modes only).** For sub-modes 1 and 2, `Test-NetConnection` confirms the DNS/TCP layer is now open:
 
 ```powershell
 Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
@@ -236,16 +248,9 @@ Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
 } | Sort-Object PSComputerName
 ```
 
-Every node should return `True` (substitute the cluster's region). Then re-run the pre-update health check so the validator re-evaluates and refreshes the cluster-wide readiness record:
+Every node should return `True` (substitute the cluster's region). Note that `True` only proves the TCP connection succeeds; for the **proxy** and **TLS-inspection** sub-modes it does **not** prove the fix (those already have `tnc: True` while failing), so confirm those with the validator / precheck above.
 
-```powershell
-Invoke-SolutionUpdatePrecheck -SystemHealth
-Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate
-```
-
-Confirm `HealthState` is `Success` with a current `HealthCheckDate`.
-
-> **Note:** the Azure portal readiness view and the cluster-wide health-check result refresh only when a full health check or `Invoke-SolutionUpdatePrecheck` runs, not on a targeted per-node re-test, so confirm the fix with `Invoke-AzStackHciConnectivityValidation` or `Test-NetConnection` on the nodes rather than waiting on the portal.
+> **Note:** the Azure portal readiness view and the cluster-wide health-check result refresh only when a full health check or `Invoke-SolutionUpdatePrecheck` runs, not on a targeted per-node re-test, so confirm the fix with `Invoke-AzStackHciConnectivityValidation` or the precheck rather than waiting on the portal.
 
 ## Glossary
 
