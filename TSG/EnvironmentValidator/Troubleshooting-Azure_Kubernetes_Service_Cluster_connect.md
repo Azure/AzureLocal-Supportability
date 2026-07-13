@@ -47,13 +47,15 @@ Azure Arc **cluster connect** provides a secure way to connect to Arc-enabled Ku
 
 ### 1. Confirm the failure and see where it appears
 
-**Run the connectivity validator directly (authoritative).** On a node (or a workstation with the Environment Checker module installed), run:
+**Run the connectivity validator directly.** On a node (or a workstation with the Environment Checker module installed), run:
 
 ```powershell
 Invoke-AzStackHciConnectivityValidation
 ```
 
 Look for the **Azure Kubernetes Service -> Cluster connect** target in the output. A failing target is shown as **Needs Attention / Critical** with the relay URL and a help link. The run also writes its own log and report (see below), and the failing URL to `FailedUrls.txt`.
+
+> **Note:** this target is validated as part of the cluster's **pre-update / deployment readiness** run, and on newer builds it may not appear in every ad-hoc standalone `Invoke-AzStackHciConnectivityValidation` run (the connectivity target set is versioned). So the **authoritative** confirmation for this specific check is the pre-update health-check result below (the `HealthCheckResult.*.json`, Event ID 17205, or the portal Updates tab), which is populated by the readiness run that actually evaluates it. Use the standalone run to test raw reachability to the relay endpoint (`Test-NetConnection azgnrelay-<region>-l1.servicebus.windows.net -Port 443`), and the health-check result to confirm the check's own pass/fail.
 
 **Read the newest health-check result on a node** and flag this check:
 
