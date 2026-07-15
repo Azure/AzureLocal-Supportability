@@ -115,7 +115,7 @@ Get-PhysicalDisk | Where-Object { -not $_.CanPool } |
 
 - Confirm the disk model and firmware are on the vendor support matrix for this solution.
 - Confirm the disk is genuinely clean (no partitions and no foreign pool signature). If it is carrying stale metadata, that shows as a different `CannotPoolReason` (`In a Pool`); resolve it with the gated, destructive `Reset-PhysicalDisk` path in Step 2g of the companion guide, not here.
-- If possible, confirm the **same disk pools normally in a different, healthy cluster**. This single test is the clearest proof that the media is fine and the local cluster is the problem.
+- If you have **already** observed the same disk pool normally in a different cluster (for example during an earlier swap), treat that as strong evidence the media is fine and the local cluster is the problem. Do **not** move a disk into another **production** cluster just to test: a clean, eligible disk can be auto-claimed there, which writes pool metadata and can start a redistribution. If you need this confirmation, use a spare or non-production cluster.
 - Confirm the disks are added symmetrically (same count and type on each node). The Health Service evaluates the cluster as a whole; an asymmetric add can leave a disk unverified.
 
 > [!WARNING]
@@ -238,49 +238,59 @@ First back up the current value on the affected cluster so you can roll back:
 
 ```powershell
 # Back up the current (incomplete) Providers value before changing anything
+$backupPath = 'C:\Temp\Health-Providers-backup.txt'
+New-Item -ItemType Directory -Path (Split-Path $backupPath) -Force | Out-Null
 $backup = (Get-ClusterResource -Name 'Health' | Get-ClusterParameter -Name Providers).Value
-$backup | Set-Content -Path C:\Temp\Health-Providers-backup.txt
-"Backed up $(@($backup).Count) provider(s) to C:\Temp\Health-Providers-backup.txt"
+$backup | Set-Content -Path $backupPath -ErrorAction Stop
+# Verify the backup actually wrote a rollback copy before continuing
+if (-not (Test-Path $backupPath) -or @(Get-Content $backupPath).Count -lt @($backup).Count) {
+    throw "Backup to $backupPath failed or is incomplete. Do NOT continue without a verified rollback copy."
+}
+"Backed up $(@($backup).Count) provider(s) to $backupPath"
 ```
 
-Capture the reference list from the healthy peer, then restore it on the affected cluster. The block hard-stops if the reference set was left as placeholders or is not larger than the current value, so a partial or placeholder list cannot be written:
+Capture the reference list from the healthy peer, then restore it on the affected cluster. Read the peer's provider **count** independently and record it below: completeness is proven by matching that recorded count, not by being larger than the broken cluster's set. The block hard-stops unless the pasted set matches the recorded peer count exactly, contains no placeholders, and every entry is a unique GUID, so a partial or placeholder list cannot be written:
 
 ```powershell
-# Run on the HEALTHY same-build peer to read the full reference value:
-#   (Get-ClusterResource -Name 'Health' | Get-ClusterParameter -Name Providers).Value
+# Run on the HEALTHY same-build peer to read the full reference value AND its count:
+#   $peer = (Get-ClusterResource -Name 'Health' | Get-ClusterParameter -Name Providers).Value
+#   $peer; "Peer provider count: $(@($peer).Count)"
+
+# Independently record the count you read on the healthy peer (type it here):
+$expectedPeerCount = 0   # <-- set to the provider COUNT read on the healthy same-build peer
 
 # Paste the FULL captured array here (every GUID from the peer, in full):
 $referenceProviders = @(
     # '{guid-1}', '{guid-2}', ...   <-- replace with the real captured values
 )
 
-# Hard stops: refuse to run with placeholders or a set no larger than the current one.
+# Hard stops: refuse to write unless the set is placeholder-free, all-unique-GUID, and complete.
+$guidPattern = '^\{[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}\}$'
 if (@($referenceProviders).Count -eq 0 -or ($referenceProviders -join '') -match '<|guid-\d') {
     throw "Refusing to write: paste the real, complete provider array captured from the healthy peer first."
 }
-$current = (Get-ClusterResource -Name 'Health' | Get-ClusterParameter -Name Providers).Value
-if (@($referenceProviders).Count -le @($current).Count) {
-    throw "Refusing to write: the reference set ($(@($referenceProviders).Count)) is not larger than the current set ($(@($current).Count)). Re-confirm the peer is healthy and same-build."
+if ($expectedPeerCount -lt 1) {
+    throw "Refusing to write: set `$expectedPeerCount to the provider count you read on the healthy peer."
+}
+$normalized = @($referenceProviders | ForEach-Object { "$_".Trim() })
+if (@($normalized | Where-Object { $_ -notmatch $guidPattern }).Count -gt 0) {
+    throw "Refusing to write: every entry must be a brace-wrapped GUID (for example {00000000-0000-0000-0000-000000000000})."
+}
+if (@($normalized | Sort-Object -Unique).Count -ne $normalized.Count) {
+    throw "Refusing to write: the reference set contains duplicate GUIDs."
+}
+if ($normalized.Count -ne $expectedPeerCount) {
+    throw "Refusing to write: pasted $($normalized.Count) providers but the peer has $expectedPeerCount. Re-capture the FULL set."
 }
 
-Get-ClusterResource -Name 'Health' | Set-ClusterParameter -Name Providers -Value $referenceProviders
+Get-ClusterResource -Name 'Health' | Set-ClusterParameter -Name Providers -Value $normalized
 
 # Round-trip verify the write took exactly the intended value
 $after = (Get-ClusterResource -Name 'Health' | Get-ClusterParameter -Name Providers).Value
-"Providers now: $(@($after).Count) (expected $(@($referenceProviders).Count))"
+"Providers now: $(@($after).Count) (expected $expectedPeerCount)"
 ```
 
-Reinitialize so the restored providers take effect (the same safe failover as Step A):
-
-```powershell
-$hs = Get-ClusterResource -Name 'Health'
-if (@(Get-ClusterNode | Where-Object State -eq 'Up').Count -gt 1) {
-    Move-ClusterGroup -Name $hs.OwnerGroup
-} else {
-    Stop-ClusterResource -Name 'Health'; Start-ClusterResource -Name 'Health'
-}
-Get-ClusterGroup -Name $hs.OwnerGroup | Format-Table Name, OwnerNode, State
-```
+Reinitialize so the restored providers take effect by **re-running the full guarded procedure in [Step A](#step-a-reinitialize-the-health-service-least-risk-try-first)** (its pre-move gate that confirms all nodes are Up and no storage job is running, its node-count-aware failover, and its post-move outcome check). Cluster state can change between steps, so do not use a shortened failover here.
 
 Wait a few minutes, then re-check `CanPool` as in Step A. If verification still does not complete, do not iterate further on the provider list; roll back to the backup (`Set-ClusterParameter -Name Providers -Value $backup`), collect diagnostics, and escalate.
 
@@ -297,15 +307,21 @@ if (@($pool).Count -ne 1) {
     throw "Expected exactly one non-primordial pool. Found $(@($pool).Count). Select the target pool by FriendlyName."
 }
 
-# Enumerate the intended new disks by serial number
+# Enumerate the intended new disks by serial number (each serial listed once)
 $intendedSerials = @('<serial-1>', '<serial-2>')
-$disksToAdd = @(Get-PhysicalDisk -CanPool $true |
-                Where-Object SerialNumber -in $intendedSerials)
-
-# Gate: every intended serial must match exactly one eligible disk before adding
-if ($disksToAdd.Count -ne $intendedSerials.Count) {
-    throw "Disk count mismatch: $($disksToAdd.Count) eligible disks matched the $($intendedSerials.Count) intended serials. Resolve before continuing."
+if (@($intendedSerials | Sort-Object -Unique).Count -ne @($intendedSerials).Count) {
+    throw "Duplicate serial numbers in the intended list. List each serial exactly once."
 }
+
+# Gate: each intended serial must match EXACTLY ONE eligible disk (checked per serial, not in aggregate)
+$disksToAdd = foreach ($sn in $intendedSerials) {
+    $match = @(Get-PhysicalDisk -CanPool $true | Where-Object SerialNumber -eq $sn)
+    if ($match.Count -ne 1) {
+        throw "Serial '$sn' matched $($match.Count) eligible disks (expected exactly 1). Resolve before continuing."
+    }
+    $match[0]
+}
+$disksToAdd = @($disksToAdd)
 
 Add-PhysicalDisk -StoragePoolFriendlyName $pool.FriendlyName -PhysicalDisks $disksToAdd
 ```
