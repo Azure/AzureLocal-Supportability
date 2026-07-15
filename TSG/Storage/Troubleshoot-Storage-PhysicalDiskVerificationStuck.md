@@ -176,35 +176,37 @@ Apply the least invasive step first and re-check after each one.
 
 Reinitializing the Health Service clears most stalled verifications without any configuration change. On a multi-node cluster you do this by failing the Health Service group over to another node, which is transparent to running VMs, CSV volumes, and data (it moves only the infrastructure Health role).
 
-**Before you fail the group over**, confirm it is safe:
+Run the block below as a whole. It is one continuous procedure: it inspects cluster state, refuses to proceed if a node is down or a storage job is running, then reinitializes and verifies the outcome.
 
 ```powershell
-# Pre-move gate: all nodes up, no active storage jobs, and a second node to move to
-Get-ClusterNode | Format-Table Name, State           # every node should be Up
-Get-StorageJob                                        # should be empty (no active repair/rebalance)
-$hs = Get-ClusterResource -Name 'Health'
+# 1. Inspect, then GATE: refuse to proceed unless all nodes are Up and no storage job is running.
+Get-ClusterNode | Format-Table Name, State
+Get-StorageJob
+$hs            = Get-ClusterResource -Name 'Health'
 $originalOwner = (Get-ClusterGroup -Name $hs.OwnerGroup).OwnerNode.Name
-$upNodes = @(Get-ClusterNode | Where-Object State -eq 'Up')
-"Health group owner: $originalOwner ; nodes Up: $($upNodes.Count)"
-```
+$upNodes       = @(Get-ClusterNode | Where-Object State -eq 'Up')
+$downNodes     = @(Get-ClusterNode | Where-Object State -ne 'Up')
+$activeJobs    = @(Get-StorageJob  | Where-Object JobState -ne 'Completed')
+if ($downNodes.Count -gt 0) {
+    throw "Refusing to reinitialize: node(s) not Up ($($downNodes.Name -join ', ')). Resolve first."
+}
+if ($activeJobs.Count -gt 0) {
+    throw "Refusing to reinitialize: $($activeJobs.Count) active storage job(s). Let them finish first."
+}
 
-Do not proceed if a node is down or a storage job is running; resolve that first. Then reinitialize:
-
-```powershell
-# Refresh the storage providers' view of the disks
+# 2. Refresh the storage providers' view of the disks.
 Update-StorageProviderCache -DiscoveryLevel Full
 Update-HostStorageCache
 
+# 3. Reinitialize: multi-node fails the group over; single-node restarts the resource in place.
 if ($upNodes.Count -gt 1) {
-    # Multi-node: fail the Health group over to ANOTHER node (Failover Clustering picks the target)
-    Move-ClusterGroup -Name $hs.OwnerGroup
+    Move-ClusterGroup -Name $hs.OwnerGroup          # Failover Clustering picks the target node
 } else {
-    # Single-node cluster: there is no failover target, so restart the resource in place instead
-    Stop-ClusterResource  -Name 'Health'
+    Stop-ClusterResource  -Name 'Health'            # no failover target on a single node
     Start-ClusterResource -Name 'Health'
 }
 
-# Confirm the outcome: the group is Online, and (multi-node) the owner actually changed
+# 4. Confirm the outcome: the group is Online, and (multi-node) the owner actually changed.
 $grp = Get-ClusterGroup -Name $hs.OwnerGroup
 $grp | Format-Table Name, OwnerNode, State
 if ($upNodes.Count -gt 1 -and $grp.OwnerNode.Name -eq $originalOwner) {
