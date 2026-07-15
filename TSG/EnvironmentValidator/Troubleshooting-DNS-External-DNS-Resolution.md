@@ -1,11 +1,31 @@
 # AzStackHci_DNS_ExternalDnsResolution
 
-| | |
-|---|---|
-| **Name** | `AzStackHci_DNS_ExternalDnsResolution` |
-| **Validator / test** | `Invoke-AzStackHciDNSValidation -Include Test-ExternalDnsResolution` |
-| **Component** | Environment Validator (DNS) |
-| **Severity** | Critical |
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
+  <tr>
+    <th style="text-align:left; width: 180px;">Name</th>
+    <td><strong>AzStackHci_DNS_ExternalDnsResolution</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Validator / test</th>
+    <td><strong>Invoke-AzStackHciDNSValidation -Include Test-ExternalDnsResolution</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Component</th>
+    <td><strong>Environment Validator (DNS)</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Severity</th>
+    <td><strong>Critical</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Applicable Scenarios</th>
+    <td><strong>Deployment, AddNode, Update (pre-update health check)</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Affected Versions</th>
+    <td><strong>All versions</strong></td>
+  </tr>
+</table>
 
 > **At a glance**
 > - **Owner:** the customer's network or DNS administrator. This is not a Microsoft software defect and not an OEM hardware or firmware issue.
@@ -64,31 +84,52 @@ intended DNS rather than a stale value carried over from imaging.
 
 ## Quick fix (start here)
 
-If external DNS resolution is failing and you already have the cluster's intended DNS
-server addresses (from your deployment's management-network configuration), this resolves
-the most common case: a node pointed at a DNS server that cannot resolve external names.
+First decide which situation you are in, because the **supported** fix differs:
+
+- **Deploying, or adding a node (the node is not yet a deployed cluster member):** you may
+  re-point that node's management-adapter DNS client at DNS servers that resolve external
+  names (steps below).
+- **An already-deployed cluster (this failed at a pre-update health check):** do **not**
+  change the node's DNS client. **Azure Local does not support modifying DNS server settings
+  post-deployment** (see
+  [Test-ManagementAdapterReadiness](./Networking/Troubleshoot-Network-Test-ManagementAdapterReadiness.md)).
+  Fix it **upstream** instead: make the currently-configured DNS server resolve external
+  names (add a forwarder or conditional forwarder, or otherwise unblock external resolution),
+  as in [Remediation](#remediation) step 3, second option. Then re-run the validator per
+  [Verify the fix](#verify-the-fix).
 
 > **Do not guess DNS server IP addresses.** If you do not have the cluster's correct DNS
-> servers, stop here and use the full decision tree under [Remediation](#remediation) after
-> identifying the failing server. Guessing can break name resolution for the whole node.
+> servers, use the full decision tree under [Remediation](#remediation) after identifying the
+> failing server. Guessing can break name resolution for the whole node.
 
-On each affected node, identify the management adapter and re-point it at DNS servers that
-resolve external names (per node, applies immediately, no reboot, reversible):
+**Deployment-time only** (do not run on a deployed cluster): re-point the management
+adapter's DNS client (per node, applies immediately, no reboot, reversible):
 
 ```powershell
-# 1. Identify the management adapter (the up adapter holding the node's management IP)
-$mgmt = (Get-NetIPConfiguration | Where-Object { $_.IPv4Address -and $_.NetAdapter.Status -eq 'Up' } |
-    Select-Object -First 1).InterfaceAlias
-"Management adapter: $mgmt"
+# 1. Identify the management adapter by the node's KNOWN management IP (from your deployment
+#    config). Azure Local nodes are multihomed, so never pick by enumeration order -- fail
+#    closed unless exactly one up adapter owns that IP.
+$ManagementIp = '<node-management-ipv4>'
+$mgmt = @(Get-NetIPConfiguration | Where-Object {
+    $_.NetAdapter.Status -eq 'Up' -and ($_.IPv4Address.IPAddress -contains $ManagementIp) })
+if ($mgmt.Count -ne 1) {
+    throw "Expected exactly one up adapter owning $ManagementIp; found $($mgmt.Count). Confirm the management IP and adapter first -- do not proceed."
+}
+$mgmtAlias = $mgmt[0].InterfaceAlias
+"Management adapter: $mgmtAlias"
 
 # 2. Record the current DNS servers FIRST so the change can be rolled back
-Get-DnsClientServerAddress -InterfaceAlias $mgmt -AddressFamily IPv4
+Get-DnsClientServerAddress -InterfaceAlias $mgmtAlias -AddressFamily IPv4
 
-# 3. Set the correct servers (replace with YOUR deployment's documented management DNS servers)
-Set-DnsClientServerAddress -InterfaceAlias $mgmt -ServerAddresses '<dns1>','<dns2>'
+# 3. Set the correct servers (your deployment's documented management DNS servers)
+Set-DnsClientServerAddress -InterfaceAlias $mgmtAlias -ServerAddresses '<dns1>','<dns2>'
 
-# 4. Confirm external resolution now works on this node
-Resolve-DnsName -Name management.azure.com -Type A
+# 4. Verify EVERY configured server resolves the external name, the way the validator does
+#    (a working default resolver can hide another configured server that still returns none)
+foreach ($dns in ((Get-DnsClientServerAddress -InterfaceAlias $mgmtAlias -AddressFamily IPv4).ServerAddresses | Sort-Object -Unique)) {
+    $count = (Resolve-DnsName -Name management.azure.com -Server $dns -Type A -DnsOnly -QuickTimeout -ErrorAction SilentlyContinue).Count
+    '{0}: {1} A record(s)' -f $dns, ([int]$count)
+}
 ```
 
 If that does not resolve it (the server is correct but internal-only, a forwarder is
