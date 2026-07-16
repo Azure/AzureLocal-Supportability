@@ -260,8 +260,11 @@ The object also carries run-level summary values as real properties, including `
 $results = Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -NoOutput -PassThru
 
 # Per-row classification (rows are under .Results)
-$results.Results | Where-Object ResultCategory -eq 'ConnectivityFailure' |
-    Format-Table URL, Port, Layer7Status, ResultCategory -AutoSize
+$failures = @($results.Results | Where-Object ResultCategory -eq 'ConnectivityFailure')
+$failures | Format-Table URL, Port, Layer7Status, ResultCategory -AutoSize
+if ($failures.Count -gt 0) {
+    throw "$($failures.Count) endpoint connectivity failure(s) detected."
+}
 
 # Run-level flags (real properties on the returned object)
 if ($results.PrivateLinkCriticalArray.Count -gt 0) {
@@ -291,14 +294,19 @@ With `-Scope Cluster -PassThru`, the function returns the **same unified structu
 $cluster = Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -Scope Cluster -PassThru
 
 foreach ($node in $cluster.Nodes) {
-    $failures = $node.Results | Where-Object ResultCategory -eq 'ConnectivityFailure'
+    if (-not $node.Collected -or $node.Error) {
+        Write-Warning "$($node.Hostname) collection failed: $($node.Error -join '; ')"
+        continue
+    }
+
+    $failures = @($node.Results | Where-Object ResultCategory -eq 'ConnectivityFailure')
     Write-Host "$($node.Hostname) : $($failures.Count) connectivity failure(s)"
 }
 ```
 
 ## Share test results with Microsoft (Optional)
 
-The 'Test-AzureLocalConnectivity' function includes an option to upload the test results to Microsoft, this is controlled by a User Prompt that asks if you would like to **Upload the Transcript file and report file to Microsoft**. If you **answer "Y"** to the prompt, the function will automatically upload the output files to Microsoft, the transfer uses the built-in log transfer method that uses secure protocols, more information on the upload process is available [here](https://learn.microsoft.com/azure/azure-local/manage/collect-logs?view=azloc-24113&tabs=powershell#about-on-demand-log-collection).
+The 'Test-AzureLocalConnectivity' function includes an option to upload the test results to Microsoft, this is controlled by a User Prompt that asks if you would like to **Upload the Transcript file and report file to Microsoft**. If you **answer "Y"** to the prompt, the function will automatically upload the output files to Microsoft, the transfer uses the built-in log transfer method that uses secure protocols, more information on the upload process is available [here](https://learn.microsoft.com/azure/azure-local/manage/collect-logs?tabs=powershell#about-on-demand-log-collection).
 
 To skip the upload prompt, use the `-ExcludeUploadResults` switch.
 
@@ -458,7 +466,7 @@ Invoke-AzStackHciConnectivityValidation -PassThru | Where-Object -Property Statu
 
 For additional information for how to use Azure Local Environment Checker module, review the [Troubleshooting External Connectivity Failures in Environment Checker](../../EnvironmentValidator/Troubleshooting-External-Connectivity-Failures-in-Environment-Checker.md) article.
 
-And the Microsoft Learn article is here: [Readiness of your environment for Azure Local - "Run readiness checks" section](https://learn.microsoft.com/azure/azure-local/manage/use-environment-checker?view=azloc-24113&tabs=connectivity#run-readiness-checks).
+And the Microsoft Learn article is here: [Readiness of your environment for Azure Local - "Run readiness checks" section](https://learn.microsoft.com/azure/azure-local/manage/use-environment-checker?tabs=connectivity#run-readiness-checks).
 
 ### Solution Update Environment Tests
 
@@ -481,7 +489,7 @@ $Result.HealthCheckResult | Out-File "C:\Temp\HealthResult-$((Get-Cluster).Name)
 $Result.HealthCheckResult | ConvertTo-Json -Depth 10 | Out-File "C:\Temp\HealthResult-$((Get-Cluster).Name).json"
 ```
 
-For additional information for how to analyze and understand the **$Results.HealthCheckResult** array, refer to this article: [Solution Update Readiness Checker - "using PowerShell" section](https://learn.microsoft.com/azure/azure-local/update/update-troubleshooting-23h2?view=azloc-24113#using-powershell).
+For additional information for how to analyze and understand the **$Results.HealthCheckResult** array, refer to this article: [Solution Update Readiness Checker - "using PowerShell" section](https://learn.microsoft.com/azure/azure-local/update/update-troubleshooting-23h2#using-powershell).
 
 ## How to get additional support
 
