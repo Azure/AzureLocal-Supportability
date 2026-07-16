@@ -40,7 +40,7 @@ Unlike the built-in readiness checks, which report an overall pass/fail, this fu
 * **Private Link / RFC1918 detection** — warns when an endpoint resolves to a private IP, helping distinguish intentional Private Link from a misconfiguration.
 * **Scenario-aware endpoint list** — automatically adjusts for Arc Gateway, Azure region, and your hardware OEM partner endpoints.
 
-> Note: This article documents version **0.6.7** of the module. Version 0.6.7 adds cluster-wide testing (`-Scope Cluster`), faster endpoint sweeps using HTTP HEAD requests (`-RequestMethod`) and parallel workers (`-Parallelism`), and richer `-PassThru` objects for automation. See [Run tests across all cluster nodes](#run-tests-across-all-cluster-nodes--scope-cluster), [Faster testing: HEAD requests and parallel workers](#faster-testing-head-requests-and-parallel-workers), and [Programmatic use with -PassThru](#programmatic-use-with--passthru-automation) below.
+> Note: This article documents version **0.6.8** of the module. Building on 0.6.7 (which added cluster-wide testing with `-Scope Cluster`, faster endpoint sweeps using HTTP HEAD requests via `-RequestMethod`, and parallel workers via `-Parallelism`), version 0.6.8 adds the `-ForceGitHubEndpointsUpdate` parameter (refresh the endpoint lists from GitHub while leaving the module untouched) and restructures `-PassThru` into a single, unified structured object (`SchemaVersion` `1.1`) whose per-endpoint rows are nested under a `.Results` property. See [Run tests across all cluster nodes](#run-tests-across-all-cluster-nodes--scope-cluster), [Faster testing: HEAD requests and parallel workers](#faster-testing-head-requests-and-parallel-workers), and [Programmatic use with -PassThru](#programmatic-use-with--passthru-automation) below.
 
 The 'Test-AzureLocalConnectivity' function has a dependency on the Azure Local Environment Checker module being installed, which is installed by default on all Azure Local physical machines. If Environment Checker module (_AzStackHci.EnvironmentChecker_) is not installed on the device running the connectivity test, you will be prompted to install the module first. The device used to install the AzStackHci.DiagnosticSettings module and test connectivity must have access to the PowerShell Gallery, in order to download the module (_nuget package_) to install it.
 
@@ -116,6 +116,22 @@ Hardware detection based on your hardware OEM vendor is built into the module au
 Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
     -KeyVaultURL "https://<YourKeyVaultName>.vault.azure.net" `
     -IncludeOEMUrls "<YourOEMPartner>"
+```
+
+### Air-gapped and offline environments (`-NoAutoUpdate` and `-ForceGitHubEndpointsUpdate`)
+
+By default the function checks the PowerShell Gallery for a newer module version and downloads the latest endpoint lists from GitHub (`raw.githubusercontent.com`) before it runs. Two parameters control this behaviour for restricted or air-gapped environments:
+
+* **`-NoAutoUpdate`** skips the PowerShell Gallery update check **and** skips the GitHub endpoint download, using the cached endpoint files bundled with the module instead. Use this when no outbound calls to PSGallery or GitHub are permitted.
+* **`-ForceGitHubEndpointsUpdate`** forces the endpoint-list refresh from GitHub **even when `-NoAutoUpdate` is specified**. This decouples the endpoint refresh from the module update check, so you can leave the installed module untouched while still pulling the freshest endpoint list. It only has an effect together with `-NoAutoUpdate` (without it, the GitHub refresh is already attempted by default). If the download is blocked or fails, the run gracefully falls back to the cached endpoint files.
+
+```PowerShell
+# Leave the installed module untouched (no PSGallery check) but still refresh the
+# endpoint list from GitHub. Useful when raw GitHub content is allowed through the
+# firewall/proxy but the PowerShell Gallery is not.
+Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
+    -NoAutoUpdate `
+    -ForceGitHubEndpointsUpdate
 ```
 
 ### Faster testing: HEAD requests and parallel workers
@@ -201,13 +217,13 @@ Output files generated:
 
 ## Programmatic use with `-PassThru` (automation)
 
-The `-PassThru` switch returns the test results to the PowerShell pipeline so you can act on them programmatically (for example, to fail a CI pipeline) without re-parsing the JSON report file. In v0.6.7 the returned objects were enhanced for automation.
+The `-PassThru` switch returns the test results to the PowerShell pipeline so you can act on them programmatically (for example, to fail a CI pipeline) without re-parsing the JSON report file. In v0.6.8 the returned value is a single **structured object** (`[pscustomobject]`) that matches the on-disk JSON summary (`SchemaVersion` `1.1`): all run-level fields are real properties on the object, and the per-endpoint rows are nested under a `.Results` property.
 
-> **Caller contract:** assign the result directly (`$results = Test-AzureLocalConnectivity ... -PassThru`). Do **not** wrap the call in `@( ... )` — doing so collapses the returned collection and breaks indexing and property access.
+> **Caller contract:** assign the result directly (`$results = Test-AzureLocalConnectivity ... -PassThru`). Access the per-endpoint rows through `$results.Results`. Because a single object is now returned, run-level properties survive `Where-Object` / `Select-Object` / `Sort-Object` on `.Results` (they no longer depend on note-properties bolted onto the results collection, as in 0.6.7).
 
 ### Node scope (`-Scope Node`, default)
 
-`-PassThru` returns the results collection. Each **row** now includes a `ResultCategory` field that classifies the outcome, so you no longer need to parse free-text notes to tell a genuine connectivity failure apart from a configuration gap:
+`-PassThru` returns the structured object described above. The per-endpoint rows are under `$results.Results`, and each **row** includes a `ResultCategory` field that classifies the outcome, so you no longer need to parse free-text notes to tell a genuine connectivity failure apart from a configuration gap:
 
 | `ResultCategory` | Meaning |
 |------------------|---------|
@@ -218,17 +234,17 @@ The `-PassThru` switch returns the test results to the PowerShell pipeline so yo
 | `PrivateLink` | Endpoint resolved to a private (RFC1918) address — possible Private Link configuration. |
 | `Skipped` | Endpoint was not tested (for example, skipped under Arc Gateway, or an untested wildcard placeholder). |
 
-The returned collection also carries run-level summary values as properties, including `RequestMethod`, `Parallelism`, `TotalDurationSeconds`, `Layer7WallClockSeconds`, `Layer7TotalDurationSeconds`, `Layer7TestedEndpoints`, `DownloadSpeed`, and the diagnostic state flags `SSLInspectionDetected` / `SSLInspectedURLs`, `PrivateLinkDetected` / `PrivateLinkCriticalArray` / `PrivateLinkProxyBypassArray`, and `CRLOfflineDetected` / `CRLOfflineURLs`.
+The object also carries run-level summary values as real properties, including `SchemaVersion`, `Hostname`, `Timestamp`, `AzureRegion`, `HardwareOEM`, `DownloadSpeed`, `ReportPath` / `JSONReportPath` (on-disk report locations), `RequestMethod`, `Parallelism`, `TotalDurationSeconds`, `Layer7WallClockSeconds`, `Layer7TotalDurationSeconds`, `Layer7TestedEndpoints`, the proxy fields (`ProxyEnabled`, `ProxyServer`, `ProxyHttp`, `ProxyHttps`, `ProxyBypassList`, `NoProxyList`), and the diagnostic state flags `SSLInspectionDetected` / `SSLInspectedURLs`, `PrivateLinkDetected` / `PrivateLinkCriticalArray` / `PrivateLinkProxyBypassArray` / `PrivateLinkDetectedArray` / `OtherRfc1918Count` / `PrivateLinkBypassConfirmedArray` / `PrivateLinkBypassMissingArray`, and `CRLOfflineDetected` / `CRLOfflineURLs`.
 
 ```PowerShell
 # Capture results and fail an automation run on any connectivity failure.
 $results = Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -NoOutput -PassThru
 
-# Per-row classification
-$results | Where-Object ResultCategory -eq 'ConnectivityFailure' |
+# Per-row classification (rows are under .Results)
+$results.Results | Where-Object ResultCategory -eq 'ConnectivityFailure' |
     Format-Table URL, Port, Layer7Status, ResultCategory -AutoSize
 
-# Run-level flags
+# Run-level flags (real properties on the returned object)
 if ($results.PrivateLinkCriticalArray.Count -gt 0) {
     throw "Arc endpoint(s) resolved to a private IP: $($results.PrivateLinkCriticalArray -join ', ')"
 }
@@ -236,28 +252,28 @@ if ($results.PrivateLinkCriticalArray.Count -gt 0) {
 
 ### Cluster scope (`-Scope Cluster`)
 
-With `-Scope Cluster -PassThru`, the function returns a single cluster summary object (`[pscustomobject]`) instead of a flat results collection. Key properties:
+With `-Scope Cluster -PassThru`, the function returns the **same unified structured object** as node scope, except the per-endpoint rows are grouped per node under a `.Nodes` array (each entry is itself a node-shaped structured object with its own `.Results` and run-level/detection fields). This gives you one consistent contract regardless of scope. Key top-level properties:
 
 | Property | Description |
 |----------|-------------|
+| `SchemaVersion` | Contract schema version (`1.1`). |
+| `Scope` | `Cluster`. |
 | `ClusterName` | Cluster name from `Get-Cluster`. |
 | `OrchestratorMachine` | Node that orchestrated the run. |
 | `RunGuid` | Unique identifier for the cluster run. |
 | `StartTime` / `EndTime` / `Duration` | Orchestration timing. |
-| `Nodes` | Hashtable keyed by node name; each value is that node's results collection. |
-| `NodeDurations` | Per-node test duration. |
-| `NodeDownloadSpeeds` | Per-node measured download speed. |
-| `NodeTelemetry` | Per-node run-level timing and `RequestMethod`. |
-| `Errors` | Per-node error messages (empty when the node succeeded). |
+| `ReportPath` / `JSONReportPath` | The **merged** cluster report and JSON on the orchestrator (local to the caller). |
 | `ExportPath` | Folder containing the cluster report and per-node output. |
+| `Nodes` | Array of per-node structured objects. Each entry carries `Hostname`, `Collected`, `Error`, `Results` (that node's per-endpoint rows), and the same run-level/detection fields as a node-scope run (per-node `ReportPath` / `JSONReportPath` point to files on the remote node). |
+| `Errors` | Per-node error messages (empty when the node succeeded). |
 
 ```PowerShell
 # Run a cluster test and inspect per-node results programmatically.
 $cluster = Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -Scope Cluster -PassThru
 
-foreach ($node in $cluster.Nodes.Keys) {
-    $failures = $cluster.Nodes[$node] | Where-Object ResultCategory -eq 'ConnectivityFailure'
-    Write-Host "$node : $($failures.Count) connectivity failure(s)"
+foreach ($node in $cluster.Nodes) {
+    $failures = $node.Results | Where-Object ResultCategory -eq 'ConnectivityFailure'
+    Write-Host "$($node.Hostname) : $($failures.Count) connectivity failure(s)"
 }
 ```
 
@@ -330,11 +346,18 @@ param (
     # before running. Default behaviour is notify-only (non-destructive).
     [switch]$AutoUpdate,
 
+    # Force downloading the latest endpoint lists from GitHub even when
+    # -NoAutoUpdate is specified. Only has an effect together with -NoAutoUpdate
+    # (the GitHub refresh is already attempted by default otherwise). Falls back
+    # to the cached endpoint files if the download is blocked or fails.
+    [switch]$ForceGitHubEndpointsUpdate,
+
     # Suppress all console output from the function.
     [switch]$NoOutput,
 
-    # Return the $Results object (Node scope) or the cluster summary object
-    # (Cluster scope) for further processing in PowerShell.
+    # Return the structured results object (Node scope) or the unified cluster
+    # structured object (Cluster scope) for further processing in PowerShell.
+    # Per-endpoint rows are under the .Results property (SchemaVersion 1.1).
     [switch]$PassThru,
 
     # Output report format. Default is HTML. CSV is also available.
@@ -383,8 +406,9 @@ param (
 | `-ExportPath` | **New in 0.6.7.** Optional additional folder to copy the report, transcript, and JSON to. Results are **always** saved to `C:\ProgramData\AzStackHci.DiagnosticSettings`; a different path is copied there *in addition*, never instead. |
 | `-Parallelism` | **New in 0.6.7.** Fans the Layer-7 sweep out across 1–16 process-isolated workers. Default `1` (sequential). Per-node default is `8` under `-Scope Cluster`. |
 | `-RequestMethod` | **New in 0.6.7.** `Auto` (default), `Get`, or `Head`. **Behaviour change:** the default is now `Auto` (HEAD-first with GET fallback). Use `-RequestMethod Get` to preserve pre-0.6.7 behaviour. |
-| `-PassThru` | **Enhanced in 0.6.7.** Node scope returns results with a per-row `ResultCategory` field and run-level summary properties; Cluster scope returns a cluster summary object. See [Programmatic use with -PassThru](#programmatic-use-with--passthru-automation). |
+| `-PassThru` | **Restructured in 0.6.8.** Now returns a single structured object (`SchemaVersion` `1.1`) with run-level fields as real properties and per-endpoint rows under `.Results`. Node scope and Cluster scope share one contract; in Cluster scope the per-node objects are nested under a `.Nodes` array. See [Programmatic use with -PassThru](#programmatic-use-with--passthru-automation). |
 | `-AutoUpdate` | **New in 0.6.7.** Opt in to auto-installing a newer module version from PowerShell Gallery. Default is notify-only (non-destructive). |
+| `-ForceGitHubEndpointsUpdate` | **New in 0.6.8.** Forces the endpoint-list refresh from GitHub even when `-NoAutoUpdate` is specified, leaving the installed module untouched. Only meaningful together with `-NoAutoUpdate`; falls back to cached endpoint files if the download is blocked. |
 | `-ArcGatewayDeployment` and `-ArcGatewayURL` | Now a **mandatory parameter set** — both must be specified together. Previously they were independent optional parameters. |
 | `-OutputFormat` | Controls the report format: `HTML` (default) or `CSV`. JSON is always generated alongside. |
 | `-IncludeOEMUrls` | Allows testing OEM hardware partner specific endpoints (DataOn, Dell, HPE, Hitachi, Lenovo, or TestAll). |
