@@ -1,10 +1,28 @@
 # Azure Local - Troubleshoot Outbound Network Connectivity
 
-> **TL;DR:** You can use the `Test-AzureLocalConnectivity` function from the **AzStackHci.DiagnosticSettings** module, to validate / troubleshoot outbound connectivity issues from Azure Local nodes to the required Azure endpoints.
+> **TL;DR:** You can use the `Test-AzureLocalConnectivity` function from the **AzStackHci.DiagnosticSettings** module, to validate / troubleshoot outbound connectivity issues from Azure Local nodes (_or any device or VM, such as pre-physical cluster deployment_) to the required Azure endpoints.
+
+## Contents
+
+- [Overview](#overview)
+- [Symptoms](#symptoms)
+- [Issue Validation](#issue-validation)
+- [Mitigation Details](#mitigation-details)
+- [Output format](#output-format)
+- [Programmatic use with `-PassThru` (automation)](#programmatic-use-with--passthru-automation)
+- [Share test results with Microsoft (Optional)](#share-test-results-with-microsoft-optional)
+- [Demo and example output](#demo-and-example-output)
+- [Parameter reference](#parameter-reference)
+- [Appendix](#appendix)
+- [How to get additional support](#how-to-get-additional-support)
 
 ## Overview
 
-Connected instances of Azure Local require outbound / egress network connectivity from the management network of each Azure Local instance to a list of public endpoints. Network connectivity to these endpoints is required for Azure Local to use Azure as a reliable management and control plane, such as for initial instance deployment, applying updates and for workload provisioning operational capabilities. Allowing connectivity to the list of endpoints is a prerequisite for deployment, but ongoing connectivity to the list of endpoints is vital for support, manageability and licensing compliance. The list of required endpoints varies depending on the customer scenario, for example the list of endpoints is reduced when using an Azure Arc Gateway, and varies (slightly) based on which Azure region is selected.
+Connected instances of Azure Local require outbound / egress network connectivity from the management network of each Azure Local instance to a list of public endpoints. This connectivity lets Azure Local use Azure as its management and control plane. In short:
+
+* **Required for day-one and day-two operations** — initial instance deployment, applying updates, and workload provisioning all depend on it.
+* **Ongoing connectivity is not optional** — it is vital for support, manageability, and licensing compliance, not just for the initial deployment.
+* **The endpoint list is scenario-specific** — it is reduced when using an Azure Arc Gateway, and varies (slightly) based on which Azure region is selected.
 
 For additional information on Azure Local Firewall requirements, please review - [Azure Local Firewall documentation](https://learn.microsoft.com/azure/azure-local/concepts/firewall-requirements).
 
@@ -40,7 +58,7 @@ Unlike the built-in readiness checks, which report an overall pass/fail, this fu
 * **Private Link / RFC1918 detection** — warns when an endpoint resolves to a private IP, helping distinguish intentional Private Link from a misconfiguration.
 * **Scenario-aware endpoint list** — automatically adjusts for Arc Gateway, Azure region, and your hardware OEM partner endpoints.
 
-> Note: This article documents version **0.6.8** of the module. Building on 0.6.7 (which added cluster-wide testing with `-Scope Cluster`, faster endpoint sweeps using HTTP HEAD requests via `-RequestMethod`, and parallel workers via `-Parallelism`), version 0.6.8 adds the `-ForceGitHubEndpointsUpdate` parameter (refresh the endpoint lists from GitHub while leaving the module untouched) and restructures `-PassThru` into a single, unified structured object (`SchemaVersion` `1.1`) whose per-endpoint rows are nested under a `.Results` property. See [Run tests across all cluster nodes](#run-tests-across-all-cluster-nodes--scope-cluster), [Faster testing: HEAD requests and parallel workers](#faster-testing-head-requests-and-parallel-workers), and [Programmatic use with -PassThru](#programmatic-use-with--passthru-automation) below.
+> Note: This article documents version **0.6.8** of the module. For the parameters added or changed in recent versions (including the 0.6.7 cluster / performance features and the 0.6.8 additions), see [Key parameter changes from previous versions](#key-parameter-changes-from-previous-versions).
 
 The 'Test-AzureLocalConnectivity' function has a dependency on the Azure Local Environment Checker module being installed, which is installed by default on all Azure Local physical machines. If Environment Checker module (_AzStackHci.EnvironmentChecker_) is not installed on the device running the connectivity test, you will be prompted to install the module first. The device used to install the AzStackHci.DiagnosticSettings module and test connectivity must have access to the PowerShell Gallery, in order to download the module (_nuget package_) to install it.
 
@@ -51,7 +69,8 @@ To install the AzStackHci.DiagnosticSettings module and perform connectivity tes
 ```PowerShell
 # Install the AzStackHci.DiagnosticSettings module, this can be on an Azure Local
 # physical machine (recommended), or any device inside your network (if it is using
-# the same firewall / proxy configuration as your Azure Local instance).
+# the same firewall / proxy configuration as your Azure Local instance). 
+# Answer "Y", to proceed with install.
 Install-Module -Name "AzStackHci.DiagnosticSettings" -Repository PSGallery
 
 # Test Azure Local Connectivity for a specific target Azure region.
@@ -293,7 +312,12 @@ The primary source of information is **opening the HTML output file** in a web b
 
 ![Test-AzureLocalConnectivity Demo](./images/Test-AzureLocalConnectivity_Demo.gif)
 
-### Test-AzureLocalConnectivity function parameters
+## Parameter reference
+
+The full parameter block is shown below for reference. You can also discover the same information at any time with `Get-Help Test-AzureLocalConnectivity -Full`.
+
+<details>
+<summary>Full parameter block (click to expand)</summary>
 
 ```PowerShell
 [CmdletBinding(DefaultParameterSetName = 'Default')]
@@ -396,6 +420,8 @@ param (
     [string]$ExportPath = 'C:\ProgramData\AzStackHci.DiagnosticSettings'
 )
 ```
+
+</details>
 
 ### Key parameter changes from previous versions
 
