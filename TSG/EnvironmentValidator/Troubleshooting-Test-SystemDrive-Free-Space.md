@@ -273,6 +273,25 @@ Remove-Item C:\Windows\Temp\* -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item $env:TEMP\* -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
+**Run Tier 1 across all nodes at once.** For at-scale deployment prep, fan the Tier 1
+reclamation out to every machine in the cluster with a single `Invoke-Command` instead of
+repeating it node by node. For example, the WinSxS component cleanup (Tier 1a, the largest
+safe win):
+
+```powershell
+# -ThrottleLimit caps how many nodes run this IO/CPU-intensive cleanup at once, so the
+# cluster does not spike all at once; the returned per-node exit code confirms success
+# (0 = succeeded). Raise the throttle only if the cluster has headroom.
+Invoke-Command -ComputerName (Get-ClusterNode).Name -ThrottleLimit 2 -ScriptBlock {
+    Dism.exe /Online /Cleanup-Image /StartComponentCleanup
+    [pscustomobject]@{ Node = $env:COMPUTERNAME; ExitCode = $LASTEXITCODE }
+} | Sort-Object Node | Format-Table -AutoSize
+```
+
+Wrap any of the Tier 1 a-d commands the same way. Do not fan out the Windows Update cache
+clear (Tier 1b) while a solution update or upgrade is in progress, because it briefly stops
+the `wuauserv` and BITS services on every node.
+
 #### Tier 2: diagnostic logs (reclaim with care)
 
 Large event logs such as `Microsoft-Windows-FailoverClustering%4Diagnostic` and
@@ -312,7 +331,12 @@ or updates, and it does not fix the underlying cause.
 - **`C:\GMACache` (monitoring agent cache).** A large `GMACache`, especially
   `GMACache\TelemetryCache`, usually means the machine cannot upload telemetry to
   Azure, so the data backs up on disk. The fix is to restore outbound connectivity
-  and the Arc connection so the cache drains on its own. Do not delete the cache to
+  and the Arc connection so the cache drains on its own. Concretely, that means
+  restoring the node's outbound HTTPS (TCP 443) to the Azure Arc and Azure Local
+  service endpoints (see the [Azure Local firewall and outbound connectivity
+  requirements](https://learn.microsoft.com/azure/azure-local/concepts/firewall-requirements))
+  and confirming the Arc agent is connected (`(azcmagent show -j | ConvertFrom-Json).status`
+  returns `Connected`). Do not delete the cache to
   free space; that loses buffered data, and the folder simply refills while
   connectivity is broken.
 - **`C:\Observability`, `C:\NugetStore`, `C:\ImageComposition`, `C:\CloudContent`,

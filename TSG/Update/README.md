@@ -36,3 +36,4 @@
 * [Test-AzStackHciARBStack: Fails on Non-Numeric Az CLI Extension Versions](./Test-AzStackHciARBStack-NonNumericAzCLIExtensionVersions.md)
 * [Update fails due to Arc Agent install failure (lockdown on azcmagent.log)](./Update-fails-due-to-Arc-Agent-install-failure.md)
 * [2604 | Previous CAU run status was canceled](./Previous-CAU-run-status-was-canceled.md)
+* [Live migration fails with "No mapping between account names and security IDs" (0x80070534)](./Live-migration-fails-with-No-mapping-between-account-names-and-security-IDs.md)
