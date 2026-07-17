@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Microsoft.AzLocal.CSSTools command overview
 
 This page lists every command documented for `Microsoft.AzLocal.CSSTools` version `1.2607.16.2249`.
@@ -14,6 +13,7 @@ describes command output.
 - [Remediation commands](#remediation-commands)
 - [Support script commands](#support-script-commands)
 - [Related references](#related-references)
+- [Release notes](#release-notes)
 
 ## Module setup
 
@@ -171,13 +171,14 @@ hashtable when the script supports preview mode.
 
 ## Related references
 
-The [release notes](./ReleaseNotes.md) record changes for this version. Folder indexes provide focused
-references for [functions](./functions/README.md), [insights](./insights/README.md),
+Folder indexes provide focused references for [functions](./functions/README.md), [insights](./insights/README.md),
 [remediations](./remediations/README.md) and [support scripts](./scripts/README.md).
-=======
+
+## Release notes
+
 This article describes the contents of the latest [Microsoft.AzLocal.CSSTools](https://www.powershellgallery.com/packages/Microsoft.AzLocal.CSSTools) module changes. This update includes improvements and fixes for the latest release of Microsoft.AzLocal.CSSTools that is supported to run on Azure Local deployments. 
 
-# Download the update
+### Download the update
 
 You can download the latest version of Microsoft.AzLocal.CSSTools by running `Update-Module -Name Microsoft.AzLocal.CSSTools` on each of the Azure Local cluster nodes. After you have downloaded the module, ensure you remove the current version from the runspace by using `Remove-Module` and import the latest version using `Import-Module`.
 
@@ -192,9 +193,9 @@ Remove-Module -Name Microsoft.AzLocal.CSSTools
 Import-Module -Name Microsoft.AzLocal.CSSTools
 ```
 
-# What's new
+### What's new
 
-## Support Insights
+#### Support Insights
 
 The following insight rules are new and run within the existing [ControlPlaneOperations](insights/ControlPlaneOperations.md), [HostNetwork](insights/HostNetwork.md), [HostStorage](insights/HostStorage.md), [KnownIssues](insights/KnownIssues.md), [LifecycleOrchestration](insights/LifecycleOrchestration.md), [OperatingSystem](insights/OperatingSystem.md), and [VirtualMachines](insights/VirtualMachines.md) components. For the full component reference, see [insights](insights/README.md).
 
@@ -226,7 +227,7 @@ The following insight rules are new and run within the existing [ControlPlaneOpe
 | Windows.Storage.VolumeRecommendations.ReserveCapacity | Checks that the storage pool has enough reserve capacity for in-place repairs. |
 | Windows.Storage.VolumeRecommendations.VolumeSize | Checks that a volume does not exceed the recommended maximum size. |
 
-## Insight Remediation
+#### Insight Remediation
 
 As issues are detected within the Insight framework, we can provide remediation guidance to execute `Invoke-AzsSupportInsightRemediation` commands that run validated, signed remediation scripts. We recommend only running these remediation scripts when insights provide guidance to run them. For the full list of remediations, see [remediations](remediations/README.md).
 
@@ -237,7 +238,7 @@ As issues are detected within the Insight framework, we can provide remediation 
 | [RemoveIncompatibleAzCliExtensions](remediations/RemoveIncompatibleAzCliExtensions.md) | Removes unmanaged (incompatible) Az CLI extensions from the current node so a solution update can proceed. |
 | [ResetCredSSPConfiguration](remediations/ResetCredSSPConfiguration.md) | Resets CredSSP authentication configuration to the correct state required for Azure Local operations. |
 
-## Core Framework
+#### Core Framework
 
 In addition to code and reliability fixes, the following public functions are new in this release.
 
@@ -246,9 +247,9 @@ In addition to code and reliability fixes, the following public functions are ne
 
 `Invoke-AzsSupportDiagnosticCheck` has been deprecated. A comprehensive list of all functions can be found under [functions](functions/README.md).
 
-## Detailed Changes
+#### Detailed Changes
 
-### Insight Framework & Remediation
+##### Insight Framework & Remediation
 
 - Insight remediation telemetry introduced via a new `InsightRemediationEvent`, capturing remediation outcomes.
 - Data emitted through the events channel improved for richer diagnostics.
@@ -256,7 +257,7 @@ In addition to code and reliability fixes, the following public functions are ne
 - CI Pester testing added for the Insight module, including Storage and Windows.Cluster test coverage.
 - Fixed handling of a string-array `Component` parameter for remote `Invoke-AzsSupportInsight`.
 
-### New Insights Added
+##### New Insights Added
 
 - Integrated the `AzStackHci.DiagnosticSettings` module (0.6.8) as an Insights data source. A new `AzStackHci.DiagnosticSettings.NetworkConnectivity` analyzer in [ControlPlaneOperations](insights/ControlPlaneOperations.md) surfaces required-endpoint connectivity, TLS/SSL inspection, Private Link configuration, certificate-revocation (CRL/OCSP) reachability, and per-node Azure connection state. A new `AzStackHci.DiagnosticSettings.OsConfig.ConfigurationConsistency` analyzer in [OperatingSystem](insights/OperatingSystem.md) surfaces cross-node OS configuration consistency checks and health sections, plus per-node Installed Programs and Driver Versions inventory.
 - `AzureLocal.LCM.RegistrationStatus` update subscription and registration precheck.
@@ -275,13 +276,13 @@ In addition to code and reliability fixes, the following public functions are ne
 - SDN Network Controller Failover Cluster API unsigned-assembly detection (`AzureLocal.KI.SDN.FailoverClusterApi.Unsigned`) for the KnownIssues component on 2601 and later builds, with a paired [RemoveFailoverClusterApiDll](remediations/RemoveFailoverClusterApiDll.md) remediation to remove the stray file.
 - Windows.System.OS.Support 23H2 test elevated to a Failure result.
 
-### Networking
+##### Networking
 
 - Fixed an ARB VM VLAN ID validator false positive on SDN / ARC-SDN clusters.
 - Removed the `-DnsOnly` parameter from name resolution.
 - Updated the set of firewall endpoints probed.
 
-### AKS Arc / MOC / ARB
+##### AKS Arc / MOC / ARB
 
 - Fixed `ArbApplianceStatus` validator false positives and hardened the check.
 - Added the MOC version to the `ErrorCode` for `MocNotOnLatestPatch`.
@@ -289,7 +290,7 @@ In addition to code and reliability fixes, the following public functions are ne
 - Updated the Support.AksArc module to 1.3.77.
 - Fixed AKS Arc analyzer per-test isolation.
 
-### Non-Solution (HCI OS) Support
+##### Non-Solution (HCI OS) Support
 
 - The module now detects whether the Azure Local solution is installed during import and operates in a reduced `HCI_OS` mode when it is not, recording the platform state (`HCI_OS` or `HCI_OS_AZLOCAL_SOLUTION`) on the module global.
 - Added the [Test-AzsSupportSolutionInstalled](functions/Test-AzsSupportSolutionInstalled.md) function, with an optional `-Terminating` switch, so callers can branch on solution presence or fail fast on plain HCI OS.
@@ -297,7 +298,7 @@ In addition to code and reliability fixes, the following public functions are ne
 - Gated the `azcmagent` region probe on agent availability instead of solution-installed state.
 - Ensured the OS solution is present before running update-validation checks that depend on it.
 
-### Infrastructure & Modules
+##### Infrastructure & Modules
 
 - Added a dependency on the `AzStackHci.DiagnosticSettings` module (0.6.8), consuming its structured `-PassThru` connectivity results, OsConfig health/consistency reports, and inventory data, with a non-fatal schema-version guard and race-free per-node detailed report collection on remote nodes.
 - Improved loading of the AzStack Disconnected module.
@@ -308,7 +309,7 @@ In addition to code and reliability fixes, the following public functions are ne
 - Added a threat modeling skill and an initial baseline security check.
 - Enabled detection of newer support modules.
 
-### Bug Fixes & Misc
+##### Bug Fixes & Misc
 
 - Deprecated `Invoke-AzsSupportDiagnosticCheck`.
 - Fixed missing-disk detection on Hyper-V hosts by including VMBUS SCSI adapters.
@@ -318,7 +319,6 @@ In addition to code and reliability fixes, the following public functions are ne
 
 ---
 
-# Contact Us
+### Contact Us
 
 If you are encountering an issue, or need assistance, refer to [questions-or-feedback](https://learn.microsoft.com/en-us/azure/azure-local/manage/support-tools#questions-or-feedback).
->>>>>>> 2f67159f90b6411cb05caae726a058fc62228ad5
