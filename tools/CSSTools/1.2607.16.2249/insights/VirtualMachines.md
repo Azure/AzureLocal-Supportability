@@ -1,6 +1,6 @@
 # VirtualMachines
 
-This script checks the state of the host network.
+This component checks the state of the virtual machines and VM network adapters.
 
 ## Windows.Network.VMNetworkAdapter
 

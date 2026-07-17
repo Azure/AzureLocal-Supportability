@@ -4,7 +4,7 @@
 Disables automatic Windows Update by configuring the appropriate registry settings under HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU.
 
 ## DESCRIPTION
-<!-- TODO: Provide a detailed description of what this remediation does and when to run it. -->
+Disables automatic Windows Update on Azure Local nodes by setting the NoAutoUpdate registry value under `HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU`. This prevents unplanned updates from applying outside of the solution update workflow.
 
 | Property | Value |
 | --- | --- |
@@ -29,9 +29,11 @@ If specified, the remediation proceeds even if environment requirements are not 
 
 ## EXAMPLES
 
-<!-- TODO: Provide at least one usage example invoking Invoke-AzsSupportInsightRemediation. -->
+```powershell
+Invoke-AzsSupportInsightRemediation -ScriptName "DisableWindowsUpdate"
+```
 
 ## NOTES
-<!-- TODO: Add operational notes, prerequisites, and the insight that triggers this remediation. -->
+This remediation is typically triggered when the `OperatingSystem` insight detects that automatic Windows Update is enabled. Run on each affected node individually.
 
 

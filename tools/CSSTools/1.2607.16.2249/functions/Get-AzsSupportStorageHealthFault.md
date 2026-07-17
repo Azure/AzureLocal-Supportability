@@ -11,7 +11,7 @@ Get-AzsSupportStorageHealthFault [[-CimSession] <CimSession>] [-ProgressAction <
 ```
 
 ## DESCRIPTION
-See https://learn.microsoft.com/en-us/azure/azure-local/manage/health-service-faults?view=azloc-24112.
+See https://learn.microsoft.com/en-us/azure/azure-local/manage/health-service-faults.
 
 ## EXAMPLES
 

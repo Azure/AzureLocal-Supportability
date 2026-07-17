@@ -17,7 +17,7 @@ Install and import the module, then run the remediation with `Invoke-AzsSupportI
 Install-Module -Name Microsoft.AzLocal.CSSTools -Force
 Import-Module -Name Microsoft.AzLocal.CSSTools -Force
 
-Invoke-AzsSupportInsightRemediation -Name <RemediationName>
+Invoke-AzsSupportInsightRemediation -ScriptName <RemediationName>
 ```
 
 Remediations support `-Force` (skip confirmation) and `-SkipEnvironmentCheck`. They run locally on the

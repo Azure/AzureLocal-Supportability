@@ -42,9 +42,6 @@ PS> $Results | Where-Object {
 
 ## PARAMETERS
 
-
-### EXAMPLE 1
-```
 ### -Latency
 The latency threshold to check for breaches (default: 10000ms).
 Accepts formats like: 16ms, 500ms, 2000ms, 10s, 20000+ms.
