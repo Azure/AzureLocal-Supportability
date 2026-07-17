@@ -5,6 +5,15 @@ It covers exported functions, insight component invocations, remediation invocat
 invocations. Follow each command link for parameter details and examples. Each linked page also
 describes command output.
 
+## Contents
+
+- [Module setup](#module-setup)
+- [Exported functions](#exported-functions)
+- [Insight commands](#insight-commands)
+- [Remediation commands](#remediation-commands)
+- [Support script commands](#support-script-commands)
+- [Related references](#related-references)
+
 ## Module setup
 
 Run PowerShell as an administrator on an Azure Local system or a management computer with access to
