@@ -1,5 +1,32 @@
 # AzStackHci_DNS_ExternalDnsResolution
 
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
+  <tr>
+    <th style="text-align:left; width: 180px;">Name</th>
+    <td><strong>AzStackHci_DNS_ExternalDnsResolution</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Validator / test</th>
+    <td><strong>Invoke-AzStackHciDNSValidation -Include Test-ExternalDnsResolution</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Component</th>
+    <td><strong>Environment Validator (DNS)</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Severity</th>
+    <td><strong>Critical</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Applicable Scenarios</th>
+    <td><strong>Deployment, AddNode, Update (pre-update health check)</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Affected Versions</th>
+    <td><strong>All versions</strong></td>
+  </tr>
+</table>
+
 > **At a glance**
 > - **Owner:** the customer's network or DNS administrator. This is not a Microsoft software defect and not an OEM hardware or firmware issue.
 > - **Impact:** Critical. It blocks Azure Local deployment and updates until external DNS resolution works on every node.
@@ -54,6 +81,61 @@ intended DNS rather than a stale value carried over from imaging.
 > fix are the same, so consult it only if you also see that older check. It is a separate,
 > in-progress supportability PR, so this guide does not depend on it:
 > [Troubleshooting AzStackHci_Connectivity_Test_Dns](./Troubleshooting-Connectivity-Test-Dns.md).
+
+## Quick fix (start here)
+
+First decide which situation you are in, because the **supported** fix differs:
+
+- **Deploying, or adding a node (the node is not yet a deployed cluster member):** you may
+  re-point that node's management-adapter DNS client at DNS servers that resolve external
+  names (steps below).
+- **An already-deployed cluster (this failed at a pre-update health check):** do **not**
+  change the node's DNS client. **Azure Local does not support modifying DNS server settings
+  post-deployment** (see
+  [Test-ManagementAdapterReadiness](./Networking/Troubleshoot-Network-Test-ManagementAdapterReadiness.md)).
+  Fix it **upstream** instead: make the currently-configured DNS server resolve external
+  names (add a forwarder or conditional forwarder, or otherwise unblock external resolution),
+  as in [Remediation](#remediation) step 3, second option. Then re-run the validator per
+  [Verify the fix](#verify-the-fix).
+
+> **Do not guess DNS server IP addresses.** If you do not have the cluster's correct DNS
+> servers, use the full decision tree under [Remediation](#remediation) after identifying the
+> failing server. Guessing can break name resolution for the whole node.
+
+**Deployment-time only** (do not run on a deployed cluster): re-point the management
+adapter's DNS client (per node, applies immediately, no reboot, reversible):
+
+```powershell
+# 1. Identify the management adapter by the node's KNOWN management IP (from your deployment
+#    config). Azure Local nodes are multihomed, so never pick by enumeration order -- fail
+#    closed unless exactly one up adapter owns that IP.
+$ManagementIp = '<node-management-ipv4>'
+$mgmt = @(Get-NetIPConfiguration | Where-Object {
+    $_.NetAdapter.Status -eq 'Up' -and ($_.IPv4Address.IPAddress -contains $ManagementIp) })
+if ($mgmt.Count -ne 1) {
+    throw "Expected exactly one up adapter owning $ManagementIp; found $($mgmt.Count). Confirm the management IP and adapter first -- do not proceed."
+}
+$mgmtAlias = $mgmt[0].InterfaceAlias
+"Management adapter: $mgmtAlias"
+
+# 2. Record the current DNS servers FIRST so the change can be rolled back
+Get-DnsClientServerAddress -InterfaceAlias $mgmtAlias -AddressFamily IPv4
+
+# 3. Set the correct servers (your deployment's documented management DNS servers)
+Set-DnsClientServerAddress -InterfaceAlias $mgmtAlias -ServerAddresses '<dns1>','<dns2>'
+
+# 4. Verify EVERY configured server resolves the external name, the way the validator does
+#    (a working default resolver can hide another configured server that still returns none)
+foreach ($dns in ((Get-DnsClientServerAddress -InterfaceAlias $mgmtAlias -AddressFamily IPv4).ServerAddresses | Sort-Object -Unique)) {
+    $count = (Resolve-DnsName -Name management.azure.com -Server $dns -Type A -DnsOnly -QuickTimeout -ErrorAction SilentlyContinue).Count
+    '{0}: {1} A record(s)' -f $dns, ([int]$count)
+}
+```
+
+If that does not resolve it (the server is correct but internal-only, a forwarder is
+missing, a firewall blocks port 53, or a proxy is in use), work the full decision tree in
+[Remediation](#remediation), then re-run the validator as shown in
+[Verify the fix](#verify-the-fix).
 
 ## Requirements
 
@@ -114,6 +196,33 @@ same record is written to `AzStackHciEnvironmentChecker` as Event ID 17205; filt
 (`$_.Name -like '*ExternalDnsResolution*' -or $_.Name -like '*Test_External_Hostname_Resolution*'`),
 and read `AdditionalData.Detail`. In the Azure portal, open the Azure Local cluster then
 the **Updates** tab; a failing pre-update health check names the failing validator there.
+
+### Where it appears across the admin surfaces
+
+This is an Environment Validator (pre-update health check) result, so it surfaces on some
+admin tools and deliberately does **not** on others. Knowing which is which stops you from
+hunting in the wrong place:
+
+- **PowerShell on an Azure Local node** (shown): the queries in this section
+  (`Get-DnsClientServerAddress`, `Resolve-DnsName -Server`, and the per-node fan-out below)
+  reproduce and localize the failure.
+- **Windows event logs** (shown): the `AzStackHciEnvironmentChecker` channel writes the same
+  record as **Event ID 17205**, with the failing `Name` and `AdditionalData.Detail`.
+- **Azure portal** (shown): the Azure Local cluster **Updates** tab flags the failing
+  validator on a pre-update health check.
+- **Component / tool log files (on disk)** (shown): the cluster-wide
+  `HealthCheckResult.EnvironmentChecker.*.json` on the infrastructure share, and the
+  `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log` on the node that ran the
+  check, both record the result.
+- **Cluster logs (`Get-ClusterLog`)** (not evident): this DNS readiness failure is **not**
+  written to the failover-cluster log, so do not look there.
+- **Windows Failover Cluster Manager** (not evident): it does **not** show up as a failed
+  cluster role, resource, or node. The cluster stays healthy; this is a readiness check, not
+  a clustering fault.
+- **Windows Admin Center (standalone host)** (not evident): WAC does **not** surface the
+  Environment Validator result; use the portal **Updates** tab or the result JSON above.
+- **Windows Admin Center in the Azure portal** (not evident): the readiness failure appears
+  through the cluster **Updates** tab (above), **not** in the WAC-in-portal node view.
 
 ### What it looks like: example failure signature
 
