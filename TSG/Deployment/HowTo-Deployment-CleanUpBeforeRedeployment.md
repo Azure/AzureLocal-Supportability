@@ -13,6 +13,22 @@
     <th style="text-align:left; width: 180px;">Applicable Scenarios</th>
     <td><strong>Azure Local, version 23H2 and later</strong>: redeploying after a failed or irrecoverable deployment, rebuilding a system, or decommissioning then redeploying</td>
   </tr>
+  <tr>
+    <th style="text-align:left; width: 180px;">Who runs this</th>
+    <td><strong>Owner</strong> or <strong>Contributor</strong> on every subscription and resource group that holds deployment resources</td>
+  </tr>
+  <tr>
+    <th style="text-align:left; width: 180px;">Reversibility</th>
+    <td><strong>Irreversible</strong>: deleted resources cannot be recovered (a soft-deleted key vault is recoverable only until it is purged or its retention period ends)</td>
+  </tr>
+  <tr>
+    <th style="text-align:left; width: 180px;">Impact / downtime</th>
+    <td><strong>Total</strong>: every workload on the system is destroyed; the system is offline until it is reimaged and redeployed</td>
+  </tr>
+  <tr>
+    <th style="text-align:left; width: 180px;">Estimated time</th>
+    <td>Azure resource deletion is typically tens of minutes; the full reimage and redeploy adds several hours (varies by hardware and node count)</td>
+  </tr>
 </table>
 
 ## Overview
@@ -44,6 +60,13 @@ This guide extends the official [Decommission Azure Local](https://learn.microso
 > [!WARNING]
 > These deletions are **destructive and irreversible**. The Arc resource bridge is the Azure control plane for the system's VMs; deleting it removes the ability to manage those VMs from Azure. Proceed only when a full redeployment (or decommission) is the agreed plan.
 
+## Glossary
+
+- **Arc resource bridge (ARB)** — the on-premises appliance VM that Azure uses as the control plane to manage the system's VMs. It runs on the cluster as a `*-control-plane-*` VM and is what `az arcappliance delete hci` removes.
+- **Custom location** — the Azure resource that points at the Arc resource bridge and gives Azure a target to create resources (VMs, disks, logical networks) on your system. It is deleted only **after** the Arc resource bridge.
+- **extendedLocation** — the property on each projected Azure resource that references the custom location it was created through. The Step 3 Resource Graph checkpoint queries this property to find resources that still depend on the platform.
+- **Soft-delete vs. purge (Key Vault)** — deleting a key vault **soft-deletes** it: the vault and its secrets stay recoverable for a retention period and the name stays reserved. **Purging** permanently removes the soft-deleted vault and frees the name, unless purge protection is enforced.
+
 ## Prerequisites
 
 - **Owner** or **Contributor** on every subscription / resource group that holds deployment resources
@@ -55,6 +78,7 @@ This guide extends the official [Decommission Azure Local](https://learn.microso
 
 - [Overview](#overview)
 - [What and Why](#what-and-why)
+- [Glossary](#glossary)
 - [Prerequisites](#prerequisites)
 - [Step 1: Inventory the Deployment Resources](#step-1-inventory-the-deployment-resources)
 - [Step 2: Remove Resource Locks](#step-2-remove-resource-locks)
@@ -95,6 +119,9 @@ By default, deployment applies **DoNotDelete** locks to the resources it creates
 
 ## Step 3: Delete Workload Resources First
 
+> [!WARNING]
+> **Back up workload data before you start.** The deletions in this step are irreversible and destroy all workload data on the system — VM guest data, AKS Arc workloads, and their data disks. Export or back up anything you need to keep, and capture any VM, disk, and network configuration you intend to recreate, before deleting anything.
+
 Delete every resource that depends on the custom location / Arc resource bridge **before** touching those platform resources. Work top-down: delete the top-level workloads (VMs, then AKS clusters) first, then the resources they used (network interfaces, data disks), then the containers those lived in (storage paths, logical networks). Deleting a container before the resources inside it orphans them:
 
 1. **Azure Local VMs**, then **AKS Arc clusters** — the top-level workloads. Deleting an Azure Local VM does **not** remove its network interfaces or data disks; those are separate resources you must delete yourself (steps below). In the portal, use **Show hidden types** on the resource group to reveal resources a VM delete left behind.
@@ -103,7 +130,35 @@ Delete every resource that depends on the custom location / Arc resource bridge 
 4. **Network security groups**.
 5. **Storage paths** (delete after the virtual hard disks they contain) and **logical networks** (delete after the network interfaces they host).
 
-CLI equivalents use the `az stack-hci-vm` command group — for example `az stack-hci-vm delete` (VMs) and the `image`, `network nic`, `disk`, `network nsg`, `storagepath`, and `network lnet` subgroups for the respective resources. (Note: `az stack-hci-vm nic` only attaches/detaches a vNIC to a VM; the NIC **resource** is managed under `az stack-hci-vm network nic`.)
+CLI equivalents use the `az stack-hci-vm` command group. Delete one resource type at a time, in the same inside-out order, using the names from your Step 1 inventory (or the matching `... list` command). Run each command once per resource of that type:
+
+```azurecli
+# --yes skips the per-resource confirmation prompt; omit it to confirm each delete.
+
+# 1. Azure Local VMs (deleting a VM does NOT delete its NICs or data disks)
+az stack-hci-vm delete --resource-group <rg> --name <vm-name> --yes
+
+# 2. VM images
+az stack-hci-vm image delete --resource-group <rg> --name <image-name> --yes
+
+# 3. Network interfaces the VMs left behind
+az stack-hci-vm network nic delete --resource-group <rg> --name <nic-name> --yes
+
+# 4. Data disks (virtual hard disks) the VMs left behind
+az stack-hci-vm disk delete --resource-group <rg> --name <disk-name> --yes
+
+# 5. Network security groups
+az stack-hci-vm network nsg delete --resource-group <rg> --name <nsg-name> --yes
+
+# 6. Storage paths (after the data disks they contain)
+az stack-hci-vm storagepath delete --resource-group <rg> --name <storagepath-name> --yes
+
+# 7. Logical networks (after the NICs they host)
+az stack-hci-vm network lnet delete --resource-group <rg> --name <lnet-name> --yes
+```
+
+> [!NOTE]
+> Delete **AKS Arc clusters** through their own management path (not `az stack-hci-vm`) before the resources above. Also note that `az stack-hci-vm nic` only attaches/detaches a vNIC on a VM — the NIC **resource** is deleted with `az stack-hci-vm network nic delete` (used above).
 
 > [!IMPORTANT]
 > Confirm each VM is actually gone — both the Azure resource **and** the underlying VM on the cluster (`Get-VM` on a node) — before continuing. "Gone in Azure" does not mean "gone on the cluster," and deleting the Arc resource bridge while an orphaned VM remains makes the on-premises VM very hard to remove.
@@ -171,7 +226,7 @@ If the system was deployed into a **dedicated** resource group, you may delete t
 
 A redeployment starts from a clean operating system on each machine.
 
-1. Reimage each machine with a fresh installation of the Azure Local OS. (The deployment node-cleanup process is not a substitute for a clean image when recovering from an irrecoverable state.)
+1. Reimage each machine with a fresh installation of the Azure Local OS — see [Install the Azure Local operating system](https://learn.microsoft.com/azure/azure-local/deploy/deployment-install-os). (The deployment node-cleanup process is not a substitute for a clean image when recovering from an irrecoverable state.)
 2. Re-run deployment following the current [Azure Local deployment documentation](https://learn.microsoft.com/azure/azure-local/deploy/deployment-introduction).
 
 ## Verification
