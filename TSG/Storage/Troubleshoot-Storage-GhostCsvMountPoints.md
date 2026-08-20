@@ -441,7 +441,10 @@ Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Filter 'ClusterStorage.*'
                 Detail         = "$($enumErrors.Count) path(s) could not be read; treat this root as UNVERIFIED, not clean."
             }
         }
-        if (-not $children) {
+        # elseif, NOT a separate if: a root whose enumeration FAILED must not also emit the
+        # '<empty>' row, because the results table calls empty the lowest-risk outcome and an
+        # incomplete scan would then read as both unverified and safe at the same time.
+        elseif (-not $children) {
             [pscustomobject]@{ GhostRoot = $root; Child = '<empty>'; IsReparsePoint = $false; Detail = '' }
         }
         else {
@@ -561,6 +564,9 @@ A VM can have healthy disks and still be anchored to a ghost root by one of thes
 three properties.
 
 ```powershell
+# Self-sufficient: re-defines the pattern if this block is pasted into a fresh session.
+# Without it, -match against an unset variable matches EVERY path.
+if ([string]::IsNullOrWhiteSpace($GhostPathPattern)) { $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)' }
 Get-VM | Select-Object Name, ConfigurationLocation, SnapshotFileLocation, SmartPagingFilePath |
     Where-Object {
         $_.ConfigurationLocation -match $GhostPathPattern -or
@@ -576,6 +582,9 @@ roles, platform-managed resources, and anything that is not a Hyper-V VM on the 
 you happen to be sitting on. Run it **once** from any node.
 
 ```powershell
+# Self-sufficient: re-defines the pattern if this block is pasted into a fresh session.
+# Without it, -match against an unset variable matches EVERY path.
+if ([string]::IsNullOrWhiteSpace($GhostPathPattern)) { $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)' }
 $paramErrors = New-Object System.Collections.Generic.List[string]
 Get-ClusterResource | ForEach-Object {
     $r = $_
@@ -1082,6 +1091,9 @@ which moves disks, configuration, checkpoints, and the smart paging file.
 3. **Build the disk mapping and review it.**
 
    ```powershell
+   # Self-sufficient: re-defines the pattern if this block is pasted into a fresh session.
+   # Without it, -match against an unset variable matches EVERY path.
+   if ([string]::IsNullOrWhiteSpace($GhostPathPattern)) { $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)' }
    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
 
    # The [string] casts are REQUIRED, and are the most common reason this step
@@ -1173,6 +1185,9 @@ which moves disks, configuration, checkpoints, and the smart paging file.
 5. **Confirm this VM is clean.**
 
    ```powershell
+   # Self-sufficient: re-defines the pattern if this block is pasted into a fresh session.
+   # Without it, -match against an unset variable matches EVERY path.
+   if ([string]::IsNullOrWhiteSpace($GhostPathPattern)) { $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)' }
    $vm  = Get-VM -Name $VMName
    $bad = New-Object System.Collections.Generic.List[string]
 
@@ -1301,7 +1316,8 @@ if ($missingNodes.Count) {
 }
 
 # 1) No ghost roots, and no VM, PARENT-CHAIN, or SMB reference, on any node.
-Invoke-Command -ComputerName $nodes -ArgumentList $GhostPathPattern -ScriptBlock {
+$remotingErrors = @()
+$nodeResults = Invoke-Command -ComputerName $nodes -ArgumentList $GhostPathPattern -ScriptBlock {
     param($Pattern)
     $refs = @()
     foreach ($vm in (Get-VM -ErrorAction SilentlyContinue)) {
@@ -1342,7 +1358,27 @@ Invoke-Command -ComputerName $nodes -ArgumentList $GhostPathPattern -ScriptBlock
         ReparsePoints = $reparse
         PlatformItems = $platform
     }
-} | Select-Object Node, GhostRoots, References, ReparsePoints, PlatformItems | Format-Table -AutoSize
+} -ErrorAction SilentlyContinue -ErrorVariable +remotingErrors
+
+# A node whose cluster state is Up can still fail Invoke-Command (WinRM down, credentials,
+# firewall). That node returns NO ROW, and a missing row is not a clean row. Reconcile the
+# nodes that actually ANSWERED against the full cluster membership, so an Up-but-unreachable
+# node cannot pass verification by silently producing nothing.
+$results   = @($nodeResults)
+$answered  = @($results | Select-Object -ExpandProperty Node -ErrorAction SilentlyContinue)
+$noAnswer  = @($allNodes | Where-Object {
+    $short = ($_ -split '\.')[0]
+    $short -notin @($answered | ForEach-Object { ($_ -split '\.')[0] })
+})
+if ($noAnswer.Count) {
+    Write-Warning ("{0} node(s) returned NO RESULT and are UNVERIFIED: {1}. A missing row is not a clean row; this condition is NOT resolved until every node answers clean." -f `
+        $noAnswer.Count, ($noAnswer -join ', '))
+}
+if ($remotingErrors.Count) {
+    Write-Warning ("{0} remoting error(s) occurred during verification; resolve them and re-run." -f $remotingErrors.Count)
+}
+
+$results | Select-Object Node, GhostRoots, References, ReparsePoints, PlatformItems | Format-Table -AutoSize
 
 # 2) Every CSV is Online and mounted under the canonical root.
 Get-ClusterSharedVolume | ForEach-Object {
