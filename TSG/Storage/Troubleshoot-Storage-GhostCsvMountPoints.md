@@ -1462,8 +1462,57 @@ Get-ClusterSharedVolume | ForEach-Object {
 
 Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Filter 'ClusterStorage.*' -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^ClusterStorage\.\d+$' } |
-    Select-Object FullName, CreationTime, LastWriteTime |
+    Select-Object FullName, CreationTime, LastWriteTime,
+        @{n='IsReparsePoint';e={[bool]($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint)}} |
     Export-Csv "$out\ghost-roots.csv" -NoTypeInformation
+
+# The criteria that TRIGGER Path C are the reference and reparse findings, so export those
+# too. Sending only the CSV list and cluster parameters makes support re-run Steps 1 and 2
+# before they can start, which is the slowest possible opening to a case.
+$nodes = (Get-ClusterNode | Where-Object State -eq 'Up').Name
+Invoke-Command -ComputerName $nodes -ArgumentList $GhostPathPattern -ScriptBlock {
+    param($Pattern)
+    $refs = New-Object System.Collections.Generic.List[object]
+    foreach ($vm in (Get-VM -ErrorAction SilentlyContinue)) {
+        foreach ($d in ($vm | Get-VMHardDiskDrive -ErrorAction SilentlyContinue)) {
+            $path = $d.Path; $depth = 0
+            while ($path -and $depth -lt 50) {
+                if ($path -match $Pattern) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='VMDiskChain'; Object=$vm.Name; Value=$path; Depth=$depth }) }
+                if (-not (Test-Path -LiteralPath $path)) { break }
+                $vhd = Get-VHD -Path $path -ErrorAction SilentlyContinue
+                if (-not $vhd) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='UnreadableChain'; Object=$vm.Name; Value=$path; Depth=$depth }); break }
+                $path = $vhd.ParentPath; $depth++
+            }
+        }
+        foreach ($dvd in ($vm | Get-VMDvdDrive -ErrorAction SilentlyContinue)) {
+            if ($dvd.Path -and ($dvd.Path -match $Pattern)) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='VMDvdDrive'; Object=$vm.Name; Value=$dvd.Path; Depth=0 }) }
+        }
+        foreach ($prop in 'ConfigurationLocation','SnapshotFileLocation','SmartPagingFilePath') {
+            $v = $vm.$prop
+            if ($v -and ($v -match $Pattern)) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind="VMConfig:$prop"; Object=$vm.Name; Value=$v; Depth=0 }) }
+        }
+    }
+    foreach ($f in (Get-SmbOpenFile -ErrorAction SilentlyContinue)) {
+        if ($f.Path -match $Pattern) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='SmbOpenFile'; Object=$f.ClientComputerName; Value=$f.Path; Depth=0 }) }
+    }
+    # Root and descendant reparse points, plus platform content, per ghost root.
+    foreach ($g in (Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Filter 'ClusterStorage.*' -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -match '^ClusterStorage\.\d+$' })) {
+        if ($g.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='ReparsePointOnRoot'; Object=$g.FullName; Value=$g.FullName; Depth=0 })
+        }
+        foreach ($item in (Get-ChildItem -LiteralPath $g.FullName -Force -Recurse -ErrorAction SilentlyContinue)) {
+            if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='ReparsePoint'; Object=$g.Name; Value=$item.FullName; Depth=0 })
+            }
+            if ($item.Name -match '^(MocArb|ImageStore|WorkingDirectory)$|\.a?vhd(x|s|pmem)?$') {
+                $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='PlatformContent'; Object=$g.Name; Value=$item.FullName; Depth=0 })
+            }
+        }
+    }
+    $refs
+} | Select-Object Node, Kind, Object, Value, Depth |
+    Export-Csv "$out\references-and-content.csv" -NoTypeInformation
 
 $paramErrors = New-Object System.Collections.Generic.List[string]
 Get-ClusterResource | ForEach-Object {
