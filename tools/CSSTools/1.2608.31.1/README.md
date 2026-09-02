@@ -1,4 +1,4 @@
-This article describes the contents of the latest [Microsoft.AzLocal.CSSTools 1.2608.30.1](https://www.powershellgallery.com/packages/Microsoft.AzLocal.CSSTools) module changes. This update includes improvements and fixes for the latest release of Microsoft.AzLocal.CSSTools that is supported to run on Azure Local deployments. 
+This article describes the contents of the latest [Microsoft.AzLocal.CSSTools 1.2608.31.1](https://www.powershellgallery.com/packages/Microsoft.AzLocal.CSSTools) module changes. This update includes improvements and fixes for the latest release of Microsoft.AzLocal.CSSTools that is supported to run on Azure Local deployments.
 
 # Download the update
 
