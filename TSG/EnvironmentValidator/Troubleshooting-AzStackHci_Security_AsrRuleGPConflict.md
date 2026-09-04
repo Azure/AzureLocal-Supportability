@@ -82,10 +82,17 @@ The same record is on the Windows event log as Event ID 17205 in `AzStackHciEnvi
 
 ```powershell
 $asrKey = 'Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules'
-Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicySetting' `
-    -Filter "RegistryKey = '$asrKey'" -ErrorAction SilentlyContinue |
+Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicySetting' -ErrorAction Stop |
+    Where-Object { $_.RegistryKey -eq $asrKey } |
     Select-Object ValueName, SOMID
 ```
+
+> **Why this query does not use `-Filter`.** A WQL filter treats the backslash as an
+> escape character, so passing the registry path into `-Filter` is rejected by the CIM
+> provider with `Invalid query`. Paired with `-ErrorAction SilentlyContinue` that error is
+> swallowed and the query returns no rows, which is indistinguishable from a clean node.
+> Retrieving the class and matching `RegistryKey` in PowerShell avoids the escaping problem,
+> and `-ErrorAction Stop` makes a genuine RSoP failure visible instead of silent.
 
 Each `ValueName` is an ASR rule GUID and each `SOMID` is the Group Policy scope that applied it (an Active Directory distinguished name for a domain GPO, or `Local` for a local group policy). No rows means no Group Policy-managed ASR on that node.
 
@@ -122,8 +129,8 @@ Run the RSoP query across every node so you know which nodes carry a Group Polic
 ```powershell
 $asrKey = 'Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules'
 Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
-    Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicySetting' `
-        -Filter "RegistryKey = '$using:asrKey'" -ErrorAction SilentlyContinue |
+    Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicySetting' -ErrorAction Stop |
+        Where-Object { $_.RegistryKey -eq $using:asrKey } |
         Select-Object ValueName, SOMID
 } | Sort-Object PSComputerName | Select-Object PSComputerName, ValueName, SOMID
 ```
@@ -178,8 +185,8 @@ On each remediated node, confirm the RSoP no longer carries a Group Policy-manag
 
 ```powershell
 $asrKey = 'Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules'
-$rows = Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicySetting' `
-    -Filter "RegistryKey = '$asrKey'" -ErrorAction SilentlyContinue
+$rows = @(Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicySetting' -ErrorAction Stop |
+    Where-Object { $_.RegistryKey -eq $asrKey })
 if (-not $rows) { 'Clean: no Group Policy-managed ASR rules' } else { $rows | Select-Object ValueName, SOMID }
 ```
 
