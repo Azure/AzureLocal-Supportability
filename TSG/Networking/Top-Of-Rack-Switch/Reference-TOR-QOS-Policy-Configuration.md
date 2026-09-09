@@ -292,7 +292,7 @@ interface Ethernet1/17
 
 In this example, the key points are the use of `priority-flow-control` and `service-policy`.
 
-- `priority-flow-control mode on send-tlv`: Enables PFC (IEEE 802.1Qbb) on the interface and advertises the PFC TLV over LLDP. On Cisco NX-OS, `send-tlv` typically requires DCBX to be enabled on the switch. If DCBX is enabled, **willing mode must be False** because Azure Local uses the advertised TLVs for telemetry and does not participate in DCBX negotiation. See [Azure Local Network Requirements][AzureLocalPhysicalNetworkRequirements].
+- `priority-flow-control mode on send-tlv`: Enables PFC (IEEE 802.1Qbb) on the interface and advertises the PFC TLV over LLDP. On Cisco NX-OS, `send-tlv` typically requires DCBX to be enabled on the switch. If DCBX is enabled, the **switch-side willing mode must be False** because Azure Local uses the advertised TLVs for telemetry and does not participate in DCBX negotiation. See [Azure Local Network Requirements][AzureLocalPhysicalNetworkRequirements].
 - `service-policy type qos input AZLocal_SERVICES`: Applies a QoS policy, which maps storage and cluster traffic to a specific CoS value that PFC will act upon.
 
 The example above configures one Cisco NX-OS switch interface. Apply the same outcomes to every interface and switching hop in each active and failover Storage path, then validate the corresponding host and NIC state. Configuring one interface alone does not complete RDMA QoS.

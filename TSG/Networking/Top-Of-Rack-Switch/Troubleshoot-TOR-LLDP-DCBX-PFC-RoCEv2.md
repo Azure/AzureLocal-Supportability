@@ -673,7 +673,7 @@ redundancy" in Step A): a whole-card reset drops the entire plane, so Resolution
 applied with the node drained. (Port and switch redundancy still exist: each plane
 has two ports across ToR-A and ToR-B.) The "Storage" rows
 give you the exact storage port list to force PFC ON in Resolution Step 2
-with `priority-flow-control mode on`. The "Mgmt/Compute" rows are the ports to set explicitly PFC off in
+with `priority-flow-control mode on send-tlv`. The "Mgmt/Compute" rows are the ports to set explicitly PFC off in
 Resolution Step 2. Applying a label or description to each Cisco switch port, such as
 `description Storage-Node01`, makes the policy
 self-documenting and reduces the risk of forcing PFC on the wrong port during
@@ -1355,11 +1355,14 @@ Stop if the port map is incomplete, the interface is not storage-facing, or the 
 
 ```
 interface ethernet 1/21-36
-  priority-flow-control mode on
+  priority-flow-control mode on send-tlv
 ```
 Note: Replace `ethernet 1/21-36` with the actual storage port range from the
 "Storage" rows of your port map. Storage ports are typically labeled
-`Switched-Storage` in the switch configuration.
+`Switched-Storage` in the switch configuration. `send-tlv` matches the
+[Azure Local QoS Policy](./Reference-TOR-QOS-Policy-Configuration.md) baseline and keeps the
+switch advertising the PFC TLV over LLDP, so the DCBX telemetry this guide relies on
+remains available after PFC is forced.
 
 **Set compute and management ports explicitly OFF:**
 
@@ -2367,7 +2370,7 @@ Expected: exactly one LLDP neighbor per port (your host's hostname), PFC Mode On
 
 ## Prevention
 
-1. **Include forced PFC in Cisco NX-OS deployment templates.** Use `priority-flow-control mode on` on storage-facing ports rather than DCBX-negotiated PFC. Keep the complete policy aligned with the [Azure Local QoS Policy](./Reference-TOR-QOS-Policy-Configuration.md).
+1. **Include forced PFC in Cisco NX-OS deployment templates.** Use `priority-flow-control mode on send-tlv` on storage-facing ports rather than DCBX-negotiated PFC. Keep the complete policy aligned with the [Azure Local QoS Policy](./Reference-TOR-QOS-Policy-Configuration.md).
 
 2. **Monitor for FW LLDP re-enablement.** NIC firmware updates or SBE
    updates may re-enable the Mellanox FW LLDP agent. Include a periodic
