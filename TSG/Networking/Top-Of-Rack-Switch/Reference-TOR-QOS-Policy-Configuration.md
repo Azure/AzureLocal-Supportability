@@ -38,6 +38,7 @@ QoS is mandatory for Azure Local deployments that carry Storage intent workloads
 - [System QoS Application](#system-qos-application)
 - [Interface Application of QOS](#interface-application-of-qos)
 - [End-to-End Validation](#end-to-end-validation)
+- [Related Guidance](#related-guidance)
 - [Terminology](#terminology)
 - [Reference](#reference)
 
@@ -78,7 +79,7 @@ QoS is mandatory for Azure Local deployments that carry Storage intent workloads
 | Endpoint response      | Transport-specific                                 | RoCEv2 requires supported NIC congestion control such as DCQCN. iWARP uses TCP congestion control and can use TCP ECN. |
 
 > [!IMPORTANT]
-> Azure Local does not configure DCBX. The host has no DCBX settings and does not send DCB TLVs back to the switch. DCB (PFC, ETS) is configured statically on both the host and the switch.
+> Azure Local does not rely on DCBX negotiation to establish PFC or ETS. These settings are configured locally on both the host and switch. In the validated Windows LLDP state, the host does not transmit DCBX TLVs; a local DCBX setting such as `Willing = False` does not prove that the host advertises DCBX policy to the switch.
 >
 > Dynamic changes to host-level DCB settings would disrupt RDMA traffic and impact the storage layer. This requirement has been in place since Storage Spaces Direct originally launched.
 
@@ -87,14 +88,14 @@ QoS is mandatory for Azure Local deployments that carry Storage intent workloads
 
 ### RDMA Transport and Endpoint Congestion Control
 
-ECN closes a feedback loop between a congested network device and the sending endpoint. The switch detects queue pressure and marks eligible IP packets with CE. The endpoint must interpret that signal and reduce its sending rate.
+ECN closes a feedback loop between a congested network device and the sending endpoint. The switch detects queue pressure and marks eligible IP packets with CE. The endpoint must interpret that signal and reduce its sending rate. See [Explicit Congestion Notification](./Reference-TOR-Explicit-Congestion-Notification.md) for ECN codepoints, transport feedback, packet evidence, and ECN-specific validation.
 
 | Transport | Data path | ECN feedback and sender response | Loss behavior |
 | --------- | --------- | -------------------------------- | ------------- |
 | RoCEv2 | RDMA over UDP/IP | The sender emits ECT packets. A congested switch marks CE, the receiving NIC returns a Congestion Notification Packet (CNP), and the sending NIC uses a supported congestion-control algorithm such as Data Center Quantized Congestion Notification (DCQCN) to reduce its rate. | Relies on a correctly engineered lossless path; PFC is the hop-by-hop loss-prevention backstop. |
 | iWARP | RDMA over TCP/IP | When endpoint ECN is enabled, the sender emits ECT packets, the switch marks CE, and TCP ECN feedback causes the sending TCP/iWARP endpoint to reduce its rate. | TCP can also detect loss, reduce its rate, and retransmit, but loss recovery adds latency. |
 
-DCQCN is a commonly implemented RoCEv2 endpoint congestion-control algorithm, not a switch feature. This reference describes the standards-based ECN, CE, CNP, PFC, and ETS behavior required to close the congestion-control loop; it does not prescribe endpoint-specific parameters, defaults, or configuration settings.
+DCQCN is a commonly implemented RoCEv2 endpoint congestion-control algorithm, not a switch feature. This design requires a working endpoint response but does not prescribe endpoint-specific parameters, defaults, or configuration settings.
 
 ```text
                          ECT storage traffic, CoS 3
@@ -127,48 +128,16 @@ Switchless configurations do not require a ToR switch QoS policy because Storage
 
 ## QOS Policy Overview
 
-```mermaid
-flowchart TD
-  A[Packet Ingress]:::ingress --> B{Ingress Queue}:::ingressqueue
-  B -- CoS 3 --> C[Class Map: RDMA]:::cos3
-  B -- CoS 7 --> D[Class Map: CLUSTER]:::cos7
-  B -- Other --> E[Class Map: Default]:::defaultclass
-
-  C --> F[Policy Map<br>Type: qos<br>AZLocal_SERVICES]:::qosmap
-  D --> F
-  E --> F
-
-  F -- RDMA --> F3[set qos-group 3]:::cos3
-  F -- CLUSTER --> G7[set qos-group 7]:::cos7
-  F -- Default --> H0[default qos-group 0]:::defaultclass
-
-  F3 --> X[policy-map type network-qos<br>QOS_NETWORK]:::networkqos
-  G7 --> X
-  H0 --> X
-
-  X -- qos-group 3 --> J[Queue 3<br>RDMA<br>Buffer carving<br>lossless transport]:::cos3
-  X -- qos-group 7 --> K[Queue 7<br>Cluster Heartbeat<br>Buffer carving]:::cos7
-  X -- qos-group 0 --> L[Default Queue<br>Buffer carving]:::defaultclass
-
-  J --> M{Egress Queue<br>QOS_EGRESS_PORT}:::egressqueue
-  K --> M
-  L --> M
-
-  M -- Queue 3 --> N[50% Bandwidth<br>WRED/ECN<br>Congestion: Mark]:::cos3
-  M -- Queue 7 --> O[1% Bandwidth]:::cos7
-  M -- Default --> P[48% Bandwidth<br>Congestion: Drop]:::defaultclass
-
-  N --> Q[Packet Egress]
-  O --> Q
-  P --> Q
-
-  %% Annotations
-  classDef cos3 fill:#e6ffe6,stroke:#2ecc40,stroke-width:2px;
-  classDef cos7 fill:#e6e6ff,stroke:#5b5bd6,stroke-width:2px;
-  classDef defaultclass fill:#f7f7f7,stroke:#aaaaaa,stroke-width:2px;
-  classDef networkqos fill:#fff3e6,stroke:#ff9900,stroke-width:2px;
-  classDef qosmap fill:#e6f0ff,stroke:#0074d9,stroke-width:2px;
-  classDef egressqueue fill:#fbeeff,stroke:#b300b3,stroke-width:2px;
+```text
+Packet ingress
+      |
+      +-- CoS 3 (Storage/RDMA) --> qos-group 3 --> lossless queue --> 50% minimum, PFC, ECN/WRED
+      |
+      +-- CoS 7 (Cluster)      --> qos-group 7 --> cluster queue  --> 1% or 2% minimum
+      |
+      +-- Other                --> qos-group 0 --> default queue  --> remaining bandwidth, drop on congestion
+      |
+Packet egress
 ```
 
 > [!NOTE]
@@ -345,6 +314,11 @@ Administrative configuration on one host or switch is not proof that RDMA QoS wo
 
 > [!IMPORTANT]
 > Stop and treat the deployment as incomplete if any endpoint or hop is unknown, mismatched, or verified only by configured state. In particular, switch CE marks without sender response, NIC DCQCN without CE/CNP activity, unexplained queue discards, or an MTU mismatch do not pass end-to-end validation.
+
+## Related Guidance
+
+- For ECN codepoints, RoCEv2 and iWARP feedback behavior, packet evidence, and ECN-specific validation, see [Explicit Congestion Notification](./Reference-TOR-Explicit-Congestion-Notification.md).
+- For diagnosis and remediation of the validated Mellanox ConnectX and Cisco NX-OS LLDP/DCBX/PFC failure, see [Troubleshoot LLDP, DCBX, and PFC for RoCEv2](./Troubleshoot-TOR-LLDP-DCBX-PFC-RoCEv2.md). That failure case does not define the baseline design in this reference.
 
 ## Terminology
 
