@@ -1,8 +1,45 @@
+<!-- tsg-metadata
+{
+  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "document_type": "reference",
+  "products": ["Azure Local"],
+  "detector": {
+    "type": "none",
+    "signal": null
+  },
+  "validation": {
+    "fidelity_level": "L0",
+    "technical_grade": null,
+    "reproduction_substrate": "none",
+    "automation_status": "not-assessed",
+    "last_validated": "2026-09-09",
+    "spec_ref": ""
+  }
+}
+-->
+
 # Azure Local - QoS Policy
 
-Below is a sample Cisco Nexus QoS configuration tailored for Azure Local environments. This policy is designed to ensure that storage (RDMA) and cluster heartbeat traffic are consistently prioritized and protected from congestion, while allowing efficient bandwidth sharing for all other traffic classes. The configuration defines traffic classes, sets bandwidth guarantees, enables congestion management, and configures MTU settings to meet Azure Local requirements.
+This reference defines the standards-based, end-to-end Quality of Service (QoS) outcomes required for Azure Local storage traffic and provides a Cisco NX-OS configuration example. The requirements are based on IEEE 802.1Qbb Priority Flow Control (PFC), IEEE 802.1Qaz Enhanced Transmission Selection (ETS), and IP Explicit Congestion Notification (ECN).
 
-Implementing QoS is mandatory for Azure Local deployments that support Storage intent workloads on network switches. For QoS to be effective, the policy must be applied consistently across all devices and interfaces that carry Storage intent traffic, ensuring end-to-end protection and performance for critical workloads.
+QoS is mandatory for Azure Local deployments that carry Storage intent workloads through network switches. A switch policy alone is not an end-to-end configuration. Network ATC, the host operating system, the RDMA adapters and drivers, and every active and failover switch path must implement compatible classification, MTU, bandwidth, loss-prevention, and congestion-response behavior.
+
+## Contents
+
+- [Requirements](#requirements)
+- [Azure Local Defaults](#azure-local-defaults)
+- [In Scope network patterns](#in-scope-network-patterns)
+- [Out of Scope network patterns](#out-of-scope-network-patterns)
+- [QOS Policy Overview](#qos-policy-overview)
+- [ClassMap](#classmap)
+- [Policy Map (QoS)](#policy-map-qos)
+- [Policy Map (Network QoS)](#policy-map-network-qos)
+- [Policy Map (Queuing)](#policy-map-queuing)
+- [System QoS Application](#system-qos-application)
+- [Interface Application of QOS](#interface-application-of-qos)
+- [End-to-End Validation](#end-to-end-validation)
+- [Terminology](#terminology)
+- [Reference](#reference)
 
 ## Requirements
 
@@ -10,9 +47,9 @@ Implementing QoS is mandatory for Azure Local deployments that support Storage i
    - CoS 3: Storage, also referred to as RDMA.
    - CoS 7: Cluster Heartbeat
    - CoS 0: Default traffic
-2. Support Storage and Cluster heartbeat traffic with Priority Flow Control (802.1Qbb)
-   - Establish Storage as a no-drop traffic class.
-   - Cluster heartbeat traffic will have the highest Priority to protect against packet loss.
+2. Protect Storage traffic with Priority Flow Control (802.1Qbb)
+  - Establish Storage as the PFC-enabled traffic class on priority 3.
+  - Assign Cluster heartbeat traffic to priority 7 with its dedicated bandwidth reservation.
    - Default traffic is the lowest priority, in the event of congestion.  Default will be dropped to protect Storage and Cluster.
 3. Bandwidth Reservations utilizing ETS (802.1Qaz)
    - Storage assigned a minimum 50% of the interface bandwidth.
@@ -20,7 +57,11 @@ Implementing QoS is mandatory for Azure Local deployments that support Storage i
      - 10G: 2%
      - 25G or Greater: 1%
 4. Congestion Notification
-   - Support for Explicit Congestion Notification (ECN) with Storage traffic.
+   - Support Explicit Congestion Notification (ECN) on every switch egress queue that can congest Storage traffic.
+   - Ensure the selected RDMA transport and NIC driver emit ECN-Capable Transport (ECT) packets and provide a supported sender response to Congestion Experienced (CE) marks.
+5. End-to-end consistency
+   - Preserve the Storage priority, compatible MTU, queue mapping, PFC, ETS, and ECN behavior across every active and failover path.
+   - Do not treat a host-only or switch-only configuration as complete.
 
 ## Azure Local Defaults
 
@@ -33,16 +74,43 @@ Implementing QoS is mandatory for Azure Local deployments that support Storage i
 | ECN                    | Enabled                                            | Explicit Congestion Notification is enabled for RDMA/Storage traffic.                                             |
 | VLAN                   | 711<br>712                                         | Default Storage Intent VLAN assignments. These values can be customized.                                          |
 | CoS (Class of Service) | Storage: 3<br>Cluster: 7<br>Default: 0             | Default CoS values for traffic classification.  These values can be customized.                                   |
+| Storage MTU            | End-to-end compatible jumbo MTU                    | Host, NIC, switch ports, and every routed or switched hop must carry the selected Storage MTU without fragmentation or discard. |
+| Endpoint response      | Transport-specific                                 | RoCEv2 requires supported NIC congestion control such as DCQCN. iWARP uses TCP congestion control and can use TCP ECN. |
 
 > [!IMPORTANT]
 > Azure Local does not configure DCBX. The host has no DCBX settings and does not send DCB TLVs back to the switch. DCB (PFC, ETS) is configured statically on both the host and the switch.
->
-> On Cisco Nexus, the `send-tlv` option used with `priority-flow-control` typically requires DCBX to be enabled on the switch so the required TLVs can be advertised over LLDP (see [Azure Local Network Requirements][AzureLocalPhysicalNetworkRequirements]). When DCBX is enabled on the switch for this purpose, **DCBX willing mode must be False**. From Azure Local's perspective, the advertised TLVs are used for telemetry only — not for DCB negotiation.
 >
 > Dynamic changes to host-level DCB settings would disrupt RDMA traffic and impact the storage layer. This requirement has been in place since Storage Spaces Direct originally launched.
 
 > [!NOTE]
 > These defaults can be overridden using [Network ATC][NetworkAtc] custom settings. For more details, see [Manage Network ATC][NetworkAtcOverride].
+
+### RDMA Transport and Endpoint Congestion Control
+
+ECN closes a feedback loop between a congested network device and the sending endpoint. The switch detects queue pressure and marks eligible IP packets with CE. The endpoint must interpret that signal and reduce its sending rate.
+
+| Transport | Data path | ECN feedback and sender response | Loss behavior |
+| --------- | --------- | -------------------------------- | ------------- |
+| RoCEv2 | RDMA over UDP/IP | The sender emits ECT packets. A congested switch marks CE, the receiving NIC returns a Congestion Notification Packet (CNP), and the sending NIC uses a supported congestion-control algorithm such as Data Center Quantized Congestion Notification (DCQCN) to reduce its rate. | Relies on a correctly engineered lossless path; PFC is the hop-by-hop loss-prevention backstop. |
+| iWARP | RDMA over TCP/IP | When endpoint ECN is enabled, the sender emits ECT packets, the switch marks CE, and TCP ECN feedback causes the sending TCP/iWARP endpoint to reduce its rate. | TCP can also detect loss, reduce its rate, and retransmit, but loss recovery adds latency. |
+
+DCQCN is a commonly implemented RoCEv2 endpoint congestion-control algorithm, not a switch feature. This reference describes the standards-based ECN, CE, CNP, PFC, and ETS behavior required to close the congestion-control loop; it does not prescribe endpoint-specific parameters, defaults, or configuration settings.
+
+```text
+                         ECT storage traffic, CoS 3
++-----------------------+       +-----------------------------+       +-------------------------+
+| Sending host and      | ----> | Every active and failover   | ----> | Receiving host and      |
+| RDMA NIC              |       | switch hop                  |  CE   | RDMA NIC                |
++-----------------------+       +-----------------------------+       +-------------------------+
+          ^                              |
+          |                              +-- PFC protects priority 3 hop by hop while feedback takes effect
+          |
+          +-- RoCEv2: CNP feedback; sender applies DCQCN or another supported rate reduction
+          +-- iWARP: TCP ECN feedback; sender applies TCP rate reduction
+```
+
+> [!IMPORTANT]
+> Partial configuration does not close the congestion-control loop. NIC-side DCQCN without switch ECN receives no CE/CNP signal. Switch ECN without endpoint ECT participation cannot mark those packets as CE. A missing MTU, CoS mapping, PFC, ETS, or ECN configuration on any switch hop can also break the intended Storage behavior.
 
 ## In Scope network patterns
 
@@ -55,7 +123,7 @@ This QoS policy is applicable to the following Azure Local deployment models:
 
 ## Out of Scope network patterns
 
-Switchless configurations do not require a switch QoS policy, as the switch is not used to transport storage traffic. In these scenarios, storage traffic is handled directly between endpoints without traversing a network switch, making switch-based QoS settings unnecessary.
+Switchless configurations do not require a ToR switch QoS policy because Storage traffic travels directly between endpoints. They still require compatible endpoint, link, MTU, priority, and transport configuration; switchless does not mean that host and NIC QoS requirements disappear.
 
 ## QOS Policy Overview
 
@@ -103,6 +171,9 @@ flowchart TD
   classDef egressqueue fill:#fbeeff,stroke:#b300b3,stroke-width:2px;
 ```
 
+> [!NOTE]
+> The command blocks below are Cisco NX-OS configuration examples. They implement the standards-based QoS outcomes defined above by using Cisco NX-OS class maps, policy maps, queue names, buffer behavior, and interface commands.
+
 ## ClassMap
 
 ```console
@@ -139,7 +210,7 @@ policy-map type network-qos QOS_NETWORK
     mtu 9216
 ```
 
-This policy map sets global Layer 2 properties for each traffic class by configuring the MTU and enabling Priority Flow Control (PFC) for storage traffic (CoS 3). The `pause pfc-cos 3` command activates PFC on CoS 3, ensuring lossless transport for RDMA and storage traffic. On Cisco NX-OS, this command alone is sufficient to achieve lossless behavior for the specified class, and the `no-drop` keyword is optional and can be added for clarity if needed. The `mtu 9216` command applies a consistent jumbo frame size to all classes, which is recommended for uniformity and optimal support of high-throughput workloads. On Cisco Nexus switches, setting the MTU to 9216 also initiates buffer carving for the ingress queue, which helps optimize buffer allocation for demanding, low-latency applications. Buffer management and MTU configuration may vary on other switch platforms, so it is important to review vendor documentation for platform-specific recommendations.
+In Cisco NX-OS, this policy map sets global Layer 2 properties for each traffic class by configuring the MTU and enabling PFC for storage traffic on CoS 3. The `pause pfc-cos 3` command activates PFC for the specified class; the `no-drop` keyword is optional and can be added for clarity. The `mtu 9216` command applies a consistent jumbo frame size to all classes and initiates ingress-queue buffer carving on supported Cisco Nexus platforms.
 
 ## Policy Map (Queuing)
 
@@ -166,9 +237,9 @@ policy-map type queuing QOS_EGRESS_PORT
 
 - Only queues 3, 7, and default are actively used in this policy. All other queues are configured with 0% bandwidth and remain unused.
 - Bandwidth reservations are explicitly configured for queues 3 and 7. Queue 3 (RDMA) is guaranteed a minimum of 50% of the interface bandwidth and can use up to 98% if available. When congestion occurs, tail drop is performed and default traffic may be randomly dropped as needed. Queue 7 (Cluster Heartbeat) is reserved 1% of bandwidth for 25G interfaces and 2% for 10G interfaces. This ensures reliable delivery of critical heartbeat traffic.
-- The `random-detect ... ecn` command enables [Explicit Congestion Notification (ECN)](./Reference-TOR-Explicit-Congestion-Notification.md) marking for congestion management in queue 3 (RDMA traffic). When congestion is detected, the switch marks packets instead of dropping them, which improves performance for lossless traffic.
-- The `random-detect minimum-threshold 300 kbytes maximum-threshold 300 kbytes drop-probability 100 weight 0` configuration sets the minimum and maximum queue thresholds for WRED (Weighted Random Early Detection). When the queue depth reaches 300 kbytes, packets are marked or dropped with a probability of 100%. The weight parameter influences how quickly the average queue size responds to changes in traffic, with a lower value making the response immediate.  RDMA traffic can spike in micro second bursts and having the immediate response ensure the best protection of the lossless traffic.
-- Because class 3 (RDMA) is configured as lossless, the switch will not drop packets from this class during congestion. Instead, when the interface is congested, packets from the default class will be dropped to maintain lossless delivery for class 3 traffic.
+- The `random-detect ... ecn` command enables [Explicit Congestion Notification (ECN)](./Reference-TOR-Explicit-Congestion-Notification.md) for queue 3. When congestion is detected, the switch can mark ECT packets with CE instead of dropping them. The receiving endpoint must return transport-appropriate feedback, and the sender must reduce its rate.
+- The `random-detect minimum-threshold 300 kbytes maximum-threshold 300 kbytes drop-probability 100 weight 0` configuration sets the minimum and maximum WRED (Weighted Random Early Detection) thresholds. When queue depth reaches 300 kbytes, selected ECT packets are marked and selected Non-ECT packets can be dropped with a probability of 100%. The weight controls how quickly average queue size responds; a lower value makes the response immediate for short RDMA bursts.
+- PFC is intended to prevent congestion loss for priority 3, but a PFC-enabled or no-drop class does not by itself prove zero discards. Verify ECN eligibility and queue-level mark, WRED-drop, tail-drop, and PFC counters on the deployed switch platform.
 
 ### Summary Table
 
@@ -233,7 +304,7 @@ This applies the defined queuing and network QoS policies globally to all interf
 
 ## Interface Application of QOS
 
-Example of a storage interface supporting a disaggregated Azure Local environment.
+Example of a Cisco NX-OS storage interface supporting a disaggregated Azure Local environment.
 
 ```console
 interface Ethernet1/17
@@ -252,14 +323,40 @@ interface Ethernet1/17
 
 In this example, the key points are the use of `priority-flow-control` and `service-policy`.
 
-- `priority-flow-control mode on send-tlv`: Enables PFC (IEEE 802.1Qbb) on the interface and advertises the PFC TLV over LLDP. PFC allows you to pause traffic on specific CoS (Class of Service) lanes instead of pausing all traffic on the link, which is crucial for lossless Ethernet and storage traffic (like RDMA) that is sensitive to packet loss. On Cisco Nexus, enabling `send-tlv` typically requires DCBX to be enabled on the switch to advertise the TLVs. If DCBX is enabled, **willing mode must be False**. See the DCB note under [Azure Local Defaults](#azure-local-defaults) — Azure Local uses these TLVs for telemetry only and does not participate in DCBX negotiation.
+- `priority-flow-control mode on send-tlv`: Enables PFC (IEEE 802.1Qbb) on the interface and advertises the PFC TLV over LLDP. On Cisco NX-OS, `send-tlv` typically requires DCBX to be enabled on the switch. If DCBX is enabled, **willing mode must be False** because Azure Local uses the advertised TLVs for telemetry and does not participate in DCBX negotiation. See [Azure Local Network Requirements][AzureLocalPhysicalNetworkRequirements].
 - `service-policy type qos input AZLocal_SERVICES`: Applies a QoS policy, which maps storage and cluster traffic to a specific CoS value that PFC will act upon.
+
+The example above configures one Cisco NX-OS switch interface. Apply the same outcomes to every interface and switching hop in each active and failover Storage path, then validate the corresponding host and NIC state. Configuring one interface alone does not complete RDMA QoS.
+
+## End-to-End Validation
+
+Administrative configuration on one host or switch is not proof that RDMA QoS works end to end. Validate both directions and every active and failover path.
+
+| Layer | Validate | Expected evidence |
+| ----- | -------- | ----------------- |
+| Network ATC and host | Selected RDMA transport, Storage VLAN and priority, ETS, PFC, and effective intent status | Desired policy is successfully realized on every node and intended Storage adapter. |
+| NIC and driver | RDMA enabled, supported firmware/driver, selected transport, endpoint ECN behavior | Adapter uses the intended RoCEv2 or iWARP mode and emits ECT packets when ECN participation is enabled. |
+| MTU | Host, NIC, switch ports, inter-switch links, and routed hops | The selected Storage frame size traverses every path without fragmentation or MTU discard. |
+| Classification and scheduling | CoS 3 preservation, Storage queue mapping, ETS allocation | Storage packets remain in the intended traffic class at every hop. |
+| Loss prevention | PFC enabled and operational for priority 3 in both directions where the switched RoCEv2 design requires it | PFC state and per-priority counters agree across each adjacent link. |
+| Switch congestion signal | ECN/WRED applied to every egress queue that can congest | Controlled load produces CE marks on ECT traffic; Non-ECT and tail drops are zero or explicitly understood. |
+| RoCEv2 endpoint response | CE reception, CNP generation, and supported DCQCN sender reaction | CNP activity and sender-rate reduction correlate with switch CE marks. |
+| iWARP endpoint response | TCP ECN negotiation and sender reaction, or understood TCP loss recovery | TCP ECN feedback and rate reduction correlate with CE marks; retransmissions and drops remain within the validated design. |
+
+> [!IMPORTANT]
+> Stop and treat the deployment as incomplete if any endpoint or hop is unknown, mismatched, or verified only by configured state. In particular, switch CE marks without sender response, NIC DCQCN without CE/CNP activity, unexplained queue discards, or an MTU mismatch do not pass end-to-end validation.
 
 ## Terminology
 
 - **ToR**: Top of Rack network switch. Supports Management, Compute, and Storage intent traffic.
 - **WRED**: Weighted Random Early Detection, a congestion avoidance mechanism used in QoS policies.
-- **ECN**: Explicit Congestion Notification, a congestion notification mechanism used to mark packets when congestion is encountered in the communication path. A DSCP bit is modified in the packet to identify congestion.
+- **ECN**: Explicit Congestion Notification, a congestion mechanism encoded in the two ECN bits of the IPv4 DS field or IPv6 Traffic Class field. ECN is separate from the six-bit DSCP value.
+- **ECT**: ECN-Capable Transport. ECT(0) and ECT(1) indicate that a packet can be ECN-marked.
+- **CE**: Congestion Experienced. A congested switch or router changes an ECT codepoint to CE.
+- **CNP**: Congestion Notification Packet. A RoCEv2 receiving NIC sends this feedback after observing CE.
+- **DCQCN**: Data Center Quantized Congestion Notification. A commonly implemented RoCEv2 NIC congestion-control algorithm that reduces sender rate in response to CNP feedback.
+- **RoCEv2**: RDMA over Converged Ethernet version 2, transported over UDP/IP.
+- **iWARP**: Internet Wide Area RDMA Protocol, transported over TCP/IP.
 - **RDMA**: Remote Direct Memory Access. A technology that enables direct memory access from the memory of one computer into that of another without involving either one's operating system or CPU. This allows for high-throughput, low-latency networking, which is especially beneficial for storage and high-performance computing workloads.
 
 ## Reference
@@ -270,7 +367,6 @@ In this example, the key points are the use of `priority-flow-control` and `serv
 - [RoCE Storage Implementation over NX-OS VXLAN Fabrics][ROCEStorageNXOSVXLANFabric]
 - [Cisco Nexus 9000 Series NX-OS Quality of Service Configuration Guide, Release 10.5(x)][CiscoNexusNetworkQOS]
 - [Cisco Nexus Configure Queuing and Scheduling][CiscoNexusQueuingAndScheduling]
-- [Cisco WRED-Explicit Congestion Notification][CiscoWredECN]
 - [RFC 3168 - The Addition of Explicit Congestion Notification (ECN) to IP][rfc3168]
 - [802.1Qbb Priority-based Flow Control][802-1qbb]
 - [802.1Qaz Enhanced Transmission Selection][802-1qaz]
@@ -283,7 +379,6 @@ In this example, the key points are the use of `priority-flow-control` and `serv
 [CiscoNexus9000NXOSACI]: https://www.cisco.com/c/en/us/td/docs/dcn/whitepapers/ACI_AzureLocal_whitepaper.html
 [CiscoNexusNetworkQOS]: https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/105x/configuration/qos/cisco-nexus-9000-series-nx-os-quality-of-service-configuration-guide-105x/m-configuring-network-qos.html "Configuration guide: The network QoS policy defines the characteristics of QoS properties network wide."
 [CiscoNexusQueuingAndScheduling]: https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/105x/configuration/qos/cisco-nexus-9000-series-nx-os-quality-of-service-configuration-guide-105x/m-configuring-queuing-and-scheduling.html#task_4FB1415CDE92466FB347121D96D6D8C2
-[CiscoWredECN]: https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/qos_conavd/configuration/15-mt/qos-conavd-15-mt-book/qos-conavd-wred-ecn.html "WRED drops packets, based on the average queue length exceeding a specific threshold value, to indicate congestion. ECN is an extension to WRED in that ECN marks packets instead of dropping them when the average queue length exceeds a specific threshold value. When configured with the WRED -- Explicit Congestion Notification feature, routers and end hosts would use this marking as a signal that the network is congested and slow down sending packets."
 [rfc3168]: https://www.rfc-editor.org/rfc/rfc3168 "We begin by describing TCP's use of packet drops as an indication of congestion.  Next we explain that with the addition of active queue management (e.g., RED) to the Internet infrastructure, where routers detect congestion before the queue overflows, routers are no longer limited to packet drops as an indication of congestion.  Routers can instead set the Congestion Experienced (CE) codepoint in the IP header of packets from ECN-capable transports.  We describe when the CE codepoint is to be set in routers, and describe modifications needed to TCP to make it ECN-capable.  Modifications to other transport protocols (e.g., unreliable unicast or multicast, reliable multicast, other reliable unicast transport protocols) could be considered as those protocols are developed and advance through the standards process.  We also describe in this document the issues involving the use of ECN within IP tunnels, and within IPsec tunnels in particular."
 [802-1qbb]: https://1.ieee802.org/dcb/802-1qbb/ "This standard specifies protocols, procedures and managed objects that enable flow control per traffic class on IEEE 802 full-duplex links. Data Center Bridging networks (bridges and end nodes) are characterized by limited bandwidth-delay product and limited hop-count. Traffic class is identified by the VLAN tag priority values. Priority-based flow control is intended to eliminate frame loss due to congestion. This is achieved by a mechanism similar to the IEEE 802.3x PAUSE, but operating on individual priorities. This mechanism, in conjunction with other Data Center Bridging technologies, enables support for higher layer protocols that are highly loss sensitive while not affecting the operation of traditional LAN protocols utilizing other priorities. In addition, PFC complements Congestion Notification in Data Center Bridging networks. Operation of priority-based flow control is limited to a domain controlled by a Data Center Bridging control protocol that controls the application of Priority-based Flow Control, Enhanced Transmission Selection, and Congestion Notification."
 [802-1qaz]: https://1.ieee802.org/dcb/802-1qaz/ "This standard specifies enhancement of transmission selection to support allocation of bandwidth amongst traffic classes. When the offered load in a traffic class doesn't use its allocated bandwidth, enhanced transmission selection will allow other traffic classes to use the available bandwidth. The bandwidth-allocation priorities will coexist with strict priorities. It will include managed objects to support bandwidth allocation."

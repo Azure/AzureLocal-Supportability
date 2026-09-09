@@ -6,7 +6,9 @@ Explicit Congestion Notification (ECN) is a network congestion management mechan
 
 When implemented with WRED (Weighted Random Early Detection) in the QoS policy, ECN allows switches to mark packets instead of dropping them when queue thresholds are reached. For storage traffic (CoS 3), this is critical because RDMA requires lossless transport. The switch marks packets with congestion information, allowing the sending host to reduce its transmission rate and prevent further congestion, all while maintaining the lossless nature required for storage workloads.
 
-This mechanism is particularly important in Azure Local environments where storage traffic must be protected from packet loss while still providing congestion control. The ECN marking occurs in the IP header's DSCP field using specific codepoints that communicate congestion status between network devices and endpoints.
+This mechanism is particularly important in Azure Local environments where storage traffic must be protected from packet loss while still providing congestion control. ECN uses two bits in the IPv4 DS field or IPv6 Traffic Class field and is separate from the six-bit DSCP value.
+
+For RoCEv2, a receiving NIC responds to a CE mark by returning a Congestion Notification Packet (CNP), and the sending NIC reduces its rate using supported congestion control such as DCQCN. For iWARP, TCP ECN feedback and TCP congestion control provide the endpoint response. Switch marking without the corresponding endpoint response does not close the congestion-control loop.
 
 An example of **ECN packet codes**
 
