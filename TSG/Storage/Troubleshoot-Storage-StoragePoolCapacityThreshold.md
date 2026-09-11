@@ -779,15 +779,25 @@ threshold *and* the volume genuinely shows large interior free space.
 > A consolidation pass can legitimately return little or no capacity. The most
 > common reasons, in order: the volume's footprint already matches the data
 > actually written, so there is nothing to reclaim (see the note at the start of
-> this procedure); ReFS delete notification has been explicitly disabled, so
-> freed slabs are never returned; or slabs are still pinned by data in use (confirm every VM on the volume is stopped
-> in Step 1 and that stale checkpoints were merged in the preparation step). Note
-> that some slabs report "pinned unmovable" even on a fully quiesced volume, so a
-> partial reclaim is not by itself a failure. If real interior free space exists,
-> ReFS delete notification is not explicitly disabled, all workloads were
-> offline, and
-> checkpoints were merged, but the pool still does not drop after the unmap wait
-> (Step 3), open a Microsoft support case rather than repeating the procedure.
+> this procedure); or slabs are still pinned by data in use (confirm every VM on
+> the volume is stopped in Step 1 and that stale checkpoints were merged in the
+> preparation step). Note that some slabs report "pinned unmovable" even on a
+> fully quiesced volume, so a partial reclaim is not by itself a failure. If real
+> interior free space exists, all workloads were offline, and checkpoints were
+> merged, but the pool still does not drop after the unmap wait (Step 3), open a
+> Microsoft support case rather than repeating the procedure.
+
+> [!IMPORTANT]
+> **Do not gate this procedure on `fsutil behavior query DisableDeleteNotify`.**
+> A ReFS value of `1` is **not** evidence that reclamation is broken: it is the
+> documented ReFS v2 default, and a healthy Azure Local cluster reports it while
+> still returning capacity to the pool (verified on a healthy single-node 12.2610
+> cluster reporting `ReFS DisableDeleteNotify = 1` with the pool `Healthy` / `OK`
+> at 4.2% used). The setting governs device-level TRIM (it "notifies the
+> underlying storage device"), not the Storage Spaces slab return this procedure
+> depends on, so it is the wrong layer for this scenario. Do not change it to
+> make a reading match, and do not treat it as a reason to hold off on opening a
+> support case.
 
 ## Choose the right option
 
@@ -926,9 +936,8 @@ firm conditions is met. Do not simply re-run the procedure.
   *operational state* is `Incomplete` / read-only from a drive-quorum loss rather
   than capacity, that is a separate, higher-severity problem. Escalate immediately.)
 - **Path B completed with every precondition met** (confirmed real interior free
-  space, ReFS delete notification not explicitly disabled, every VM on the volume
-  stopped, checkpoints merged) and you waited out the
-  ReFS unmap, but pool `AllocatedSize` still does not drop.
+  space, every VM on the volume stopped, checkpoints merged) and you waited out
+  the ReFS unmap, but pool `AllocatedSize` still does not drop.
 - The reserve-capacity fault (`InsufficientReserveCapacity`) **persists after**
   you have added capacity or reduced footprint.
 
