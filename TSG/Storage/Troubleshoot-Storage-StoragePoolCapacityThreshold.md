@@ -504,22 +504,51 @@ unless you find orphaned disks that have to be removed:**
    same way, and a single-node listing will not show that:
 
    ```powershell
-   # Disks in use anywhere on the cluster, including checkpoint disks
-   $inUse = Get-ClusterNode | ForEach-Object {
-       Get-VM -ComputerName $_.Name | ForEach-Object {
-           $_ | Get-VMHardDiskDrive | Select-Object -ExpandProperty Path
-           $_ | Get-VMSnapshot | Get-VMHardDiskDrive | Select-Object -ExpandProperty Path
-       }
-   } | Sort-Object -Unique
+   # Disks in use anywhere on the cluster, including checkpoint disks.
+   # Collected per node so a node that does not answer is DETECTED, not skipped.
+   $nodes = @(Get-ClusterNode)
+   if ($nodes.Count -eq 0) {
+       throw "Could not enumerate cluster nodes. Do NOT delete anything."
+   }
 
-   # Files on the volume that nothing on the cluster references
-   Get-ChildItem "C:\ClusterStorage\<volume>" -Recurse -Include *.vhdx,*.avhdx,*.vhds |
+   $answered = @()
+   $inUse = @(foreach ($node in $nodes) {
+       try {
+           Get-VM -ComputerName $node.Name -ErrorAction Stop | ForEach-Object {
+               $_ | Get-VMHardDiskDrive | Select-Object -ExpandProperty Path
+               $_ | Get-VMSnapshot | Get-VMHardDiskDrive | Select-Object -ExpandProperty Path
+           }
+           $answered += $node.Name
+       } catch {
+           Write-Warning "Could not enumerate VMs on $($node.Name): $($_.Exception.Message)"
+       }
+   })
+   $inUse = @($inUse | Sort-Object -Unique)
+
+   # Fail closed. Either condition means the candidate list below would be WRONG,
+   # so no list is produced at all.
+   if ($answered.Count -ne $nodes.Count) {
+       throw "INCOMPLETE: only $($answered.Count) of $($nodes.Count) node(s) answered. Do NOT delete anything."
+   }
+   if ($inUse.Count -eq 0) {
+       throw "REFUSING: zero in-use disks found across $($nodes.Count) node(s). That is an enumeration failure, not an empty cluster."
+   }
+
+   # Candidate files. Only plain .vhdx is listed -- see the note below on why
+   # .avhdx and .vhds are deliberately excluded.
+   Get-ChildItem "C:\ClusterStorage\<volume>" -Recurse -File -Include *.vhdx |
        Where-Object { $_.FullName -notin $inUse } |
        Select-Object FullName, @{N='GB';E={[math]::Round($_.Length/1GB,1)}}, LastWriteTime
    ```
 
+   > [!IMPORTANT]
+   > Run this as a single block. Both guards must be able to stop the listing; if
+   > you run the final `Get-ChildItem` on its own, or in a new session, `$inUse`
+   > may be empty or stale, and **an empty `$inUse` matches every file on the
+   > volume**. Re-run the whole block immediately before acting on its output.
+
    That output is a list of **candidates, not a list of garbage.** Before removing
-   anything, rule out all three of the following:
+   anything, rule out all four of the following:
 
    - **Arc-managed disks and images.** For Azure Local VMs enabled by Arc the disk
      is an Azure resource, and one that exists but is not currently attached to a
@@ -529,13 +558,40 @@ unless you find orphaned disks that have to be removed:**
      paths in use on this volume.
    - **Templates, golden images, ISOs, and backup targets**, which legitimately
      have no attached VM and are still needed.
+   - **Parent disks of a differencing chain.** A differencing disk names only the
+     *child* in the VM's configuration, so the **parent is referenced by no VM and
+     will appear in the list above** even on a fully healthy cluster. Deleting it
+     destroys every child that depends on it. Check each candidate before removing
+     it, and keep anything that reports a child or is itself a parent:
+
+     ```powershell
+     Get-VHD -Path '<candidate>' | Select-Object Path, VhdType, ParentPath, Attached
+     ```
+
+     `VhdType` of `Differencing` means the file has a parent (keep that parent).
+     Note this check is only reliable for disks attached on, or not attached
+     anywhere but reachable from, the node you run it on: `Get-VHD` cannot open a
+     disk that is attached on another node, so a failure to read a candidate is a
+     reason to **keep** it, never to delete it.
    - **Checkpoint disks.** Never delete an `.avhdx` directly. It is a differencing
      disk, and removing it breaks the chain and can destroy the VM's data. Merge
      checkpoints through Hyper-V instead (`Get-VM | Get-VMSnapshot`, then
      `Remove-VMSnapshot`), which collapses the `.avhdx` into its parent and frees
      the space properly.
 
-   Delete only what you have positively accounted for on all three counts.
+   > [!NOTE]
+   > The listing above deliberately does **not** include `.avhdx` or `.vhds` files.
+   > Both are routinely reported as unreferenced while holding live data, because
+   > the VM configuration names a different file than the one on disk: a VHD Set
+   > attaches as `<name>.vhds` (a small metadata file) while its data lives in a
+   > separate companion file, and a checkpoint's `.avhdx` must be merged rather
+   > than deleted. Listing either one produces candidates that are never safe to
+   > act on, so they are excluded rather than shown with a warning. If a volume's
+   > space is held by checkpoints, merge them (see the pre-step); if it is held by
+   > a VHD Set, that is guest-cluster shared storage and Hyper-V owns its chain --
+   > open a support case rather than deleting files by hand.
+
+   Delete only what you have positively accounted for on all four counts.
    **[HIGH RISK]**
 
    > [!WARNING]
