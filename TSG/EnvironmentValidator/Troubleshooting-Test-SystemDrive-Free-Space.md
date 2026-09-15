@@ -42,6 +42,14 @@ machine has enough free space for the platform to operate and to install updates
 It fails when free space on `C:` drops below the required minimum of **30 GB** on
 any machine in the cluster.
 
+The **30 GB** value is an operational headroom floor, not space reserved for
+workloads. Windows servicing and component cleanup, update staging and rollback,
+temporary files, event logs, and Azure Local management agents all need working
+space while an operation is in progress. Existing VMs may continue running while
+the check is failing, but the management plane can no longer safely stage updates,
+add nodes, or deploy extensions. If the drive reaches zero, the node itself can
+become unstable.
+
 A low system drive is a real problem, not just a warning. While the check is
 failing:
 
@@ -51,6 +59,38 @@ failing:
 - New Arc and Kubernetes extensions may fail to deploy.
 - Existing workloads keep running, but the machine cannot be lifecycle-managed
   reliably, and a drive that fills to zero can destabilize the node.
+
+This is primarily an operating-system and platform-capacity check, not proof of a
+failed physical disk. If a newly provisioned machine is below 30 GB before any
+workload is placed, or space cannot be restored without deleting platform-managed
+content, compare the system-drive layout with the validated deployment or OEM
+configuration and escalate to the deployment or hardware owner. Do not replace
+hardware based on this validator alone.
+
+## Quick path and expected duration
+
+For a one-time low-space condition, plan for several minutes to measure the
+consumer, run one or two Tier 1 actions, and run the targeted validation. DISM
+and the full system-health precheck can take longer. If the drive refills during
+or soon after cleanup, stop repeating cleanup and treat it as a longer
+connectivity, logging, or platform-consumer investigation.
+
+The common first pass is:
+
+```powershell
+# 1. Check the current headroom
+Get-PSDrive C | Select-Object @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}
+
+# 2. Reclaim superseded Windows components
+Dism.exe /Online /Cleanup-Image /StartComponentCleanup
+
+# 3. Check again before moving to the next tier
+Get-PSDrive C | Select-Object @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}
+```
+
+If the final value is still below 30 GB, continue with the consumer inventory
+and the tiered actions below. Do not delete platform-managed folders to force the
+number over the threshold.
 
 ## Where this failure appears
 
@@ -143,12 +183,35 @@ free space it found (25 GB), and the minimum it expected (30 GB). A passing resu
 has `Status` of `0` or `SUCCESS`; a failing result has a non-zero status or
 `FAILURE`.
 
+### Other administration surfaces
+
+- **Cluster logs (`Get-ClusterLog`):** This validator result does not appear as a
+  dedicated cluster-log fault. Use cluster logs only to investigate drain,
+  membership, or node-stability symptoms.
+- **Failover Cluster Manager (`cluadmin.msc`):** The check does not appear as a
+  dedicated clustered role or resource fault. Use the node state and workload
+  ownership views to confirm a drain, not to diagnose the 30 GB result.
+- **Windows Admin Center on a standalone host:** The check does not appear as a
+  dedicated validator result. Use the node PowerShell commands and the component
+  logs listed below.
+- **Windows Admin Center in the Azure portal:** The check does not appear as a
+  dedicated WAC result. Use the Azure portal **Updates** and **Update readiness**
+  views described above.
+- **Component and tool log files:** The check does appear in
+  `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log` and the
+  corresponding `AzStackHciEnvironmentReport.json` or `.xml` on the node where
+  the validator runs. `C:\CloudDeployment\Logs` and `C:\MASLogs` can provide
+  surrounding action-plan context.
+
 ## Requirements
 
 1. Each Azure Local machine must have at least **30 GB** free on its system drive
    (`C:`).
 2. You run the steps below on the affected machine, signed in as an administrator,
    in a PowerShell session.
+3. If you must drain an already deployed cluster member, confirm the cluster is
+   healthy enough to lose that node temporarily and that the remaining nodes have
+   capacity for its workloads.
 
 ## Troubleshooting Steps
 
@@ -212,7 +275,7 @@ or a reboot. A few need light coordination:
 | --- | --- |
 | Tier 1a: WinSxS component cleanup | Yes, no reboot. It is IO and CPU intensive and can take several minutes, so prefer a quieter period. |
 | Tier 1b: clear Windows Update cache | Yes, but not while a solution update or upgrade is in progress, because it briefly stops the Windows Update and BITS services. |
-| Tier 1c: remove crash dumps | Yes, deletes files only. |
+| Tier 1c: remove crash dumps and WER reports | Yes, after the evidence-preservation gate; deletes files only. |
 | Tier 1d: clear temporary files | Yes, deletes files only. |
 | Tier 2: clear large event logs | Yes for uptime, but this erases diagnostic and audit history, and clearing the Security log has compliance implications. Export first. |
 | Tier 3: platform-managed areas | Do not delete. Fixing the cause has no workload impact. |
@@ -220,13 +283,25 @@ or a reboot. A few need light coordination:
 If a machine is already near zero free space and at risk of dropping out of the
 cluster, treat that one machine as a maintenance action: pause and drain it first
 so its workloads move to other machines, then clean up, then resume. The cluster
-stays in production throughout, because the workloads live-migrate.
+can stay in production because the workloads live-migrate, but the drain consumes
+capacity on the remaining nodes and can fail if the cluster is already degraded
+or lacks headroom. Do not start cleanup until the drain has completed.
 
 ```powershell
-Suspend-ClusterNode -Name <node> -Drain    # move workloads off this machine
+Suspend-ClusterNode -Name <node> -Drain -Wait    # wait for live migration and drain completion
+Get-ClusterNode -Name <node> | Select-Object Name, State
+Get-ClusterGroup |
+    Where-Object { $_.OwnerNode.Name -eq '<node>' -and $_.GroupType -eq 'VirtualMachine' } |
+    Select-Object Name, OwnerNode, State
 # ... run the cleanup steps below ...
 Resume-ClusterNode  -Name <node>           # return the machine to service
 ```
+
+Proceed only when the target node is `Paused` and no virtual-machine cluster
+group remains owned by it. If the installed Failover Clustering module does not
+support `-Wait`, run the drain without that switch and poll the two commands
+above until the same conditions are true. If a workload cannot move, stop and
+resolve the cluster-capacity or live-migration issue before reclaiming space.
 
 #### Tier 1: safe to reclaim now
 
@@ -255,10 +330,40 @@ try {
 }
 ```
 
-**c. Remove crash dumps.** Collect them first only if you have an open support case
-that needs them. Safe in production; this deletes files only.
+**c. Preserve then remove crash dumps and WER reports.** These files can explain
+why the drive filled or provide evidence for an existing incident. Before
+deleting them, check the active IcM, SR, or support case with its owner. If a case
+exists, the node recently rebooted or bugchecked, or you are unsure, preserve the
+files and do not delete them. Copy them to a non-`C:` volume or network share,
+verify the copy, and only then run the deletion block. If the copy or hash
+verification fails, leave the originals in place and use another Tier 1 action.
 
 ```powershell
+$evidenceDestination = '<NON_C_DRIVE_OR_SHARE>'  # must not be C:
+$evidenceRoot = Join-Path $evidenceDestination (
+    "SystemDriveEvidence_{0}_{1}" -f $env:COMPUTERNAME, (Get-Date -Format 'yyyyMMddHHmmss')
+)
+New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
+
+$evidencePaths = @(
+    'C:\Windows\MEMORY.DMP',
+    'C:\Windows\Minidump',
+    'C:\Windows\LiveKernelReports',
+    "$env:ProgramData\Microsoft\Windows\WER\ReportQueue"
+)
+
+foreach ($path in $evidencePaths) {
+    if (Test-Path -LiteralPath $path) {
+        Copy-Item -LiteralPath $path -Destination $evidenceRoot -Recurse -Force -ErrorAction Stop
+    }
+}
+
+Get-ChildItem -LiteralPath $evidenceRoot -Recurse -File |
+    Get-FileHash -Algorithm SHA256
+```
+
+```powershell
+# Run only after the evidence copy completed and the case/evidence check is clear.
 Remove-Item C:\Windows\MEMORY.DMP -Force -ErrorAction SilentlyContinue
 Remove-Item C:\Windows\Minidump\* -Force -ErrorAction SilentlyContinue
 Remove-Item C:\Windows\LiveKernelReports\* -Recurse -Force -ErrorAction SilentlyContinue
@@ -339,6 +444,20 @@ or updates, and it does not fix the underlying cause.
   returns `Connected`). Do not delete the cache to
   free space; that loses buffered data, and the folder simply refills while
   connectivity is broken.
+
+  Use this quick node-side check before handing the issue to the network or
+  connectivity owner:
+
+  ```powershell
+  Test-NetConnection management.azure.com -Port 443 |
+      Select-Object ComputerName, RemotePort, TcpTestSucceeded
+  (azcmagent show -j | ConvertFrom-Json) |
+      Select-Object status, lastStatusChange
+  ```
+
+  `TcpTestSucceeded` should be `True` and the Arc status should be `Connected`.
+  This is a first signal, not a replacement for checking every endpoint in the
+  firewall requirements.
 - **`C:\Observability`, `C:\NugetStore`, `C:\ImageComposition`, `C:\CloudContent`,
   `C:\Agents`.** These hold platform logs, solution packages, and update content.
   They are managed and rotated automatically. Do not delete them. If one of them is
@@ -370,16 +489,28 @@ This is the quickest way to confirm your cleanup worked on the machine you just
 fixed. (`-Include Test-SystemDriveFreeSpace` runs only this check; drop the
 `-Include` to run the full hardware validation.)
 
+The targeted include name is the validator name used by this guide. Result names
+in the event log and portal can differ by build, as described above. If a build
+does not accept the targeted include, run the full hardware validation and filter
+for either `SystemDriveFreeSpace` or `Test_SystemDrive_Free_Space`; a missing
+targeted result is not evidence that the check passed.
+
 **Authoritative: re-run the pre-update health check.** This is what the portal
 readiness view and the cluster-wide result file reflect, so run it to clear the
 failure everywhere it is reported. It runs the full readiness check, so allow
 several minutes for the results to refresh:
 
 ```powershell
-Invoke-SolutionUpdatePrecheck
+# Trigger a fresh system health check. The switch is required to re-run the checks.
+Invoke-SolutionUpdatePrecheck -SystemHealth
+
+# Wait a few minutes, then verify that the result is current and healthy.
+Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate
 ```
 
-After the re-run, **Test System Drive Free Space** should report success. You can
+The `-SystemHealth` switch is what re-runs the health checks; a bare
+`Invoke-SolutionUpdatePrecheck` does not re-evaluate them. After the re-run,
+**Test System Drive Free Space** should report success. You can
 confirm it in any of the places listed under [Where this failure
 appears](#where-this-failure-appears): the portal readiness checks, the
 `AzStackHciEnvironmentChecker` event log (Event ID 17205), or the newest
@@ -396,6 +527,21 @@ appears](#where-this-failure-appears): the portal readiness checks, the
 If it still fails, repeat step 2 to see what refilled the drive. A drive that
 refills quickly is usually caused by a backed-up `GMACache` (a connectivity
 problem) or a runaway log, not a one-time pile of files.
+
+## Glossary
+
+- **Component store (WinSxS):** Windows' serviced component repository. DISM
+  removes superseded components while retaining the versions needed for the
+  current operating system and supported rollback paths.
+- **BITS:** Background Intelligent Transfer Service, used with Windows Update to
+  transfer update content. Stopping it briefly is why the update-cache cleanup
+  must not run during an active solution update.
+- **`GMACache` / `TelemetryCache`:** Buffered monitoring data waiting to upload.
+  It is a symptom of an upload or connectivity problem, not disposable platform
+  clutter.
+- **Management plane:** The Azure Local update, deployment, Arc, and extension
+  workflows that validate and service the cluster. These workflows can be blocked
+  even while existing VM workloads continue to run.
 
 ## When to escalate
 

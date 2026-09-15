@@ -11,7 +11,7 @@
   </tr>
   <tr>
     <th style="text-align:left;">Validator / test</th>
-    <td><code>Test-Endpoint-Connectivity</code> (an SBE health check emitted during pre-update validation)</td>
+    <td><code>Test-SBEEndpointConnectivity</code> (the standalone probe invoked by <code>Test-AzStackHciSBEHealth</code>); the emitted result is <code>Test-Endpoint-Connectivity</code> during <code>PreUpdate</code> or <code>PreUpdateJIT</code>.</td>
   </tr>
   <tr>
     <th style="text-align:left;">Component</th>
@@ -20,6 +20,18 @@
   <tr>
     <th style="text-align:left;">Severity</th>
     <td><strong>Informational</strong>: this check reports whether the SBE manifest endpoint is reachable so you can fix connectivity, but it does <strong>not</strong> block the update. A failure still means the node cannot reach the endpoint and should be resolved.</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Customer impact</th>
+    <td>Read-only evidence collection and endpoint testing do not restart nodes or move running VMs. Until reachability is restored, the node cannot retrieve the partner SBE manifest, so an update that needs that manifest may fail or have reduced partner-content coverage. Starting the update is a separate change with its own workload and maintenance-window assessment.</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Primary owner</th>
+    <td>The network, firewall, or proxy owner handles transport and egress policy. The OEM or SBE publisher owns an incorrect, expired, or search-engine redirecting manifest URL. The Azure Local or LCM owner handles a missing endpoint from solution discovery.</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Typical effort</th>
+    <td>Allow 10-20 minutes for evidence and a layered probe, 15-30 minutes for a network or proxy allow-list change plus revalidation, and partner or product-support time when the endpoint or solution-discovery configuration is wrong.</td>
   </tr>
   <tr>
     <th style="text-align:left;">Requirement</th>
@@ -39,10 +51,11 @@
 
 If you just want the short version: this check failed because the node could not reach the
 **SBE manifest endpoint** (the URL your hardware partner's Solution Builder Extension content is
-published at) over HTTPS. It is almost always a **firewall / proxy** block on outbound HTTPS
-(443) to that endpoint. Find the endpoint URL from the failure detail, make sure the node can
-reach it (allow HTTPS to that host, and to its redirect target if it is an `aka.ms` link), then
-re-run the pre-update health check. Full detail and how to verify the fix are below.
+published at) over HTTPS, or because the endpoint returned a non-usable response. It is usually a
+**firewall / proxy** problem on outbound HTTPS (443), but a missing endpoint or a broken redirect
+needs a different owner. Read `AdditionalData.Detail`, identify the endpoint and failure mode, allow
+only the required destinations on every node, then re-run the pre-update health check. Full detail
+and the verification boundary are below.
 
 ## Overview
 
@@ -64,28 +77,75 @@ information) and then makes an HTTPS request to it. The outcome is one of:
   manifest endpoint `<endpoint>` is reachable."*
 
 This check is **Informational**: a failure does **not** block the deployment or update. It is an
-early warning that the node cannot reach the SBE content source, which would cause a later step to
-fail, so it surfaces the connectivity problem now while it is easy to fix. If the cluster is
-configured for **disconnected (ALDO) operations**, the endpoint check is skipped entirely.
+early warning that the node cannot reach the SBE content source, so it surfaces the problem before a
+later SBE operation needs the manifest. If the cluster is configured for **disconnected (ALDO)
+operations**, the endpoint check is skipped entirely.
+
+## Boundary with general connectivity
+
+This check answers one narrow question: can this node reach the configured SBE manifest URI from
+`Get-SolutionDiscoveryDiagnosticInfo` and receive a usable HTTPS response? The product's real probe
+is `Test-SBEEndpointConnectivity`; the emitted health-check name is `Test-Endpoint-Connectivity`.
+The DNS, TCP, and HTTP commands in this guide are supporting evidence only. Do not replace the real
+HTTPS probe with `Test-NetConnection`, a DNS lookup, or a test against a different Microsoft or
+Azure endpoint.
+
+A successful SBE probe does **not** prove general outbound connectivity, Azure control-plane access,
+Arc registration, proxy access for every destination, or connectivity from every node. Conversely,
+a general connectivity failure does not prove that this SBE endpoint is broken. For broad endpoint
+coverage, use the [general Environment Checker connectivity guide](./Troubleshooting-External-Connectivity-Failures-in-Environment-Checker.md).
+
+## Impact, ownership, and change boundary
+
+| Situation | Owner | Typical effort | Impact and risk |
+|---|---|---|---|
+| Read the result, inspect logs, or run the layered probe | Cluster administrator or CSS engineer | 10-20 minutes | [LOW RISK] Read-only. No node restart, VM move, or update installation. |
+| Allow the endpoint and its required redirect destinations | Network, firewall, or proxy owner | 15-30 minutes plus propagation and revalidation | [MEDIUM RISK] Changes outbound egress policy. Scope the rule to the required hosts and TCP 443; do not disable the node firewall. |
+| Correct an expired, wrong, or search-engine redirecting URL | OEM or SBE publisher, with the update owner | 30 minutes to collect evidence, then partner-dependent | [LOW RISK] Investigation is read-only. The endpoint owner must publish or confirm the correct manifest location. |
+| The endpoint is missing from solution discovery | Azure Local or LCM owner | 15-30 minutes for local evidence, then product support as needed | [LOW RISK] Stop before changing firewall rules. This is not a transport diagnosis. |
+| Proceed while this informational check remains failed | Update owner and change approver | Follows the normal update process | [MEDIUM RISK] The check does not block the update, but SBE manifest retrieval remains unproven. Assess the specific update and partner-content dependency separately. |
 
 ## Before you start: who should do this, and is it safe?
 
 - **Who owns this.** This is an outbound-connectivity problem, so it is usually a **network /
   firewall / proxy** task for whoever manages the node's internet egress, done together with the
-  person running the update. The SBE endpoint URL itself comes from the hardware partner (OEM), so
-  involve them if the URL looks wrong or its redirect target is unknown.
+  person running the update. The SBE endpoint URL itself comes from solution discovery and may be
+  overridden, so involve the OEM or SBE publisher if the URL looks wrong or its redirect target is
+  unknown.
 - **This is safe to investigate read-only.** Reading the check result, the event log, and testing
   the endpoint with a web request changes nothing on the node.
-- **It does not restart nodes or bounce running workloads.** This is a pre-update validation
-  signal, not a runtime operation. Reading the check and adjusting firewall / proxy rules do not
-  restart cluster nodes or move running VMs.
+- **The precheck is not the update.** `Invoke-SolutionUpdatePrecheck -SystemHealth` only reruns
+  validation; it does not install the update, restart nodes, or move running VMs. Starting the
+  update afterward follows the normal change process and may have separate workload impact.
+- **Use an administrator session on the affected node.** Run the evidence commands in Windows
+  PowerShell 5.1 or PowerShell 7 on the node that reported the result. The component logs are
+  written under the profile that ran Environment Checker.
+- **Stop before a firewall change when the endpoint is missing.** A blank
+  `Configuration.ComponentUris["SBE"]`, the message *"Unable to determine SBE manifest endpoint"*,
+  or `DISCONNECTED_OPS_SUPPORT=True` indicates solution-discovery or ALDO handling, not a missing
+  firewall allow rule.
+- **Do not paste placeholders literally.** Replace `<endpoint-from-step-1>` with the URI from
+  `AdditionalData.Detail`. Do not disable the Windows firewall globally or create an unrestricted
+  outbound allow rule.
 - **Do not "fix" this by disabling the check or ignoring it.** Because it is Informational it will
   not block the update, but the underlying connectivity gap will cause a later SBE step to fail.
   Fix the reachability, do not suppress the warning.
 
-## Where this failure appears
+## Where this failure appears, and where it does not
 
-You can see this failure in two places, the Azure portal and the node itself.
+Use the following surfaces to decide where to collect evidence. Only the first three and the
+component files carry a direct signal for this check.
+
+| Admin surface | Expected signal |
+|---|---|
+| PowerShell on an Azure Local node | **Shown**: the Event ID 17205 result, `Get-SolutionDiscoveryDiagnosticInfo`, and the layered probe below. |
+| Azure portal | **Shown**: the Azure Local cluster **Updates** view can show the SBE health result after validation. |
+| Windows event logs | **Shown**: `AzStackHciEnvironmentChecker`, Event ID 17205. |
+| Cluster logs from `Get-ClusterLog` | This check does **not** appear as an authoritative cluster-log event. Use cluster logs only if a separate cluster or node issue needs correlation. |
+| Windows Failover Cluster Manager | This check does **not** appear as a dedicated cluster resource or node signal. |
+| Windows Admin Center on a standalone host | This check does **not** appear as a dedicated WAC signal. Use the node result or portal Updates view. |
+| Windows Admin Center in the Azure portal | This check does **not** appear as a separate WAC diagnostic. Use the Azure portal Updates view. |
+| Component or tool log files on disk | **Shown**: the Environment Checker log and report files under `%USERPROFILE%\.AzStackHci` on the node and profile that ran the check. |
 
 ### In the Azure portal
 
@@ -120,48 +180,153 @@ is `FAILURE`, `AdditionalData.Detail` reads *"Failed to reach SBE manifest endpo
 ..."*, and `Remediation` reads *"Check firewall rules to ensure the SBE manifest endpoint
 `<endpoint>` is reachable."*
 
+### In component and tool logs
+
+The Environment Checker also writes component evidence under the `.AzStackHci` directory in the
+profile that ran the check. Use this read-only command to list the files, show their freshness, and
+search the log and report files for this check:
+
+```powershell
+$componentLogRoot = Join-Path $env:USERPROFILE '.AzStackHci'
+if (-not (Test-Path -LiteralPath $componentLogRoot)) {
+    throw "Component log directory was not found: $componentLogRoot"
+}
+
+$componentFiles = Get-ChildItem -LiteralPath $componentLogRoot -File -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.Name -in @(
+            'AzStackHciEnvironmentChecker.log',
+            'AzStackHciEnvironmentReport.json',
+            'AzStackHciEnvironmentReport.xml'
+        )
+    } |
+    Sort-Object LastWriteTime -Descending
+
+$componentFiles | Select-Object FullName, LastWriteTime, Length
+$componentFiles | ForEach-Object {
+    Select-String -LiteralPath $_.FullName `
+        -Pattern 'Test-Endpoint-Connectivity', 'SBE manifest endpoint',
+                 'Failed to reach', 'Validate SBE manifest reachable' `
+        -Context 2, 2 -ErrorAction SilentlyContinue
+}
+```
+
+Attach the matching files with their `LastWriteTime`. If they predate the Event ID 17205 entry, they
+are stale evidence and must be refreshed by rerunning the validation.
+
 ## Troubleshooting Steps
 
 ### 1. Read the failure detail and get the endpoint URL
 
 Run the Event ID 17205 query above (or open the `HealthCheckResult.*.json`) and read the
-`AdditionalData.Detail`. It names the exact **SBE manifest endpoint** URL the check could not reach,
-and the reason. Classify the reason:
-
-- **A connection error / no response** (for example *"Failed to reach ... Error: ..."*): the node
-  cannot open an HTTPS connection to the endpoint. This is a firewall, proxy, or routing block.
-- **A non-`200` response code** (for example *"Response code: 403"* or *"407"*): the request
-  reached something, but it was refused. A `407` points at a proxy that needs authentication; a
-  `403`/`404` can point at a wrong or expired endpoint.
-- **Redirected to a search engine**: the endpoint is an `aka.ms` link whose redirect did not
-  resolve, so the request landed on a search engine. Treat this as the endpoint being unreachable
-  from this node.
-- **"Unable to determine SBE manifest endpoint"**: the check could not even discover the endpoint
-  URL (a solution-discovery / LCM extension problem, not a firewall one). See **When to escalate**.
-
-### 2. Confirm the endpoint reachability from the node
-
-Test the endpoint the same way the check does, from the affected node, so you can see the exact
-failure and confirm the fix. This also surfaces the **final redirected URL** (the check inspects
-the redirect target, and treats a redirect that lands on a search engine as a failure):
+`AdditionalData.Detail`, not the top-level `Description`. It names the exact **SBE manifest
+endpoint** URL the check could not reach and the reason. Confirm the configured URI and discovery
+status before changing a firewall:
 
 ```powershell
-# Use the endpoint URL from the failure Description in step 1.
-$sbeEndpoint = '<endpoint-from-step-1>'
-try {
-    $r = Invoke-WebRequest -Uri $sbeEndpoint -UseBasicParsing -TimeoutSec 15
-    [pscustomobject]@{ StatusCode = $r.StatusCode; FinalUri = $r.BaseResponse.ResponseUri.AbsoluteUri }
-} catch {
-    "Failed: $($_.Exception.Message)"
+$discovery = Get-SolutionDiscoveryDiagnosticInfo
+[pscustomobject]@{
+    SbeEndpoint = $discovery.Configuration.ComponentUris['SBE']
+    ManifestSource = $discovery.SbeManifestResult.ManifestSource
+    ManifestStatus = $discovery.SbeManifestResult.Status
+    ManifestDescription = $discovery.SbeManifestResult.Description
 }
 ```
 
-This uses only `-UseBasicParsing`, which returns a response object on the default node shell
-(Windows PowerShell 5.1) so `.StatusCode` and `.BaseResponse.ResponseUri.AbsoluteUri` are both
-populated. A reachable endpoint returns `StatusCode = 200`, and `FinalUri` shows the real host the
-`aka.ms` link redirects to (the host you must also allow in step 3). A failure here reproduces
-exactly what the check saw: the same connection error, non-`200` code, **no response at all**, or a
-`FinalUri` that points at a search engine.
+Classify the result using the exact evidence you collected:
+
+| Evidence | Meaning | First owner |
+|---|---|---|
+| Blank `ComponentUris['SBE']` or *"Unable to determine SBE manifest endpoint"* | Solution discovery did not provide a URI. This is not a firewall diagnosis. | Azure Local / LCM owner |
+| Connection exception or no response | DNS, route, TCP 443, TLS inspection, firewall, or proxy timeout prevented a usable response. | Network, firewall, or proxy owner |
+| `407` | The proxy reached the request but requires proxy authentication or policy authorization. | Proxy owner |
+| `401`, `403`, `404`, `410`, or another non-`200` response | A server, proxy, or endpoint policy refused the request, or the URI is wrong, expired, or no longer publishes the manifest. | Proxy owner, endpoint owner, or OEM |
+| Redirect ends at Bing, Google, Yahoo, or another search page, even with HTTP `200` | The redirect URI is not a usable SBE manifest location. An unregistered or broken `aka.ms` link can look successful by status code alone. | Endpoint owner or OEM, then Microsoft link owner if appropriate |
+| Final response is `200` from the expected manifest host and is not a search page | This probe is healthy. Continue with the specific Event ID 17205 verification in step 5. | No connectivity action |
+
+On Windows PowerShell 5.1, a non-`200` response can enter the `catch` path before a response object
+is available, so the check detail may show a blank response code. Treat a blank code with an
+exception as a transport or proxy symptom, not as success.
+
+### 2. Confirm the endpoint reachability from the node
+
+Run the real HTTPS request from the affected node, then collect DNS and TCP evidence. This keeps the
+product probe as the pass/fail authority while separating DNS, TCP, TLS, proxy, and HTTP symptoms.
+Use the actual URI from `AdditionalData.Detail`; do not use the placeholder as written:
+
+```powershell
+# Replace this with the actual URI from AdditionalData.Detail.
+$sbeEndpoint = 'https://endpoint-from-step-1'
+$uri = [System.Uri]$sbeEndpoint
+$dnsAddresses = @(
+    try {
+        [System.Net.Dns]::GetHostAddresses($uri.DnsSafeHost) |
+            ForEach-Object { $_.IPAddressToString }
+    } catch {
+        "DNS error: $($_.Exception.Message)"
+    }
+)
+$tcp = Test-NetConnection -ComputerName $uri.DnsSafeHost -Port 443 `
+    -InformationLevel Detailed -WarningAction SilentlyContinue
+
+try {
+    $request = @{
+        Uri = $sbeEndpoint
+        TimeoutSec = 15
+        MaximumRedirection = 10
+        ErrorAction = 'Stop'
+    }
+    if ($PSVersionTable.PSVersion.Major -le 5) {
+        $request.UseBasicParsing = $true
+    } else {
+        $request.SkipHttpErrorCheck = $true
+    }
+    $response = Invoke-WebRequest @request
+    $finalUri = $null
+    if ($null -ne $response.BaseResponse -and $null -ne $response.BaseResponse.ResponseUri) {
+        $finalUri = $response.BaseResponse.ResponseUri.AbsoluteUri
+    } elseif ($null -ne $response.ResponseUri) {
+        $finalUri = $response.ResponseUri.AbsoluteUri
+    }
+    [pscustomobject]@{
+        DnsAddresses = $dnsAddresses
+        Tcp443 = $tcp.TcpTestSucceeded
+        StatusCode = [int]$response.StatusCode
+        FinalUri = $finalUri
+        Error = $null
+    }
+} catch {
+    $errorResponse = $_.Exception.Response
+    $errorStatus = $null
+    if ($null -ne $errorResponse -and $null -ne $errorResponse.StatusCode) {
+        $errorStatus = [int]$errorResponse.StatusCode
+    }
+    [pscustomobject]@{
+        DnsAddresses = $dnsAddresses
+        Tcp443 = $tcp.TcpTestSucceeded
+        StatusCode = $errorStatus
+        FinalUri = $null
+        Error = $_.Exception.Message
+    }
+}
+```
+
+The real probe uses an HTTPS request with a 15-second timeout and treats an exception, no response,
+non-`200` response, or search-engine redirect as failure. `BaseResponse.ResponseUri` is a useful
+Windows PowerShell 5.1 field, but it is not consistently populated in PowerShell 7. If PowerShell 7
+does not return `FinalUri`, use the following optional header trace to identify each redirect target:
+
+```powershell
+if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+    curl.exe -sSIL --max-redirs 10 --connect-timeout 15 --max-time 20 $sbeEndpoint
+} else {
+    Write-Warning 'curl.exe is not available; collect the redirect Location headers with an approved proxy or browser trace.'
+}
+```
+
+An HTTP `200` is not sufficient when `FinalUri` lands on a search engine. The product's
+`Test-SBEEndpointConnectivity` result remains the authoritative check result; these commands are
+the evidence ladder that explains why it passed or failed.
 
 ### 3. Fix the reachability (firewall / proxy)
 
@@ -169,10 +334,10 @@ Do not edit the check. Make the endpoint reachable from the node. In plain terms
 the node to make an outbound HTTPS request (TCP port **443**) to the SBE endpoint host:
 
 - **Allow outbound HTTPS (443) to the endpoint host.** Add the SBE manifest endpoint host to your
-  firewall / proxy allow list on port 443. If the endpoint is an `aka.ms` link, it **redirects**,
-  so you must allow HTTPS to **both** `aka.ms` **and** the redirect target host. Enumerate the
-  redirect target with the `FinalUri` from step 2 (or `nslookup` / a browser: browse to the endpoint
-  and note the host in the address bar it lands on), then allow that host on 443 too.
+  firewall / proxy allow list on port 443. If the endpoint is an `aka.ms` link, allow HTTPS to
+  **all three redirect layers**: `aka.ms`, `redirectiontool.trafficmanager.net`, and the final OEM
+  manifest host identified by the `FinalUri`, `Location` headers, or an approved browser trace. For
+  a non-`aka.ms` endpoint, allow the configured host and any documented redirect target only.
 - **If a proxy is in the path**, make sure the node's proxy configuration lets it reach the
   endpoint. A **`407` response means the proxy is refusing the request because it wants
   authentication** (the node is not sending proxy credentials). Configure the node's proxy settings
@@ -207,26 +372,44 @@ The `-SystemHealth` switch is what actually re-runs the health checks (a bare
 
 ### 5. Verify the fix
 
-Re-read the Event ID 17205 result (step 1). A fixed check reports `Test-Endpoint-Connectivity` with
-`AdditionalData.Status = SUCCESS` and an `AdditionalData.Detail` of *"Validate SBE manifest reachable:
-`<endpoint>`"*. The step 2 `Invoke-WebRequest` returns `StatusCode = 200`. If you re-ran with
-`-SystemHealth`, confirm the overall result with `Get-SolutionUpdateEnvironment | Format-List
-HealthState, HealthCheckDate` and check that `HealthState` is `Success` (not `Failure`). In the
-portal, the SBE health check clears on
-the next validation pass.
+Re-read the Event ID 17205 result after the new validation run. The specific check is fixed only
+when the result matched by `Name -like '*Test-Endpoint-Connectivity*'` has
+`AdditionalData.Status = SUCCESS` and a detail such as *"Validate SBE manifest reachable:
+`<endpoint>`"*. Confirm the component log or report has a newer `LastWriteTime` and the same
+success result. The step 2 probe should also show `StatusCode = 200`, a usable final manifest host,
+and no search-engine redirect.
+
+`Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate` is an **aggregate**
+readiness result. `HealthState = Success` alone does not prove this specific endpoint check passed,
+and `HealthState = Failure` does not identify which check failed. Use the Event ID 17205
+`AdditionalData` result or fresh component evidence for this check, then use the aggregate state as
+supporting context. In the portal, the SBE health check clears on the next validation pass.
+
+Because the check runs per node, repeat the specific result query on every cluster node. A single
+healthy node does not clear a failure on another node.
 
 ## When to escalate
 
 - The check reports **"Unable to determine SBE manifest endpoint to test connectivity against"**.
   That is not a firewall problem: the node could not even discover the endpoint URL from
   solution discovery. Confirm the **LCM extension** is installed and that
-  `Get-SolutionDiscoveryDiagnosticInfo` returns an SBE endpoint, and escalate with that command's
-  output if it does not.
-- The endpoint is reachable from other machines but not from the node even after the firewall /
-  proxy is opened. Escalate to the network team with the endpoint URL, the step 2 output, and the
-  proxy configuration.
-- The endpoint URL itself is wrong or its `aka.ms` redirect does not resolve to a valid partner
-  location. Escalate to the hardware partner (OEM) to confirm the correct SBE manifest endpoint.
+  `Get-SolutionDiscoveryDiagnosticInfo` returns an SBE endpoint. Stop changing firewall rules and
+  escalate to the Azure Local or LCM owner with the discovery output and the fresh Event ID 17205
+  record.
+- The endpoint has a DNS result and TCP 443 succeeds, but HTTPS returns `407`, a TLS error, or a
+  policy response after the allow-list is confirmed. Escalate to the network or proxy team with
+  the endpoint URI, DNS addresses, TCP result, HTTP status or exception, redirect trace, proxy
+  configuration, and the UTC timestamp.
+- The endpoint URL itself is wrong, expired, returns `404`/`410`, or its `aka.ms` redirect ends at
+  a search engine or an invalid partner location. Escalate to the OEM or SBE publisher with the
+  `ComponentUris['SBE']` value, `AdditionalData.Detail`, and the redirect trace. Do not reset an
+  intentional endpoint without its owner.
+- The event result changes to SUCCESS but component files are missing or stale, or the event result
+  does not refresh after `Invoke-SolutionUpdatePrecheck -SystemHealth`. Escalate to Environment
+  Validator / LCM support with the Event ID 17205 record, file paths and timestamps, and the
+  precheck output.
+- This SBE check passes while a broader connectivity check fails. Do not route that discrepancy to
+  the OEM by default; use the general connectivity guide to identify the other endpoint or service.
 - The sibling SBE health checks also fail (see **Related**), which can indicate a broader SBE
   configuration problem rather than a connectivity one.
 
@@ -239,6 +422,8 @@ the next validation pass.
 - **Firewall blocks SBE validation** (internal guide covering the SBE manifest endpoint, its
   `redirectiontool.trafficmanager.net` redirect target, and the firewall allow-list):
   [Firewall-blocks-SBE-validation.md](../SolutionExtension/Firewall-blocks-SBE-validation.md)
+- **General Environment Checker connectivity** (broader DNS, proxy, and endpoint diagnostics):
+  [Troubleshooting-External-Connectivity-Failures-in-Environment-Checker.md](./Troubleshooting-External-Connectivity-Failures-in-Environment-Checker.md)
 - **Rerun a deployment / update after fixing prerequisites** (Azure Local deployment
   troubleshooting): https://learn.microsoft.com/azure/azure-local/manage/troubleshoot-deployment#restart-the-deployment-via-azure-portal
 - **Solution Builder Extension** overview and partner content:
