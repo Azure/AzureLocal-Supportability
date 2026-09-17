@@ -1,294 +1,405 @@
-# AzStackHci_Hardware_Test_PhysicalDisk
+---
+ArticleType: "TSG"
+Article_ID: "20260917143653"
+Title: "AzStackHci_Hardware_PhysicalDisk"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  - Source: "ADO PR"
+    ID: 16230858
+  - Source: "ADO PR"
+    ID: 16676534
+Tags: ["Validation", "Physical Disk", "Disks"]
+---
+[[_TOC_]]
+
+# Revision History
+
+| Date | Description |
+| --- | --- |
+| 2026-09-17 | Updated current result names and branches, added safe diagnostics and remediation gates, live-validated the disposable minimum-count loop, and adopted mandatory PickleFactory metadata and layout. |
+
+# AzStackHci_Hardware_PhysicalDisk
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr>
     <th style="text-align:left; width: 180px;">Name</th>
-    <td><strong>AzStackHci_Hardware_Test_PhysicalDisk, 
-AzStackHci_Hardware_Test_PhysicalDisk_Instance_Consistency_Count_ByGroup, 
-AzStackHci_Hardware_Test_PhysicalDisk_Instance_Consistency_Count, 
-AzStackHci_Hardware_Test_PhysicalDisk_Minimum_Count
-</strong></td>
+    <td><strong>AzStackHci_Hardware_PhysicalDisk</strong></td>
   </tr>
   <tr>
-    <th style="text-align:left; width: 180px;">Severity</th>
-    <td><strong>Critical</strong>: This validator will block operations until remediated.</td>
+    <th style="text-align:left;">Validator / test</th>
+    <td><strong>Test-PhysicalDisk</strong>, run by <code>Invoke-AzStackHciHardwareValidation</code></td>
   </tr>
   <tr>
-    <th style="text-align:left;">Applicable Scenarios</th>
-    <td><strong>Deployment, AddNode, RepairNode</strong></td>
+    <th style="text-align:left;">Component</th>
+    <td>Candidate-host data disks and storage controllers</td>
   </tr>
   <tr>
-    <th style="text-align:left;">Virtualization Scenarios</th>
-    <td><strong>Not applicable</strong></td>
+    <th style="text-align:left;">Severity</th>
+    <td><strong>Critical</strong>: the pending lifecycle operation remains blocked until the candidate host meets the disk requirements.</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Applicable scenarios</th>
+    <td>Deployment, Add Node, and Repair Node validation of a candidate host. SAN-backed storage excludes this local physical-disk validator.</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Primary owner</th>
+    <td>Azure Local deployment administrator, with the OEM hardware or storage owner when a controller, firmware, cabling, or drive replacement is required.</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Risk summary</th>
+    <td>Diagnosis is read-only. Hardware remediation can require a maintenance window and may be destructive if the wrong disk is selected.</td>
   </tr>
 </table>
 
-## Overview
+> [!IMPORTANT]
+> Run the diagnostic steps first. Do not use `Clear-Disk`, `Reset-PhysicalDisk`, `Remove-PhysicalDisk`, `Set-PhysicalDisk -Usage Retired`, or controller reconfiguration as a generic response to this validator. Those actions can destroy data or reduce storage resiliency.
 
-This environment validator failure occurs when the Physical Disks in the cluster do not meet requirements. If prerequisites are not met, this validator will block the pending lifecycle event.
+## Summary
 
-> **Note:** Physical Disks in this case refers to the data disks made available for Storage Spaces.
+This check validates the disks that a candidate host can contribute to Azure Local. It verifies that the disk inventory can be read, identifies supported data disks, checks required properties and minimum counts, and checks per-type counts. A single-node candidate also receives an all-flash check.
 
-## Requirements
+Most cases take 15 to 30 minutes to classify with the read-only commands below. Replacing a drive, changing a controller from RAID to HBA or pass-through mode, updating firmware, or correcting cabling requires the OEM procedure and a maintenance window. Do not guess an OEM command or change a deployed cluster member from this article alone.
 
-Physical Disks on every node in the cluster must meet the following criteria:
+## Current and legacy result names
 
-- Minimum number of data disks for Azure Local <a href="https://learn.microsoft.com/en-us/windows-server/storage/storage-spaces/storage-spaces-direct-hardware-requirements#physical-deployments" target="_blank">Deployments</a>, <a href="https://learn.microsoft.com/en-us/azure/azure-local/concepts/system-requirements-small-23h2#device-requirements" target="_blank">(Low Capacity)</a> 
-- Disk Consistency - All nodes should have the same number of instances per disk type.
-- Disk Health - All disks should have a healthy status, operational status and no indicator light on.
+Current Environment Checker builds aggregate the actionable details into:
 
-## Troubleshooting Steps
+- `AzStackHci_Hardware_PhysicalDisk`
 
-### Review Environment Validator Output
+Single-node validation can also emit:
 
-Review the Environment Validator output in the portal or in the result JSON under `C:\CloudContent\MasLogs\AzStackHciEnvironmentCheckerReport.json`. Depending on which prerequisite is not met, a different result may be shown.  The following are 3 different examples, one or more of these results may be shown depending on the environment i.e. No supported disks, a missing disk, inconsistent disks etc.
+- `AzStackHci_Hardware_Test_PhysicalDisk_AllFlash`
 
-#### Example 1 - AzStackHci_Hardware_Test_PhysicalDisk
+The following names can appear in older reports and support cases:
 
-This rule is checking that disks suitable for Storage Spaces are present.  If none are found this result is shown.  The result attempts to list all disks in the `AdditionalData.Detail` (this may be omitted in large environments).
+- `AzStackHci_Hardware_Test_PhysicalDisk`
+- `AzStackHci_Hardware_Test_PhysicalDisk_Minimum_Count`
+- `AzStackHci_Hardware_Test_PhysicalDisk_Instance_Consistency_Count`
+- `AzStackHci_Hardware_Test_PhysicalDisk_Instance_Consistency_Count_ByGroup`
 
-```json
-{
-    "Name":  "AzStackHci_Hardware_Test_PhysicalDisk",
-    "DisplayName":  "Test PhysicalDisk API NODE3",
-    "Title":  "Test PhysicalDisk API",
-    "Status":  1,
-    "Severity":  2,
-    "Description":  "Checking PhysicalDisk has CIM data",
-    "Remediation":  "See AdditionalData / Detail for more information. Or run Get-PhysicalDiskSupport -PsSession <node>",
-    "TargetResourceID":  "Machine: NODE3, Class: PhysicalDisk",
-    "TargetResourceName":  "Machine: NODE3, Class: PhysicalDisk",
-    "TargetResourceType":  "PhysicalDisk",
-    "Timestamp":  "\/Date(1758977970006)\/",
-    "AdditionalData":  {
-                           "Detail":  "## Supported Data Disk Diagnostic Helper ##
+Current builds no longer emit the FriendlyName-based group-consistency and instance-count-by-group results. Those checks were removed because identical disk models and identical cross-node group layouts are not required for Add Node or Repair Node. Do not replace healthy disks merely to make `FriendlyName` values identical.
 
-                                        Node: NODE3
-                                        Scenario: Deployment\\RackAware\\Medium\\Hardware\\3b48f3eb
-                                        IsSupportedHelp: Data Disks must be the right bustype (SATA, SAS, NVMe or SCM), mediatype (HDD, SSD, SCM), not a boot device and CanPool should be true.
-                                        Data disks must be consistent across all nodes. Use the following command to check data disks meet these requirements:
-                                        Get-PhysicalDisk | Format-Table PhysicalLocation, UniqueId, SerialNumber, CanPool, CannotPoolReason, BusType, MediaType, Size
-                                        HCISupportedData:
-                                        
-                                        ServerName PhysicalLocation                                           UniqueId                             HCISupported
-                                        ---------- ----------------                                           --------                             ------------
-                                        NODE3   Integrated : Bus 130 : Device 0 : Function 0 : Adapter 8   eui.61124572600061BE1238970000000000        False
-                                        NODE3   PCI Slot 9 : Bus 194 : Device 0 : Function 0 : Adapter 5   eui.00000000000000008CE29FE205E4F901        False
-                                        NODE3   PCI Slot 10 : Bus 133 : Device 0 : Function 0 : Adapter 9  eui.00000000000000008CE29FE206537601        False
-                                        NODE3   PCI Slot 11 : Bus 196 : Device 0 : Function 0 : Adapter 7  eui.00000000000000008CE29FE205E50301        False
-                                        NODE3   PCI Slot 8 : Bus 193 : Device 0 : Function 0 : Adapter 4   eui.00000000000000008CE29FE205E4FC01        False
-                                        NODE3   PCI Slot 11 : Bus 134 : Device 0 : Function 0 : Adapter 10 eui.00000000000000008CE29FE205E4FF01        False
-                                        NODE3   PCI Slot 10 : Bus 195 : Device 0 : Function 0 : Adapter 6  eui.00000000000000008CE29FE20653B701        False",
-                           "Status":  "FAILURE",
-                           "TimeStamp":  "09/27/2025 12:59:30",
-                           "Resource":  "Null",
-                           "Source":  "NODE3"
-                       },
-    "HealthCheckSource":  "Deployment\\RackAware\\Medium\\Hardware\\3b48f3eb"
+## What the current check evaluates
+
+The aggregate result can fail for one or more of these branches:
+
+1. **Inventory unavailable**: the PhysicalDisk CIM data cannot be read or no supported data-disk candidate is found.
+2. **Unsupported disk properties**: a candidate disk has an unsupported bus or media type, is a boot or system disk, is unhealthy, or is not pool-eligible for the current lifecycle scenario.
+3. **Minimum count**: the candidate host has fewer supported data disks than the validator requires for the detected hardware class and scenario.
+4. **Per-type count**: the supported SSD, NVMe, SCM, or HDD population does not meet the check's count rules.
+5. **Single-node all-flash**: a single-node deployment contains rotating media when the single-node rule requires flash.
+
+The failure's `AdditionalData.Detail` is authoritative for the branch and expected count on that build. Do not copy a threshold from another cluster or an older report.
+
+Some builds render the minimum-count detail as `Total number of PhysicalDisk ''. Expected at least '<n>'`, with the disk-type label blank. Treat this as the total supported data-disk count branch. Use the expected number in the same detail and confirm the actual supported disks with `Get-PhysicalDiskSupport`; do not invent a media type from the empty label.
+
+## Terms
+
+| Term | Meaning |
+| --- | --- |
+| Candidate host | The machine being evaluated for deployment, Add Node, or Repair Node. |
+| Data disk | A non-boot disk intended for Storage Spaces Direct. |
+| `CanPool` | Whether Storage Spaces currently considers the disk eligible to join a pool. |
+| `CannotPoolReason` | The product-reported reason that `CanPool` is false. |
+| Bus type | The storage transport reported by Windows, such as SAS, SATA, NVMe, or SCM. |
+| Media type | HDD, SSD, or storage-class memory. |
+| CIM | The Windows management interface used by the validator to enumerate disk state. |
+| `PsSession` | A PowerShell remoting session used to query one or more candidate hosts. |
+
+## Before you start
+
+- Run the commands from an elevated Windows PowerShell session.
+- Confirm that you are targeting the candidate host named in the validator result.
+- Record the current lifecycle operation: Deployment, Add Node, or Repair Node.
+- Do not apply candidate-host disk instructions to a healthy deployed member without a separate storage repair plan.
+- If the host is already a deployed cluster member, stop before any physical or controller change. Confirm all nodes are Up, all virtual disks and CSVs are healthy, no storage job is running, and workloads have an approved evacuation plan.
+- For OEM controller mode, firmware, backplane, cabling, or drive replacement, use the qualified OEM procedure for the exact model.
+
+## Where this failure appears
+
+| Administrator surface | What to expect |
+| --- | --- |
+| PowerShell on the candidate host | `Invoke-AzStackHciHardwareValidation -Include Test-PhysicalDisk -PassThru`, `Get-PhysicalDisk`, and `Get-PhysicalDiskSupport` show the actionable disk state. |
+| Azure portal | A deployment or lifecycle validation failure can show this check as blocking. Portal data can lag until the next full validation run. |
+| Windows event logs | The `AzStackHciEnvironmentChecker` log can contain Event ID 17205 with the serialized result. Read `AdditionalData.Status` and `AdditionalData.Detail`. |
+| Cluster logs (`Get-ClusterLog`) | This candidate-host validator does not normally appear as a failover-cluster event. Use cluster logs only when a separate cluster or storage fault is also present. |
+| Failover Cluster Manager | The validator result does not normally appear as a role or resource. Use it only to confirm deployed-member and CSV state before a maintenance action. |
+| Windows Admin Center, standalone | The exact validator result is not consistently exposed. OEM extensions can show hardware inventory, but they do not replace the validator output. |
+| Windows Admin Center in Azure | The exact validator result is not consistently exposed. Use the Azure Local lifecycle result and on-node evidence. |
+| Component or tool log files | The account that ran Environment Checker can have `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log` and `AzStackHciEnvironmentReport.json` or `.xml`. Preserve timestamps and the matching result. |
+
+### Read the newest Event ID 17205 result
+
+```powershell
+$currentNames = @(
+    'AzStackHci_Hardware_PhysicalDisk',
+    'AzStackHci_Hardware_Test_PhysicalDisk',
+    'AzStackHci_Hardware_Test_PhysicalDisk_Minimum_Count',
+    'AzStackHci_Hardware_Test_PhysicalDisk_Instance_Consistency_Count',
+    'AzStackHci_Hardware_Test_PhysicalDisk_Instance_Consistency_Count_ByGroup'
+)
+
+Get-WinEvent -LogName AzStackHciEnvironmentChecker `
+    -FilterXPath '*[System[(EventID=17205)]]' -MaxEvents 2000 |
+    ForEach-Object {
+        try { $_.Message | ConvertFrom-Json } catch { $null }
+    } |
+    Where-Object {
+        $_ -and (
+            $currentNames -contains $_.Name -or
+            $_.Name -like '*PhysicalDisk*'
+        )
+    } |
+    Select-Object -First 1 `
+        Name,
+        @{n='Status';e={$_.AdditionalData.Status}},
+        @{n='Detail';e={$_.AdditionalData.Detail}},
+        Remediation,
+        Timestamp
+```
+
+If no fresh record exists, run the direct validation in the next section. A missing event is a data gap, not a passing result.
+
+## Diagnosis
+
+### 1. Run the targeted validator on the candidate host
+
+```powershell
+Import-Module AzStackHci.EnvironmentChecker -Force
+
+$result = Invoke-AzStackHciHardwareValidation `
+    -Include Test-PhysicalDisk `
+    -PassThru
+
+$result |
+    Where-Object { $_.Name -like '*PhysicalDisk*' } |
+    Select-Object Name, Status, Severity, Description, Remediation,
+        @{n='DetailStatus';e={$_.AdditionalData.Status}},
+        @{n='Detail';e={$_.AdditionalData.Detail}} |
+    Format-List
+```
+
+Expected failure shape on current builds:
+
+- `Name` is `AzStackHci_Hardware_PhysicalDisk`.
+- `Status` or `AdditionalData.Status` is `FAILURE`.
+- `AdditionalData.Detail` names the failed branch, node, observed count or property, and expected state.
+
+If the command returns no PhysicalDisk result, confirm the module version, inspect `ExcludeTests.txt`, and verify that the lifecycle scenario runs the Hardware validator. SAN-backed configurations intentionally exclude the local PhysicalDisk check.
+
+### 2. Record the module version and disk identity
+
+```powershell
+Get-Module -ListAvailable AzStackHci.EnvironmentChecker |
+    Sort-Object Version -Descending |
+    Select-Object -First 1 Name, Version, ModuleBase
+
+Get-Disk |
+    Select-Object Number, FriendlyName, SerialNumber, UniqueId, IsBoot, IsSystem,
+        BusType, PartitionStyle, OperationalStatus, HealthStatus |
+    Sort-Object Number |
+    Format-Table -AutoSize
+
+Get-PhysicalDisk |
+    Select-Object DeviceId, FriendlyName, SerialNumber, UniqueId, PhysicalLocation,
+        HealthStatus, OperationalStatus, Usage, CanPool, CannotPoolReason,
+        BusType, MediaType, Size |
+    Sort-Object DeviceId |
+    Format-Table -AutoSize
+```
+
+Use `UniqueId`, `SerialNumber`, `PhysicalLocation`, and the OEM slot label together. Do not select a disk for remediation by `DeviceId` alone because numbering can change after a reboot or hardware rescan.
+
+### 3. Run the support classifier
+
+For one candidate host:
+
+```powershell
+$session = New-PSSession -ComputerName '<candidate-host>' -Credential (Get-Credential)
+
+try {
+    Import-Module 'C:\Program Files\WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker\AzStackHciHardware\AzStackHci.Hardware.Diagnostic.Helpers.psm1' -Force
+
+    Get-PhysicalDiskSupport -PsSession $session |
+        Select-Object -ExpandProperty DiskData |
+        Select-Object HCISupported, ServerName, PhysicalLocation, UniqueId,
+            SerialNumber, HCISupportedData |
+        Format-List
+}
+finally {
+    Remove-PSSession $session -ErrorAction SilentlyContinue
 }
 ```
 
-#### Example 2 - AzStackHci_Hardware_Test_PhysicalDisk_Minimum_Count
+For several candidate hosts, create one session per host and pass the array to `Get-PhysicalDiskSupport`. Do not leave stale sessions open after evidence collection.
 
-This rule is checking that the minimum number of disks are present.  This result is shown during a failure.
+### 4. Classify the result
 
-```json
-{
-    "Name":  "AzStackHci_Hardware_Test_PhysicalDisk_Minimum_Count",
-    "DisplayName":  "Test PhysicalDisk Minimum Count NODE1",
-    "Tags":  {
+| Evidence | Meaning | Next action |
+| --- | --- | --- |
+| `IsBootDevice=True` | The disk is the boot or system device and is not eligible as a data disk. | No disk repair. Exclude it from the supported data-disk count. |
+| Unsupported `BusType` | The controller presents the disk through an unsupported transport, commonly RAID virtual-disk mode. | Engage the OEM owner to verify the qualified HBA or pass-through configuration. |
+| Unsupported `MediaType` | Windows cannot classify the media as HDD, SSD, or SCM, or the device is not qualified. | Verify firmware, driver, controller presentation, and the qualified hardware catalog with the OEM. |
+| `CanPool=False`, `CannotPoolReason=In a Pool` | The disk already belongs to a Storage Spaces pool. On a deployed member this can be expected. | Do not clear or reset it. Confirm that the validator is running against the intended candidate-host scenario. |
+| `CanPool=False`, `CannotPoolReason=Insufficient Capacity` | The device is too small for pooling or represents a boot/system device, reserved media, or another capacity-limited device. | Correlate `Size`, `IsBoot`, and `IsSystem`; replace or reconfigure only through the qualified hardware plan. |
+| `HealthStatus` is not Healthy or `OperationalStatus` is not OK | Windows reports a disk or path health problem. | Stop the lifecycle operation and follow the storage or OEM failure procedure. |
+| Detail reports fewer disks than expected | The number of supported candidate data disks is below the build's requirement. | Verify missing slots, power, cabling, controller visibility, firmware, and whether a disk was intentionally removed. |
+| Detail reports a per-type count failure | The supported HDD, SSD, NVMe, or SCM population does not meet the current check. | Use the exact expected and observed counts in `AdditionalData.Detail`; do not infer a threshold from another cluster. |
+| Only model or `FriendlyName` values differ across otherwise supported disks | Current builds do not enforce the removed FriendlyName group-consistency checks. | Do not replace disks solely to make model strings identical. Verify current module version and current result name. |
 
-             },
-    "Title":  "Test PhysicalDisk Minimum Count",
-    "Status":  1,
-    "Severity":  2,
-    "Description":  "Checking PhysicalDisk minimum count",
-    "Remediation":  "https://aka.ms/hci-envch",
-    "TargetResourceID":  "Machine: NODE1, Class: PhysicalDisk",
-    "TargetResourceName":  "Machine: NODE1, Class: PhysicalDisk",
-    "TargetResourceType":  "PhysicalDisk",
-    "Timestamp":  "\/Date(1758902669891)\/",
-    "AdditionalData":  {
-                           "Detail":  "Total number of PhysicalDisk '1'. Expected at least '3'",
-                           "Status":  "FAILURE",
-                           "TimeStamp":  "09/26/2025 16:04:29",
-                           "Resource":  "1",
-                           "Source":  "PhysicalDisk Minimum Count"
-                       },
-    "HealthCheckSource":  "Deployment\\Standard\\Medium\\Hardware\\7a144597"
-}
+## Remediation
+
+### Path A: the wrong host or lifecycle context was validated
+
+1. Confirm the target computer in `AdditionalData.Detail`.
+2. Confirm whether this is Deployment, Add Node, or Repair Node.
+3. If a deployed member was evaluated without the expected lifecycle context and its data disks are correctly `In a Pool`, do not reset the disks.
+4. Re-run the intended lifecycle validation against the correct candidate host.
+
+### Path B: a disk is missing from Windows
+
+1. Compare the validator detail with the OEM inventory and physical slot map.
+2. Confirm power, seating, cabling, backplane state, and controller visibility.
+3. Use the OEM's qualified procedure to reseat or replace the exact disk.
+4. Rescan storage or reboot only when the OEM procedure requires it.
+5. Re-run the read-only inventory before restarting the lifecycle operation.
+
+### Path C: the controller presents disks in RAID mode
+
+Azure Local requires qualified direct disk presentation. RAID virtual disks, shared SAN paths, multipath storage, and shared SAS enclosures are not interchangeable with supported local Storage Spaces Direct media.
+
+1. Stop before changing controller mode on a deployed member.
+2. Confirm the exact server, controller, firmware, and qualified configuration with the OEM.
+3. For a new candidate host with no customer data, follow the OEM procedure to configure HBA or pass-through mode.
+4. Confirm that Windows now reports each physical data disk directly with a supported bus type.
+5. Run the validator again.
+
+### Path D: `CanPool=False`
+
+Do not use `Clear-Disk` or `Reset-PhysicalDisk` until the disk's identity, ownership, and data disposition are proven.
+
+- `In a Pool`: do not reset the disk. Verify lifecycle context and existing pool membership.
+- `Insufficient Capacity`: verify disk size and boot/system status. Replace undersized media through the hardware plan.
+- `Offline` or `Read-only`: first prove the disk is the intended non-boot, non-pooled candidate. Then use the Storage Spaces drive-state guidance.
+- `Verification in progress` or `Verification failed`: allow the normal verification interval and collect storage diagnostics if it persists.
+- Hardware or firmware noncompliance: use the OEM and qualified configuration guidance.
+
+### Path E: the supported disk count is too low
+
+1. Use the exact observed and expected count from `AdditionalData.Detail`.
+2. Confirm which disks were excluded and why with `Get-PhysicalDiskSupport`.
+3. Restore visibility or replace unsupported or missing media through the OEM procedure.
+4. For Add Node or Repair Node, do not require identical `FriendlyName` strings when the current check no longer enforces that removed condition.
+5. Re-run the targeted validator.
+
+### Path F: single-node all-flash requirement
+
+If the separate single-node all-flash result fails, replace rotating media with qualified flash media according to the supported single-node configuration. Do not suppress the check or mix unsupported media tiers.
+
+## Workload and maintenance impact
+
+- The diagnostic commands in this article are read-only and do not require a drain.
+- A new, not-yet-deployed candidate host has no cluster workload to evacuate.
+- A deployed member requires a separate maintenance plan before a controller change, disk removal, firmware update, or reboot.
+- Before work on a deployed member, verify cluster quorum, node state, virtual-disk health, CSV state, and storage jobs. Live migrate or stop workloads according to the approved maintenance procedure.
+- Do not continue when redundancy is degraded, a storage job is active, quorum is at risk, or the intended disk cannot be identified unambiguously.
+
+## Verify the fix
+
+### 1. Re-run the targeted validator
+
+```powershell
+Import-Module AzStackHci.EnvironmentChecker -Force
+
+$result = Invoke-AzStackHciHardwareValidation `
+    -Include Test-PhysicalDisk `
+    -PassThru
+
+$result |
+    Where-Object { $_.Name -like '*PhysicalDisk*' } |
+    Select-Object Name, Status, Severity,
+        @{n='DetailStatus';e={$_.AdditionalData.Status}},
+        @{n='Detail';e={$_.AdditionalData.Detail}} |
+    Format-List
 ```
 
-#### Example 3 - AzStackHci_Hardware_Test_PhysicalDisk_Instance_Consistency_Count
+The fix is verified only when:
 
-This rule is checking that all nodes have the same number of disks, in total or by type i.e. SDD, NVMe, HDD.  This result is shown during a failure.
+- a PhysicalDisk result is present and fresh;
+- the current aggregate is `AzStackHci_Hardware_PhysicalDisk`, or a documented legacy name is present on an older module;
+- `Status` and `AdditionalData.Status` report success for the blocking branch;
+- the supported-disk count and per-type details meet the expected values;
+- no new unsupported, unhealthy, or ambiguous disk appears.
 
-```json
-{
-    "Name":  "AzStackHci_Hardware_Test_PhysicalDisk_Instance_Consistency_Count",
-    "DisplayName":  "Test PhysicalDisk Instance Count Consistency AllServers",
-    "Tags":  {
+### 2. Re-run the lifecycle validation
 
-             },
-    "Title":  "Test PhysicalDisk Instance Count Consistency",
-    "Status":  1,
-    "Severity":  2,
-    "Description":  "Checking all servers have same PhysicalDisk instance count",
-    "Remediation":  "https://aka.ms/hci-envch",
-    "TargetResourceID":  "Machine: AllServers, Class: PhysicalDisk",
-    "TargetResourceName":  "Machine: AllServers, Class: PhysicalDisk",
-    "TargetResourceType":  "PhysicalDisk",
-    "Timestamp":  "\/Date(1758902748783)\/",
-    "AdditionalData":  {
-                           "Detail":  "[FAILURE] Instance count consistency for PhysicalDisk 
-                                        NODE13 x 23
-                                        NODE14 x 24
-                                        Expected them to be the same.
-                
-                                        [FAILURE] Instance count consistency for PhysicalDisk (NVMe) 
-                                        NODE13 x 23
-                                        NODE14 x 24
-                                        Expected them to be the same.
-                
-                
-                                        ## Supported Data Disk Diagnostic Helper ##
-                
-                                        Node: NODE13
-                                        Scenario: Deployment\\Standard\\Medium\\Hardware\\d6c9ca17
-                                        IsSupportedHelp: Data Disks must be the right bustype (SATA, SAS, NVMe or SCM), mediatype (HDD, SSD, SCM), not a boot device and CanPool should be true.
-                                        Data disks must be consistent across all nodes. Use the following command to check data disks meet these requirements:
-                                        Get-PhysicalDisk | Format-Table PhysicalLocation, UniqueId, SerialNumber, CanPool, CannotPoolReason, BusType, MediaType, Size
-                                        HCISupportedData:
-                                        
-                                        ServerName PhysicalLocation                                                  UniqueId                             HCISup
-                                                                                                                                                        ported
-                                        ---------- ----------------                                                  --------                             ------
-                                        NODE13 PCIe SSD in Slot 23 Bay 2                                         eui.363145304E8015010025384500000005   True
-                                        NODE13 PCIe SSD in Slot 9 Bay 1                                          eui.363145304E9001670025384500000005   True
-                                        NODE13 PCIe SSD in Slot 8 Bay 1                                          eui.363145304E7000880025384500000005   True
-                                        NODE13 PCIe SSD in Slot 18 Bay 2                                         eui.363145304E7000350025384500000005   True
-                                        NODE13 PCIe SSD in Slot 22 Bay 2                                         eui.363145304E8033700025384500000005   True
-                                        NODE13 PCIe SSD in Slot 17 Bay 2                                         eui.363145304E8061580025384500000005   True
-                                        NODE13 PCIe SSD in Slot 16 Bay 2                                         eui.363145304E7000330025384500000005   True
-                                        NODE13 PCIe SSD in Slot 5 Bay 1                                          eui.363145304E8032860025384500000006   True
-                                        NODE13 PCIe SSD in Slot 4 Bay 1                                          eui.363145304E7000850025384500000005   True
-                                        NODE13 PCIe SSD in Slot 7 Bay 1                                          eui.363145304E7000920025384500000005   True
-                                        NODE13 PCIe SSD in Slot 21 Bay 2                                         eui.363145304E8033890025384500000005   True
-                                        NODE13 PCIe SSD in Slot 19 Bay 2                                         eui.363145304E7000980025384500000005   True
-                                        NODE13 PCIe SSD in Slot 1 Bay 1                                          eui.363145304E8015060025384500000005   True
-                                        NODE13 PCIe SSD in Slot 0 Bay 1                                          eui.363145304E8015020025384500000005   True
-                                        NODE13 PCIe SSD in Slot 11 Bay 1                                         eui.363145304E9001630025384500000005   True
-                                        NODE13 PCIe SSD in Slot 6 Bay 1                                          eui.363145304E7000970025384500000005   True
-                                        NODE13 PCIe SSD in Slot 15 Bay 2                                         eui.363145304E8033780025384500000005   True
-                                        NODE13 PCIe SSD in Slot 3 Bay 1                                          eui.363145304E7000360025384500000005   True
-                                        NODE13 PCIe SSD in Slot 10 Bay 1                                         eui.363145304E8033850025384500000005   True
-                                        NODE13 PCIe SSD in Slot 13 Bay 2                                         eui.363145304E7000560025384500000005   True
-                                        NODE13 PCIe SSD in Slot 14 Bay 2                                         eui.363145304E9001280025384500000005   True
-                                        NODE13 PCI Slot 5 : Bus 129 : Device 0 : Function 0 : Adapter 0 : Port 0      ATADELLBOSS VD                   False
-                                        NODE13 PCIe SSD in Slot 20 Bay 2                                         eui.363145304E9001290025384500000005   True
-                                        NODE13 PCIe SSD in Slot 2 Bay 1                                          eui.363145304E8014840025384500000005   True
+Run the same deployment, Add Node, or Repair Node validation that originally failed. A direct targeted pass does not by itself prove that the full lifecycle workflow refreshed its persisted health result.
 
-                                        Node: NODE14
-                                        Scenario: Deployment\\Standard\\Medium\\Hardware\\d6c9ca17
-                                        IsSupportedHelp: Data Disks must be the right bustype (SATA, SAS, NVMe or SCM), mediatype (HDD, SSD, SCM), not a boot device and CanPool should be true.
-                                        Data disks must be consistent across all nodes. Use the following command to check data disks meet these requirements:
-                                        Get-PhysicalDisk | Format-Table PhysicalLocation, UniqueId, SerialNumber, CanPool, CannotPoolReason, BusType, MediaType, Size
-                                        HCISupportedData:
-                                        
-                                        ServerName PhysicalLocation                                                  UniqueId                             HCISup
-                                                                                                                                                        ported
-                                        ---------- ----------------                                                  --------                             ------
-                                        NODE14 PCIe SSD in Slot 6 Bay 1                                          eui.363145304D8134540025384500000005   True
-                                        NODE14 PCIe SSD in Slot 14 Bay 2                                         eui.363145304E7000680025384500000005   True
-                                        NODE14 PCIe SSD in Slot 22 Bay 2                                         eui.363145304D8134410025384500000005   True
-                                        NODE14 PCIe SSD in Slot 20 Bay 2                                         eui.363145304E9001300025384500000005   True
-                                        NODE14 PCIe SSD in Slot 8 Bay 1                                          eui.363145304D8134350025384500000005   True
-                                        NODE14 PCIe SSD in Slot 2 Bay 1                                          eui.363145304D8134560025384500000005   True
-                                        NODE14 PCIe SSD in Slot 3 Bay 1                                          eui.363145304D8134640025384500000005   True
-                                        NODE14 PCIe SSD in Slot 18 Bay 2                                         eui.363145304E9001310025384500000005   True
-                                        NODE14 PCIe SSD in Slot 17 Bay 2                                         eui.363145304D8134450025384500000005   True
-                                        NODE14 PCIe SSD in Slot 15 Bay 2                                         eui.363145304D8134580025384500000005   True
-                                        NODE14 PCIe SSD in Slot 4 Bay 1                                          eui.363145304E9001110025384500000005   True
-                                        NODE14 PCIe SSD in Slot 5 Bay 1                                          eui.363145304E8033800025384500000005   True
-                                        NODE14 PCIe SSD in Slot 12 Bay 2                                         eui.363145304D8134360025384500000005   True
-                                        NODE14 PCIe SSD in Slot 9 Bay 1                                          eui.363145304E8061570025384500000005   True
-                                        NODE14 PCIe SSD in Slot 16 Bay 2                                         eui.363145304D8134420025384500000005   True
-                                        NODE14 PCIe SSD in Slot 0 Bay 1                                          eui.363145304D8134440025384500000005   True
-                                        NODE14 PCIe SSD in Slot 10 Bay 1                                         eui.363145304D8134330025384500000005   True
-                                        NODE14 PCIe SSD in Slot 21 Bay 2                                         eui.363145304E8033790025384500000005   True
-                                        NODE14 PCIe SSD in Slot 23 Bay 2                                         eui.363145304E9001090025384500000005   True
-                                        NODE14 PCI Slot 5 : Bus 129 : Device 0 : Function 0 : Adapter 0 : Port 0      ATADELLBOSS VD                   False
-                                        NODE14 PCIe SSD in Slot 13 Bay 2                                         eui.363145304D8134590025384500000005   True
-                                        NODE14 PCIe SSD in Slot 7 Bay 1                                          eui.363145304D8134530025384500000005   True
-                                        NODE14 PCIe SSD in Slot 1 Bay 1                                          eui.363145304D8134320025384500000005   True
-                                        NODE14 PCIe SSD in Slot 19 Bay 2                                         eui.363145304D8134570025384500000005   True
-                                        NODE14 PCIe SSD in Slot 11 Bay 1                                         eui.363145304D8134470025384500000005   True",
-                           "Status":  "FAILURE",
-                           "TimeStamp":  "09/26/2025 16:05:48",
-                           "Resource":  "PhysicalDisk",
-                           "Source":  "AllServers"
-                       },
-    "HealthCheckSource":  "Deployment\\Standard\\Medium\\Hardware\\f5c7ca18"
-}
+### 3. Confirm deployed-cluster health when applicable
+
+```powershell
+Get-ClusterNode
+Get-StoragePool -IsPrimordial $false |
+    Select-Object FriendlyName, HealthStatus, OperationalStatus, IsReadOnly
+Get-VirtualDisk |
+    Select-Object FriendlyName, HealthStatus, OperationalStatus
+Get-StorageJob
+Get-ClusterSharedVolume |
+    Select-Object Name, State, OwnerNode
 ```
 
+All nodes must be Up, non-primordial pools and virtual disks must be healthy, CSVs must be Online, and no unexpected storage job may remain.
 
+## Escalation
 
-**Root Cause:** 
+Escalate to the OEM hardware owner when:
 
-It is necessary to breakdown the `AdditionalData.Detail` field as it explains the scenario's requirements. 
-```
-Scenario: Deployment\\Standard\\Medium\\Hardware\\f5c7ca18
-```
-This is for deployment of standard cluster pattern on medium hardware.  Addnode with a Small form factor hardware for example.
-```
-IsSupportedHelp: Data Disks must be the right bustype (SATA, SAS, NVMe or SCM), mediatype (HDD, SSD, SCM), not a boot device and CanPool should be true.
-```
-The criteria used to determine if the disks are supported. E.g. The bustype, media type, CanPool and boot device criteria that must be satisfied.  
+- the controller mode, firmware, backplane, cabling, or drive qualification is uncertain;
+- a disk is missing from the OEM inventory or Windows;
+- a physical drive reports a health or operational error;
+- replacement or firmware work is required.
 
-```
-Get-PhysicalDisk | Format-Table PhysicalLocation, UniqueId, SerialNumber, CanPool, CannotPoolReason, BusType, MediaType, Size
-```
-The command to use to confirm these settings locally on the node.  This command is simple to use and useful if the count of disks is inconsistent. 
+Escalate to Azure Local support or the Environment Validator owner when:
 
-There is also a diagnostic helper cmdlet (Get-PhysicalDiskSupport) to help retrieve the current support state of the disks in the cluster, this will also explain why each disk is supported or not.
+- the current module emits a removed legacy group-consistency result;
+- the direct inventory and `Get-PhysicalDiskSupport` output are healthy but the current aggregate still fails after a fresh validation;
+- the validator returns no PhysicalDisk result outside a documented SAN exclusion;
+- the expected count or branch conflicts with the current module's behavior.
 
-The following example passes an array PsSessions (one for each node)
+Attach:
 
-```
-Import-Module "C:\Program Files\WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker\AzStackHciHardware\AzStackHci.Hardware.Diagnostic.Helpers.psm1"
+- Environment Checker module version and path;
+- lifecycle operation and hardware class;
+- fresh `AzStackHci_Hardware_PhysicalDisk` result with `AdditionalData.Detail`;
+- Event ID 17205 record and timestamps;
+- `Get-Disk`, `Get-PhysicalDisk`, and `Get-PhysicalDiskSupport` output;
+- OEM controller, firmware, slot, and drive inventory;
+- cluster health output when the target is already deployed.
 
-$PsSession = New-PSSession -ComputerName $Nodes -Credential $cred;
+## References
 
-Get-PhysicalDiskSupport -PsSession $pssession | select -ExpandProperty DiskData | Ft HCISupported, ServerName, PhysicalLocation, HCISupportedData
+- [Azure Local physical deployment storage requirements](https://learn.microsoft.com/en-us/windows-server/storage/storage-spaces/storage-spaces-direct-hardware-requirements#physical-deployments)
+- [Azure Local machine and storage requirements](https://learn.microsoft.com/en-us/azure/azure-local/concepts/system-requirements-23h2#machine-and-storage-requirements)
+- [Azure Local low-capacity device requirements](https://learn.microsoft.com/en-us/azure/azure-local/concepts/system-requirements-small-23h2#device-requirements)
+- [Storage Spaces drive states and pooling reasons](https://learn.microsoft.com/en-us/windows-server/storage/storage-spaces/storage-spaces-states)
 
-HCISupported ServerName   PhysicalLocation                                                 HCISupportedData
------------- ----------   ----------------                                                 ----------------
-        True NODE5 Integrated : Bus 0 : Device 23 : Function 0 : Adapter 1 : Port 1
-       False NODE5 PCI Slot 6 : Bus 1 : Device 0 : Function 0 : Adapter 3           @{CanPool=False; MediaTypeIsSupported=True; CannotPoolReason=Insufficient Capacity BusTypeIsSupported=True; IsBootDevice=True}
-       False NODE5 Integrated : Bus 0 : Device 23 : Function 0 : Adapter 1 : Port 0 @{CanPool=False; MediaTypeIsSupported=True; CannotPoolReason=Insufficient Capacity; BusTypeIsSupported=True; IsBootDevice=False}
-       False NODE7 PCI Slot 6 : Bus 1 : Device 0 : Function 0 : Adapter 3           @{CanPool=False; MediaTypeIsSupported=True; CannotPoolReason=Insufficient Capacity; BusTypeIsSupported=True; IsBootDevice=True}
-       False NODE7 Integrated : Bus 0 : Device 23 : Function 0 : Adapter 1 : Port 0 @{CanPool=False; MediaTypeIsSupported=True; CannotPoolReason=Insufficient Capacity; BusTypeIsSupported=True; IsBootDevice=False}
-        True NODE7 Integrated : Bus 0 : Device 23 : Function 0 : Adapter 1 : Port 1
-```
+::: audience-css
 
-#### Remediation Steps
+# Source Articles
 
-Looking at the last output from the helper cmdlet, each node in the 2-node system has:
+- [ASZ-EnvironmentValidator PR 16230858: Remove PhysicalDisk group by FriendlyName test](https://dev.azure.com/msazure/One/_git/ASZ-EnvironmentValidator/pullrequest/16230858)
+- [ASZ-EnvironmentValidator PR 16676534: Fix PhysicalDisk count details and JSON-safe localized strings](https://dev.azure.com/msazure/One/_git/ASZ-EnvironmentValidator/pullrequest/16676534)
 
-- 1 disk where IsBootDevice:true - These are not eligible as data disks.
-- 2 disks where CanPool:false & CannotPoolReason:"Insufficient Capacity" - these are not eligible as data disks.
-- 1 disk which is supported as data disk.
-
-Overall, this is not a supported scenario for a medium sized deployment because only 1 supported disk exists in the system. It is likely that the disks with "Insufficient Capacity" need remediating.  For this and other pooling issues see <a href="https://learn.microsoft.com/en-us/windows-server/storage/storage-spaces/storage-spaces-direct-hardware-requirements#physical-deployments" target="_blank">Deployments</a>, <a href="https://learn.microsoft.com/en-us/windows-server/storage/storage-spaces/storage-spaces-states#reasons-a-drive-cant-be-pooled" target="_blank">Storage Spaces: Reasons a drive can't be pooled</a>
-
-### Conclusion 
-
-**For disks to be eligible** they should have a CanPool value of true*, have a BusType of SATA, SAS, NVMe or SCM, MediaType of HDD, SSD or SCM and not be a boot disk.
-
-For storage to be eligible across a cluster, all nodes should have the same **eligible disk layout** e.g. 5 HDD and 3 SSDs, or 4 SSDs and 2 NVMe.
-
-Common issues:  
-- Data Disks CanPool property is false, from the output above there will be a CannotPoolReason property indicating why the disk cannot be pooled. Check the following article to help with remediation https://learn.microsoft.com/en-us/windows-server/storage/storage-spaces/storage-spaces-states
-- Data Disk BusType is RAID. For Azure Local RAID controller cards or SAN (Fibre Channel, iSCSI, FCoE) storage, shared SAS enclosures connected to multiple machines, or any form of multi-path IO (MPIO) where drives are accessible by multiple paths, aren't supported. https://learn.microsoft.com/en-us/azure/azure-local/concepts/system-requirements-23h2#machine-and-storage-requirements
-- Nodes do not have the same number of supported disks, including the same number disks of the same type.
+:::
