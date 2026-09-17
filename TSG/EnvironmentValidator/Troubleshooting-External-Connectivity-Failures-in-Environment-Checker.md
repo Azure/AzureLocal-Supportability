@@ -1,24 +1,39 @@
-<!-- tsg-metadata
-{
-  "schema": "azure-local-supportability/tsg-metadata/v1",
-  "document_type": "troubleshoot",
-  "products": ["Azure Local"],
-  "detector": {
-    "type": "envchecker",
-    "signal": "Invoke-AzStackHciConnectivityValidation"
-  },
-  "validation": {
-    "fidelity_level": "L2",
-    "technical_grade": "A",
-    "reproduction_substrate": "vm",
-    "automation_status": "one-off-live-driver",
-    "last_validated": "2026-09-17",
-    "spec_ref": ""
-  }
-}
--->
+---
+ArticleType: "TSG"
+Article_ID: "20260917160016"
+Title: "AzStackHci_Connectivity_ExternalConnectivityFailures"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: ""
+  ID: 0
+Tags: ["Validation", "Firewall", "Proxy", "DNS", "Certificates", "Telemetry"]
+---
 
-# Troubleshooting external connectivity failures in Environment Checker
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scoping, and current article layout without changing technical guidance. |
+
+:::
+
+# AzStackHci_Connectivity_ExternalConnectivityFailures
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr>
@@ -536,9 +551,13 @@ before sharing the package.
 - Run a fresh `Invoke-AzStackHciConnectivityValidation` before the maintenance window.
 - Treat `NO DATA` as an unresolved validation gap, never as a pass.
 
-## Related documentation
+::: audience-css
+
+# Source Articles
 
 - [Evaluate the deployment readiness of your environment for Azure Local](https://learn.microsoft.com/azure/azure-local/manage/use-environment-checker)
 - [Azure Local firewall requirements](https://learn.microsoft.com/azure/azure-local/concepts/firewall-requirements)
 - [Troubleshoot Azure Local updates](https://learn.microsoft.com/azure/azure-local/update/update-troubleshooting-23h2)
 - [Azure Arc-enabled servers network requirements](https://learn.microsoft.com/azure/azure-arc/servers/network-requirements)
+
+:::

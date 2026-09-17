@@ -1,9 +1,49 @@
+---
+ArticleType: "KI"
+Article_ID: "20260917160008"
+Title: "Known Issue: High Disk Space Usage in TEMP"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+EngineeringStatus: "Pending"
+FixedInBuild:
+  OS: []
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: ""
+  ID: 0
+Tags: ["Validation", "Diagnostics", "Log Collection"]
+---
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Reclassified the article as a pending Known Issue and adopted the canonical PickleFactory KI layout without changing the technical procedure. |
+
+:::
+
 # Known Issue: High Disk Space Usage in TEMP
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr>
     <th style="text-align:left; width:180px;">ArticleType</th>
-    <td><code>TSG</code></td>
+    <td><code>KI</code></td>
   </tr>
   <tr>
     <th style="text-align:left;">Audience</th>
@@ -43,7 +83,9 @@
   </tr>
 </table>
 
-## Overview
+# Symptoms
+
+**Overview**
 
 Environment Checker and related deployment or readiness activity can leave versioned
 NuGet extraction folders under the HCIOrchestrator profile's local TEMP directory.
@@ -55,7 +97,7 @@ The cleanup is local to one node. It does not repair storage pools, change clust
 configuration, stop services, or modify network, firmware, OEM, or workload data.
 The one-day age check is a safety heuristic, not proof that a folder is inactive.
 
-## Symptoms
+**Symptoms**
 
 Look for one or more of these symptoms on the affected node:
 
@@ -71,7 +113,7 @@ Folder count alone does not establish that cleanup is safe. Use the inventory to
 capture each parent path, last-write age, estimated size, and system-drive free
 space before deciding whether to reclaim anything.
 
-## Impact, scope, and success criteria
+**Impact, scope, and success criteria**
 
 | Item | Guidance |
 |---|---|
@@ -82,7 +124,7 @@ space before deciding whether to reclaim anything.
 | Ownership | The cluster administrator owns the local cleanup. Route a blocked deletion, unexplained low space, or a failed readiness check to CSS or the Environment Validator owner with the evidence bundle below. |
 | Effort | Read-only inventory is normally short. Review, cleanup, and revalidation are performed serially per node. Do not fan out deletion in parallel. |
 
-## Before you start
+**Before you start**
 
 1. Use an elevated PowerShell session on the node. If the node is part of a
    cluster, obtain the node list with `Get-ClusterNode` and process nodes
@@ -101,7 +143,14 @@ space before deciding whether to reclaim anything.
    If the script reports an access or lock error, preserve the error and escalate
    it rather than retrying with a more forceful command.
 
-## Issue validation
+# Issue Validation
+
+## Errors or Failures
+
+Use the symptoms, exact TEMP root, candidate-folder inventory, and system-drive
+measurement below to determine whether this known issue applies.
+
+## PowerShell Detection Script
 
 Run this read-only inventory on each affected node. It reports the exact root,
 candidate parents, last-write age, estimated bytes, skipped paths, and system-drive
@@ -213,7 +262,7 @@ that this specific folder pattern was not found under the exact TEMP root. If
 free space remains low, investigate other consumers with the standard OS and
 storage diagnostics instead of widening this cleanup.
 
-### Serial per-node inventory
+**Serial per-node inventory**
 
 For a deployed cluster, use this read-only loop from an elevated PowerShell
 session to report every currently-up node. It does not delete anything. A node
@@ -277,7 +326,7 @@ all nodes are clean, rerun the readiness check that originally exposed the
 condition. This loop intentionally does not run deletion remotely or in
 parallel.
 
-## Where this failure appears
+**Where this failure appears**
 
 - **PowerShell on the node:** the read-only inventory above is the authoritative
   local view for this issue. It shows candidate parents, age, estimated bytes,
@@ -304,7 +353,24 @@ parallel.
 - **Windows Admin Center in Azure:** the condition is not evident in Windows
   Admin Center in Azure; use the node inventory instead.
 
-## Mitigation details
+# Root Cause
+
+Environment Checker and related deployment or readiness activity can leave
+versioned NuGet extraction folders under the HCIOrchestrator profile's local
+TEMP directory. When those folders accumulate, they consume local system-drive
+space.
+
+# Internal Root Cause
+
+::: audience-engineering
+
+No authoritative engineering disposition or fixed build is established by this
+article. The Known Issue remains in `Pending` status while the bounded folder
+signature, ownership, and product disposition are investigated.
+
+:::
+
+# Mitigation Details
 
 The apply script below intentionally defaults to preview mode. It writes a
 manifest, reports matching long-running orchestration processes for operator
@@ -529,7 +595,7 @@ age, and reparse-point gates. It de-duplicates parents when multiple matching
 NuGet folders exist under one extraction. It never removes a drive root or a
 child outside the selected parent.
 
-## Verify the fix
+**Verify the fix**
 
 Run the read-only inventory again on the same node, then repeat it on every node.
 Confirm all of the following:
@@ -555,7 +621,9 @@ Confirm all of the following:
    cleanup and investigate the other system-drive consumers with the standard
    OS and storage diagnostics.
 
-## Evidence bundle and escalation
+# Escalation
+
+**Evidence bundle and escalation**
 
 Keep the following for CSS or the Environment Validator owner when the issue is
 not resolved:
@@ -572,7 +640,7 @@ fails, the parent is newer than one day, a reparse point is present, inventory
 cannot read the tree, a file is locked, the candidate count is zero but system
 space is still low, or the readiness failure persists after revalidation.
 
-## Scope boundaries
+**Scope boundaries**
 
 This is a local TEMP extraction issue, not a network or hardware diagnosis. Do
 not change NIC, DNS, RDMA, firewall, firmware, BIOS, BMC, storage-controller,
@@ -582,7 +650,7 @@ to physical media or firmware health, route it to the OEM or hardware owner.
 If the evidence points to another system-drive consumer, route it to the OS and
 storage troubleshooting path.
 
-## Validation fidelity
+**Validation fidelity**
 
 The current review established static PowerShell structure and a scratch-only
 validation of the detector's exact TEMP root, parent-name pattern, one-day age
@@ -591,3 +659,26 @@ matching folders, so no platform-managed or customer-like candidate was deleted,
 no service was stopped, and no real reclaimed-space threshold was measured.
 This evidence supports the documented safety boundaries, but it is not a live
 proof of customer-like cleanup or a claim that every extraction is stale.
+
+# Internal Escalation
+
+::: audience-engineering
+
+Escalate with the before and after manifests, exact candidate paths, UTC
+timestamps, process-review output, readiness or action-plan evidence, and any
+preserved exception. Do not assign a fixed-build disposition until an
+authoritative engineering source establishes one.
+
+:::
+
+# Related Content
+
+- No additional related article is cited by this guide.
+
+::: audience-css
+
+# Source Articles
+
+- No additional source article is cited by this guide.
+
+:::

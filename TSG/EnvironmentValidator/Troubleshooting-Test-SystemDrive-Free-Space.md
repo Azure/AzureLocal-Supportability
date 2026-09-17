@@ -1,3 +1,38 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160001"
+Title: "AzStackHci_Hardware_Test_SystemDrive_Free_Space"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38356876
+Tags: ["Validation", "Windows Update", "Solution Update", "Cloud Deployment"]
+---
+
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scoping, and current article layout without changing technical guidance. |
+
+:::
+
 # AzStackHci_Hardware_Test_SystemDrive_Free_Space
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -570,10 +605,14 @@ Open a support case if any of the following are true:
 - The machine is at or near zero free space and will not boot or stay in the
   cluster.
 
-## Related
+::: audience-css
+
+# Source Articles
 
 - [Known Issue: High Disk Space Usage in TEMP](./Known-Issue-High-Disk-Space-usage-in-TEMP.md)
 - General Environment Checker remediation link shown in the validator output:
   https://aka.ms/hci-envch
 - Azure Local low-capacity requirements:
   https://aka.ms/azurelocallowcapacityrequirements
+
+:::

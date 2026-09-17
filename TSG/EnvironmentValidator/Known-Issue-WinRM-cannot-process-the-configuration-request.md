@@ -1,4 +1,47 @@
+---
+ArticleType: "KI"
+Article_ID: "20260917160013"
+Title: "Known issue: WinRM cannot process the TrustedHosts configuration request"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+EngineeringStatus: "Pending"
+FixedInBuild:
+  OS: []
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: ""
+  ID: 0
+Tags: ["Validation", "Cloud Deployment", "Solution Update", "Diagnostics", "Log Collection"]
+---
+
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+|------|---------|---------|
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, accepted Known Issue layout, audience scopes, revision history, and source scope without changing the validated commands or technical evidence. |
+
+:::
+
 # Known issue: WinRM cannot process the TrustedHosts configuration request
+
+# Symptoms
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr>
@@ -51,7 +94,7 @@
   </tr>
 </table>
 
-## Decision summary
+**Decision summary**
 
 Use this article only when the lifecycle operation emits the exact hostname-pattern
 error shown below. The presence of `TrustedHosts = '*'` by itself is not sufficient
@@ -74,8 +117,6 @@ switch change, or OEM action. Use a console or other control path when changing
 a workgroup or non-domain host because altering its outbound trust list can
 affect the remoting path you are using.
 
-## Symptoms
-
 Cluster validation or another Environment Validator operation fails while
 configuring remote sessions:
 
@@ -93,64 +134,13 @@ The defining signature is the rejection of a hostname pattern that tries to
 combine `*` with another entry. A generic WinRM connection error, firewall
 timeout, access-denied message, or listener failure is a different scenario.
 
-## Cause
+# Issue Validation
 
-WinRM allows `*` as a special `TrustedHosts` value only when it is the entire
-pattern. An affected legacy Environment Validator path read the existing value
-and attempted to append node IP addresses or names. Appending to `*` would
-produce a mixed list such as `*,192.0.2.10`, which WSMan rejects because the
-unqualified wildcard must be the only pattern.
+## Errors or Failures
 
-The period in an IP address or fully qualified domain name is not the cause.
-The factual error in the earlier version of this article was attributing the
-failure to WSMan treating the period as a special pattern.
+The defining error and applicability boundaries are described in Symptoms. A generic WinRM connection, firewall, listener, authentication, or access-denied failure is outside this Known Issue.
 
-Current 2610 product code contains a guard that skips the append when the
-existing value is exactly `*`. On the confirmed build in the metadata table,
-the source-exact guard left `*` unchanged without error. The underlying WSMan
-constraint remains, so another caller that performs the raw invalid append can
-still produce the same message.
-
-## Terms
-
-- **WinRM** is Windows Remote Management, the service used for remote
-  PowerShell and management operations.
-- **WSMan** is the configuration provider and protocol implementation used by
-  WinRM.
-- **TrustedHosts** is a WinRM **client-side** list. It controls which remote
-  computers this node may trust when mutual authentication is not available.
-  It is not the WinRM listener or firewall configuration.
-- **Policy-owned** means Group Policy or another managed security baseline
-  controls the setting. A local command must not override that ownership.
-
-## Before you start
-
-1. Open an elevated Windows PowerShell session.
-2. Identify every node in the affected deployment or cluster. A passing first
-   node does not establish the state of the other nodes.
-3. Use console, PowerShell Direct, or another independent control path when the
-   node is not domain joined or when your current session depends on
-   `TrustedHosts`.
-4. Do not change the WinRM service, listener, authentication methods, firewall,
-   Group Policy, node power state, cluster membership, or workload state for
-   this procedure.
-5. Preserve the inventory JSON. It is the exact rollback source if the
-   validation does not recover.
-
-## Where this failure appears
-
-| Admin surface | What to expect |
-|---|---|
-| PowerShell on an Azure Local node | **Shown**: `Get-Item WSMan:\localhost\Client\TrustedHosts` and the inventory below show the exact client value and policy ownership. |
-| Azure portal | **Shown** when the deployment, Add Node, or update-readiness operation reports the Environment Validator exception. The portal does not show the exact local TrustedHosts value. |
-| Windows event logs | **Shown when persisted**: an Environment Checker Event ID 17205 can contain the validation result. Use it for timestamp correlation, then confirm the current node state with PowerShell. |
-| Cluster logs from `Get-ClusterLog` | This client configuration rejection is **not evident in cluster logs** as a cluster membership, quorum, storage, or resource failure. |
-| Windows Failover Cluster Manager | This setting is **not evident in Failover Cluster Manager** as a node, role, or resource state. |
-| Windows Admin Center on a standalone host | The exact Environment Validator rejection is **not evident in Windows Admin Center on a standalone host**. Use node PowerShell. |
-| Windows Admin Center in the Azure portal | The exact client value is **not evident in Windows Admin Center in the Azure portal**. Use the Azure Local lifecycle view for correlation and node PowerShell for evidence. |
-| Component or tool log files on disk | **Shown when written**: preserve `C:\CloudDeployment\Logs` and, for a user-profile Environment Checker run, `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log` plus `AzStackHciEnvironmentReport.json` or `.xml`. |
-
-## Issue validation
+## PowerShell Detection Script
 
 Run this read-only inventory from an elevated Windows PowerShell session. It
 checks every currently Up cluster node when `Get-ClusterNode` is available and
@@ -237,9 +227,76 @@ Interpret the result:
   solution, and platform versions and escalate. The confirmed 2610 path avoided
   the invalid append, so another caller or code path must be identified.
 
-## Mitigation
+# Root Cause
 
-### Clear only the unmanaged exact wildcard
+WinRM allows `*` as a special `TrustedHosts` value only when it is the entire
+pattern. An affected legacy Environment Validator path read the existing value
+and attempted to append node IP addresses or names. Appending to `*` would
+produce a mixed list such as `*,192.0.2.10`, which WSMan rejects because the
+unqualified wildcard must be the only pattern.
+
+The period in an IP address or fully qualified domain name is not the cause.
+The factual error in the earlier version of this article was attributing the
+failure to WSMan treating the period as a special pattern.
+
+Current 2610 product code contains a guard that skips the append when the
+existing value is exactly `*`. On the confirmed build in the metadata table,
+the source-exact guard left `*` unchanged without error. The underlying WSMan
+constraint remains, so another caller that performs the raw invalid append can
+still produce the same message.
+
+**Terms**
+
+- **WinRM** is Windows Remote Management, the service used for remote
+  PowerShell and management operations.
+- **WSMan** is the configuration provider and protocol implementation used by
+  WinRM.
+- **TrustedHosts** is a WinRM **client-side** list. It controls which remote
+  computers this node may trust when mutual authentication is not available.
+  It is not the WinRM listener or firewall configuration.
+- **Policy-owned** means Group Policy or another managed security baseline
+  controls the setting. A local command must not override that ownership.
+
+::: audience-css
+
+# Internal Root Cause
+
+The September 17, 2026 source review confirmed that current 2610 product code contains the exact-wildcard guard described above. The earliest fixed release remains unestablished, so this article does not claim a public fixed-in-build boundary.
+
+:::
+
+# Mitigation Details
+
+**Before you start**
+
+1. Open an elevated Windows PowerShell session.
+2. Identify every node in the affected deployment or cluster. A passing first
+   node does not establish the state of the other nodes.
+3. Use console, PowerShell Direct, or another independent control path when the
+   node is not domain joined or when your current session depends on
+   `TrustedHosts`.
+4. Do not change the WinRM service, listener, authentication methods, firewall,
+   Group Policy, node power state, cluster membership, or workload state for
+   this procedure.
+5. Preserve the inventory JSON. It is the exact rollback source if the
+   validation does not recover.
+
+**Where this failure appears**
+
+| Admin surface | What to expect |
+|---|---|
+| PowerShell on an Azure Local node | **Shown**: `Get-Item WSMan:\localhost\Client\TrustedHosts` and the inventory below show the exact client value and policy ownership. |
+| Azure portal | **Shown** when the deployment, Add Node, or update-readiness operation reports the Environment Validator exception. The portal does not show the exact local TrustedHosts value. |
+| Windows event logs | **Shown when persisted**: an Environment Checker Event ID 17205 can contain the validation result. Use it for timestamp correlation, then confirm the current node state with PowerShell. |
+| Cluster logs from `Get-ClusterLog` | This client configuration rejection is **not evident in cluster logs** as a cluster membership, quorum, storage, or resource failure. |
+| Windows Failover Cluster Manager | This setting is **not evident in Failover Cluster Manager** as a node, role, or resource state. |
+| Windows Admin Center on a standalone host | The exact Environment Validator rejection is **not evident in Windows Admin Center on a standalone host**. Use node PowerShell. |
+| Windows Admin Center in the Azure portal | The exact client value is **not evident in Windows Admin Center in the Azure portal**. Use the Azure Local lifecycle view for correlation and node PowerShell for evidence. |
+| Component or tool log files on disk | **Shown when written**: preserve `C:\CloudDeployment\Logs` and, for a user-profile Environment Checker run, `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log` plus `AzStackHciEnvironmentReport.json` or `.xml`. |
+
+**Mitigation**
+
+**Clear only the unmanaged exact wildcard**
 
 **[MEDIUM RISK]** Run the following only after reviewing the inventory. The
 script processes nodes serially, refuses policy-owned values, and changes only a
@@ -296,7 +353,7 @@ $changed | Format-Table Node, Before, After, WinRMStatus -AutoSize
 Expected result: every targeted node reports `Before` as `*`, an empty `After`,
 and `WinRMStatus` as `Running`.
 
-### Rerun the original validation
+**Rerun the original validation**
 
 Return to the same Azure portal deployment, Add Node, or update-readiness
 operation and select **Retry**, **Resume**, or rerun the same validation action.
@@ -310,7 +367,7 @@ The mitigation is successful only when:
   explicit entries written by the product; and
 - WinRM remains Running on every affected node.
 
-## Rollback
+**Rollback**
 
 If the original validation still fails, restore the exact pre-change values
 from the inventory. Do not invent a replacement list.
@@ -351,7 +408,7 @@ foreach ($item in $inventory) {
 }
 ```
 
-## Verify the fix
+**Verify the fix**
 
 Run the inventory again after the lifecycle operation completes. Save it under
 a new filename and compare it with the original backup.
@@ -371,7 +428,7 @@ An empty event query is a data gap, not proof that the issue did not occur. The
 authoritative success signal is the result of the original lifecycle operation
 plus the current node values.
 
-## Prevention and recurrence
+**Prevention and recurrence**
 
 - Do not configure `TrustedHosts = '*'` as a routine Azure Local prerequisite.
   Prefer mutual authentication and the product-managed explicit node entries.
@@ -383,7 +440,7 @@ plus the current node values.
 - On current 2610 systems, do not apply this mitigation merely because `*` is
   present. Confirm the exact lifecycle error first.
 
-## Escalation
+# Escalation
 
 Escalate to Microsoft Support or the Environment Validator owner when:
 
@@ -407,3 +464,24 @@ Collect:
 
 Do not weaken policy, enable CredSSP, alter WinRM listeners, or change firewall
 rules to work around this specific error.
+
+::: audience-css
+
+# Internal Escalation
+
+Preserve the exact solution, platform, and AzStackHci.EnvironmentChecker versions, plus the source-exact guard evidence, when routing a current-build reproduction to the Environment Validator owner.
+
+:::
+
+# Related Content
+
+Use the Azure Local lifecycle operation that originally surfaced the error to verify recovery. General WinRM connectivity failures require a separate troubleshooting path.
+
+::: audience-css
+
+# Source Articles
+
+- Azure Local Environment Validator product source reviewed on September 17, 2026.
+- The prior L2 faithful-product-path validation evidence, mitigation execution, rollback execution, and zero-residue result remain unchanged by this structural retrofit.
+
+:::

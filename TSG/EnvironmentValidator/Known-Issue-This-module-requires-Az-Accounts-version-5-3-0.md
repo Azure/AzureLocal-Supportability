@@ -1,6 +1,45 @@
-# AzStackHci_ValidatedRecipe_PowerShellModule_Version
+---
+ArticleType: "KI"
+Article_ID: "20260917160010"
+Title: "This module requires Az.Accounts version 5.3.0"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+EngineeringStatus: "Pending"
+FixedInBuild:
+  OS: []
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: ""
+  ID: 0
+Tags: ["Solution Update", "Validation", "Diagnostics"]
+---
+[[_TOC_]]
 
-## This module requires Az.Accounts version 5.3.0
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, canonical layout, audience directives, and source scoping without changing commands or technical evidence. |
+
+:::
+
+# This module requires Az.Accounts version 5.3.0
+
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr>
@@ -61,7 +100,8 @@
   </tr>
 </table>
 
-## Decision summary
+**Decision summary**
+
 
 Use this article only when the current Environment Validator reports the same
 module-version exception or a related failure on the affected node.
@@ -83,7 +123,8 @@ PowerShell. `Get-InstalledModule` is only secondary package-ownership evidence
 for modules registered with PowerShellGet. The current validator recipe and
 `Remediate-PSModules` determine what the product expects now.
 
-## Symptoms
+# Symptoms
+
 
 During a ClusterWitness or another Environment Validator operation, the node can
 report an exception similar to:
@@ -108,7 +149,12 @@ If the message appears only in a persisted portal result, first rerun the
 validator in a fresh session. A stale persisted result and a node-local current
 result are different pieces of evidence.
 
-## Version boundary and no-downgrade rule
+# Issue Validation
+
+## Errors or Failures
+
+**Version boundary and no-downgrade rule**
+
 
 The original article recorded the following recipe through Azure Local 2511:
 
@@ -136,7 +182,8 @@ The current recipe is established only by the current validator's
 module version difference without a current validator failure is not sufficient
 evidence for remediation.
 
-## Where this failure appears
+**Where this failure appears**
+
 
 Use the node result for module evidence and the lifecycle surfaces only for
 correlation:
@@ -152,7 +199,8 @@ correlation:
 | Windows Admin Center in the Azure portal | The module path and recipe value are **not evident in Windows Admin Center in the Azure portal**. Use the Updates view for lifecycle correlation and the node inventory for module evidence. |
 | Component or tool log files on disk | **Shown when written**: preserve `C:\CloudDeployment\Logs` and, when the Environment Checker ran under a user profile, `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log`, `AzStackHciEnvironmentReport.json`, or `AzStackHciEnvironmentReport.xml`. A missing log is a data gap, not proof that the failure did not occur. |
 
-## Issue validation
+## PowerShell Detection Script
+
 
 Run the following **read-only** inventory in a new administrative Windows
 PowerShell session on **every affected node**, not only the first node. The
@@ -246,7 +294,8 @@ The `AdditionalData.Detail` value is the authoritative current-recipe evidence.
 If it is empty on a failure, preserve the complete result and stop. Do not
 select a version from the historical table.
 
-### Diagnostic decision
+**Diagnostic decision**
+
 
 - **Current result is `SUCCESS`:** stop. Do not uninstall extra candidates or
   downgrade a passing node. If a portal result is still failing, record both
@@ -259,9 +308,22 @@ select a version from the historical table.
 - **Only one node fails:** treat the condition as node-local until every affected
   node has a current result. A passing first node is not cluster-wide proof.
 
-## Mitigation details
+# Root Cause
 
-### Safety, workload, repository, and ownership gates
+The exception text is a symptom rather than proof that `Az.Accounts` alone is wrong. The current validator detail and recipe comparison determine the affected module and supported remediation.
+
+# Internal Root Cause
+
+::: audience-engineering
+
+No additional internal root-cause detail is required for this article revision.
+
+:::
+
+# Mitigation Details
+
+**Safety, workload, repository, and ownership gates**
+
 
 Complete these gates before changing a node:
 
@@ -291,7 +353,8 @@ not an automatic reboot. If a release-specific product runbook separately
 requires a reboot, follow that runbook and preserve the before and after
 timestamps.
 
-### Run the current-recipe remediation
+**Run the current-recipe remediation**
+
 
 Run this block in a new administrative PowerShell session on one approved node
 at a time, or through the supported update remediation workflow that invokes
@@ -318,7 +381,8 @@ If `Remediate-PSModules` is unavailable, the repository cannot be reached, the
 command fails, or ownership is unclear, stop at that node. Preserve the full
 error and escalate instead of substituting a manually selected version.
 
-## Verify the fix
+**Verify the fix**
+
 
 Start a fresh administrative PowerShell session and run the targeted validator
 on **every affected node**:
@@ -352,7 +416,8 @@ run. If it still contains the old exception, preserve both timestamps and the
 node-local current result, then escalate rather than repeating a version
 change.
 
-## Validation boundary
+**Validation boundary**
+
 
 The current review deliberately preserves an honest validation limit:
 
@@ -368,7 +433,8 @@ The current review deliberately preserves an honest validation limit:
 - Therefore this article makes no end-to-end technical-pass claim. Use the
   current validator and product remediation as the decision authority.
 
-## Rollback and failed remediation
+**Rollback and failed remediation**
+
 
 If the product remediation fails, stop the update or readiness retry and
 preserve the complete command output. Do not manually uninstall, downgrade, or
@@ -380,7 +446,8 @@ If a PowerShell session has the target module loaded, close that diagnostic
 session and start a new one for verification. Do not unload a module from an
 active validator, update, deployment, or ECE process.
 
-## Escalation and evidence bundle
+# Escalation
+
 
 Escalate to the Azure Local Environment Validator or solution-update owner when:
 
@@ -409,3 +476,25 @@ Do not attach credentials, tokens, or unrelated customer data. This is a
 software module and recipe issue. Do not route it to firmware, BIOS, BMC, or
 other hardware remediation unless independent evidence establishes a separate
 hardware problem.
+
+# Internal Escalation
+
+::: audience-engineering
+
+Use the evidence bundle above when routing the case to the Environment Validator or solution-update owner.
+
+:::
+
+# Related Content
+
+- [Test PowerShell Module Version](Troubleshooting-Test-PowerShell-Module-Version.md)
+- [Azure PowerShell version troubleshooting](https://aka.ms/azps-version-error)
+
+::: audience-css
+
+# Source Articles
+
+- [Azure PowerShell version troubleshooting](https://aka.ms/azps-version-error)
+- [Test PowerShell Module Version](Troubleshooting-Test-PowerShell-Module-Version.md)
+
+:::

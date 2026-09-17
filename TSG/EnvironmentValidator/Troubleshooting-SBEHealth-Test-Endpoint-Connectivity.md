@@ -1,3 +1,38 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160004"
+Title: "AzStackHci_SBEHealth_Test-Endpoint-Connectivity"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: "Solution Builder Extension"
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38356180
+Tags: ["Validation", "Solution Update", "SBE", "Firewall", "Proxy"]
+---
+
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scoping, and current article layout without changing technical guidance. |
+
+:::
+
 # AzStackHci_SBEHealth_Test-Endpoint-Connectivity
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -429,7 +464,9 @@ healthy node does not clear a failure on another node.
 - The sibling SBE health checks also fail (see **Related**), which can indicate a broader SBE
   configuration problem rather than a connectivity one.
 
-## Related
+::: audience-css
+
+# Source Articles
 
 - **Firewall blocks SBE update discovery** (internal SBE connectivity guide with the per-vendor
   `aka.ms/AzureStackSBEUpdate/<vendor>` endpoints and how to discover the active endpoint with
@@ -449,3 +486,5 @@ healthy node does not clear a failure on another node.
   and SKU), `Test-Installed-SBE-Env-Vars` (the installed-SBE environment variables are consistent),
   and `Test-SolutionExtensionModule` (the staged SBE `SolutionExtension` module is present,
   integrity-intact, and signed).
+
+:::

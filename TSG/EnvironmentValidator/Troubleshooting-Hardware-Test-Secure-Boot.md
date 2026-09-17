@@ -1,3 +1,38 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160017"
+Title: "AzStackHci_Hardware_Test_Secure_Boot"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38583976
+Tags: ["Validation", "Firmware", "BIOS", "BitLocker", "Cloud Deployment"]
+---
+
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scoping, and current article layout without changing technical guidance. |
+
+:::
+
 # AzStackHci_Hardware_Test_Secure_Boot
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -541,7 +576,9 @@ Open a support case if any of the following are true:
 | KEK | Key Exchange Key database. It authorizes updates to the allowed and revoked signature databases. |
 | db | The allowed-signature database used by Secure Boot. |
 
-## Related
+::: audience-css
+
+# Source Articles
 
 - General Environment Checker remediation link shown in the validator output:
   https://aka.ms/hci-envch
@@ -550,3 +587,5 @@ Open a support case if any of the following are true:
 - [Suspend-BitLocker before firmware changes](https://learn.microsoft.com/powershell/module/bitlocker/suspend-bitlocker)
 - [Suspend-ClusterNode (pause and drain a node)](https://learn.microsoft.com/powershell/module/failoverclusters/suspend-clusternode)
 - [Resume-ClusterNode](https://learn.microsoft.com/powershell/module/failoverclusters/resume-clusternode)
+
+:::

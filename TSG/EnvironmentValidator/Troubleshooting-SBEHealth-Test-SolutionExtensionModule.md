@@ -1,3 +1,38 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160018"
+Title: "AzStackHci_SBEHealth_Test-SolutionExtensionModule"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: "Solution Builder Extension"
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38357441
+Tags: ["Validation", "Solution Update", "SBE", "Firmware", "Driver"]
+---
+
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scoping, and current article layout without changing technical guidance. |
+
+:::
+
 # AzStackHci_SBEHealth_Test-SolutionExtensionModule
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -414,7 +449,9 @@ For escalation, attach the all-node output, Event ID 17205 timestamps and detail
 integrity report, the SBE package version, the staging or transfer log, the operation type
 (deployment or update), and the fresh validation timestamp and result.
 
-## Related
+::: audience-css
+
+# Source Articles
 
 - **Rerun a deployment / update after fixing prerequisites** (Azure Local deployment
   troubleshooting): https://learn.microsoft.com/azure/azure-local/manage/troubleshoot-deployment#restart-the-deployment-via-azure-portal
@@ -424,3 +461,5 @@ integrity report, the SBE package version, the staging or transfer log, the oper
   store match the SBE manifest).
 - **Solution Builder Extension** overview and partner content:
   https://learn.microsoft.com/azure/azure-local/update/solution-builder-extension
+
+:::

@@ -1,3 +1,38 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160002"
+Title: "AzStackHci_Security_AsrRuleGPConflict"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38356877
+Tags: ["Validation", "Solution Update", "Defender", "Active Directory"]
+---
+
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scoping, and current article layout without changing technical guidance. |
+
+:::
+
 # AzStackHci_Security_AsrRuleGPConflict
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -268,3 +303,12 @@ Confirm `HealthState` is `Success` with a current `HealthCheckDate`, then re-rea
 - **Group Policy conflict:** when ASR is configured by both Group Policy and the OSConfig baseline, Group Policy wins, so the effective state no longer matches the OSConfig-managed configuration. That mismatch is what this check reports.
 - **RSoP (Resultant Set of Policy):** the computed result of all Group Policy applied to a node. This check reads RSoP (WMI namespace `root\rsop\computer`) to see which ASR rules Group Policy set and from where.
 - **Scope / SOM (scope of management):** where a Group Policy setting was applied from, reported as an Active Directory distinguished name (a domain or organizational-unit GPO) or `Local` for a local group policy on the node.
+
+::: audience-css
+
+# Source Articles
+
+- [Manage the Azure Local security baseline](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-baseline)
+- [Azure Local security features overview](https://learn.microsoft.com/azure/azure-local/concepts/security-features)
+
+:::

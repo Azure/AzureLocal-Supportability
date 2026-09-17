@@ -1,3 +1,33 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160007"
+Title: "AzStackHci_DNS_ExternalDnsResolution"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "DNS"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38356875
+Tags: ["DNS", "Validation"]
+---
+[[_TOC_]]
+
+# Revision History
+
+| Date | Description |
+| --- | --- |
+| 2026-09-17 | Retrofitted mandatory PickleFactory metadata, audience scope, revision history, and source-article layout without changing the technical procedure. |
+
 # AzStackHci_DNS_ExternalDnsResolution
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -748,3 +778,12 @@ skip this section.
 - **WinHTTP proxy:** a system-level outbound proxy configured on a node. When one is set,
   the node routes outbound traffic through it, and this DNS check self-skips on that node
   and reports success.
+
+::: audience-css
+
+# Source Articles
+
+- [Troubleshooting AzStackHci_Connectivity_Test_Dns](./Troubleshooting-Connectivity-Test-Dns.md)
+- [Management adapter readiness guidance](./Networking/Troubleshoot-Network-Test-ManagementAdapterReadiness.md)
+
+:::

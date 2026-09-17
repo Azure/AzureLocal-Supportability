@@ -1,3 +1,33 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160009"
+Title: "Troubleshooting Azure Local Environment Validator Module Versions"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: ""
+  ID: 0
+Tags: ["Validation", "Solution Update", "Diagnostics"]
+---
+[[_TOC_]]
+
+# Revision History
+
+| Date | Description |
+| --- | --- |
+| 2026-09-17 | Retrofitted mandatory PickleFactory metadata, audience scope, revision history, and source-article layout without changing the technical procedure. |
+
 # Troubleshooting Azure Local Environment Validator Module Versions
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -517,3 +547,11 @@ Include the affected node, UTC timestamps, module inventory, exact module
 paths, `PSModulePath`, loaded-module output, active workload and owner,
 approval record, complete command output, and the retry result. Do not attach
 secrets or unrelated customer data.
+
+::: audience-css
+
+# Source Articles
+
+- No additional source article is cited by this guide.
+
+:::

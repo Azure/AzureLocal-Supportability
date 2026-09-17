@@ -1,3 +1,37 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160012"
+Title: "AzStackHci_ValidatedRecipe_PowerShellModule_Version"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: ""
+  ID: 0
+Tags: ["Solution Update", "Validation", "Diagnostics"]
+---
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, canonical layout, audience directives, and source scoping without changing commands or technical evidence. |
+
+:::
+
 # AzStackHci_ValidatedRecipe_PowerShellModule_Version
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -263,3 +297,12 @@ Include the affected node names, UTC timestamps, complete validator detail,
 the persisted health-check result, the complete remediation error or output, and
 the post-remediation validator result. Do not attach credentials, tokens, or
 unrelated customer data.
+
+::: audience-css
+
+# Source Articles
+
+- [Azure Local update troubleshooting](https://learn.microsoft.com/en-us/azure/azure-local/update/update-troubleshooting-23h2)
+- [Azure PowerShell version troubleshooting](https://aka.ms/azps-version-error)
+
+:::

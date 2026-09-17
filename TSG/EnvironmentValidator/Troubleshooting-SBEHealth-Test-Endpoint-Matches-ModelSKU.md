@@ -1,3 +1,38 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160005"
+Title: "AzStackHci_SBEHealth_Test-Endpoint-Matches-ModelSKU"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: "Solution Builder Extension"
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38357077
+Tags: ["Validation", "Solution Update", "SBE", "Firmware", "Driver"]
+---
+
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scoping, and current article layout without changing technical guidance. |
+
+:::
+
 # AzStackHci_SBEHealth_Test-Endpoint-Matches-ModelSKU
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -416,7 +451,9 @@ For any escalation, attach the Event ID 17205 timestamp, the `AdditionalData.Sta
 `AdditionalData.Detail` values, the endpoint, the per-node fan-out output, and the time and result
 of the `Invoke-SolutionUpdatePrecheck -SystemHealth` re-run.
 
-## Related
+::: audience-css
+
+# Source Articles
 
 - **Firewall blocks SBE update discovery** (internal SBE connectivity guide with the per-vendor
   `aka.ms/AzureStackSBEUpdate/<vendor>` endpoints and how to discover the active endpoint with
@@ -430,3 +467,5 @@ of the `Invoke-SolutionUpdatePrecheck -SystemHealth` re-run.
   `Test-Endpoint-Connectivity` (the node can reach the SBE manifest endpoint), `Test-Installed-SBE-Env-Vars`
   (the installed-SBE environment variables are consistent), and `Test-SolutionExtensionModule` (the
   staged SBE `SolutionExtension` module is present, integrity-intact, and signed).
+
+:::

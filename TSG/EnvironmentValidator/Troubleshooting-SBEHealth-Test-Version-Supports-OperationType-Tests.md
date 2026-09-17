@@ -1,3 +1,38 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160006"
+Title: "AzStackHci_SBEHealth_Test-Version-Supports-OperationType-Tests"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: "Solution Builder Extension"
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38357187
+Tags: ["Validation", "Solution Update", "SBE", "Firmware", "Driver"]
+---
+
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scoping, and current article layout without changing technical guidance. |
+
+:::
+
 # AzStackHci_SBEHealth_Test-Version-Supports-OperationType-Tests
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -333,7 +368,9 @@ not replace the per-node version and partner-result checks above.
 - The sibling SBE health checks also report problems (see **Related**), which can indicate a broader SBE
   configuration issue rather than just an old version.
 
-## Related
+::: audience-css
+
+# Source Articles
 
 - **Rerun a deployment / update after fixing prerequisites** (Azure Local deployment troubleshooting):
   https://learn.microsoft.com/azure/azure-local/manage/troubleshoot-deployment#restart-the-deployment-via-azure-portal
@@ -345,3 +382,5 @@ not replace the per-node version and partner-result checks above.
   `Test-Endpoint-Matches-ModelSKU` (the SBE manifest lists this hardware model and SKU), and
   `Test-SolutionExtensionModule` (the staged SBE `SolutionExtension` module is present, integrity-intact,
   and signed).
+
+:::

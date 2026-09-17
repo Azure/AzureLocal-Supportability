@@ -1,3 +1,37 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160011"
+Title: "AzStackHci_Software_IsNotPartofDomain"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38564291
+Tags: ["Cloud Deployment", "Validation", "Active Directory"]
+---
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, canonical layout, audience directives, and source scoping without changing commands or technical evidence. |
+
+:::
+
 # AzStackHci_Software_IsNotPartofDomain
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -397,3 +431,12 @@ Open a support case if any of the following are true:
   https://aka.ms/hci-envch
 - [Azure Local deployment prerequisites](https://learn.microsoft.com/azure/azure-local/deploy/deployment-local-identity-with-key-vault)
   (machines must start in a workgroup; the deployment performs the domain join).
+
+::: audience-css
+
+# Source Articles
+
+- [Azure Local deployment prerequisites](https://learn.microsoft.com/azure/azure-local/deploy/deployment-local-identity-with-key-vault)
+- [Environment Checker remediation](https://aka.ms/hci-envch)
+
+:::

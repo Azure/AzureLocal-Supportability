@@ -1,3 +1,38 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160003"
+Title: "AzStackHci_SBEHealth_Test-Installed-SBE-Env-Vars"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: "Solution Builder Extension"
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38356189
+Tags: ["Validation", "Solution Update", "SBE", "Firmware", "Driver"]
+---
+
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scoping, and current article layout without changing technical guidance. |
+
+:::
+
 # AzStackHci_SBEHealth_Test-Installed-SBE-Env-Vars
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -448,10 +483,12 @@ completion (step 2) in a maintenance window. Route the next action by evidence:
   errors. Escalate to the network or proxy owner with the endpoint, transfer error, and
   affected node list. Do not assign a transfer problem to the OEM until the egress path
   has been checked.
-- The sibling SBE health checks also warn or fail (see **Related**), which can indicate a
+- The sibling SBE health checks also warn or fail (see **Source Articles**), which can indicate a
   broader SBE configuration problem rather than just a stale environment variable.
 
-## Related
+::: audience-css
+
+# Source Articles
 
 - **Rerun a deployment / update after fixing prerequisites** (Azure Local deployment
   troubleshooting): https://learn.microsoft.com/azure/azure-local/manage/troubleshoot-deployment#restart-the-deployment-via-azure-portal
@@ -462,3 +499,5 @@ completion (step 2) in a maintenance window. Route the next action by evidence:
   integrity-intact, and signed), `Test-SBEPropertiesValid` (partner property values match the
   SBE manifest), and `Test-SBECredentialsValid` (SBE credentials in the secret store match the
   SBE manifest).
+
+:::

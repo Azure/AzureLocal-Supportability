@@ -1,3 +1,38 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917160015"
+Title: "AzStackHci_DNS_ActiveDirectoryDomainName"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "DNS and Active Directory"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38356873
+Tags: ["DNS", "Active Directory", "Validation", "Cloud Deployment", "Solution Update"]
+---
+
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+|------|---------|---------|
+| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scopes, revision history, and source scope without changing the validated technical procedure. |
+
+:::
+
 # AzStackHci_DNS_ActiveDirectoryDomainName
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -637,3 +672,12 @@ skip this section; it is here so the steps above stay short.
 - **Split-horizon (split-brain) DNS:** a setup where the same DNS name resolves
   differently for internal versus external clients. A stale or shadowing zone can cause a
   server to return nothing for the AD domain name this check asks for.
+
+::: audience-css
+
+# Source Articles
+
+- Azure Local Environment Validator product source and result semantics reviewed during the September 17, 2026 TSG Forge validation.
+- The prior live-validation evidence, command results, safety gates, and fidelity classification remain unchanged by this structural retrofit.
+
+:::
