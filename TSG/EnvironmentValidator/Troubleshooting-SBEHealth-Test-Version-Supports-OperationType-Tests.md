@@ -6,6 +6,22 @@
     <td><strong>AzStackHci_SBEHealth_Test-Version-Supports-&lt;OperationType&gt;-Tests</strong> (for example <code>Test-Version-Supports-PreUpdate-Tests</code>)</td>
   </tr>
   <tr>
+    <th style="text-align:left;">ArticleType</th>
+    <td><code>TSG</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Audience</th>
+    <td><code>['Engineering', 'CSS', 'OEM Partners', 'External']</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">AppliesTo.Product</th>
+    <td><code>Azure Local</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">AppliesTo.OEM</th>
+    <td><code>['All']</code></td>
+  </tr>
+  <tr>
     <th style="text-align:left;">Display name</th>
     <td>Solution Builder Extension version supports the operation-type health tests ("Validate SBE Version supports &lt;OperationType&gt; type tests")</td>
   </tr>

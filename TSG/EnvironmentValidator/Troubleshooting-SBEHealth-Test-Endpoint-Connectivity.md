@@ -6,6 +6,22 @@
     <td><strong>AzStackHci_SBEHealth_Test-Endpoint-Connectivity</strong></td>
   </tr>
   <tr>
+    <th style="text-align:left;">ArticleType</th>
+    <td><code>TSG</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Audience</th>
+    <td><code>['Engineering', 'CSS', 'OEM Partners', 'External']</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">AppliesTo.Product</th>
+    <td><code>Azure Local</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">AppliesTo.OEM</th>
+    <td><code>['All']</code></td>
+  </tr>
+  <tr>
     <th style="text-align:left;">Display name</th>
     <td>Solution Builder Extension manifest endpoint connectivity ("Validate SBE manifest reachable")</td>
   </tr>

@@ -6,6 +6,22 @@
     <td><strong>AzStackHci_Hardware_Test_SystemDrive_Free_Space</strong></td>
   </tr>
   <tr>
+    <th style="text-align:left;">ArticleType</th>
+    <td><code>TSG</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Audience</th>
+    <td><code>['Engineering', 'CSS', 'OEM Partners', 'External']</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">AppliesTo.Product</th>
+    <td><code>Azure Local</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">AppliesTo.OEM</th>
+    <td><code>['All']</code></td>
+  </tr>
+  <tr>
     <th style="text-align:left;">Telemetry / health-scanner name</th>
     <td><strong>AzStackHci_Hardware_SystemDriveFreeSpace</strong> (same check; this is the name used in Azure telemetry and the health-fault scanner)</td>
   </tr>

@@ -6,6 +6,22 @@
     <td><strong>AzStackHci_Software_IsNotPartofDomain</strong></td>
   </tr>
   <tr>
+    <th style="text-align:left;">ArticleType</th>
+    <td><code>TSG</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Audience</th>
+    <td><code>['Engineering', 'CSS', 'OEM Partners', 'External']</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">AppliesTo.Product</th>
+    <td><code>Azure Local</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">AppliesTo.OEM</th>
+    <td><code>['All']</code></td>
+  </tr>
+  <tr>
     <th style="text-align:left;">Display name</th>
     <td>Domain Membership</td>
   </tr>
@@ -30,6 +46,22 @@
     <td>Deployment (pre-deployment validation).</td>
   </tr>
   <tr>
+    <th style="text-align:left;">Owner</th>
+    <td>Customer Windows / Active Directory administrator or the deployment partner.</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Estimated effort</th>
+    <td>About 15 minutes of hands-on work per machine, plus one restart and a validator rerun. Multiply this estimate by the number of pre-deployment machines.</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Operational impact</th>
+    <td>The affected machine is unavailable during the restart. After the unjoin, use the verified local administrator; do not apply this change to a live cluster member.</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Domain-controller dependency</th>
+    <td>The unjoin requires DNS and network reachability to a domain controller for the current domain, a healthy trust path, and a credential allowed to remove the computer object.</td>
+  </tr>
+  <tr>
     <th style="text-align:left;">Affected Versions</th>
     <td>Azure Local, version 23H2 and later.</td>
   </tr>
@@ -49,9 +81,12 @@ machine. A machine that is part of a domain returns a **FAILURE**; a machine in 
 workgroup returns a **SUCCESS**.
 
 While this check is failing, deployment is blocked at the Software validation stage,
-and the machine cannot proceed to cluster deployment. This is a pre-deployment gate,
-so it does not affect a cluster that is already deployed; it stops a new machine from
-being deployed while it is still attached to a domain.
+and the machine cannot proceed to cluster deployment. The Software validator includes
+this test for Deployment and Upgrade, while the AddNode path explicitly excludes it.
+The unjoin procedure in this guide is only for a machine being prepared for a new
+deployment. If the result names an already deployed cluster member during Upgrade or
+another workflow, do not unjoin that member; stop and route the case to the cluster
+owner or Azure Local support.
 
 ## Before you start: who should do this, and is it safe?
 
@@ -59,16 +94,24 @@ being deployed while it is still attached to a domain.
   identity admin, or the deployment partner). It is **not** a networking task and **not** a
   hardware-vendor (OEM) issue, so do not route it to the network team or escalate it to your
   server vendor.
-- **Confirm this is a pre-deployment machine, not a live cluster member.** This check runs
-  only before deployment, so the machine it flags should be a host you are preparing to
-  deploy. **Do not unjoin a machine that is already a deployed Azure Local cluster member.**
-  If you are not sure whether this machine is already part of a running cluster, stop and
-  confirm with the cluster owner first; unjoining and restarting a live node is disruptive
-  and is not what this check is for.
-- **You will restart the machine and must sign in locally afterward.** Removing the machine
-  from the domain requires a restart, after which you can sign in only with a local account.
-  Confirm a working local administrator sign-in **before** you unjoin (see step 2 below).
-  Otherwise the restart can lock you out of the machine.
+- **Confirm the workload boundary.** The remediation below is for a pre-deployment host
+  that is not carrying Azure Local cluster roles or workloads. **[HIGH RISK] Do not
+  unjoin a machine that is already a deployed Azure Local cluster member.** Unjoining
+  and restarting a live member can make the node unavailable to the cluster and
+  interrupt VMs or other workloads that depend on it. If you cannot prove that the
+  machine is still a pre-deployment host, stop and confirm with the cluster owner.
+- **Confirm the domain-controller dependency.** Removing a computer from the domain
+  requires a reachable domain controller, working DNS, a healthy trust path, and a
+  domain credential with permission to remove the computer object. Run the
+  domain-controller check in step 1 before attempting the unjoin. If it fails, stop
+  and engage the Active Directory or DNS owner; do not try to force an offline unjoin.
+- **You will restart the machine and must sign in locally afterward.** Removing the
+  machine from the domain requires a restart, after which domain sign-in no longer
+  applies. Confirm a working local administrator sign-in with the executable gate in
+  step 2, and do not continue unless it reports success.
+- **Check the provisioning path.** If Group Policy, imaging, or provisioning
+  automatically rejoins machines to the domain, have its owner change that process so
+  pre-deployment hosts remain in a workgroup.
 
 ## Where this failure appears
 
@@ -79,7 +122,8 @@ show the same underlying result.
 
 This check runs during the deployment validation step. When you deploy Azure Local
 from the portal (or with a deployment template), the **Validation** phase runs the
-environment checks and lists any that fail:
+environment checks and lists any that fail. The same Software validation family can
+also run during Upgrade, but the AddNode path excludes this test:
 
 1. Open the Azure Local deployment for your cluster and go to its **Validation**
    results (the deployment surfaces these before it proceeds to apply).
@@ -123,6 +167,19 @@ Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath '*[System[(Event
     Select-Object -First 1 -ExpandProperty Message
 ```
 
+**Component / tool log files (on disk).** The Environment Checker also writes its
+own log and report on the machine where the validation ran:
+`%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log` and
+`%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentReport.json`. These files can provide
+the same per-machine detail when you are collecting an evidence bundle.
+
+**Where this does not appear.** This is a pre-deployment operating-system check, not
+a clustered role or workload event. It does not appear in `Get-ClusterLog`, Windows
+Failover Cluster Manager, Windows Admin Center on a standalone host, or Windows Admin
+Center in the Azure portal. In Windows Admin Center in the Azure portal, this result is
+not evident here; use the deployment Validation view instead. Use the node PowerShell
+result, the Environment Checker event log, or the component files above.
+
 In both sources the result for this check looks like this:
 
 ```json
@@ -130,8 +187,8 @@ In both sources the result for this check looks like this:
   "Name": "AzStackHci_Software_IsNotPartofDomain",
   "DisplayName": "Domain Membership",
   "Title": "Domain Membership",
-  "Severity": "Critical",
-  "Status": "FAILURE",
+  "Severity": 2,
+  "Status": 1,
   "Description": "Validates nodes are not pre-joined to an Active Directory domain by querying (Get-WmiObject Win32_ComputerSystem).PartOfDomain on each node. Nodes must not be domain-joined before Azure Local deployment.",
   "TargetResourceType": "OperatingSystem",
   "TargetResourceName": "AzL-Node-01",
@@ -144,9 +201,12 @@ In both sources the result for this check looks like this:
 }
 ```
 
-The `Detail` line is the key part. It names the machine (`AzL-Node-01` above) and tells
-you to remove it from the domain. A passing result has `Status` of `SUCCESS` and a
-detail line of `'AzL-Node-01' is not part of a domain.`
+The persisted Event ID 17205 and health-check JSON use numeric top-level `Status` and
+`Severity` values. Read the human-readable status and message from
+`AdditionalData.Status` and `AdditionalData.Detail`. The `Detail` line is the key part:
+it names the machine (`AzL-Node-01` above) and tells you to remove it from the domain.
+A passing result has `AdditionalData.Status` of `SUCCESS` and a detail line of
+`'AzL-Node-01' is not part of a domain.`
 
 ## Requirements
 
@@ -156,6 +216,10 @@ detail line of `'AzL-Node-01' is not part of a domain.`
    a PowerShell session.
 3. You have a domain account with permission to remove the machine's computer object
    from the domain (used once to unjoin).
+4. The machine can resolve and reach a domain controller for its current domain, and
+   the secure channel is usable. Step 1 verifies this dependency before the unjoin.
+5. Keep the same elevated PowerShell session open for steps 2 and 3 so the verified
+   `$localCredential` remains available to the pre-unjoin gate.
 
 ## Troubleshooting Steps
 
@@ -164,39 +228,73 @@ detail line of `'AzL-Node-01' is not part of a domain.`
 On each machine you are deploying, check its domain membership directly:
 
 ```powershell
-Get-CimInstance Win32_ComputerSystem | Select-Object Name, PartOfDomain, Domain
+$computerSystem = Get-CimInstance Win32_ComputerSystem
+$computerSystem | Select-Object Name, PartOfDomain, Domain
+
+if ($computerSystem.PartOfDomain) {
+    nltest /dsgetdc:$($computerSystem.Domain)
+    if ($LASTEXITCODE -ne 0) {
+        throw "No reachable domain controller was found for $($computerSystem.Domain). Stop and fix DNS, network, or trust connectivity before unjoining."
+    }
+    if (-not (Test-ComputerSecureChannel -Verbose)) {
+        throw "The secure channel to $($computerSystem.Domain) is not healthy. Stop and repair the domain trust before unjoining."
+    }
+}
 ```
 
 If `PartOfDomain` is `True`, this check will fail on that machine, and `Domain` shows
 the domain it is joined to. A machine that is ready for deployment shows
-`PartOfDomain` of `False` and a workgroup name (for example `WORKGROUP`).
+`PartOfDomain` of `False` and a workgroup name (for example `WORKGROUP`). For a
+multi-machine deployment, repeat this check on every host; one passing host does not
+clear another host.
 
 ### 2. Make sure you can sign in locally after the unjoin
 
 The next step unjoins the machine and restarts it, so it comes back up as a workgroup
 member and the next sign-in must use a **local** account. On a machine that has been
-domain-joined, the built-in local `Administrator` account is often disabled or has an
-unknown password, so confirm you have a working local administrator sign-in **before**
-you unjoin. Otherwise the restart can lock you out of the machine.
+domain-joined, the built-in local administrator account may be disabled, renamed (for
+example, `ASBuiltInAdmin`), or have an unknown password. Establish and test a known
+local administrator credential before you unjoin. Otherwise the restart can lock you
+out of the machine.
 
 ```powershell
-# Is the built-in local Administrator enabled?
-Get-LocalUser -Name Administrator | Select-Object Name, Enabled
-# Who else is a local administrator?
-Get-LocalGroupMember -Group Administrators
+# Windows can rename the built-in Administrator account. Its stable RID is -500,
+# so discover the account instead of assuming its name is "Administrator".
+$localUser = Get-LocalUser -ErrorAction Stop |
+    Where-Object { $_.SID.Value -match '-500$' } |
+    Select-Object -First 1
+if ($null -eq $localUser) {
+    throw 'The built-in local administrator account (SID ending in -500) was not found.'
+}
+$localAdmin = $localUser.Name
+
+if (-not $localUser.Enabled) {
+    Enable-LocalUser -Name $localAdmin -ErrorAction Stop
+}
+
+$isLocalAdministrator = Get-LocalGroupMember -Group 'Administrators' -ErrorAction Stop |
+    Where-Object { $_.SID.Value -eq $localUser.SID.Value }
+if (-not $isLocalAdministrator) {
+    throw "$env:COMPUTERNAME\$localAdmin is not a member of the local Administrators group."
+}
+
+$localPassword = Read-Host -Prompt "Enter a known password for $env:COMPUTERNAME\$localAdmin" -AsSecureString
+Set-LocalUser -Name $localAdmin -Password $localPassword -ErrorAction Stop
+
+# Verify that Windows accepts the local credentials before any domain change.
+$localCredential = [pscredential]::new("$env:COMPUTERNAME\$localAdmin", $localPassword)
+$localAccessTest = Start-Process -FilePath "$env:SystemRoot\System32\whoami.exe" `
+    -Credential $localCredential -Wait -PassThru -ErrorAction Stop
+if ($localAccessTest.ExitCode -ne 0) {
+    throw "The local credential test failed. Do not unjoin the domain."
+}
+"Verified local administrator credentials for $env:COMPUTERNAME\$localAdmin."
 ```
 
-If the local `Administrator` is disabled, or no local administrator has a password you
-know, enable the account and set a known password before continuing (run as an
-administrator):
-
-```powershell
-Enable-LocalUser -Name Administrator
-Set-LocalUser  -Name Administrator -Password (Read-Host -AsSecureString 'New local Administrator password')
-```
-
-Do not proceed to the unjoin until at least one local administrator sign-in is known to
-work on this machine.
+The block must finish with the explicit verification message and a zero exit code.
+If any command errors, the account is not a local administrator, or the credential
+test fails, stop and correct local access before continuing. Keep this PowerShell
+session open because step 3 repeats the credential test using `$localCredential`.
 
 ### 3. Remove the machine from the domain
 
@@ -209,9 +307,36 @@ preparation window.
 You will be prompted for a domain account that can remove this machine from the domain
 (enter it as `DOMAIN\username`), and then asked to confirm the unjoin. Confirm to proceed.
 
+**[MEDIUM RISK] Required pre-unjoin gate:** Run the following block only after step 2
+completed successfully. It repeats the local credential test and stops before the
+unjoin if the local access gate is not met.
+
 ```powershell
+# Fail closed if step 2 was not completed in this same PowerShell session, or if
+# the credential no longer identifies the account that step 2 verified.
+if ([string]::IsNullOrWhiteSpace($localAdmin) -or
+    $null -eq $localCredential -or
+    -not ($localCredential -is [pscredential])) {
+    throw 'Run step 2 and keep its verified $localCredential in this PowerShell session before unjoining.'
+}
+if ($localCredential.UserName -ne "$env:COMPUTERNAME\$localAdmin") {
+    throw 'The verified local credential does not match the local administrator account from step 2.'
+}
+$localAccessTest = Start-Process -FilePath "$env:SystemRoot\System32\whoami.exe" `
+    -Credential $localCredential -Wait -PassThru -ErrorAction Stop
+if ($localAccessTest.ExitCode -ne 0) {
+    throw 'The local credential test failed. Do not unjoin the domain.'
+}
+
+# Required precondition: the local credential gate above passed in this session.
 # Supply a domain account allowed to remove this machine from the domain.
-Remove-Computer -UnjoinDomainCredential (Get-Credential) -PassThru
+$unjoinResult = Remove-Computer -UnjoinDomainCredential (Get-Credential) `
+    -PassThru `
+    -ErrorAction Stop
+if (-not $unjoinResult.HasSucceeded) {
+    throw "Domain removal did not succeed for $($unjoinResult.ComputerName). The machine will not restart."
+}
+# Restart only after Remove-Computer returned a confirmed successful result.
 Restart-Computer -Force
 ```
 
@@ -246,8 +371,10 @@ $r.AdditionalData.Detail
 
 A workgroup machine returns `Status` of `SUCCESS` and a detail line of
 `'AzL-Node-01' is not part of a domain.` Once every machine you are deploying reports
-success, re-run the deployment validation; the **Domain Membership** check should now
-pass and deployment can proceed.
+success, repeat the same verification on every machine, then re-run the deployment
+validation. The **Domain Membership** check should now pass and deployment can proceed.
+If a machine rejoins the domain, stop the deployment and correct the provisioning or
+Group Policy path before retrying.
 
 ## When to escalate
 
@@ -257,6 +384,10 @@ Open a support case if any of the following are true:
   still fails during deployment validation.
 - The machine rejoins the domain on its own after you unjoin it, and you cannot find
   the Group Policy, provisioning task, or imaging step that is rejoining it.
+- `nltest /dsgetdc` cannot find a domain controller, or the unjoin fails with a DNS,
+  trust, or domain-controller connectivity error.
+- The result names an already deployed cluster member. Do not unjoin that member;
+  engage the cluster owner or Azure Local support for a workload-safe procedure.
 - `Remove-Computer` fails with a permissions or trust error that you cannot resolve
   with a domain account that has rights to remove the computer object.
 
