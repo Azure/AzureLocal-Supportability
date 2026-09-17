@@ -27,7 +27,7 @@ The usual contributing factor is a single physical disk that is failing with ext
 
 The same failing drive can also hang the storage completion path under heavy write I/O and trip a `DPC_WATCHDOG_VIOLATION` (bugcheck `0x133`) on the node that hosts the drive, so a node crash and the stuck repair are often two symptoms of one underlying disk fault.
 
-**How to resolve it (at a glance).** Confirm the stuck repair, identify the failing drive (a `Get-PhysicalDisk` disk that is still `Healthy` but reports `"Abnormal Latency"` or `Lost Communication`, and on physical hardware a `Get-HealthFault` `PhysicalDisk.HighLatency` / `HighErrorCount` outlier), confirm the pool has free reserve, then mark the drive do-not-use with `Set-PhysicalDisk -Usage Retired` and watch the rebuild drain to zero. The detailed steps, safety checks, and a glossary of terms follow below.
+**How to resolve it (at a glance).** Confirm the stuck repair, then identify the failing drive by its variant: high latency reports `HealthStatus = Healthy` with `OperationalStatus = "OK, Abnormal Latency"`, while lost communication reports `HealthStatus = Warning` with `OperationalStatus = "Lost Communication"`. On physical hardware, corroborate the disk with a `Get-HealthFault` `PhysicalDisk.HighLatency` / `HighErrorCount` outlier. Confirm the pool has free reserve, mark the drive do-not-use with `Set-PhysicalDisk -Usage Retired`, and watch the rebuild drain to zero. The detailed steps, safety checks, and a glossary of terms follow below.
 
 **Impact and ownership.** A volume is running without full redundancy, so this is data-at-risk, but no VM or cluster downtime is needed to fix it: the retire and rebuild run online. Owner: customer or partner IT runs the retire; the OEM or hardware vendor physically replaces the drive. Duration: the rebuild usually takes from tens of minutes to a few hours, depending on how much data was on the drive and the volume's resiliency type.
 
@@ -154,7 +154,7 @@ S2D stores each volume with a resiliency type that keeps redundant data across f
 
 Confirm the actual scheme before you act: `Get-VirtualDisk -FriendlyName <vol> | Select-Object FriendlyName, ResiliencySettingName, NumberOfDataCopies, PhysicalDiskRedundancy`.
 
-**Why the drive was not automatically failed (this is scheme-independent).** S2D auto-retires a drive only when its own health/SMART state marks it failed. A drive that is merely slow or erroring, or that dropped its connection but still enumerates, can stay `HealthStatus = Healthy` (`OperationalStatus = "OK, Abnormal Latency"`, or `Lost Communication`), so S2D keeps scheduling I/O to it. Repair and regeneration jobs that must touch that drive's slabs time out and requeue, and you observe the restart loop, regardless of the resiliency scheme.
+**Why the drive was not automatically failed (this is scheme-independent).** S2D auto-retires a drive only when its own health/SMART state marks it failed. A slow or erroring drive can stay `HealthStatus = Healthy` with `OperationalStatus = "OK, Abnormal Latency"`. A drive that dropped its connection but still enumerates instead reports `HealthStatus = Warning` with `OperationalStatus = "Lost Communication"`. In either variant, S2D can keep scheduling I/O to the disk. Repair and regeneration jobs that must touch that drive's slabs time out and requeue, and you observe the restart loop, regardless of the resiliency scheme.
 
 **How the fix applies per scheme.**
 
@@ -211,7 +211,7 @@ The fix is to mark the failing drive `Retired` so S2D stops using it and rebuild
 Run through this list before Step 4. Most stuck or unsafe retires trace back to skipping one of these.
 
 - **All nodes up.** Confirm `Get-ClusterNode` shows every node `Up`. Retiring a drive while a node is down removes a fault domain and can block the rebuild or drop below resiliency.
-- **Only one fault domain affected.** A second failing drive can read as `Healthy` while its `OperationalStatus` is `Abnormal Latency` or `Lost Communication`, which is exactly the condition this guide describes, so filter on operational status too, not just `HealthStatus` and `Usage`, and note each suspect drive's node: `Get-PhysicalDisk | Where-Object { $_.Usage -eq 'Retired' -or $_.HealthStatus -ne 'Healthy' -or (($_.OperationalStatus -join ',') -ne 'OK') } | Select-Object FriendlyName, SerialNumber, HealthStatus, @{n='Op';e={$_.OperationalStatus -join ','}}, PhysicalLocation` (identify a suspect drive's node with `Get-PhysicalDisk -SerialNumber <SerialNumber> | Get-StorageNode -PhysicallyConnected`). Retiring a second drive in a second fault domain while a three-way mirror is already degraded can cause data loss.
+- **Only one fault domain affected.** A second high-latency drive can remain `Healthy` while its `OperationalStatus` is `Abnormal Latency`; a lost-communication drive instead reports `HealthStatus = Warning` with `OperationalStatus = Lost Communication`. Filter on both health and operational status, and note each suspect drive's node: `Get-PhysicalDisk | Where-Object { $_.Usage -eq 'Retired' -or $_.HealthStatus -ne 'Healthy' -or (($_.OperationalStatus -join ',') -ne 'OK') } | Select-Object FriendlyName, SerialNumber, HealthStatus, @{n='Op';e={$_.OperationalStatus -join ','}}, PhysicalLocation` (identify a suspect drive's node with `Get-PhysicalDisk -SerialNumber <SerialNumber> | Get-StorageNode -PhysicallyConnected`). Retiring a second drive in a second fault domain while a three-way mirror is already degraded can cause data loss.
 - **Enough free reserve (Step 3).** Pool free must exceed the drive's used capacity, with reserve left over. Do not rely on deleting data to create it at the last minute; thin reclaim is slow.
 - **Check for last-copy data.** Run `Get-VirtualDisk -FriendlyName <VolumeName> | Get-PhysicalDisk -NoRedundancy`. If the failing drive is returned, some regions have no other copy; retiring is still correct but is a data-at-risk operation (see the Step 4 caveat). Also check `ReadErrorsUncorrected` on the drive: non-zero uncorrected read errors on a last-copy drive is the worst case.
 - **Not during an update or CAU run.** Do not retire a drive while a solution update, Cluster-Aware Updating run, or node maintenance is in progress. Wait for a quiet window so the rebuild is not competing with reboots and storage maintenance.
@@ -239,7 +239,8 @@ Get-VirtualDisk | Select-Object FriendlyName, HealthStatus, OperationalStatus, O
 # plus VirtualDisks.NoRedundancy / LastCopy on the volume.
 Get-HealthFault | Select-Object FaultType, PerceivedSeverity, Reason, FaultingObjectDescription
 
-# The failing drive: Healthy but "Abnormal Latency" or "Lost Communication".
+# The high-latency variant is Healthy with "Abnormal Latency".
+# The lost-communication variant is Warning with "Lost Communication".
 Get-PhysicalDisk | Where-Object { ($_.OperationalStatus -join ',') -match 'Abnormal Latency|Lost Communication' } |
   Select-Object FriendlyName, SerialNumber, UniqueId, PhysicalLocation, HealthStatus, OperationalStatus
 
@@ -259,6 +260,18 @@ Record the drive's `UniqueId`; you will use it in Step 4 and Step 6.
 
 S2D does not use dedicated hot spares. It rebuilds a retired or failed drive's data into free **reserve capacity** distributed across the remaining drives and nodes. You do not need a replacement drive in hand to recover redundancy. What you need is enough free capacity in the surviving fault domains, with the general guidance being to keep roughly one capacity drive's worth of space free per server (up to four).
 
+[READ-ONLY] Discover and record the single non-primordial pool name before using it below:
+
+```powershell
+$pools = @(Get-StoragePool -IsPrimordial $false)
+if ($pools.Count -ne 1) {
+    $pools | Select-Object FriendlyName, HealthStatus, OperationalStatus | Format-Table -AutoSize
+    throw "Expected exactly one non-primordial pool. Resolve the target pool explicitly before continuing."
+}
+$PoolName = $pools[0].FriendlyName
+"Pool selected: $PoolName"
+```
+
 ```powershell
 # 1. How much data must be rebuilt elsewhere equals the USED (allocated) capacity of the
 #    failing drive. A retire evacuates the drive's whole allocated content, not just a
@@ -269,7 +282,7 @@ Get-PhysicalDisk -UniqueId <DiskUniqueId> |
     @{n='SizeGB';e={[math]::Round($_.Size/1e9,1)}}
 
 # 2. Pool free space and fill level.
-Get-StoragePool -FriendlyName <PoolName> |
+Get-StoragePool -FriendlyName $PoolName |
   Select-Object FriendlyName, HealthStatus,
     @{n='UsedPct';e={[math]::Round(100*$_.AllocatedSize/$_.Size,1)}},
     @{n='FreeTB';e={[math]::Round(($_.Size-$_.AllocatedSize)/1e12,2)}}
@@ -388,11 +401,48 @@ Get-VirtualDisk -FriendlyName <VolumeName> | Select-Object HealthStatus, Operati
 Get-HealthFault | Select-Object FaultType, PerceivedSeverity
 ```
 
-If no repair jobs start within a few minutes of retiring the drive, trigger one explicitly:
+If no `Repair` or `Regeneration` job starts automatically within a few minutes of retiring the drive, use the guarded fallback below.
+
+[LOW RISK] `Repair-VirtualDisk` starts repair work for one explicitly selected virtual disk. Run it only after the failing physical disk is confirmed `Retired` and no repair or regeneration job is already active. The repair runs online but can increase storage I/O and latency.
 
 ```powershell
-Repair-VirtualDisk -FriendlyName <VolumeName>
+$VolumeName = '<VolumeName>'
+$DiskUniqueId = '<DiskUniqueId>'
+
+$retiredDisk = Get-PhysicalDisk -UniqueId $DiskUniqueId
+if (@($retiredDisk).Count -ne 1 -or $retiredDisk.Usage -ne 'Retired') {
+    throw "Refusing to trigger repair: the diagnosed physical disk is not uniquely resolved with Usage = Retired."
+}
+
+$activeRepair = @(Get-StorageJob | Where-Object {
+    $_.Name -match 'Repair|Regeneration' -and $_.JobState -notin @('Completed','Failed')
+})
+if ($activeRepair.Count -gt 0) {
+    $activeRepair | Select-Object Name, JobState, PercentComplete | Format-Table -AutoSize
+    throw "A Repair or Regeneration job is already active. Monitor it instead of starting another repair."
+}
+
+$targetVirtualDisk = @(Get-VirtualDisk -FriendlyName $VolumeName)
+if ($targetVirtualDisk.Count -ne 1) {
+    throw "Expected exactly one virtual disk named '$VolumeName'. Found $($targetVirtualDisk.Count). Resolve the volume identity before continuing."
+}
+
+# Preview the selected virtual disk repair with no changes.
+Repair-VirtualDisk -InputObject $targetVirtualDisk[0] -WhatIf
+
+$confirm = Read-Host "Type REPAIR to start repair for virtual disk '$VolumeName'"
+if ($confirm -ne 'REPAIR') {
+    throw "Confirmation not received. Aborting before Repair-VirtualDisk."
+}
+
+Repair-VirtualDisk -InputObject $targetVirtualDisk[0]
+
+# Expected result: a Repair or Regeneration job appears for the selected virtual disk.
+Get-StorageJob | Where-Object { $_.Name -match 'Repair|Regeneration' } |
+  Select-Object Name, JobState, PercentComplete, BytesProcessed, BytesTotal
 ```
+
+If no repair or regeneration job appears, do not repeat the command. Collect the evidence package and escalate. There is no rollback action for a repair request; let an active repair run or engage Microsoft Support rather than trying to cancel it by returning the failing disk to service.
 
 During evacuation the pool used percentage rises briefly as replacement copies are written, then settles as the retired drive's slabs are released. This is expected.
 
