@@ -276,7 +276,8 @@ if (-not (Test-Path $backupPath) -or @(Get-Content $backupPath).Count -lt @($bac
 Write-Host "ROLLBACK FILE: $backupPath" -ForegroundColor Yellow
 Write-Host "Write that path down. Rollback reads the FILE, not this PowerShell session." -ForegroundColor Yellow
 
-# Every backup for THIS cluster on this node, oldest first. The OLDEST is the pre-change value.
+# List backups for inspection only. Rollback must use the exact ROLLBACK FILE path
+# recorded for the current change, never a file selected by age.
 Get-ChildItem $backupDir -Filter ("Health-Providers-backup-{0}-*.txt" -f $clusterName) -ErrorAction SilentlyContinue |
     Sort-Object CreationTime |
     Select-Object Name, CreationTime, @{n='ProviderCount';e={ @(Get-Content $_.FullName | Where-Object { $_.Trim() }).Count }} |
