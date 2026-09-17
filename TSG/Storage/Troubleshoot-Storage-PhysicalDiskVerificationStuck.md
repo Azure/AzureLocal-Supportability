@@ -319,9 +319,16 @@ if ($normalized.Count -ne $expectedPeerCount) {
 
 Get-ClusterResource -Name 'Health' | Set-ClusterParameter -Name Providers -Value $normalized
 
-# Round-trip verify the write took exactly the intended value
-$after = (Get-ClusterResource -Name 'Health' | Get-ClusterParameter -Name Providers).Value
-"Providers now: $(@($after).Count) (expected $expectedPeerCount)"
+# Round-trip verify by exact GUID identity and count, not just by count.
+# This also catches a multi-value write that collapsed into one string.
+$after = @((Get-ClusterResource -Name 'Health' | Get-ClusterParameter -Name Providers).Value |
+           ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+$difference = @(Compare-Object -ReferenceObject $normalized -DifferenceObject $after)
+if ($after.Count -ne $normalized.Count -or $difference.Count -gt 0) {
+    $difference | Format-Table -AutoSize
+    throw "Providers write did NOT round-trip: wrote $($normalized.Count) provider(s), read back $($after.Count) with $($difference.Count) difference(s). Roll back with the recorded file and escalate."
+}
+"Providers write verified: $($after.Count) provider(s) match the healthy-peer set exactly."
 ```
 
 Reinitialize so the restored providers take effect by **re-running the full guarded procedure in [Step A](#step-a-reinitialize-the-health-service-least-risk-try-first)** (its pre-move gate that confirms all nodes are Up and no storage job is running, its node-count-aware failover, and its post-move outcome check). Cluster state can change between steps, so do not use a shortened failover here.
@@ -331,25 +338,32 @@ Wait a few minutes, then re-check `CanPool` as in Step A. If verification still 
 Roll back from the **backup file**, not from an in-session variable. The `$backup` variable only exists in the shell that created it, and a rollback is most often needed later, from a new session, or by a different engineer.
 
 ```powershell
-# Pick the OLDEST backup FOR THIS CLUSTER: it holds the value from before any change.
-# Scoping by cluster name matters: a re-used node can hold another cluster's backup, and
-# restoring that cluster-wide would be worse than the fault you are fixing.
+# Paste the exact ROLLBACK FILE path printed and recorded during the current change.
+# Do not auto-select by age: a reused host can contain older backups for this cluster.
 $backupDir   = 'C:\Temp'
 $clusterName = (Get-Cluster).Name
 $candidates  = @(Get-ChildItem $backupDir -Filter ("Health-Providers-backup-{0}-*.txt" -f $clusterName) -ErrorAction SilentlyContinue |
                  Sort-Object CreationTime)
 if (-not $candidates) { throw "No backup file for cluster '$clusterName' in $backupDir. Do NOT guess a provider list; escalate." }
 
-$oldest = $candidates[0]
-"Backups for '$clusterName' (oldest first):"
-$candidates | Select-Object Name, CreationTime | Format-Table -AutoSize
-"Using: $($oldest.FullName) (created $($oldest.CreationTime))"
+"Backups for '$clusterName':"
+$candidates | Select-Object FullName, CreationTime | Format-Table -AutoSize
+
+$rollbackPath = '<paste-the-exact-ROLLBACK-FILE-path-recorded-for-this-change>'
+if ($rollbackPath -match '^<.*>$' -or -not (Test-Path -LiteralPath $rollbackPath -PathType Leaf)) {
+    throw "Set `$rollbackPath to the exact ROLLBACK FILE path recorded during the current change. Do NOT select a file by age or guess."
+}
+$selected = Get-Item -LiteralPath $rollbackPath
+if ($selected.DirectoryName -ne $backupDir -or $selected.Name -notlike "Health-Providers-backup-$clusterName-*.txt") {
+    throw "Selected file is not a Providers backup for cluster '$clusterName' in $backupDir. Do NOT restore it."
+}
+"Using the explicitly recorded rollback file: $($selected.FullName) (created $($selected.CreationTime))"
 
 $guidPattern = '^\{[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}\}$'
-$restore = @(Get-Content $oldest.FullName | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-if (@($restore).Count -lt 1) { throw "Backup file $($oldest.FullName) is empty. Escalate rather than writing an empty provider list." }
+$restore = @(Get-Content -LiteralPath $selected.FullName | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+if (@($restore).Count -lt 1) { throw "Backup file $($selected.FullName) is empty. Escalate rather than writing an empty provider list." }
 if (@($restore | Where-Object { $_ -notmatch $guidPattern }).Count -gt 0) {
-    throw "Backup file $($oldest.FullName) contains a non-GUID line. Do NOT write it; escalate."
+    throw "Backup file $($selected.FullName) contains a non-GUID line. Do NOT write it; escalate."
 }
 
 "Restoring $(@($restore).Count) provider(s)"
@@ -373,8 +387,12 @@ Then collect diagnostics and escalate.
 
 Once the disks show `CanPool=True`, add them to the pool. On a standard single-pool Azure Local cluster, eligible disks are usually claimed automatically within a short time. If they are not, add them explicitly.
 
+[MEDIUM RISK] Manual pool add changes storage pool membership. Use it only after the disks show `CanPool=True`, cluster health is stable, and automatic pooling has not claimed them.
+
+Workload impact: adding disks can start storage jobs and rebalance work. Schedule the action when the cluster can tolerate background I/O and monitor `Get-StorageJob` until it drains.
+
 > [!IMPORTANT]
-> Identify the intended disks by serial number and use `-PhysicalDisks`. Do not pipe `Get-PhysicalDisk -CanPool $true` directly into `Add-PhysicalDisk`, and do not rely on the pipeline form (it does not bind reliably). This block enforces a single non-primordial pool and verifies every intended serial matched exactly one eligible disk before adding. For more background see Step 3 of the companion guide: [Troubleshoot physical disks not claimed after insertion (`CanPool=False`)](./Troubleshoot-Storage-PhysicalDiskCanPoolFalse.md#step-3-manually-add-disks-only-when-they-are-eligible).
+> Identify the intended disks by `UniqueId` and use `-PhysicalDisks`. Do not pipe `Get-PhysicalDisk -CanPool $true` directly into `Add-PhysicalDisk`, and do not rely on the pipeline form (it does not bind reliably). `UniqueId` is authoritative; `SerialNumber` is only a human cross-check because nested and virtual disks can report an empty serial number. For more background see Step 3 of the companion guide: [Troubleshoot physical disks not claimed after insertion (`CanPool=False`)](./Troubleshoot-Storage-PhysicalDiskCanPoolFalse.md#step-3-manually-add-disks-only-when-they-are-eligible).
 
 ```powershell
 $pool = Get-StoragePool -IsPrimordial $false
@@ -382,21 +400,33 @@ if (@($pool).Count -ne 1) {
     throw "Expected exactly one non-primordial pool. Found $(@($pool).Count). Select the target pool by FriendlyName."
 }
 
-# Enumerate the intended new disks by serial number (each serial listed once)
-$intendedSerials = @('<serial-1>', '<serial-2>')
-if (@($intendedSerials | Sort-Object -Unique).Count -ne @($intendedSerials).Count) {
-    throw "Duplicate serial numbers in the intended list. List each serial exactly once."
+# Enumerate only the intended new disks by UniqueId (each ID listed once).
+$intendedUniqueIds = @('<unique-id-1>', '<unique-id-2>')
+if (@($intendedUniqueIds | Sort-Object -Unique).Count -ne @($intendedUniqueIds).Count) {
+    throw "Duplicate UniqueIds in the intended list. List each disk exactly once."
 }
 
-# Gate: each intended serial must match EXACTLY ONE eligible disk (checked per serial, not in aggregate)
-$disksToAdd = foreach ($sn in $intendedSerials) {
-    $match = @(Get-PhysicalDisk -CanPool $true | Where-Object SerialNumber -eq $sn)
+# Gate: each intended UniqueId must match EXACTLY ONE eligible disk.
+$disksToAdd = foreach ($id in $intendedUniqueIds) {
+    $match = @(Get-PhysicalDisk -CanPool $true | Where-Object UniqueId -eq $id)
     if ($match.Count -ne 1) {
-        throw "Serial '$sn' matched $($match.Count) eligible disks (expected exactly 1). Resolve before continuing."
+        throw "UniqueId '$id' matched $($match.Count) eligible disks (expected exactly 1). Resolve before continuing."
     }
     $match[0]
 }
 $disksToAdd = @($disksToAdd)
+
+# Human cross-check before changing pool membership. SerialNumber may be blank; UniqueId is authoritative.
+$disksToAdd | Format-Table UniqueId, FriendlyName, SerialNumber, Size, MediaType
+
+# Preview the exact pool-add operation with no changes.
+Add-PhysicalDisk -StoragePoolFriendlyName $pool.FriendlyName -PhysicalDisks $disksToAdd -WhatIf
+
+# Require an explicit typed confirmation before the real add.
+$confirm = Read-Host "Type ADD to claim the $($disksToAdd.Count) disk(s) above into pool '$($pool.FriendlyName)'"
+if ($confirm -ne 'ADD') {
+    throw "Confirmation not received. Aborting before Add-PhysicalDisk."
+}
 
 Add-PhysicalDisk -StoragePoolFriendlyName $pool.FriendlyName -PhysicalDisks $disksToAdd
 ```
