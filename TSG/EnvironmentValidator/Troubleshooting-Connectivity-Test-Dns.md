@@ -29,7 +29,7 @@ Tags: ["DNS", "Validation", "Cloud Deployment", "Solution Update", "Diagnostics"
 
 | Date | Version | Summary |
 |------|---------|---------|
-| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scopes, revision history, and source scope without changing the validated technical procedure. |
+| 2026-09-17 | 2.0 | Added mandatory publication metadata, audience scopes, revision history, and source scope without changing the validated technical procedure. |
 
 :::
 
@@ -711,7 +711,7 @@ skip this section; it is here so the steps above stay short.
 
 # Source Articles
 
-- Azure Local Environment Validator product source and result semantics reviewed during the September 17, 2026 TSG Forge validation.
+- Azure Local Environment Validator product source and result semantics reviewed during the September 17, 2026 documentation validation.
 - The prior live-validation evidence, command results, safety gates, and fidelity classification remain unchanged by this structural retrofit.
 
 :::

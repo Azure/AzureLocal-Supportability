@@ -29,7 +29,7 @@ Tags: ["Validation", "Windows Update", "Solution Update", "Cloud Deployment"]
 
 | Date | Version | Summary |
 | --- | --- | --- |
-| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scoping, and current article layout without changing technical guidance. |
+| 2026-09-17 | 2.0 | Added mandatory publication metadata, audience scoping, and current article layout without changing technical guidance. |
 
 :::
 
@@ -339,13 +339,13 @@ capacity on the remaining nodes and can fail if the cluster is already degraded
 or lacks headroom. Do not start cleanup until the drain has completed.
 
 ```powershell
-Suspend-ClusterNode -Name <node> -Drain -Wait    # wait for live migration and drain completion
-Get-ClusterNode -Name <node> | Select-Object Name, State
+Suspend-ClusterNode -Name '<node>' -Drain -Wait    # wait for live migration and drain completion
+Get-ClusterNode -Name '<node>' | Select-Object Name, State
 Get-ClusterGroup |
     Where-Object { $_.OwnerNode.Name -eq '<node>' -and $_.GroupType -eq 'VirtualMachine' } |
     Select-Object Name, OwnerNode, State
 # ... run the cleanup steps below ...
-Resume-ClusterNode  -Name <node>           # return the machine to service
+Resume-ClusterNode -Name '<node>'          # return the machine to service
 ```
 
 Proceed only when the target node is `Paused` and no virtual-machine cluster
@@ -388,10 +388,37 @@ exists, the node recently rebooted or bugchecked, or you are unsure, preserve th
 files and do not delete them. Copy them to a non-`C:` volume or network share,
 verify the copy, and only then run the deletion block. If the copy or hash
 verification fails, leave the originals in place and use another Tier 1 action.
+The script below maps every source file to its destination, compares SHA-256
+hashes on both sides, and deletes only the source files in the verified mapping.
 
 ```powershell
 $evidenceDestination = '<NON_C_DRIVE_OR_SHARE>'  # must not be C:
-$evidenceRoot = Join-Path $evidenceDestination (
+$caseEvidenceApprovedForDeletion = $false
+# Set the value above to $true only after the case owner confirms deletion is allowed.
+
+$expandedEvidenceDestination = [Environment]::ExpandEnvironmentVariables(
+    $evidenceDestination
+)
+if (
+    [string]::IsNullOrWhiteSpace($expandedEvidenceDestination) -or
+    $expandedEvidenceDestination -eq '<NON_C_DRIVE_OR_SHARE>'
+) {
+    throw 'Set $evidenceDestination to an approved non-system volume or network share.'
+}
+$fullEvidenceDestination = [System.IO.Path]::GetFullPath(
+    $expandedEvidenceDestination
+)
+$destinationRoot = [System.IO.Path]::GetPathRoot($fullEvidenceDestination)
+$systemRoot = [System.IO.Path]::GetPathRoot("$env:SystemDrive\")
+if (
+    -not $destinationRoot -or
+    $destinationRoot.Equals($systemRoot, [StringComparison]::OrdinalIgnoreCase)
+) {
+    throw 'The evidence destination must not be on the system drive.'
+}
+
+$evidenceVerified = $false
+$evidenceRoot = Join-Path $fullEvidenceDestination (
     "SystemDriveEvidence_{0}_{1}" -f $env:COMPUTERNAME, (Get-Date -Format 'yyyyMMddHHmmss')
 )
 New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
@@ -403,22 +430,92 @@ $evidencePaths = @(
     "$env:ProgramData\Microsoft\Windows\WER\ReportQueue"
 )
 
+$evidenceMap = @()
 foreach ($path in $evidencePaths) {
     if (Test-Path -LiteralPath $path) {
-        Copy-Item -LiteralPath $path -Destination $evidenceRoot -Recurse -Force -ErrorAction Stop
+        $sourceItem = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+        if ($sourceItem.PSIsContainer) {
+            $sourceRoot = $sourceItem.FullName.TrimEnd('\')
+            $destinationRoot = Join-Path $evidenceRoot $sourceItem.Name
+            foreach ($sourceFile in Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Force) {
+                $relativePath = $sourceFile.FullName.Substring($sourceRoot.Length).TrimStart('\')
+                $evidenceMap += [pscustomobject]@{
+                    Source      = $sourceFile.FullName
+                    Destination = Join-Path $destinationRoot $relativePath
+                }
+            }
+        } else {
+            $evidenceMap += [pscustomobject]@{
+                Source      = $sourceItem.FullName
+                Destination = Join-Path $evidenceRoot $sourceItem.Name
+            }
+        }
     }
 }
 
-Get-ChildItem -LiteralPath $evidenceRoot -Recurse -File |
-    Get-FileHash -Algorithm SHA256
-```
+try {
+    foreach ($entry in $evidenceMap) {
+        if (-not (Test-Path -LiteralPath $entry.Source -PathType Leaf)) {
+            throw "Source file disappeared before copy: $($entry.Source)"
+        }
 
-```powershell
-# Run only after the evidence copy completed and the case/evidence check is clear.
-Remove-Item C:\Windows\MEMORY.DMP -Force -ErrorAction SilentlyContinue
-Remove-Item C:\Windows\Minidump\* -Force -ErrorAction SilentlyContinue
-Remove-Item C:\Windows\LiveKernelReports\* -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:ProgramData\Microsoft\Windows\WER\ReportQueue\*" -Recurse -Force -ErrorAction SilentlyContinue
+        $destinationParent = Split-Path -Parent $entry.Destination
+        New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
+        Copy-Item -LiteralPath $entry.Source -Destination $entry.Destination `
+            -Force -ErrorAction Stop
+    }
+
+    $verificationResults = foreach ($entry in $evidenceMap) {
+        $sourceExists = Test-Path -LiteralPath $entry.Source -PathType Leaf
+        $destinationExists = Test-Path -LiteralPath $entry.Destination -PathType Leaf
+        $sourceHash = $null
+        $destinationHash = $null
+
+        if ($sourceExists) {
+            $sourceHash = (Get-FileHash -LiteralPath $entry.Source -Algorithm SHA256).Hash
+        }
+        if ($destinationExists) {
+            $destinationHash = (Get-FileHash -LiteralPath $entry.Destination -Algorithm SHA256).Hash
+        }
+
+        [pscustomobject]@{
+            Source          = $entry.Source
+            Destination     = $entry.Destination
+            SourceHash      = $sourceHash
+            DestinationHash = $destinationHash
+            Verified        = (
+                $sourceExists -and
+                $destinationExists -and
+                $sourceHash -eq $destinationHash
+            )
+        }
+    }
+
+    $verificationResults | Format-Table Source, Destination, Verified -AutoSize
+    $failedVerification = @($verificationResults | Where-Object { -not $_.Verified })
+    if ($failedVerification.Count -gt 0) {
+        throw "One or more evidence files are missing or have mismatched hashes."
+    }
+
+    $evidenceVerified = $true
+} catch {
+    throw "Evidence preservation failed; originals were not deleted. $($_.Exception.Message)"
+}
+
+if ($evidenceMap.Count -eq 0) {
+    Write-Host 'No evidence files were found. Nothing was deleted.'
+} else {
+    if (-not $caseEvidenceApprovedForDeletion) {
+        throw 'Deletion is blocked until the case owner approves evidence removal.'
+    }
+    if (-not $evidenceVerified) {
+        throw 'Deletion is blocked because evidence copy verification did not succeed.'
+    }
+
+    foreach ($entry in $evidenceMap) {
+        Remove-Item -LiteralPath $entry.Source -Force -ErrorAction Stop
+    }
+}
 ```
 
 **d. Clear temporary files.** Safe in production; this deletes files only, and

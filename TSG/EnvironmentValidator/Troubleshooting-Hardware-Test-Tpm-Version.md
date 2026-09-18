@@ -4,7 +4,7 @@ Article_ID: "20260917170004"
 Title: "AzStackHci_Hardware_Test_Tpm_Version"
 Status: "Active"
 Audience: ["Engineering", "CSS", "OEM Partners", "External"]
-LastUpdated: "2026-09-17"
+LastUpdated: "2026-09-18"
 Region: ["All"]
 AppliesTo:
   Product: "Azure Local"
@@ -29,7 +29,8 @@ Tags: ["Validation", "TPM", "Firmware", "BitLocker", "Cloud Deployment"]
 
 | Date | Version | Summary |
 | --- | --- | --- |
-| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, read-only validation evidence, explicit OEM constraints, all eight admin surfaces, and safer deployed-member gates. |
+| 2026-09-18 | 2.1 | Expanded the BitLocker safety gate to cover every protected volume and require explicit external escrow confirmation before firmware changes. |
+| 2026-09-17 | 2.0 | Added mandatory publication metadata, read-only validation evidence, explicit OEM constraints, all eight admin surfaces, and safer deployed-member gates. |
 
 :::
 
@@ -278,15 +279,16 @@ model. Use this table before scheduling downtime:
 | What your hardware reports / the vendor says | What it means | Owner | Planning window | What to do |
 | --- | --- | --- | --- | --- |
 | TPM already reports **2.0** | This check should pass | Azure Local administrator | About 10 minutes for read-only confirmation | Re-confirm with step 1; if it still fails, see [When to escalate](#when-to-escalate) |
-| TPM present, reports **1.2**, vendor says it is **reversibly switchable** | A firmware switch is possible, but it clears the TPM | Server / firmware admin; Windows admin confirms BitLocker | Use an approved maintenance window; firmware menus, reboot time, and post-check time vary by OEM | Escrow the recovery password, confirm the remaining switch allowance if the OEM limits it, then follow the procedure |
+| TPM present, reports **1.2**, vendor says it is **reversibly switchable** | A firmware switch is possible, but it clears the TPM | Server / firmware admin; Windows admin confirms BitLocker | Use an approved maintenance window; firmware menus, reboot time, and post-check time vary by OEM | Confirm externally escrowed recovery evidence for every protected volume, confirm the remaining switch allowance if the OEM limits it, then follow the procedure |
 | TPM **1.2**, switch is **one-way or limited** | You may be unable to return to the prior state, or each switch consumes a finite allowance | Server / firmware admin with written OEM confirmation | Treat as a controlled hardware change, not a routine reboot | Obtain the exact OEM procedure and approval before suspending BitLocker or taking the host down |
 | TPM is a **fixed module** that cannot report 2.0 | There is no firmware setting that can satisfy the validator | Hardware vendor and procurement | Hardware replacement lead time is OEM and supply-chain dependent | Replace the module or server with an Azure Local qualified configuration |
 | **No TPM present** | Not deployable; both this version check and `Test-TpmProperties` can be silent, so verify presence directly | Hardware vendor and procurement | Hardware replacement lead time is OEM and supply-chain dependent | Confirm the qualified configuration and add or replace the required hardware |
 
 **Do not start any disruptive change until you have confirmed all three:** the switch is
-supported on your exact model, the **BitLocker recovery key is escrowed**, and (if this machine
-is already a deployed cluster member) it has been **drained** first. A TPM switch clears the
-module and is sometimes irreversible, so if any of the three is unknown, stop and confirm.
+supported on your exact model, **every protected BitLocker volume has an externally escrowed
+recovery-password protector**, and (if this machine is already a deployed cluster member) it
+has been **drained** first. A TPM switch clears the module and is sometimes irreversible, so
+if any of the three is unknown, stop and confirm.
 
 > **Setting expectations:** a firmware switch is usually quick, but a fixed-module or
 > unsupported-hardware case means a hardware change or replacement with real lead time and
@@ -349,26 +351,136 @@ module, which invalidates the TPM-sealed BitLocker key. If a protected volume is
 48-digit recovery password, which can strand the machine.
 
 ```powershell
-# Are any volumes protected? (On a truly clean, never-encrypted host this is empty.)
-Get-BitLockerVolume | Select-Object MountPoint, ProtectionStatus, VolumeStatus
+# [READ-ONLY] Before running this block, open the authorized external escrow system.
+# For each protected volume, confirm that the escrow record contains BOTH the same
+# recovery-password protector ID and its associated 48-digit recovery password.
+# Then enter only those externally verified protector IDs below. Do not paste recovery
+# passwords into this script.
+$externallyVerifiedRecoveryProtectorIds = @(
+    # Example: '{00000000-0000-0000-0000-000000000000}'
+)
 
-# Show the recovery-password protector ID and value for comparison with your
-# authorized escrow system. Treat the output as sensitive.
-manage-bde.exe -protectors -get C: -Type RecoveryPassword
+$verifiedIds = @(
+    $externallyVerifiedRecoveryProtectorIds |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { $_.Trim().Trim([char[]]'{}').ToUpperInvariant() } |
+        Select-Object -Unique
+)
+
+$allBitLockerVolumes = @(Get-BitLockerVolume -ErrorAction Stop)
+$protectedVolumes = @(
+    $allBitLockerVolumes |
+        Where-Object {
+            [string]$_.VolumeStatus -ne 'FullyDecrypted' -or
+            @($_.KeyProtector).Count -gt 0
+        }
+)
+
+$bitLockerPreflight = @(
+    foreach ($volume in $protectedVolumes) {
+        $recoveryProtectors = @(
+            $volume.KeyProtector |
+                Where-Object { [string]$_.KeyProtectorType -eq 'RecoveryPassword' }
+        )
+        $localRecoveryIds = @(
+            $recoveryProtectors |
+                ForEach-Object {
+                    ([string]$_.KeyProtectorId).Trim().Trim([char[]]'{}').ToUpperInvariant()
+                } |
+                Where-Object { $_ } |
+                Select-Object -Unique
+        )
+        $escrowConfirmedIds = @(
+            $localRecoveryIds |
+                Where-Object { $verifiedIds -contains $_ }
+        )
+
+        $result = if ([string]$volume.ProtectionStatus -eq 'Unknown') {
+            'STOP: BitLocker protection state is unknown'
+        } elseif ($localRecoveryIds.Count -eq 0) {
+            'STOP: no recovery-password protector'
+        } elseif ($escrowConfirmedIds.Count -eq 0) {
+            'STOP: external escrow not confirmed'
+        } else {
+            'READY: externally verified recovery protector'
+        }
+
+        [pscustomobject]@{
+            MountPoint                    = $volume.MountPoint
+            VolumeStatus                  = $volume.VolumeStatus
+            ProtectionStatus              = $volume.ProtectionStatus
+            LocalRecoveryProtectorIds     = $localRecoveryIds -join ', '
+            EscrowConfirmedProtectorIds   = $escrowConfirmedIds -join ', '
+            Result                        = $result
+        }
+    }
+)
+
+if ($protectedVolumes.Count -eq 0) {
+    Write-Host 'READY: no encrypted or protected BitLocker volumes were found.'
+} else {
+    $bitLockerPreflight |
+        Format-Table MountPoint, VolumeStatus, ProtectionStatus,
+            LocalRecoveryProtectorIds, EscrowConfirmedProtectorIds, Result -AutoSize
+}
+
+$blockedVolumes = @(
+    $bitLockerPreflight |
+        Where-Object { $_.Result -notlike 'READY:*' }
+)
+if ($blockedVolumes.Count -gt 0) {
+    throw 'STOP: one or more protected volumes lack confirmed external recovery evidence. Do not change TPM firmware.'
+}
 ```
 
-If every volume reports `ProtectionStatus = Off`, there is nothing to suspend; go to step 3.
-If any volume is protected, **compare the displayed protector ID and 48-digit recovery
-password with the authorized escrow record first**. Do not continue if the record is absent,
-stale, or inaccessible. Then suspend it
-with `-RebootCount 0` so the suspend holds across the firmware change and reboot until you
-explicitly resume it:
+If no encrypted or protected volume is returned, there is nothing to suspend; go to step 3.
+Otherwise, the table must report **READY** for every returned mount point, including a volume
+that is already suspended and reports `ProtectionStatus = Off`.
+The script does not query your escrow system. A local recovery-password protector, by itself,
+does not prove that its password is stored externally. The **READY** result means only that
+an operator supplied a protector ID after independently confirming the matching protector ID
+and 48-digit password in the authorized escrow system. Do not continue if any record is absent,
+stale, inaccessible, or does not match.
+
+Suspend every returned volume with `-RebootCount 0` so the suspension holds across the
+firmware change and reboot. The block persists the pre-change protection state under
+`ProgramData`, so step 5 can restore only the volumes that were armed before this procedure:
 
 ```powershell
-Suspend-BitLocker -MountPoint "C:" -RebootCount 0
-# Repeat for any data volume that reports ProtectionStatus = On, for example:
-# Suspend-BitLocker -MountPoint "D:" -RebootCount 0
+$suspensionRecordPath = Join-Path $env:ProgramData (
+    'AzureLocalTSG\TpmVersion-BitLocker-Suspended.json'
+)
+$suspensionRecordDirectory = Split-Path -Parent $suspensionRecordPath
+New-Item -ItemType Directory -Path $suspensionRecordDirectory -Force | Out-Null
+
+$suspensionRecord = @(
+    $protectedVolumes | ForEach-Object {
+        [pscustomobject]@{
+            MountPoint = $_.MountPoint
+            ProtectionStatusBefore = [string]$_.ProtectionStatus
+            VolumeStatusBefore = [string]$_.VolumeStatus
+            RecordedAtUtc = [DateTime]::UtcNow.ToString('o')
+        }
+    }
+)
+$suspensionRecord |
+    ConvertTo-Json -Depth 4 |
+    Set-Content -LiteralPath $suspensionRecordPath -Encoding UTF8
+
+foreach ($mountPoint in $suspensionRecord.MountPoint) {
+    Suspend-BitLocker -MountPoint $mountPoint -RebootCount 0 -ErrorAction Stop
+}
+
+Get-BitLockerVolume |
+    Where-Object { $suspensionRecord.MountPoint -contains $_.MountPoint } |
+    Select-Object MountPoint, ProtectionStatus, VolumeStatus
+
+Write-Host "Persistent BitLocker suspension record: $suspensionRecordPath"
 ```
+
+Every listed volume must report `ProtectionStatus = Off` before you enter firmware setup.
+If the preflight or suspension block throws, stop before step 3 and resolve the recovery or
+BitLocker issue first.
 
 ### 3. Enable the TPM and set it to TPM 2.0 in firmware
 
@@ -403,14 +515,52 @@ The first segment of `SpecVersion` should now be `2.0`.
 ### 5. Resume BitLocker (only if you suspended it in step 2)
 
 ```powershell
-Resume-BitLocker -MountPoint "C:"
-# And any data volume you suspended, for example:
-# Resume-BitLocker -MountPoint "D:"
+$suspensionRecordPath = Join-Path $env:ProgramData (
+    'AzureLocalTSG\TpmVersion-BitLocker-Suspended.json'
+)
+if (-not (Test-Path -LiteralPath $suspensionRecordPath -PathType Leaf)) {
+    throw 'The BitLocker suspension record from step 2 was not found. Stop and determine the pre-change protection state before resuming any volume.'
+}
+$suspensionRecord = @(
+    Get-Content -LiteralPath $suspensionRecordPath -Raw |
+        ConvertFrom-Json
+)
+$mountPointsToResume = @(
+    $suspensionRecord |
+        Where-Object { $_.ProtectionStatusBefore -eq 'On' } |
+        ForEach-Object MountPoint
+)
+
+foreach ($mountPoint in $mountPointsToResume) {
+    Resume-BitLocker -MountPoint $mountPoint -ErrorAction Stop
+}
+
+$finalBitLockerState = @(
+    Get-BitLockerVolume |
+    Where-Object { $suspensionRecord.MountPoint -contains $_.MountPoint } |
+    Select-Object MountPoint, ProtectionStatus, VolumeStatus
+)
+$finalBitLockerState | Format-Table -AutoSize
+
+$resumeFailures = @(
+    $finalBitLockerState |
+        Where-Object {
+            $mountPointsToResume -contains $_.MountPoint -and
+            [string]$_.ProtectionStatus -ne 'On'
+        }
+)
+if ($resumeFailures.Count -gt 0) {
+    throw 'One or more volumes did not return to ProtectionStatus On. Keep the suspension record and resolve BitLocker before closing the change.'
+}
+
+Remove-Item -LiteralPath $suspensionRecordPath -Force -ErrorAction Stop
 ```
 
 Resuming allows the TPM-based protector to reseal against the new measured-boot state.
-Confirm each volume returns to protected status and that the previously verified recovery
-password remains available in the authorized escrow system.
+Every volume whose recorded `ProtectionStatusBefore` was `On` must return to
+`ProtectionStatus = On`. A volume that was already suspended remains suspended, preserving
+its prior maintenance state. Confirm again that each previously verified protector ID and
+recovery password remains available in the authorized escrow system.
 
 ### If the machine is already a deployed, encrypted cluster member
 

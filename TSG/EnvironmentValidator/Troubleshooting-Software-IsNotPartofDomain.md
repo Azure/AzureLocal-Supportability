@@ -28,7 +28,7 @@ Tags: ["Cloud Deployment", "Validation", "Active Directory"]
 
 | Date | Version | Summary |
 | --- | --- | --- |
-| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, canonical layout, audience directives, and source scoping without changing commands or technical evidence. |
+| 2026-09-17 | 2.0 | Added mandatory publication metadata, canonical layout, audience directives, and source scoping without changing commands or technical evidence. |
 
 :::
 
@@ -286,24 +286,24 @@ clear another host.
 
 The next step unjoins the machine and restarts it, so it comes back up as a workgroup
 member and the next sign-in must use a **local** account. On a machine that has been
-domain-joined, the built-in local administrator account may be disabled, renamed (for
-example, `ASBuiltInAdmin`), or have an unknown password. Establish and test a known
-local administrator credential before you unjoin. Otherwise the restart can lock you
-out of the machine.
+domain-joined, confirm an **already approved, enabled local administrator account**
+with a known credential. Do not enable or reset the password of the built-in
+Administrator account as part of the normal procedure. Otherwise the restart can lock
+you out of the machine or disrupt services and scheduled tasks that use a changed
+account credential.
 
 ```powershell
-# Windows can rename the built-in Administrator account. Its stable RID is -500,
-# so discover the account instead of assuming its name is "Administrator".
-$localUser = Get-LocalUser -ErrorAction Stop |
-    Where-Object { $_.SID.Value -match '-500$' } |
-    Select-Object -First 1
-if ($null -eq $localUser) {
-    throw 'The built-in local administrator account (SID ending in -500) was not found.'
+# Replace only the account name. Get-Credential prompts securely for the password,
+# so the password is not placed in the command or PowerShell history.
+$localAdmin = '<approved-local-administrator-name>'
+if ([string]::IsNullOrWhiteSpace($localAdmin) -or
+    $localAdmin -eq '<approved-local-administrator-name>') {
+    throw 'Set $localAdmin to an owner-approved local administrator account name.'
 }
-$localAdmin = $localUser.Name
 
+$localUser = Get-LocalUser -Name $localAdmin -ErrorAction Stop
 if (-not $localUser.Enabled) {
-    Enable-LocalUser -Name $localAdmin -ErrorAction Stop
+    throw "$env:COMPUTERNAME\$localAdmin is disabled. Use another approved local administrator or follow the owner-approved break-glass branch below."
 }
 
 $isLocalAdministrator = Get-LocalGroupMember -Group 'Administrators' -ErrorAction Stop |
@@ -312,11 +312,13 @@ if (-not $isLocalAdministrator) {
     throw "$env:COMPUTERNAME\$localAdmin is not a member of the local Administrators group."
 }
 
-$localPassword = Read-Host -Prompt "Enter a known password for $env:COMPUTERNAME\$localAdmin" -AsSecureString
-Set-LocalUser -Name $localAdmin -Password $localPassword -ErrorAction Stop
-
 # Verify that Windows accepts the local credentials before any domain change.
-$localCredential = [pscredential]::new("$env:COMPUTERNAME\$localAdmin", $localPassword)
+$localCredential = Get-Credential `
+    -UserName "$env:COMPUTERNAME\$localAdmin" `
+    -Message 'Enter the approved local administrator credential that will be used after the restart.'
+if ($null -eq $localCredential) {
+    throw 'No local administrator credential was supplied. Do not unjoin the domain.'
+}
 $localAccessTest = Start-Process -FilePath "$env:SystemRoot\System32\whoami.exe" `
     -Credential $localCredential -Wait -PassThru -ErrorAction Stop
 if ($localAccessTest.ExitCode -ne 0) {
@@ -329,6 +331,115 @@ The block must finish with the explicit verification message and a zero exit cod
 If any command errors, the account is not a local administrator, or the credential
 test fails, stop and correct local access before continuing. Keep this PowerShell
 session open because step 3 repeats the credential test using `$localCredential`.
+
+#### Owner-approved break-glass branch: recover the built-in RID-500 administrator
+
+**[HIGH RISK] Use this branch only when no approved local administrator credential is
+available, the machine owner explicitly approves changing the built-in Administrator
+account, and the machine is confirmed to be a pre-deployment host.** Enabling this
+account increases the available local sign-in surface. Resetting its password can
+break Windows services, scheduled tasks, scripts, or management tools that run under
+that account. The previous password cannot be recovered by this procedure.
+
+Before continuing, the owner must:
+
+1. Confirm that console or out-of-band access is available if the credential test
+   fails.
+2. Review services, scheduled tasks, scripts, and management tooling for dependencies
+   on the RID-500 account, and either update those dependencies during the approved
+   change window or stop this procedure.
+3. Approve the password rotation and record whether the account was enabled before
+   the change. If it was disabled, plan to restore that disabled state after the
+   machine is in a workgroup and another approved recovery path has been verified.
+
+Run the following only after those preconditions are met:
+
+```powershell
+# Windows can rename the built-in Administrator account. Its stable RID is -500.
+$localUser = Get-LocalUser -ErrorAction Stop |
+    Where-Object { $_.SID.Value -match '-500$' } |
+    Select-Object -First 1
+if ($null -eq $localUser) {
+    throw 'The built-in local administrator account (SID ending in -500) was not found.'
+}
+
+$localAdmin = $localUser.Name
+$rid500WasEnabled = [bool]$localUser.Enabled
+"Record for restoration: $env:COMPUTERNAME\$localAdmin was enabled = $rid500WasEnabled"
+
+$dependentServices = Get-CimInstance Win32_Service -ErrorAction Stop |
+    Where-Object {
+        $_.StartName -eq ".\$localAdmin" -or
+        $_.StartName -eq "$env:COMPUTERNAME\$localAdmin"
+    } |
+    Select-Object Name, State, StartMode, StartName
+$dependentTasks = Get-ScheduledTask -ErrorAction Stop |
+    Where-Object {
+        $_.Principal.UserId -eq ".\$localAdmin" -or
+        $_.Principal.UserId -eq "$env:COMPUTERNAME\$localAdmin"
+    } |
+    Select-Object TaskPath, TaskName, State, @{Name='UserId'; Expression={$_.Principal.UserId}}
+if ($dependentServices -or $dependentTasks) {
+    $dependentServices
+    $dependentTasks
+    throw 'RID-500 account dependencies were found. Stop and have the owner assess and update them before changing the password.'
+}
+
+$enabledForBreakGlass = $false
+try {
+    if (-not $rid500WasEnabled) {
+        Enable-LocalUser -Name $localAdmin -ErrorAction Stop
+        $enabledForBreakGlass = $true
+    }
+
+    # Read-Host -AsSecureString prevents the password from appearing in command history.
+    $localPassword = Read-Host `
+        -Prompt "Enter the owner-approved new password for $env:COMPUTERNAME\$localAdmin" `
+        -AsSecureString
+    Set-LocalUser -Name $localAdmin -Password $localPassword -ErrorAction Stop
+    $localCredential = [pscredential]::new(
+        "$env:COMPUTERNAME\$localAdmin",
+        $localPassword
+    )
+
+    $localAccessTest = Start-Process -FilePath "$env:SystemRoot\System32\whoami.exe" `
+        -Credential $localCredential -Wait -PassThru -ErrorAction Stop
+    if ($localAccessTest.ExitCode -ne 0) {
+        throw 'The RID-500 credential test failed.'
+    }
+}
+catch {
+    $setupError = [string]$_.Exception.Message
+    $restoreError = $null
+    if ($enabledForBreakGlass) {
+        try {
+            Disable-LocalUser -Name $localAdmin -ErrorAction Stop
+        }
+        catch {
+            $restoreError = [string]$_.Exception.Message
+        }
+    }
+    if ($restoreError) {
+        throw (
+            'The break-glass credential setup failed, and the prior disabled ' +
+            "state could not be restored. Setup error: $setupError " +
+            "Restore error: $restoreError"
+        )
+    }
+    throw (
+        'The break-glass credential setup failed. The prior disabled state was ' +
+        'restored when this procedure enabled the account. A completed password ' +
+        "change cannot be rolled back. Setup error: $setupError"
+    )
+}
+"Verified break-glass local administrator credentials for $env:COMPUTERNAME\$localAdmin."
+```
+
+Keep the same PowerShell session open and continue to step 3. After the restart, sign
+in locally and complete the restoration step below. Password rollback is not
+automatic because the previous password is not retained. If the owner requires
+another password after recovery, rotate it through the owner's approved credential
+management process and update any approved dependencies.
 
 ### 3. Remove the machine from the domain
 
@@ -378,6 +489,24 @@ Notes:
 
 - After the restart, sign in with the **local** administrator account you confirmed in
   step 2, since the machine is now a workgroup member rather than a domain member.
+- If you used the RID-500 break-glass branch and recorded
+  `RID-500 was enabled = False`, first verify another approved local administrator or
+  out-of-band recovery path. Then restore the prior disabled state in an elevated
+  Windows PowerShell session:
+
+  ```powershell
+  $rid500 = Get-LocalUser -ErrorAction Stop |
+      Where-Object { $_.SID.Value -match '-500$' } |
+      Select-Object -First 1
+  if ($null -eq $rid500) {
+      throw 'The built-in local administrator account (SID ending in -500) was not found.'
+  }
+  Disable-LocalUser -Name $rid500.Name -ErrorAction Stop
+  Get-LocalUser -Name $rid500.Name | Select-Object Name, Enabled, SID
+  ```
+
+  The expected result is `Enabled` = `False`. If it remains enabled, stop and have
+  the machine owner restore the approved local-account state before deployment.
 - The machine keeps its computer name; only its domain membership changes.
 - Unjoining does not delete the machine's computer account in Active Directory; that
   object stays until a domain administrator removes it. It is harmless for deployment

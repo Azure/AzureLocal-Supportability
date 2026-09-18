@@ -28,7 +28,7 @@ Tags: ["Validation", "Physical Disk", "Disks"]
 
 | Date | Description |
 | --- | --- |
-| 2026-09-17 | Updated current result names and branches, added safe diagnostics and remediation gates, live-validated the disposable minimum-count loop, and adopted mandatory PickleFactory metadata and layout. |
+| 2026-09-17 | Updated current result names and branches, added safe diagnostics and remediation gates, live-validated the disposable minimum-count loop, and adopted mandatory publication metadata and layout. |
 
 # AzStackHci_Hardware_PhysicalDisk
 
@@ -399,7 +399,7 @@ Attach:
 
 # Source Articles
 
-- [ASZ-EnvironmentValidator PR 16230858: Remove PhysicalDisk group by FriendlyName test](https://dev.azure.com/msazure/One/_git/ASZ-EnvironmentValidator/pullrequest/16230858)
-- [ASZ-EnvironmentValidator PR 16676534: Fix PhysicalDisk count details and JSON-safe localized strings](https://dev.azure.com/msazure/One/_git/ASZ-EnvironmentValidator/pullrequest/16676534)
+- Azure Local Environment Validator source history for removal of the PhysicalDisk grouping-by-friendly-name test.
+- Azure Local Environment Validator source history for PhysicalDisk count details and JSON-safe localized strings.
 
 :::

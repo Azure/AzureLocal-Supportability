@@ -28,7 +28,7 @@ Tags: ["Validation", "NIC", "Driver"]
 
 | Date | Description |
 | --- | --- |
-| 2026-09-17 | Updated current result names and branches, added read-only diagnosis, maintenance gates, verification, escalation evidence, and PickleFactory metadata. |
+| 2026-09-17 | Updated current result names and branches, added read-only diagnosis, maintenance gates, verification, escalation evidence, and publication metadata. |
 
 # AzStackHci_Hardware_Test_NetAdapter
 
@@ -537,7 +537,7 @@ Attach:
 
 # Source Articles
 
-- [ASZ-EnvironmentValidator PR 15166298: Azure Local SAN source integration and NetAdapter result aggregation](https://dev.azure.com/msazure/One/_git/ASZ-EnvironmentValidator/pullrequest/15166298)
-- [ASZ-EnvironmentValidator PR 11451171: Add explanation when disks or NICs are not found](https://dev.azure.com/msazure/One/_git/ASZ-EnvironmentValidator/pullrequest/11451171)
+- Azure Local Environment Validator source history for SAN integration and NetAdapter result aggregation.
+- Azure Local Environment Validator source history for missing-disk and missing-NIC explanations.
 
 :::

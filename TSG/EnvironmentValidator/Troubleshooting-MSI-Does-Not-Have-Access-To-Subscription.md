@@ -4,7 +4,7 @@ Article_ID: "20260917170003"
 Title: "MSI does not have access to subscription"
 Status: "Active"
 Audience: ["Engineering", "CSS", "OEM Partners", "External"]
-LastUpdated: "2026-09-17"
+LastUpdated: "2026-09-18"
 Region: ["All"]
 AppliesTo:
   Product: "Azure Local"
@@ -28,6 +28,7 @@ Tags: ["Solution Update", "Validation", "Diagnostics"]
 
 | Date | Version | Summary |
 | --- | --- | --- |
+| 2026-09-18 | 2.1 | Made RBAC remediation consume the per-role detection results and recheck each missing assignment before creation. |
 | 2026-09-17 | 2.0 | Replaced the stale Az.Accounts pin and speculative role assignment with current-source branches, current-recipe remediation, scoped RBAC verification, and read-only validation evidence. |
 
 :::
@@ -287,8 +288,39 @@ Run the following from an Azure-authenticated administrator workstation. It uses
 ARM directly so it does not need Microsoft Graph to resolve the service principal:
 
 ```powershell
+$ErrorActionPreference = 'Stop'
+
+function Invoke-AzJsonOrThrow {
+    param(
+        [Parameter(Mandatory)]
+        [string[]] $Arguments,
+
+        [Parameter(Mandatory)]
+        [string] $Operation
+    )
+
+    $stderrPath = [System.IO.Path]::GetTempFileName()
+    try {
+        $stdout = @(& az @Arguments --only-show-errors 2> $stderrPath)
+        $exitCode = $LASTEXITCODE
+        $stderr = Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue
+        if ($exitCode -ne 0) {
+            throw "$Operation failed with exit code $exitCode. Azure CLI error: $stderr"
+        }
+        if (-not ($stdout -join '').Trim()) {
+            throw "$Operation returned no JSON output."
+        }
+        return (($stdout -join [Environment]::NewLine) | ConvertFrom-Json -ErrorAction Stop)
+    }
+    finally {
+        Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $machineResourceId = '<resource-id-from-azcmagent>'
-$machine = az resource show --ids $machineResourceId | ConvertFrom-Json
+$machine = Invoke-AzJsonOrThrow `
+    -Arguments @('resource', 'show', '--ids', $machineResourceId, '--output', 'json') `
+    -Operation 'Arc machine lookup'
 
 $principalId = $machine.identity.principalId
 $subscriptionId = ($machine.id -split '/')[2]
@@ -299,7 +331,15 @@ $url = "https://management.azure.com/subscriptions/$subscriptionId/providers/" +
     "Microsoft.Authorization/roleAssignments" +
     "?api-version=2022-04-01&`$filter=principalId%20eq%20'$principalId'"
 
-$assignments = (az rest --method get --url $url | ConvertFrom-Json).value
+$assignments = (
+    Invoke-AzJsonOrThrow `
+        -Arguments @('rest', '--method', 'get', '--url', $url, '--output', 'json') `
+        -Operation 'Role-assignment lookup'
+).value
+
+if (-not $principalId -or -not $machine.id -or -not $machine.resourceGroup) {
+    throw 'The Arc machine response did not include the required identity and scope fields.'
+}
 
 $requiredRoles = [ordered]@{
     '865ae368-6a45-4bd1-8fbf-0d5151f56fc1' =
@@ -308,26 +348,31 @@ $requiredRoles = [ordered]@{
         'Azure Stack HCI Connected InfraVMs'
 }
 
-$requiredRoles.GetEnumerator() | ForEach-Object {
-    $roleId = $_.Key
-    $roleName = $_.Value
-    $match = @(
-        $assignments |
-            Where-Object {
-                $_.properties.scope -ieq $scope -and
-                $_.properties.roleDefinitionId -like "*/$roleId"
-            }
-    )
+$roleResults = @(
+    $requiredRoles.GetEnumerator() | ForEach-Object {
+        $roleId = $_.Key
+        $roleName = $_.Value
+        $match = @(
+            $assignments |
+                Where-Object {
+                    $_.properties.scope -ieq $scope -and
+                    $_.properties.roleDefinitionId -like "*/$roleId"
+                }
+        )
 
-    [pscustomobject]@{
-        Node = $machine.name
-        PrincipalId = $principalId
-        Scope = $scope
-        Role = $roleName
-        Present = $match.Count -gt 0
-        AssignmentId = @($match.id)
+        [pscustomobject]@{
+            Node = $machine.name
+            PrincipalId = $principalId
+            Scope = $scope
+            Role = $roleName
+            RoleDefinitionId = $roleId
+            Present = $match.Count -gt 0
+            AssignmentId = @($match.id)
+        }
     }
-}
+)
+
+$roleResults
 ```
 
 Run it for every Arc machine resource in the cluster. A role present on one node
@@ -375,22 +420,90 @@ Portal path:
 Azure CLI equivalent:
 
 ```powershell
-$principalId = '<affected-arc-machine-principal-id>'
-$scope = '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>'
+# Reuse $principalId, $scope, $url, $requiredRoles, and $roleResults from
+# the read-only check for one affected Arc machine.
+$ErrorActionPreference = 'Stop'
 
-# Run only the command for a role that the read-only check proved missing.
-az role assignment create `
-    --assignee-object-id $principalId `
-    --assignee-principal-type ServicePrincipal `
-    --role 'Azure Stack HCI Device Management Role' `
-    --scope $scope
+$detectedRoleIds = @(
+    $roleResults.RoleDefinitionId |
+        Sort-Object -Unique
+)
 
-az role assignment create `
-    --assignee-object-id $principalId `
-    --assignee-principal-type ServicePrincipal `
-    --role 'Azure Stack HCI Connected InfraVMs' `
-    --scope $scope
+if (
+    @($roleResults).Count -ne $requiredRoles.Count -or
+    $detectedRoleIds.Count -ne $requiredRoles.Count
+) {
+    throw 'Role detection is incomplete. Re-run the read-only RBAC check.'
+}
+
+$invalidResults = @(
+    $roleResults |
+        Where-Object {
+            -not $requiredRoles.Contains($_.RoleDefinitionId) -or
+            $_.PrincipalId -ne $principalId -or
+            $_.Scope -ine $scope
+        }
+)
+
+if ($invalidResults.Count -gt 0) {
+    throw 'Role detection does not match the approved principal and scope.'
+}
+
+$missingRoles = @($roleResults | Where-Object { $_.Present -eq $false })
+
+if ($missingRoles.Count -eq 0) {
+    Write-Host 'Both required roles are already present. No RBAC change was made.'
+}
+else {
+    foreach ($missingRole in $missingRoles) {
+        $roleId = $missingRole.RoleDefinitionId
+        $roleName = $requiredRoles[$roleId]
+
+        # Recheck immediately before changing authorization so reruns are safe.
+        $currentAssignments = (
+            Invoke-AzJsonOrThrow `
+                -Arguments @(
+                    'rest', '--method', 'get', '--url', $url, '--output', 'json'
+                ) `
+                -Operation "Recheck $roleName"
+        ).value
+
+        $alreadyPresent = @(
+            $currentAssignments |
+                Where-Object {
+                    $_.properties.scope -ieq $scope -and
+                    $_.properties.roleDefinitionId -like "*/$roleId"
+                }
+        ).Count -gt 0
+
+        if ($alreadyPresent) {
+            Write-Host "$roleName is already present. No change was made."
+            continue
+        }
+
+        $createdAssignment = Invoke-AzJsonOrThrow `
+            -Arguments @(
+                'role', 'assignment', 'create',
+                '--assignee-object-id', $principalId,
+                '--assignee-principal-type', 'ServicePrincipal',
+                '--role', $roleId,
+                '--scope', $scope,
+                '--output', 'json'
+            ) `
+            -Operation "Create $roleName"
+        [pscustomobject]@{
+            Role = $roleName
+            PrincipalId = $createdAssignment.principalId
+            Scope = $createdAssignment.scope
+            AssignmentId = $createdAssignment.id
+        }
+    }
+}
 ```
+
+The script creates only roles whose matching detection result is
+`Present = False`. It also repeats the read-only ARM check immediately before
+each create, so a role added after diagnosis is skipped rather than duplicated.
 
 Do not assign these roles at subscription scope merely to avoid finding the
 registration resource group. Do not assign them to the deployment user in place

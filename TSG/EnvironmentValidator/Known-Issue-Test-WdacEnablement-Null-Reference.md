@@ -382,7 +382,7 @@ The September 17, 2026 validation used Azure Local solution
 `AzStackHci.EnvironmentChecker 10.2610.0.2039`.
 
 The exact multi-node read-only inventory returned the fixed source markers and
-the same helper hash on `V-HOST1`, `V-HOST2`, and `V-HOST3`. The real
+the same helper hash on all three disposable lab nodes. The real
 `Test-WdacEnablement` path returned `SUCCESS` on disposable nodelab node
 `tsg-wdac-0917` with a real supplemental-policy fixture. The affected pre-2607
 binary was not executed, and the retired exception was not forced.

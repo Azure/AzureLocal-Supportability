@@ -35,7 +35,7 @@ Tags: ["Validation", "Cloud Deployment", "Solution Update", "Diagnostics", "Log 
 
 | Date | Version | Summary |
 |------|---------|---------|
-| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, accepted Known Issue layout, audience scopes, revision history, and source scope without changing the validated commands or technical evidence. |
+| 2026-09-17 | 2.0 | Added mandatory publication metadata, accepted Known Issue layout, audience scopes, revision history, and source scope without changing the validated commands or technical evidence. |
 
 :::
 
@@ -152,23 +152,39 @@ $ErrorActionPreference = 'Stop'
 $timestamp = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')
 $backupPath = Join-Path (Get-Location) "TrustedHosts-before-$timestamp.json"
 
-$nodes = @(
-    if (Get-Command Get-ClusterNode -ErrorAction SilentlyContinue) {
-        Get-ClusterNode |
+$clusterNodeCommand = Get-Command Get-ClusterNode -ErrorAction SilentlyContinue
+$clusterService = Get-Service ClusSvc -ErrorAction SilentlyContinue
+$nodes = if ($clusterNodeCommand -and $clusterService.Status -eq 'Running') {
+    @(
+        Get-ClusterNode -ErrorAction Stop |
             Where-Object State -eq 'Up' |
             Select-Object -ExpandProperty Name
-    }
-    else {
+    )
+}
+else {
+    @(
         $env:COMPUTERNAME
-    }
-)
+    )
+}
+
+if ($clusterNodeCommand -and $clusterService.Status -eq 'Running' -and $nodes.Count -eq 0) {
+    throw 'The cluster service is running, but no Up cluster nodes were returned.'
+}
+
+if (-not $clusterService -or $clusterService.Status -ne 'Running') {
+    Write-Host (
+        'Cluster service is not running; inventory is limited to this ' +
+        'standalone or predeployment host.'
+    )
+}
 
 if ($nodes.Count -eq 0) {
     throw 'No target nodes were found.'
 }
 
 $inventory = foreach ($node in $nodes) {
-    Invoke-Command -ComputerName $node -ScriptBlock {
+    try {
+        Invoke-Command -ComputerName $node -ScriptBlock {
         $policyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client'
         $policy = Get-ItemProperty -LiteralPath $policyPath -ErrorAction SilentlyContinue
         $policyValue = if ($policy) {
@@ -177,16 +193,42 @@ $inventory = foreach ($node in $nodes) {
         else {
             $null
         }
-        $rsop = @(
-            Get-CimInstance -Namespace 'root\rsop\computer' `
-                -ClassName 'RSOP_RegistryPolicySetting' `
-                -ErrorAction SilentlyContinue |
-                Where-Object {
-                    $_.ValueName -eq 'TrustedHosts' -or
-                    $_.KeyName -match '(?i)Windows\\WinRM\\Client'
-                } |
-                Select-Object KeyName, ValueName, Value, GPOID, SOMID, Precedence
-        )
+        try {
+            $rsop = @(
+                Get-CimInstance -Namespace 'root\rsop\computer' `
+                    -ClassName 'RSOP_RegistryPolicySetting' `
+                    -ErrorAction Stop |
+                    Where-Object {
+                        $_.ValueName -eq 'TrustedHosts' -or
+                        $_.KeyName -match '(?i)Windows\\WinRM\\Client'
+                    } |
+                    Select-Object KeyName, ValueName, Value, GPOID, SOMID, Precedence
+            )
+        }
+        catch {
+            $errorId = [string]$_.FullyQualifiedErrorId
+            $errorMessage = [string]$_.Exception.Message
+            $statusCode = if (
+                $_.Exception.PSObject.Properties['StatusCode']
+            ) {
+                [string]$_.Exception.StatusCode
+            }
+            else {
+                ''
+            }
+            $providerUnavailable = (
+                $errorId -match '(?i)InvalidNamespace|InvalidClass|8004100e|80041010' -or
+                $statusCode -match '(?i)InvalidNamespace|InvalidClass'
+            )
+            if (-not $providerUnavailable) {
+                throw (
+                    "RSoP ownership query failed on '$env:COMPUTERNAME' " +
+                    "(ErrorId: '$errorId'): $errorMessage TrustedHosts ownership " +
+                    'is unknown. No remediation is authorized.'
+                )
+            }
+            $rsop = @()
+        }
 
         [pscustomobject]@{
             Node = $env:COMPUTERNAME
@@ -201,19 +243,56 @@ $inventory = foreach ($node in $nodes) {
                 $null
             }
             Rsop = $rsop
+            RsopQuerySucceeded = -not $providerUnavailable
+            RsopProviderUnavailable = [bool]$providerUnavailable
+            InventorySucceeded = $true
+            InventoryError = $null
             PolicyOwned = [bool]($policyValue -or $rsop.Count -gt 0)
             WinRMStatus = [string](Get-Service WinRM).Status
+        }
+        }
+    }
+    catch {
+        [pscustomobject]@{
+            Node = $node
+            ObservedAtUtc = [DateTime]::UtcNow.ToString('o')
+            TrustedHosts = $null
+            PolicyRegistryValue = $null
+            Rsop = @()
+            RsopQuerySucceeded = $false
+            RsopProviderUnavailable = $false
+            InventorySucceeded = $false
+            InventoryError = [string]$_.Exception.Message
+            PolicyOwned = $null
+            WinRMStatus = $null
         }
     }
 }
 
 $inventory | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $backupPath
-$inventory | Format-Table Node, TrustedHosts, PolicyOwned, WinRMStatus -AutoSize
+$inventory |
+    Format-Table Node, TrustedHosts, RsopQuerySucceeded,
+        RsopProviderUnavailable, PolicyOwned, WinRMStatus -AutoSize
 Write-Host "Exact rollback inventory: $backupPath"
+
+$inventoryFailures = @($inventory | Where-Object { -not $_.InventorySucceeded })
+if ($inventoryFailures.Count -gt 0) {
+    $inventoryFailures |
+        Select-Object Node, InventoryError |
+        Format-Table -AutoSize
+    throw 'One or more nodes could not be inventoried. No remediation is authorized.'
+}
 ```
 
 Interpret the result:
 
+- **`RsopProviderUnavailable` is `True`:** the RSoP provider is not available on
+  that node. Continue only when `PolicyRegistryValue` is empty,
+  `InventorySucceeded` is `True`, and every other gate below passes.
+- **The script reports any other RSoP or inventory error:** stop. Ownership is
+  unknown, no remediation is authorized, and the existing value must remain
+  unchanged. Send the reported error to the Group Policy or security-baseline
+  owner.
 - **Current lifecycle operation does not emit the exact error:** stop. Do not
   clear `*` solely because the value exists.
 - **`TrustedHosts` is not exactly `*`:** stop. This article does not authorize
@@ -312,13 +391,24 @@ if (-not $backupPath -or -not (Test-Path -LiteralPath $backupPath)) {
 $inventory = @(Get-Content -LiteralPath $backupPath -Raw | ConvertFrom-Json)
 $blocked = @(
     $inventory |
-        Where-Object { $_.PolicyOwned -or $_.TrustedHosts -ne '*' }
+        Where-Object {
+            -not $_.InventorySucceeded -or
+            (
+                -not $_.RsopQuerySucceeded -and
+                -not $_.RsopProviderUnavailable
+            ) -or
+            $_.PolicyOwned -or
+            $_.TrustedHosts -ne '*'
+        }
 )
 if ($blocked.Count -gt 0) {
     $blocked |
-        Select-Object Node, TrustedHosts, PolicyOwned |
+        Select-Object Node, TrustedHosts, RsopQuerySucceeded, PolicyOwned |
         Format-Table -AutoSize
-    throw 'No changes were made. Every target must have an unmanaged exact wildcard.'
+    throw (
+        'No changes were made. Every target must have a complete inventory, ' +
+        'a successful or unavailable RSoP provider, and an unmanaged exact wildcard.'
+    )
 }
 
 $changed = foreach ($item in $inventory) {

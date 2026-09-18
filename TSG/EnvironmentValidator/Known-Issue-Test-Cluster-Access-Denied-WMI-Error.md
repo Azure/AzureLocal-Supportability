@@ -35,7 +35,7 @@ Tags: ["Cloud Deployment", "Validation", "DNS"]
 
 | Date | Version | Summary |
 |------|---------|---------|
-| 2026-09-17 | 1.0 | Initial TSG Forge revision |
+| 2026-09-17 | 1.0 | Initial publication revision |
 
 :::
 
@@ -168,11 +168,6 @@ if ($domainFqdn -eq '<domain.fqdn>' -or $dnsServer -eq '<dns-server-ip>') {
     throw 'Replace the domain and DNS-server placeholders.'
 }
 
-$dnsPort = Test-NetConnection -ComputerName $dnsServer -Port 53 -WarningAction SilentlyContinue
-if (-not $dnsPort.TcpTestSucceeded) {
-    throw "DNS server $dnsServer is not reachable on TCP 53. Restore the DNS path before continuing."
-}
-
 $results = foreach ($node in $nodes) {
     $fqdn = "$node.$domainFqdn"
     try {
@@ -189,7 +184,10 @@ $results = foreach ($node in $nodes) {
         }
     }
     catch {
-        $rcode = if ($_.Exception.Message -match 'does not exist|NXDOMAIN') {
+        $rcode = if (
+            $_.FullyQualifiedErrorId -like 'DNS_ERROR_RCODE_NAME_ERROR*' -or
+            $_.Exception.Message -match 'does not exist|NXDOMAIN'
+        ) {
             'MISSING'
         }
         else {
@@ -210,7 +208,7 @@ $missing = @($results | Where-Object Status -eq 'MISSING')
 $queryFailed = @($results | Where-Object Status -eq 'QUERY-FAILED')
 
 if ($queryFailed.Count) {
-    throw 'At least one DNS query failed for a reason other than a missing record. Resolve that DNS-server or network error first.'
+    throw 'At least one DNS query failed for a reason other than a missing record. Review the per-node error, then restore the DNS service or network path before continuing.'
 }
 if ($missing.Count) {
     Write-Warning "$($missing.Count) node DNS A record(s) are missing. Continue with only those nodes."
@@ -227,6 +225,11 @@ Interpret the result:
 | `PRESENT` for every node | DNS registration is not the cause | Stop. Use the sibling administrative-privileges guide or investigate the exact Test Cluster report. |
 | `MISSING` for one or more nodes | The DNS-registration condition is present | Continue for only the missing nodes. |
 | `QUERY-FAILED` | The DNS server, DNS service, or network path failed | Stop and route to the DNS or network owner. |
+
+`Resolve-DnsName` is the DNS reachability and record test. It uses the DNS
+client's normal query behavior, including ordinary UDP DNS and protocol fallback
+when required. Do not infer DNS unreachability from a separate TCP-only port
+test.
 
 **Confirm the affected node's local identity and DNS-client state**
 

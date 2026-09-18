@@ -29,7 +29,7 @@ Tags: ["Solution Update", "Validation", "Certificates", "Firmware", "BitLocker",
 
 | Date | Version | Summary |
 |------|---------|---------|
-| 2026-09-17 | 1.0 | TSG Forge validation and PickleFactory metadata compliance |
+| 2026-09-17 | 1.0 | Expanded validation evidence and publication metadata compliance |
 
 :::
 

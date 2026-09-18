@@ -26,7 +26,7 @@ Tags: ["Validation", "Solution Update", "Diagnostics"]
 
 | Date | Description |
 | --- | --- |
-| 2026-09-17 | Retrofitted mandatory PickleFactory metadata, audience scope, revision history, and source-article layout without changing the technical procedure. |
+| 2026-09-17 | Retrofitted mandatory publication metadata, audience scope, revision history, and source-article layout without changing the technical procedure. |
 
 # Troubleshooting Azure Local Environment Validator Module Versions
 

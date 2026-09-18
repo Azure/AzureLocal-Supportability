@@ -29,7 +29,7 @@ Tags: ["Validation", "Firewall", "Proxy", "DNS", "Certificates", "Telemetry"]
 
 | Date | Version | Summary |
 | --- | --- | --- |
-| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scoping, and current article layout without changing technical guidance. |
+| 2026-09-17 | 2.0 | Added mandatory publication metadata, audience scoping, and current article layout without changing technical guidance. |
 
 :::
 

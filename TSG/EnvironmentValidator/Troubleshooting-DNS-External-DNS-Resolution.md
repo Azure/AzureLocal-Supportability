@@ -26,7 +26,7 @@ Tags: ["DNS", "Validation"]
 
 | Date | Description |
 | --- | --- |
-| 2026-09-17 | Retrofitted mandatory PickleFactory metadata, audience scope, revision history, and source-article layout without changing the technical procedure. |
+| 2026-09-17 | Retrofitted mandatory publication metadata, audience scope, revision history, and source-article layout without changing the technical procedure. |
 
 # AzStackHci_DNS_ExternalDnsResolution
 

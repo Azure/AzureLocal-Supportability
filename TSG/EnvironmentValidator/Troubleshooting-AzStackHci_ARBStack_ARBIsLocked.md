@@ -29,7 +29,7 @@ Tags: ["Solution Update", "Validation", "ARC Resource Bridge", "RBAC"]
 
 | Date | Version | Summary |
 | --- | --- | --- |
-| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, safety and ownership gates, complete administrator-surface guidance, and current validation evidence while preserving the legacy technical procedure. |
+| 2026-09-17 | 2.0 | Added mandatory publication metadata, safety and ownership gates, complete administrator-surface guidance, and current validation evidence while preserving the legacy technical procedure. |
 
 :::
 
@@ -112,7 +112,7 @@ az login
 az account set --subscription '<subscription-id>'
 az account show --query '{subscription:id, tenant:tenantId, user:user.name}' -o table
 
-# Find the ARB, then list locks on the exact appliance.
+# Find the ARB, then inspect the exact appliance.
 az resource list --resource-type 'Microsoft.ResourceConnector/appliances' `
     --query '[].{name:name, resourceGroup:resourceGroup, id:id}' -o table
 az lock list --resource '<arbName>' `
@@ -120,10 +120,10 @@ az lock list --resource '<arbName>' `
     --resource-group '<arbRG>' -o table
 ```
 
-If the appliance query returns a lock, obtain the lock owner's approval and delete that exact
-appliance-scope lock with the command in step 5. If no appliance lock is returned, inspect the
-resource-group and subscription scopes in step 3. Do not delete a parent-scope lock merely to make
-this one update pass.
+The appliance query is an initial signal only. Whether it returns rows or not, run the exact
+three-scope discovery in step 3 before deciding which lock applies or declaring the ARB clear.
+Delete only an approved lock ID returned by that discovery. Do not delete a parent-scope lock merely
+to make this one update pass.
 
 ## Requirements
 
@@ -184,9 +184,10 @@ az lock list --resource $arb.name `
     --resource-group $arb.resourceGroup -o table
 ```
 
-Any row is actionable lock evidence. Record the lock name, level, ID, and scope. The resource-level
-query includes locks inherited from the resource group and subscription. Use step 3 to locate the
-scope where each returned lock is defined.
+Any row is actionable lock evidence, but this resource-level query alone is not sufficient to prove
+where a lock is defined or that no inherited lock applies. Record the lock name, level, ID, and
+scope, then run step 3 to query and classify the ARB resource, resource group, and subscription
+scopes independently.
 
 To read the check result itself, query Event ID 17205:
 
@@ -246,7 +247,8 @@ az resource list --resource-type "Microsoft.ResourceConnector/appliances" --quer
 az lock list --resource "<arbName>" --resource-type "Microsoft.ResourceConnector/appliances" --resource-group "<arbRG>" -o table
 ```
 
-Any rows returned are the locks that trip this check. No rows means the ARB is not locked.
+Any rows returned are actionable evidence. No rows at this one scope are inconclusive. Complete all
+three successful scope queries in step 3 before declaring the ARB clear.
 
 ### 2. What it looks like: example failure signatures
 
@@ -288,19 +290,130 @@ collect the Environment Checker component logs before escalation.
 
 ### 3. Identify the lock and the scope that applies it
 
-Locks are inherited, so a lock on the ARB can live on the appliance itself, on its resource group, or on the subscription. List locks at each scope so you remove the right one:
+Locks are inherited, so a lock on the ARB can be defined directly on the appliance or inherited
+from its resource group or subscription. The following read-only block queries every applicable
+scope, fails closed if any query or JSON conversion fails, and filters out locks defined on
+unrelated resources in the same subscription:
 
 ```powershell
-$arb = '<arbName>'; $rg = '<arbRG>'
-# On the appliance
-az lock list --resource $arb --resource-type "Microsoft.ResourceConnector/appliances" --resource-group $rg -o table
-# On the resource group
-az lock list --resource-group $rg -o table
-# On the subscription
-az lock list -o table
+$ErrorActionPreference = 'Stop'
+$arb = '<arbName>'
+$rg = '<arbRG>'
+
+function Invoke-AzJsonOrThrow {
+    param(
+        [Parameter(Mandatory)]
+        [string[]] $Arguments,
+
+        [Parameter(Mandatory)]
+        [string] $ScopeName
+    )
+
+    $stderrPath = [System.IO.Path]::GetTempFileName()
+    try {
+        $output = @(& az @Arguments --only-show-errors 2> $stderrPath)
+        $exitCode = $LASTEXITCODE
+        $stderr = Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue
+        if ($exitCode -ne 0) {
+            throw "Failed to query $ScopeName. Do not declare the ARB clear. Azure CLI error: $stderr"
+        }
+        if (-not ($output -join '').Trim()) {
+            throw "The $ScopeName query returned no JSON output. Do not declare the ARB clear."
+        }
+        try {
+            $json = ($output -join [Environment]::NewLine) |
+                ConvertFrom-Json -ErrorAction Stop
+        }
+        catch {
+            throw "The $ScopeName query returned invalid JSON. Do not declare the ARB clear. $($_.Exception.Message)"
+        }
+        return @($json)
+    }
+    finally {
+        Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$account = Invoke-AzJsonOrThrow `
+    -Arguments @('account', 'show', '--output', 'json') `
+    -ScopeName 'selected subscription context'
+$subscriptionId = $account.id
+if (-not $subscriptionId) {
+    throw 'The selected subscription ID could not be determined. Do not declare the ARB clear.'
+}
+
+$arbResource = Invoke-AzJsonOrThrow `
+    -Arguments @(
+        'resource', 'show',
+        '--name', $arb,
+        '--resource-type', 'Microsoft.ResourceConnector/appliances',
+        '--resource-group', $rg,
+        '--output', 'json'
+    ) `
+    -ScopeName 'ARB resource identity'
+$arbId = $arbResource.id.TrimEnd('/')
+if (-not $arbId) {
+    throw 'The ARB resource ID could not be determined. Do not declare the ARB clear.'
+}
+
+$rgId = "/subscriptions/$subscriptionId/resourceGroups/$rg"
+$subscriptionScope = "/subscriptions/$subscriptionId"
+
+$resourceResults = Invoke-AzJsonOrThrow `
+    -Arguments @(
+        'lock', 'list',
+        '--resource', $arb,
+        '--resource-type', 'Microsoft.ResourceConnector/appliances',
+        '--resource-group', $rg,
+        '--output', 'json'
+    ) `
+    -ScopeName 'ARB resource locks'
+$resourceLocks = @($resourceResults | Where-Object {
+    $_.id -and $_.id.StartsWith(
+        "$arbId/providers/Microsoft.Authorization/locks/",
+        [StringComparison]::OrdinalIgnoreCase
+    )
+})
+
+$resourceGroupResults = Invoke-AzJsonOrThrow `
+    -Arguments @('lock', 'list', '--resource-group', $rg, '--output', 'json') `
+    -ScopeName 'resource-group locks'
+$resourceGroupLocks = @($resourceGroupResults | Where-Object {
+    $_.id -and $_.id.StartsWith(
+        "$rgId/providers/Microsoft.Authorization/locks/",
+        [StringComparison]::OrdinalIgnoreCase
+    )
+})
+
+$subscriptionResults = Invoke-AzJsonOrThrow `
+    -Arguments @('lock', 'list', '--subscription', $subscriptionId, '--output', 'json') `
+    -ScopeName 'subscription locks'
+$subscriptionLocks = @($subscriptionResults | Where-Object {
+    $_.id -and $_.id.StartsWith(
+        "$subscriptionScope/providers/Microsoft.Authorization/locks/",
+        [StringComparison]::OrdinalIgnoreCase
+    )
+})
+
+$scopeChecks = @(
+    [pscustomobject]@{ Scope = 'ARB resource'; DirectLockCount = $resourceLocks.Count }
+    [pscustomobject]@{ Scope = 'Resource group'; DirectLockCount = $resourceGroupLocks.Count }
+    [pscustomobject]@{ Scope = 'Subscription'; DirectLockCount = $subscriptionLocks.Count }
+)
+$scopeChecks | Format-Table -AutoSize
+
+$applicableLocks = @(
+    $resourceLocks | Select-Object @{n='AppliesAs';e={'Direct'}}, name, level, id
+    $resourceGroupLocks | Select-Object @{n='AppliesAs';e={'Inherited from resource group'}}, name, level, id
+    $subscriptionLocks | Select-Object @{n='AppliesAs';e={'Inherited from subscription'}}, name, level, id
+)
+$applicableLocks | Format-Table AppliesAs, name, level, id -AutoSize
 ```
 
-Note each lock's `name` and `level` (`ReadOnly` or `CanNotDelete`) and the scope it is defined at. You remove it at the scope where it is defined.
+The scope table must contain all three rows. Any exception or missing row means verification is
+incomplete, so stop and do not declare the ARB clear. For each applicable lock, record its
+`AppliesAs`, `name`, `level` (`ReadOnly` or `CanNotDelete`), and full `id`. The full ID identifies
+the exact defining scope and prevents an unrelated lock from being selected for removal.
 
 Also verify that the current identity is authorized at the defining scope:
 
@@ -336,18 +449,14 @@ Remove the lock from the scope where it is defined so the ARB upgrade can procee
 
 1. Navigate to the ARB appliance resource in the Azure portal (resource type `Microsoft.ResourceConnector/appliances`), or to its resource group / subscription if the lock is defined there.
 2. Under **Settings**, select **Locks**.
-3. Identify the `ReadOnly` or `CanNotDelete` lock.
+3. Match the full lock ID from step 3 and confirm its level is `ReadOnly` or `CanNotDelete`.
 4. Click the delete (trash) icon next to the lock to remove it.
 
 **Remove the lock (Azure CLI):**
 
 ```powershell
-# Delete a lock defined on the appliance
-az lock delete --name "<lockName>" --resource "<arbName>" --resource-type "Microsoft.ResourceConnector/appliances" --resource-group "<arbRG>"
-
-# Parent-scope examples. Run only with explicit owner approval.
-az lock delete --name "<lockName>" --resource-group "<arbRG>"   # resource-group scope
-az lock delete --name "<lockName>"                               # subscription scope
+# Delete only the exact approved lock returned by step 3.
+az lock delete --ids "<full-lock-id>"
 ```
 
 If deletion returns `AuthorizationFailed`, stop. Do not broaden permissions or try a different
@@ -394,19 +503,38 @@ $rows = foreach ($subscription in (az account list --query "[?state=='Enabled'].
 $rows | Sort-Object Subscription, ResourceGroup, ARB | Format-Table -AutoSize
 ```
 
-The resource-level query includes locks inherited from the resource group and subscription. Use the
-scope returned for each lock to route approval and removal to the correct owner.
+The resource-level query reports locks defined directly on the ARB. Query the resource-group and
+subscription scopes separately to find inherited locks.
 
 ### 6. Verification: prove the failure cleared
 
-Confirm no locks remain on the ARB appliance (or the resource group / subscription):
+Rerun the complete three-scope discovery block from step 3 after every approved deletion. Do not
+substitute a resource-level query. The ARB is clear of management locks only when all three scope
+queries succeed and every direct lock count is zero:
 
 ```powershell
-az lock list --resource "<arbName>" --resource-type "Microsoft.ResourceConnector/appliances" --resource-group "<arbRG>" -o table
+if ($scopeChecks.Count -ne 3) {
+    throw 'Lock verification did not succeed at all three scopes. Do not declare the ARB clear.'
+}
+if ($resourceLocks.Count -ne 0) {
+    $resourceLocks | Format-Table name, level, id -AutoSize
+    throw 'The validator condition is not cleared because a direct ARB resource lock remains.'
+}
+$inheritedLocks = @($resourceGroupLocks) + @($subscriptionLocks)
+if ($inheritedLocks.Count -ne 0) {
+    $applicableLocks | Format-Table AppliesAs, name, level, id -AutoSize
+    throw (
+        'The direct ARB lock condition is cleared, but one or more inherited ' +
+        'management locks still apply. Do not start the update until the ' +
+        'governance owner resolves or approves each parent-scope lock.'
+    )
+}
+'CLEAR: ARB resource, resource-group, and subscription lock queries all succeeded with zero applicable locks.'
 ```
 
-An empty resource-level result means no management lock applies directly or by inheritance to the
-ARB. Then rerun the pre-update health check so the validator re-evaluates:
+If any Azure CLI query errors, returns invalid output, or cannot resolve the selected subscription or
+ARB resource ID, stop. An error is not an empty result. After the three-scope check prints the
+`CLEAR` message, rerun the pre-update health check so the validator re-evaluates:
 
 ```powershell
 Invoke-SolutionUpdatePrecheck -SystemHealth
@@ -418,7 +546,10 @@ Confirm the precheck completed with a current `HealthCheckDate`, then re-read th
 its `AdditionalData.Detail` is `ARB is not locked as expected.`. The aggregate `HealthState` alone
 does not prove this specific check cleared.
 
-> **Note:** the Azure portal readiness view and the cluster-wide health-check result refresh only when a full health check or `Invoke-SolutionUpdatePrecheck` runs, not on a targeted per-node re-test, so confirm the fix with `az lock list` rather than waiting on the portal.
+> **Note:** the Azure portal readiness view and the cluster-wide health-check result refresh only
+> when a full health check or `Invoke-SolutionUpdatePrecheck` runs, not on a targeted per-node
+> re-test. Confirm the Azure lock state with the successful three-scope verification in step 3
+> rather than waiting on the portal.
 
 ### Evidence collection and escalation
 
@@ -441,13 +572,21 @@ Get-ChildItem (Join-Path $env:USERPROFILE '.AzStackHci') -File -ErrorAction Sile
 az account show -o json > (Join-Path $out 'az-account.json')
 az lock list --resource '<arbName>' `
     --resource-type 'Microsoft.ResourceConnector/appliances' `
-    --resource-group '<arbRG>' -o json > (Join-Path $out 'arb-locks.json')
+    --resource-group '<arbRG>' -o json > (Join-Path $out 'arb-resource-locks.json')
+if ($LASTEXITCODE -ne 0) { throw 'Failed to collect ARB resource locks.' }
+az lock list --resource-group '<arbRG>' -o json > (Join-Path $out 'resource-group-locks.json')
+if ($LASTEXITCODE -ne 0) { throw 'Failed to collect resource-group locks.' }
+az lock list --subscription '<subscription-id>' -o json > (Join-Path $out 'subscription-locks.json')
+if ($LASTEXITCODE -ne 0) { throw 'Failed to collect subscription locks.' }
 ```
 
 Escalate with this bundle when any of the following is true:
 
-- the specific validator still reports `ARB is locked` after the resource-level query, including inherited locks, is proven empty;
-- `az lock list` is empty but an update write is denied, which can indicate Azure Policy or a deny assignment rather than a management lock;
+- the specific validator still reports `ARB is locked` after all three scope queries succeeded and
+  the filtered applicable-lock list was proven empty;
+- all three scope queries succeeded with no applicable lock but an update write is denied, which can
+  indicate Azure Policy or a deny assignment rather than a management lock;
+- any required scope query fails or cannot be parsed, because lock absence is then unverified;
 - the validator reports MSI login failure after Arc agent, proxy, and TCP 443 checks are healthy;
 - an approved lock was removed but it is recreated by automation or policy before revalidation.
 
@@ -467,7 +606,7 @@ Escalate with this bundle when any of the following is true:
 # Source Articles
 
 - **Current Environment Checker implementation:** `ASZ-EnvironmentValidator/AzStackHci.EnvironmentChecker/AzStackHCIARBStack/AzStackHci.ARBStack.Helpers.psm1`, function `Test-ARBIsNotLocked`. The September 17, 2026 live source on module `10.2610.0.2039` signs in with MSI, discovers the ARB, and runs `az lock list` against `Microsoft.ResourceConnector/appliances`.
-- **Live validation:** `HC1n22r1803`, `v-Host1`, September 17, 2026. The shipping `Test-ARBIsNotLocked` returned `SUCCESS` with `ARB is not locked as expected.`. The operator identity did not have the target subscription in its current Azure CLI contexts, so Owner or User Access Administrator could not be proven and no lock mutation was attempted.
+- **Live validation:** disposable Azure Local lab node, September 17, 2026. The shipping `Test-ARBIsNotLocked` returned `SUCCESS` with `ARB is not locked as expected.`. The operator identity did not have the target subscription in its current Azure CLI contexts, so Owner or User Access Administrator could not be proven and no lock mutation was attempted.
 - [ARB upgrade fails with ApplianceResourceScopeLocked](../Update/UpgradeArbAndExtensions_fails_ApplianceResourceScopeLocked.md)
 - [Known issue: ScopeLockedError during ARB Upgrade](../Upgrade/Known-issue-ScopeLockedError-ARB-Upgrade.md)
 

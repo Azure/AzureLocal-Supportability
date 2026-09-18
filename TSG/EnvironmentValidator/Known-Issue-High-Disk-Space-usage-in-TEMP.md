@@ -34,7 +34,7 @@ Tags: ["Validation", "Diagnostics", "Log Collection"]
 
 | Date | Version | Summary |
 | --- | --- | --- |
-| 2026-09-17 | 2.0 | Reclassified the article as a pending Known Issue and adopted the canonical PickleFactory KI layout without changing the technical procedure. |
+| 2026-09-17 | 2.0 | Reclassified the article as a pending Known Issue and adopted the canonical publication KI layout without changing the technical procedure. |
 
 :::
 

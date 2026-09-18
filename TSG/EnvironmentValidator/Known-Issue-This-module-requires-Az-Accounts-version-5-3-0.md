@@ -34,7 +34,7 @@ Tags: ["Solution Update", "Validation", "Diagnostics"]
 
 | Date | Version | Summary |
 | --- | --- | --- |
-| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, canonical layout, audience directives, and source scoping without changing commands or technical evidence. |
+| 2026-09-17 | 2.0 | Added mandatory publication metadata, canonical layout, audience directives, and source scoping without changing commands or technical evidence. |
 
 :::
 

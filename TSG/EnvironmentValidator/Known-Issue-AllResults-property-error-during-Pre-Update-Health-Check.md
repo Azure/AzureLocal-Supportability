@@ -30,7 +30,7 @@ Tags: ["Solution Update", "Lifecycle Manager", "Validation", "Diagnostics", "Log
 
 | Date | Version | Summary |
 |------|---------|---------|
-| 2026-09-17 | 1.0 | Added source-validated 2604 disposition, safe diagnostics, and mandatory PickleFactory metadata and layout. |
+| 2026-09-17 | 1.0 | Added source-validated 2604 disposition, safe diagnostics, and mandatory publication metadata and layout. |
 
 :::
 

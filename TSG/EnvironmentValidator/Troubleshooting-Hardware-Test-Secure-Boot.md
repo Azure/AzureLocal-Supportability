@@ -29,7 +29,7 @@ Tags: ["Validation", "Firmware", "BIOS", "BitLocker", "Cloud Deployment"]
 
 | Date | Version | Summary |
 | --- | --- | --- |
-| 2026-09-17 | 2.0 | Added mandatory PickleFactory metadata, audience scoping, and current article layout without changing technical guidance. |
+| 2026-09-17 | 2.0 | Added mandatory publication metadata, audience scoping, and current article layout without changing technical guidance. |
 
 :::
 
@@ -144,6 +144,9 @@ if (-not $validator.Parameters.ContainsKey('Include')) {
 }
 
 $r = Invoke-AzStackHciHardwareValidation -Include Test-SecureBoot -PassThru
+if (@($r).Count -eq 0) {
+    throw 'The targeted validator returned no Secure Boot result. Preserve the module version and full output, then escalate.'
+}
 $r | Select-Object Name, Status, Severity
 $r.AdditionalData.Detail
 ```
@@ -154,7 +157,10 @@ that `-Include` is unavailable, run the full validator and filter the returned r
 
 ```powershell
 $r = Invoke-AzStackHciHardwareValidation -PassThru |
-    Where-Object Name -like '*Hardware*SecureBoot*'
+    Where-Object { $_.Name -match '^AzStackHci_Hardware_(Test_Secure_Boot|SecureBoot)$' }
+if (@($r).Count -eq 0) {
+    throw 'The full validator returned no canonical or verified legacy Secure Boot result. Preserve the module version and full output, then escalate.'
+}
 $r | Select-Object Name, Status, Severity
 $r.AdditionalData.Detail
 ```

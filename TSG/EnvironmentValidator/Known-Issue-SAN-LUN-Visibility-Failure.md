@@ -521,8 +521,8 @@ not match source. Route validator-emission defects to the Environment Validator
 owner. Route array qualification, HBA, DSM, and fabric-specific issues to the
 storage integration owner and named vendor.
 
-TSG Forge validation for the September 17, 2026 campaign is intentionally
-T3/L1. HC1n26r1039 ran solution `12.2610.1004.30`, platform
+Documentation validation completed on September 17, 2026 is intentionally
+T3/L1. A disposable Azure Local lab cluster ran solution `12.2610.1004.30`, platform
 `12.2610.0.3059`, and Environment Checker `10.2610.0.2039`. The lab had no
 Fibre Channel or iSCSI disks, no iSCSI targets or sessions, and no MPIO disks.
 Only source, installed command shape, and applicability were validated. No SAN
