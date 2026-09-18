@@ -154,7 +154,11 @@ Get-AzureStackHCISubscriptionStatus | Where-Object SubscriptionName -like 'Azure
     Select-Object SubscriptionName, SubscriptionStatus
 ```
 
-`SubscriptionStatus = Active` is healthy. Any other value (or an error, or no row returned) is the failure this check reports.
+`SubscriptionStatus = Active` is healthy. Any other value or no matching row is
+actionable. A cmdlet error by itself is **inconclusive** on current builds because
+the validator can still return `SUCCESS` from the independently readable Active
+local-policy fallback. After any cmdlet error, use the refreshed validator result
+and branch on its emitted `AdditionalData.Status` and `AdditionalData.Detail`.
 
 **Where this does NOT appear.** This is an Azure registration/billing signal, not a Windows failover-cluster state, so do not spend time looking for it in the cluster tooling:
 
