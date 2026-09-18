@@ -86,14 +86,24 @@ Azure Arc **cluster connect** provides a secure way to connect to Arc-enabled Ku
 - **When it runs:** the Connectivity validator runs during **Deployment**, **Update**, **Scale-out (Add Node)**, and **Upgrade** readiness, and can also be run standalone at any time (see step 1).
 - **The failure is always the same class of problem:** the node's outbound connection to the relay endpoint did not complete. The `Detail` string tells you *where* it broke (DNS, TCP/firewall, proxy, or TLS inspection); step 2 maps each signature to its fix.
 
-> **Most common in the field (start here).** The usual cause is a **firewall, proxy, or TLS-inspection appliance** that does not allow the node's outbound connection to `*.servicebus.windows.net` (the Azure Relay endpoints). Read the `Detail` string first (step 1), match the signature in step 2, and apply the matching fix in step 5.
+> **Most common in the field (start here).** The usual cause is a **firewall,
+> proxy, or TLS-inspection appliance** that does not allow the node's outbound
+> connection to the exact relay hostname emitted by the failed result. Read the
+> `Detail` string first (step 1), match the signature in step 2, and apply the
+> matching fix in step 5.
 
 ## Requirements
 
-- Outbound connectivity from **every** node to the Azure Local required endpoints, including the Azure Relay / Service Bus relay endpoints used by Arc cluster connect (`*.servicebus.windows.net`, specifically `azgnrelay-<region>-l1.servicebus.windows.net`) on TCP 443.
+- Outbound connectivity from **every** node to the exact Azure Relay / Service Bus
+  relay hostname emitted by the failed result on TCP 443. Public-cloud hosts
+  normally end in `servicebus.windows.net`; Azure Government hosts end in
+  `servicebus.usgovcloudapi.net`.
 - If the cluster uses a **proxy**, the proxy must be configured on the nodes and must allow those endpoints.
 - If the network uses **TLS inspection / deep packet inspection**, the Azure Relay endpoints must be **excluded** from interception (the relay uses a long-lived connection that inspection appliances frequently break).
-- A cluster node (or a workstation with the `AzStackHci.EnvironmentChecker` module) to run `Invoke-AzStackHciConnectivityValidation` for authoritative confirmation.
+- A cluster node from which to run the pre-update health check and read its refreshed
+  health-check JSON or Event ID 17205 result. The standalone
+  `Invoke-AzStackHciConnectivityValidation` command is optional because the active
+  manifest may omit the **Cluster connect** target.
 
 ## Troubleshooting Steps
 
@@ -352,7 +362,12 @@ Risk: [LOW RISK] to the cluster. Allowing the documented outbound endpoint does 
 
 **Sub-mode: proxy** (`Unable to connect to the remote server`, `tnc: True`).
 
-1. If the cluster uses a proxy, confirm the proxy is configured on the nodes and allows `*.servicebus.windows.net`. See the proxy guidance in [Troubleshooting External Connectivity Failures in Environment Checker](./Troubleshooting-External-Connectivity-Failures-in-Environment-Checker.md).
+1. If the cluster uses a proxy, confirm the proxy is configured on the nodes and
+   allows the exact `$relayHost` extracted from the emitted result in step 1. Do not
+   substitute a commercial wildcard for a Government-cloud host. Public-cloud hosts
+   normally end in `servicebus.windows.net`; Azure Government hosts end in
+   `servicebus.usgovcloudapi.net`. See the proxy guidance in
+   [Troubleshooting External Connectivity Failures in Environment Checker](./Troubleshooting-External-Connectivity-Failures-in-Environment-Checker.md).
 2. Confirm the node's proxy configuration matches the cluster's documented proxy, and that the relay endpoints are not on a bypass list that routes them incorrectly. Read the current values before changing them:
 
    ```powershell
@@ -369,7 +384,12 @@ Risk: [MEDIUM RISK] if node proxy settings are edited directly, because the prox
 
 **Sub-mode: TLS inspection** (`The underlying connection was closed: An unexpected error occurred on a send`, `tnc: True`).
 
-1. Exclude the Azure Relay endpoints (`*.servicebus.windows.net`) from any TLS-inspection, deep-packet-inspection, or SSL-interception appliance on the outbound path. These are middleboxes that terminate and re-sign TLS so they can inspect the traffic; the cluster-connect relay uses a long-lived connection that they break.
+1. Exclude the exact `$relayHost` extracted from the emitted result in step 1 from
+   any TLS-inspection, deep-packet-inspection, or SSL-interception appliance on the
+   outbound path. This covers both `servicebus.windows.net` and
+   `servicebus.usgovcloudapi.net` without constructing a cloud-specific hostname.
+   These middleboxes terminate and re-sign TLS so they can inspect the traffic; the
+   cluster-connect relay uses a long-lived connection that they break.
 2. Confirm with the network team that the relay endpoints are on the inspection bypass list. This is a security-policy change and needs their approval and their change record.
 3. Re-test with step 1.
 
@@ -410,13 +430,24 @@ extraction block from step 1 in the same session first. `True` only proves the T
 connection succeeds; for the **proxy** and **TLS-inspection** sub-modes it does
 **not** prove the fix, so confirm those with the refreshed per-target result above.
 
-> **Note:** the Azure portal readiness view and the cluster-wide health-check result refresh only when a full health check or `Invoke-SolutionUpdatePrecheck` runs, not on a targeted per-node re-test, so confirm the fix with `Invoke-AzStackHciConnectivityValidation` or the precheck rather than waiting on the portal.
+> **Note:** the Azure portal readiness view and the cluster-wide health-check result
+> refresh only when a full health check or `Invoke-SolutionUpdatePrecheck` runs, not
+> on a targeted per-node re-test. Confirm the fix with the refreshed per-target JSON
+> or Event ID 17205 result from the precheck rather than waiting on the portal. Use
+> `Invoke-AzStackHciConnectivityValidation` only as an additional confirmation when
+> its active manifest includes the **Cluster connect** target.
 
 ## Glossary
 
 - **Azure Arc cluster connect:** a feature that provides secure connectivity to Arc-enabled Kubernetes clusters from anywhere without opening any inbound port, by maintaining an outbound connection from the cluster to an Azure Relay endpoint. This check verifies that outbound path.
-- **Azure Relay / Service Bus relay (`*.servicebus.windows.net`):** the Azure service that hosts the cluster-connect reverse tunnel. The per-region endpoint is `azgnrelay-<region>-l1.servicebus.windows.net`.
-- **`Invoke-AzStackHciConnectivityValidation`:** the Environment Checker connectivity validator. It probes each required endpoint and reports the result, including this "Cluster connect" target. Run it standalone on a node or workstation to reproduce and verify.
+- **Azure Relay / Service Bus relay:** the Azure service that hosts the cluster-connect
+  reverse tunnel. Public-cloud hosts normally use `servicebus.windows.net`; Azure
+  Government hosts use `servicebus.usgovcloudapi.net`. Always read the exact hostname
+  from the failed result instead of constructing it.
+- **`Invoke-AzStackHciConnectivityValidation`:** the standalone Environment Checker
+  connectivity validator. Its target set is manifest-dependent and may omit
+  **Cluster connect**. When the target is absent, confirm this check through the
+  refreshed pre-update health-check JSON or Event ID 17205 result.
 - **`Test Analysis - Layer 3 (tnc)`:** the `Test-NetConnection` (TCP 443) result recorded in the `Detail`. `True` = TCP reached the endpoint (a remaining failure is proxy or TLS inspection); `False` = TCP or DNS failed (firewall or DNS).
   > **Note on the label.** The validator prints "Layer 3", but `Test-NetConnection -Port 443`
   > completes a **TCP** handshake, which is layer 4. Read the field as "did name resolution
