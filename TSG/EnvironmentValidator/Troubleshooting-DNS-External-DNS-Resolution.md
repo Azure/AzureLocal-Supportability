@@ -384,64 +384,59 @@ Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
         '<none on up adapters>'
     }
 
-    $base = 'C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\HealthCheck\System'
-    if (-not (Test-Path $base)) {
-        $base = Get-ChildItem 'C:\ClusterStorage' -Directory -ErrorAction SilentlyContinue |
-            ForEach-Object { Join-Path $_.FullName 'Shares\SU1_Infrastructure_1\Updates\HealthCheck\System' } |
-            Where-Object { Test-Path $_ } | Select-Object -First 1
-    }
-    $latest = $null
-    if ($base) {
-        $latest = Get-ChildItem $base -Filter 'HealthCheckResult.EnvironmentChecker.*.json' -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    }
-    if (-not $latest) {
-        # Emit an explicit NO DATA row so this node is never silently treated as passing.
+    $nodeResults = @(
+        Get-WinEvent -LogName AzStackHciEnvironmentChecker `
+            -FilterXPath "*[System[(EventID=17205)]]" `
+            -MaxEvents 2000 `
+            -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                try { $_.Message | ConvertFrom-Json }
+                catch { $null }
+            } |
+            Where-Object {
+                (
+                    $_.Name -like '*ExternalDnsResolution*' -or
+                    $_.Name -like '*Test_External_Hostname_Resolution*'
+                ) -and
+                [string]$_.AdditionalData.Detail -match
+                    [regex]::Escape($node)
+            } |
+            Sort-Object { $_.Timestamp } -Descending
+    )
+    $latestNodeResult = $nodeResults | Select-Object -First 1
+    if (-not $latestNodeResult) {
         [pscustomobject]@{
             Node               = $node
             UpAdapters         = $upAliases -join ', '
             CurrentDnsServers  = $currentText
             ResultName         = ''
             Status             = 'NO DATA'
-            Detail             = 'No HealthCheck result file found; read Event ID 17205 on this node'
+            Detail             = 'No node-local Event ID 17205 result naming this node'
         }
         return
     }
 
-    $results = @(Get-Content $latest.FullName -Raw | ConvertFrom-Json |
-        Where-Object {
-            $_.Name -like '*ExternalDnsResolution*' -or
-            $_.Name -like '*Test_External_Hostname_Resolution*'
-        })
-    $failure = @($results | Where-Object { $_.AdditionalData.Status -eq 'FAILURE' } | Select-Object -First 1)
-    if ($failure) {
-        [pscustomobject]@{
-            Node              = $node
-            UpAdapters        = $upAliases -join ', '
-            CurrentDnsServers = $currentText
-            ResultName        = $failure.Name
-            Status            = $failure.AdditionalData.Status
-            Detail            = $failure.AdditionalData.Detail
+    [pscustomobject]@{
+        Node              = $node
+        UpAdapters        = $upAliases -join ', '
+        CurrentDnsServers = $currentText
+        ResultName        = $latestNodeResult.Name
+        Status            = if ($latestNodeResult.AdditionalData.Status) {
+            $latestNodeResult.AdditionalData.Status
         }
-    }
-    else {
-        [pscustomobject]@{
-            Node              = $node
-            UpAdapters        = $upAliases -join ', '
-            CurrentDnsServers = $currentText
-            ResultName        = if ($results) { ($results | Select-Object -First 1).Name } else { '' }
-            Status            = 'PASS'
-            Detail            = 'No failing DNS result in the latest health check'
+        else {
+            $latestNodeResult.Status
         }
+        Detail            = $latestNodeResult.AdditionalData.Detail
     }
 } | Sort-Object Node | Format-Table -AutoSize
 ```
 
 Every node reports its up adapters, the current DNS servers on those adapters, and one of
-three result states: a failing `Detail` (fix it), `PASS` (the latest result has no
-failure), or `NO DATA` (the result could not be read, so confirm it with the event log
-rather than assuming it passed). The result file is cluster-wide; the current DNS
-configuration is collected from each node independently.
+three result states: `FAILURE`, `SUCCESS`, or `NO DATA`. The command reads each
+node's local Event ID 17205 stream and accepts only a result whose Detail names that
+node, so a failure for one node cannot be attached to every node's local DNS
+configuration.
 
 ### Admin-surface map
 
@@ -473,10 +468,12 @@ place to look for this validator.
   ```powershell
   $componentLogRoot = Join-Path $env:USERPROFILE '.AzStackHci'
   $componentFiles = @(Get-ChildItem $componentLogRoot -File -ErrorAction SilentlyContinue |
-      Where-Object { $_.Name -match 'AzStackHciEnvironmentChecker|AzStackHciEnvironmentReport' } |
-      Select-Object FullName, LastWriteTime, Length)
-  $componentFiles
-  $componentFiles | Select-String -Pattern 'ExternalDnsResolution|Test_External_Hostname_Resolution'
+      Where-Object {
+          $_.Name -match 'AzStackHciEnvironmentChecker|AzStackHciEnvironmentReport'
+      })
+  $componentFiles | Select-Object FullName, LastWriteTime, Length
+  Select-String -Path $componentFiles.FullName `
+      -Pattern 'ExternalDnsResolution|Test_External_Hostname_Resolution'
   ```
 
 For the four not-evident surfaces, do not treat the absence of a matching entry as
