@@ -385,6 +385,8 @@ Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
     }
 
     $nodeResults = @(
+        $nodeTokenPattern = '(?<![A-Za-z0-9-]){0}(?![A-Za-z0-9-])' -f
+            [regex]::Escape($node)
         Get-WinEvent -LogName AzStackHciEnvironmentChecker `
             -FilterXPath "*[System[(EventID=17205)]]" `
             -MaxEvents 2000 `
@@ -399,7 +401,7 @@ Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
                     $_.Name -like '*Test_External_Hostname_Resolution*'
                 ) -and
                 [string]$_.AdditionalData.Detail -match
-                    [regex]::Escape($node)
+                    $nodeTokenPattern
             } |
             Sort-Object { $_.Timestamp } -Descending
     )
@@ -471,9 +473,17 @@ place to look for this validator.
       Where-Object {
           $_.Name -match 'AzStackHciEnvironmentChecker|AzStackHciEnvironmentReport'
       })
-  $componentFiles | Select-Object FullName, LastWriteTime, Length
-  Select-String -Path $componentFiles.FullName `
-      -Pattern 'ExternalDnsResolution|Test_External_Hostname_Resolution'
+  if ($componentFiles.Count -eq 0) {
+      [pscustomobject]@{
+          Status = 'NO FILES'
+          Detail = "No Environment Checker component files found under $componentLogRoot"
+      }
+  }
+  else {
+      $componentFiles | Select-Object FullName, LastWriteTime, Length
+      Select-String -Path $componentFiles.FullName `
+          -Pattern 'ExternalDnsResolution|Test_External_Hostname_Resolution'
+  }
   ```
 
 For the four not-evident surfaces, do not treat the absence of a matching entry as
