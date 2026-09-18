@@ -150,7 +150,13 @@ Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath "*[System[(Event
   ForEach-Object { try { $_.Message | ConvertFrom-Json } catch { } } |
   Where-Object { $_.Name -like '*Azure_Kubernetes_Service_Cluster_connect*' } |
   Sort-Object { $_.Timestamp } -Descending |
-  Select-Object -First 10 Status, @{n='Target';e={$_.TargetResourceID}}, @{n='Detail';e={$_.AdditionalData.Detail}}
+  Select-Object -First 10 `
+    @{n='Status';e={
+        if ($_.AdditionalData.Status) { $_.AdditionalData.Status }
+        else { $_.Status }
+    }},
+    @{n='Target';e={$_.TargetResourceID}},
+    @{n='Detail';e={$_.AdditionalData.Detail}}
 ```
 
 **The Environment Checker also writes its own log and report on the node that ran the check.** By default these are under the running account's `%USERPROFILE%\.AzStackHci\` folder: the text log `AzStackHciEnvironmentChecker.log`, the machine-readable `AzStackHciEnvironmentReport.json`, and, for connectivity failures, `FailedUrls.txt` (the list of endpoints that failed). These files are local to the node that executed the check; search the log for `FAILURE` or the endpoint host to find this failure and its debug detail:
@@ -159,6 +165,43 @@ Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath "*[System[(Event
 Get-ChildItem C:\Users\*\.AzStackHci\AzStackHciEnvironmentChecker.log -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1 |
     Select-String -Pattern 'azgnrelay', 'FAILURE' | Select-Object -Last 20
+```
+
+**Resolve the exact relay hostname before any network test.** Do not construct a
+hostname from a region. The public and Fairfax targets use different naming
+families. The following reads the newest local Event ID 17205 result and extracts
+the source-emitted Service Bus hostname from `TargetResourceID` or `Detail`:
+
+```powershell
+$clusterConnectResult = Get-WinEvent -LogName AzStackHciEnvironmentChecker `
+    -FilterXPath "*[System[(EventID=17205)]]" -MaxEvents 2000 |
+    ForEach-Object {
+        try { $_.Message | ConvertFrom-Json }
+        catch { $null }
+    } |
+    Where-Object {
+        $_.Name -like '*Azure_Kubernetes_Service_Cluster_connect*'
+    } |
+    Sort-Object { $_.Timestamp } -Descending |
+    Select-Object -First 1
+
+if (-not $clusterConnectResult) {
+    throw 'No Cluster connect Event ID 17205 result was found. Run the precheck, then retry.'
+}
+
+$targetText = @(
+    [string]$clusterConnectResult.TargetResourceID
+    [string]$clusterConnectResult.AdditionalData.Detail
+) -join ' '
+$hostMatch = [regex]::Match(
+    $targetText,
+    '(?i)(?<host>[a-z0-9][a-z0-9.-]*\.servicebus\.(?:windows\.net|usgovcloudapi\.net))'
+)
+if (-not $hostMatch.Success) {
+    throw 'The emitted result did not contain a Service Bus hostname. Preserve the result and escalate.'
+}
+$relayHost = $hostMatch.Groups['host'].Value
+"Exact emitted relay host: $relayHost"
 ```
 
 If the customer noticed this because a pending update will not start, confirm whether it is blocking (this check is a Warning in the public cloud, so it usually is not the blocker there):
@@ -233,13 +276,19 @@ The check runs per node, so confirm which nodes fail and re-test the endpoint di
 
 ```powershell
 Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
-    $uri = 'azgnrelay-eastus-l1.servicebus.windows.net'   # replace <region> with the cluster's region
-    $tnc = Test-NetConnection -ComputerName $uri -Port 443 -InformationLevel Quiet -WarningAction SilentlyContinue
+    param($ExactRelayHost)
+    $tnc = Test-NetConnection -ComputerName $ExactRelayHost -Port 443 `
+        -InformationLevel Quiet -WarningAction SilentlyContinue
     [pscustomobject]@{ TcpTo443 = $tnc }
-} | Sort-Object PSComputerName | Select-Object PSComputerName, TcpTo443
+} -ArgumentList $relayHost |
+    Sort-Object PSComputerName |
+    Select-Object PSComputerName, TcpTo443
 ```
 
-Nodes returning `True` reach the endpoint at the TCP layer (any remaining failure is proxy or TLS inspection); nodes returning `False` are blocked at the firewall or DNS layer. Substitute the cluster's real region for `<region>` (read it from the `TargetResourceID` / `Detail` of the failing result in step 1).
+Nodes returning `True` reach the exact emitted endpoint at the TCP layer (any
+remaining failure is proxy or TLS inspection); nodes returning `False` are
+blocked at the firewall or DNS layer. Run the relay-host extraction block above
+in the same session before this test.
 
 ### 4. Consequences if you do not fix this
 
@@ -247,7 +296,7 @@ While this check fails, **Azure Arc cluster connect does not work** for this clu
 
 ### 5. Remediation
 
-Match the `Detail` signature from step 2 to the sub-mode and apply **only** the matching fix. The canonical endpoint list is in [Azure Arc-enabled Kubernetes network requirements](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/network-requirements) and, for AKS on Azure Local, [AKS network requirements - firewall URL exceptions](https://learn.microsoft.com/en-us/azure/aks/hybrid/aks-hci-network-system-requirements#firewall-url-exceptions).
+Match the `Detail` signature from step 2 to the sub-mode and apply **only** the matching fix. The canonical endpoint list is in [Azure Arc-enabled Kubernetes network requirements](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/network-requirements) and, for AKS on Azure Local, [AKS enabled by Azure Arc network requirements](https://learn.microsoft.com/en-us/azure/aks/aksarc/network-system-requirements#firewall-url-exceptions).
 
 > [!IMPORTANT]
 > **Apply one sub-mode fix at a time, and stop when the check passes.** Every fix below
@@ -273,7 +322,8 @@ Match the `Detail` signature from step 2 to the sub-mode and apply **only** the 
 > the customer's existing DNS servers resolve the public name, normally by fixing their
 > forwarders.
 
-1. On an affected node, confirm the relay hostname resolves: `Resolve-DnsName azgnrelay-<region>-l1.servicebus.windows.net`.
+1. Run the relay-host extraction block in step 1, then confirm the exact emitted
+   hostname resolves: `Resolve-DnsName -Name $relayHost`.
 2. Record the current setting before changing anything, so the change is reversible:
 
    ```powershell
@@ -288,9 +338,15 @@ Risk: [MEDIUM RISK] if a node's DNS servers are changed, because a node's DNS co
 
 **Sub-mode: firewall / outbound 443 blocked** (`Unable to connect to the remote server` or `timed out`, `tnc: False`).
 
-1. Allow outbound **TCP 443** from every node to the Azure Relay endpoints used by cluster connect: `*.servicebus.windows.net` (specifically `azgnrelay-<region>-l1.servicebus.windows.net`). Add these to the firewall allow list per [Azure Arc-enabled Kubernetes network requirements](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/network-requirements) and the [AKS on Azure Local firewall URL exceptions](https://learn.microsoft.com/en-us/azure/aks/hybrid/aks-hci-network-system-requirements#firewall-url-exceptions). This is normally the **perimeter or edge firewall**, not the Windows firewall on the node; Azure Local nodes do not block this outbound traffic by default. Confirm with the network owner which device enforces the block before changing anything.
+1. Allow outbound **TCP 443** from every node to the exact relay hostname
+   extracted from the emitted result. Add the applicable endpoint to the firewall
+   allow list per [Azure Arc-enabled Kubernetes network requirements](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/network-requirements)
+   and [AKS enabled by Azure Arc network requirements](https://learn.microsoft.com/en-us/azure/aks/aksarc/network-system-requirements#firewall-url-exceptions).
+   This is normally the **perimeter or edge firewall**, not the Windows firewall
+   on the node. Confirm with the network owner which device enforces the block.
 2. Confirm no route or Network Security Group (NSG) drops the outbound connection to the relay. Route and NSG changes are owned by the network team.
-3. Re-test with `Test-NetConnection azgnrelay-<region>-l1.servicebus.windows.net -Port 443` from the node.
+3. Re-test with `Test-NetConnection -ComputerName $relayHost -Port 443` from
+   the node.
 
 Risk: [LOW RISK] to the cluster. Allowing the documented outbound endpoint does not disrupt running workloads, but it is a change to customer network policy and needs the network owner's approval.
 
@@ -331,22 +387,28 @@ Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate
 Confirm `HealthState` is `Success` with a current `HealthCheckDate`.
 
 > [!NOTE]
-> `HealthState` is the **aggregate** result of the whole pre-update health check, not this one
-> target. An unrelated failing check keeps it non-`Success` even after cluster connect is
-> fixed, and a `Success` does not on its own prove that this target passed. The authoritative
-> per-target confirmation is the validator output itself, so always also re-run
-> `Invoke-AzStackHciConnectivityValidation` on an affected node and confirm the **Cluster
-> connect** target reports `Overall Result: True`.
+> `HealthState` is the **aggregate** result of the whole pre-update health check,
+> not this one target. An unrelated failure can keep it non-`Success`. Confirm
+> this target in the refreshed `HealthCheckResult.EnvironmentChecker.*.json` or
+> the newest Event ID 17205 result and require readable `AdditionalData.Status =
+> SUCCESS`. If the current standalone manifest still emits **Cluster connect**,
+> `Invoke-AzStackHciConnectivityValidation` is an additional confirmation. Do not
+> require that standalone target when the active manifest omits it.
 
 **Quick lower-layer check (DNS and firewall/TCP sub-modes only).** For sub-modes 1 and 2, `Test-NetConnection` confirms the DNS/TCP layer is now open:
 
 ```powershell
 Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
-    Test-NetConnection azgnrelay-eastus-l1.servicebus.windows.net -Port 443 -InformationLevel Quiet -WarningAction SilentlyContinue
-} | Sort-Object PSComputerName
+    param($ExactRelayHost)
+    Test-NetConnection -ComputerName $ExactRelayHost -Port 443 `
+        -InformationLevel Quiet -WarningAction SilentlyContinue
+} -ArgumentList $relayHost | Sort-Object PSComputerName
 ```
 
-Every node should return `True` (substitute the cluster's region). Note that `True` only proves the TCP connection succeeds; for the **proxy** and **TLS-inspection** sub-modes it does **not** prove the fix (those already have `tnc: True` while failing), so confirm those with the validator / precheck above.
+Every node should return `True` for the exact emitted host. Run the relay-host
+extraction block from step 1 in the same session first. `True` only proves the TCP
+connection succeeds; for the **proxy** and **TLS-inspection** sub-modes it does
+**not** prove the fix, so confirm those with the refreshed per-target result above.
 
 > **Note:** the Azure portal readiness view and the cluster-wide health-check result refresh only when a full health check or `Invoke-SolutionUpdatePrecheck` runs, not on a targeted per-node re-test, so confirm the fix with `Invoke-AzStackHciConnectivityValidation` or the precheck rather than waiting on the portal.
 
@@ -371,6 +433,6 @@ Every node should return `True` (substitute the cluster's region). Note that `Tr
 # Source Articles
 
 - [Azure Arc-enabled Kubernetes network requirements](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/network-requirements)
-- [AKS on Azure Local network requirements](https://learn.microsoft.com/en-us/azure/aks/hybrid/aks-hci-network-system-requirements)
+- [AKS enabled by Azure Arc network requirements](https://learn.microsoft.com/en-us/azure/aks/aksarc/network-system-requirements)
 
 :::
