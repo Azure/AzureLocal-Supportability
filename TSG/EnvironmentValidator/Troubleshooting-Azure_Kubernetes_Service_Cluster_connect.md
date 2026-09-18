@@ -1,3 +1,37 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260918154402"
+Title: "Azure_Kubernetes_Service_Cluster_connect"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-18"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38357506
+Tags: ["Solution Update", "Validation", "Diagnostics"]
+---
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-18 | 2.0 | Added the publication contract, source-exact cloud endpoint guidance, and refreshed live validation evidence. |
+
+:::
+
 # Azure_Kubernetes_Service_Cluster_connect
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -17,6 +51,14 @@
     <th style="text-align:left;">Severity</th>
     <td><strong>Warning</strong> in the Azure public cloud (non-blocking, but the Arc cluster-connect feature will not work until it is fixed); <strong>Critical</strong> in Azure Government (Fairfax).</td>
   </tr>
+  <tr>
+    <th style="text-align:left;">Applicable scenarios</th>
+    <td>Deployment, Update, Add Node, and Upgrade readiness</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Affected versions</th>
+    <td>Versions whose active connectivity target set includes this check</td>
+  </tr>
 </table>
 
 > **At a glance**
@@ -33,14 +75,14 @@ Azure Arc **cluster connect** provides a secure way to connect to Arc-enabled Ku
 - **Severity:** the check is defined at **Warning** severity in the Azure public cloud, so a failure does **not** block a solution update, but the Arc cluster-connect feature is broken until it is fixed. In Azure Government (Fairfax) the same check is **Critical**.
 
 > [!IMPORTANT]
-> **Azure Government uses a different endpoint suffix.** Every relay FQDN on this page is the
-> Azure **public cloud** form `azgnrelay-<region>-l1.servicebus.windows.net`. In Azure
-> Government the Service Bus / Relay suffix is **`servicebus.usgovcloudapi.net`**, so the host
-> to test and allow is `azgnrelay-<usgov-region>-l1.servicebus.usgovcloudapi.net` (for example
-> the `usgovvirginia` or `usgovarizona` region). Testing or allow-listing the commercial name
-> on a Fairfax cluster will not fix the check, and because the check is **Critical** there it
-> also blocks the solution update. Confirm the exact host for your cloud and region from the
-> `TargetResourceID` in the check's own `Detail` output rather than from an example.
+> **Azure Government uses a different endpoint family.** The public-cloud relay
+> pattern is `azgnrelay-<region>-l1.servicebus.windows.net`. Do not derive a
+> Government hostname by replacing only the suffix. The source-defined Fairfax
+> target uses a different name, for example
+> `azgns-usgovvirginia-fairfax-1p-public.servicebus.usgovcloudapi.net`.
+> Confirm and use the exact host emitted in the failing result's
+> `TargetResourceID` or `Detail`. Testing or allowing a constructed commercial-style
+> name does not clear the check, and the Government-cloud failure is Critical.
 - **When it runs:** the Connectivity validator runs during **Deployment**, **Update**, **Scale-out (Add Node)**, and **Upgrade** readiness, and can also be run standalone at any time (see step 1).
 - **The failure is always the same class of problem:** the node's outbound connection to the relay endpoint did not complete. The `Detail` string tells you *where* it broke (DNS, TCP/firewall, proxy, or TLS inspection); step 2 maps each signature to its fix.
 
@@ -323,3 +365,12 @@ Every node should return `True` (substitute the cluster's region). Note that `Tr
   > supported route, so treat `tnc: False` plus a configured proxy as the proxy sub-mode, not
   > automatically as a firewall problem.
 - **AKS enabled by Azure Arc:** Azure Kubernetes Service running on Azure Local, managed through Azure Arc. Cluster connect is one of the paths used to reach it.
+
+::: audience-css
+
+# Source Articles
+
+- [Azure Arc-enabled Kubernetes network requirements](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/network-requirements)
+- [AKS on Azure Local network requirements](https://learn.microsoft.com/en-us/azure/aks/hybrid/aks-hci-network-system-requirements)
+
+:::
