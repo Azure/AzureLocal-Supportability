@@ -1,165 +1,648 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917145001"
+Title: "AzStackHci_Security_SecureBootStatus"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-17"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: ["2603+"]
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Security"
+Engineering_ID:
+  Source: ""
+  ID: 0
+Tags: ["Solution Update", "Validation", "Certificates", "Firmware", "BitLocker", "BIOS"]
+---
+
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+|------|---------|---------|
+| 2026-09-17 | 1.0 | Expanded validation evidence and publication metadata compliance |
+
+:::
+
 # AzStackHci_Security_SecureBootStatus
 
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
+  <tr>
+    <th style="text-align:left; width: 200px;">Name</th>
+    <td><strong>AzStackHci_Security_SecureBootStatus</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">ArticleType</th>
+    <td><code>TSG</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Audience</th>
+    <td><code>['Engineering', 'CSS', 'OEM Partners', 'External']</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">AppliesTo.Product</th>
+    <td><code>Azure Local</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">AppliesTo.OEM</th>
+    <td><code>['All']</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Validator / test</th>
+    <td><code>Test-SecureBootUpdateStatus</code> (emitted by <code>Invoke-AzStackHciSecurityValidation</code>)</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Component</th>
+    <td>Security (Environment Validator / Environment Checker)</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Severity</th>
+    <td><strong>Informational</strong>: the status is always SUCCESS. The actionable posture is encoded in <code>AdditionalData.Detail</code>.</td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Applicable scenarios</th>
+    <td>Security readiness and pre-update system health checks.</td>
+  </tr>
+</table>
+
 > **At a glance**
-> - **What it is:** an Environment Validator (Environment Checker) security check that reports each node's **Secure Boot 2023 certificate rollout** posture (the CVE-2023-24932 / BlackLotus mitigation, tied to the 2011 Secure Boot certificates expiring in June 2026).
-> - **Owner:** delivered and orchestrated by the Azure Local platform update; some hardware also needs an OEM BIOS/UEFI firmware update. It is not an Azure Local software defect and the fix is not a manual per-node registry edit.
-> - **Impact:** a security-posture gap, not an outage. Nodes keep booting and running; some Secure Boot protections are limited once the 2011 certificates expire.
-> - **Read the Detail, not the Status:** this validator is informational and always reports a SUCCESS status. The actionable state is in the result **Detail**, see the detection note below.
+> - **What it is:** a posture check for the Windows UEFI CA 2023 Secure Boot certificate rollout associated with CVE-2023-24932.
+> - **Impact:** this is normally a security-readiness gap, not an outage. Nodes continue to run, but the rollout is incomplete.
+> - **Fastest safe answer:** run `Test-AzSSecureBootUpdateCompleted -Verbose` on each node. `True` is complete. `False` means at least one required component is incomplete.
+> - **No instant workaround:** the supported remediation is an Azure Local Solution Update, plus OEM BIOS or UEFI firmware where required. Completion may need more than one reboot or a later update retry.
+> - **Workload planning:** service one deployed member at a time. Its VMs must move to other nodes before a manual firmware reboot. The number of reboot cycles is not deterministic.
+> - **Hard safety gate:** do not change firmware, Secure Boot keys, revocation state, or Secure Boot servicing registry values unless the BitLocker recovery key is retrievable and the approved Azure Local procedure explicitly requires the change.
 
 ## Overview
 
-This check reports whether each node has completed the **2023 Secure Boot certificate update**. A node is healthy when its Windows Boot Manager is updated to the Windows UEFI CA 2023 signed version and in use, and all four expected certificates are installed:
+This check reports whether each node has completed the Windows UEFI CA 2023 Secure Boot update. It examines five related outcomes:
 
-- **Windows UEFI CA 2023** (in the Secure Boot `db`)
-- **Microsoft UEFI CA 2023** (in `db`)
-- **Microsoft Option ROM UEFI CA 2023** (in `db`)
-- **Microsoft Corporation KEK 2K CA 2023** (in the `KEK`)
+1. The Windows UEFI CA 2023 certificate is installed in the Secure Boot `db`.
+2. The Microsoft UEFI CA 2023 certificate is installed in `db`.
+3. The Microsoft Option ROM UEFI CA 2023 certificate is installed in `db`.
+4. The Microsoft Corporation KEK 2K CA 2023 certificate is installed in `KEK`.
+5. The Windows boot manager is signed by Windows UEFI CA 2023 and the updated boot manager is in use.
 
-- **Severity:** Informational. The check does not fail with an error status; it reports posture. See the detection note.
-- **When it runs:** the Environment Checker runs this check during **pre-deployment readiness** and during the **pre-update health check**. Starting with Azure Local release 2604, the pre-update prechecks verify that the Secure Boot certificates and the CVE-2023-24932 mitigation are in place, so in practice you will most often see this surface as part of a pre-update readiness run. It is not tied to a single node reboot; it reflects the cluster's current certificate posture whenever the checker runs.
-- **Read the Detail, not the Status (IMPORTANT).** This validator always reports a SUCCESS status, so a filter that looks for a non-success status finds nothing. A node needs attention when its **Detail** shows a certificate `Installed: False`, or a `Boot Manager Update Status` other than `BootManagerUpdatedAndInUse`. The steps below read the Detail.
-- **Who owns the fix.** The 2023 certificates are installed by the Azure Local platform update's built-in orchestration (a Cluster-Aware Updating plugin), delivered starting with the 2603 Solution Update, and by OEM BIOS/UEFI firmware where the hardware requires it. The operator's role is to apply the Solution Update (and any required OEM firmware) and confirm completion, not to hand-edit Secure Boot registry values.
+The validator result contains four certificate fields and one boot-manager status. The product completion cmdlet reports the same posture as five component booleans.
 
-## Requirements
+### Important result semantics
 
-- Administrative (local administrator) access to each Azure Local node.
-- The cluster on Azure Local Solution Update **2603 or later** (the release that carries the Secure Boot mitigation orchestration).
-- For some hardware, the latest OEM BIOS/UEFI firmware (see the OEM minimum-BIOS note in remediation).
-- The BitLocker recovery key for every node, backed up before any firmware or Secure Boot change (`manage-bde -protectors -get $env:SystemDrive`). Secure Boot changes are measured-boot changes and can trigger BitLocker recovery.
+This validator always emits `Status = SUCCESS` and `Severity = INFORMATIONAL`, including when the rollout is incomplete. Do not filter for a failure status. Read `AdditionalData.Detail` or the component output from `Test-AzSSecureBootUpdateCompleted -Verbose`.
 
-## Troubleshooting Steps
+A node needs attention when any of these are true:
 
-### 1. Confirm the failure and see where it appears
+- A certificate reads `Installed: False`.
+- A certificate reads `Installed: Unknown`.
+- `Boot Manager Update Status` is not `BootManagerUpdatedAndInUse`.
+- `Test-AzSSecureBootUpdateCompleted` returns `False`.
+- The check reports an error while reading UEFI variables.
 
-Because this check always reports a SUCCESS status, confirm it by reading the result **Detail**, not the status. Read the newest health-check result file and flag any node whose Detail shows a certificate `Installed: False` or a Boot Manager status other than `BootManagerUpdatedAndInUse`:
+`UEFICA2023Status=Updated` is useful servicing evidence, but it is not sufficient by itself. The servicing value can be `Updated` while one or more certificate checks remain false. The product completion cmdlet and its individual component results are authoritative.
+
+### Ownership and expected effort
+
+| Situation | Owner | Workload impact | Planning guidance |
+| --- | --- | --- | --- |
+| Solution Update can continue the rollout | Azure Local update operator | Normal Solution Update maintenance behavior | Run the supported Solution Update and recheck every node. Completion may continue in a later update cycle. |
+| Another reboot is required | Azure Local cluster administrator | The serviced node is unavailable during reboot; VMs must run elsewhere | Drain and reboot one node at a time. Do not promise a fixed reboot count. |
+| BIOS is below the OEM minimum | OEM or server firmware administrator, coordinated with the cluster administrator | The serviced node is unavailable during the separate firmware window | Plan a separate BIOS or UEFI maintenance step after confirming the exact model and minimum version. |
+| The known BIOS and reboot cases do not apply | Microsoft Support and the owning product group | No change should be attempted until the evidence is reviewed | Collect the bounded evidence in this guide and escalate. |
+
+There is no reliable single completion time. A cluster may finish in one planned update window, or it may need additional per-node reboots, a separate OEM firmware window, or a later Solution Update retry.
+
+## Requirements and safety gates
+
+- Local administrator access to every node being checked.
+- Azure Local Solution Update 2603 or later for the platform-managed rollout.
+- The current OEM BIOS or UEFI requirement for each server model.
+- A current cluster-health review before manually draining or rebooting a deployed member.
+- A BitLocker recovery password for every protected volume, retrieved from the approved escrow location before any measured-boot or firmware change.
+
+> [LOW RISK] The diagnostic commands in the confirmation and evidence sections are read-only.
+
+> [MEDIUM RISK] A Solution Update, node reboot, or BIOS or UEFI update can move workloads and temporarily reduce cluster capacity. Follow the platform update workflow and service one node at a time.
+
+> [HIGH RISK] Do not manually add or remove Secure Boot certificates, force DBX revocation, clear Secure Boot keys, or hand-edit `AvailableUpdates` as a shortcut. These operations can be irreversible or make a node or recovery media unbootable.
+
+If you are first-line, temporary, or outsourced staff and do not own BitLocker recovery, cluster draining, and firmware maintenance, stop after collecting the read-only evidence and hand it to the cluster and firmware owners.
+
+## Troubleshooting steps
+
+### 1. Confirm Secure Boot is enabled
+
+Run this on every affected node:
+
+```powershell
+$secureBootEnabled = Confirm-SecureBootUEFI
+if ($secureBootEnabled -ne $true) {
+    throw 'Secure Boot is not enabled. Resolve the separate Secure Boot enablement requirement before troubleshooting the 2023 certificate rollout.'
+}
+$secureBootEnabled
+```
+
+`True` confirms the prerequisite. `False`, or an error that the platform does not support the cmdlet, belongs to the separate Secure Boot enablement path rather than this certificate-rollout TSG.
+
+### 2. Run the authoritative completion check
+
+```powershell
+$command = Get-Command Test-AzSSecureBootUpdateCompleted -ErrorAction SilentlyContinue
+if (-not $command) {
+    throw 'Test-AzSSecureBootUpdateCompleted is not installed on this node. Preserve the Environment Checker result and contact Microsoft Support for the release-appropriate verification path.'
+}
+
+Test-AzSSecureBootUpdateCompleted -Verbose
+```
+
+Interpret the output as follows:
+
+- `True`: all required Secure Boot update components are complete on this node.
+- `False`: at least one component is incomplete. Read the verbose component list.
+- A command error: preserve the error and the Environment Checker result, then escalate rather than treating the node as complete.
+
+The verbose output identifies:
+
+- `WindowsUEFICAInstalled`
+- `MicrosoftUEFICAInstalled`
+- `MicrosoftOptionROMUEFICAInstalled`
+- `KEKInstalled`
+- `BootEFISignerUpdated`
+
+Check every cluster node:
+
+```powershell
+Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
+    $command = Get-Command Test-AzSSecureBootUpdateCompleted -ErrorAction SilentlyContinue
+    if (-not $command) {
+        [pscustomobject]@{
+            ComputerName = $env:COMPUTERNAME
+            Completed    = $null
+            Error        = 'Cmdlet not installed'
+        }
+        return
+    }
+
+    try {
+        [pscustomobject]@{
+            ComputerName = $env:COMPUTERNAME
+            Completed    = [bool](Test-AzSSecureBootUpdateCompleted)
+            Error        = $null
+        }
+    }
+    catch {
+        [pscustomobject]@{
+            ComputerName = $env:COMPUTERNAME
+            Completed    = $null
+            Error        = $_.Exception.Message
+        }
+    }
+} | Sort-Object PSComputerName | Format-Table -AutoSize
+```
+
+Do not infer cluster-wide completion from one node.
+
+### 3. Read the Environment Checker Detail
+
+The latest cluster-wide health result is under the update health-check share. Read `AdditionalData.Detail`, not the top-level numeric status:
 
 ```powershell
 $base = 'C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\HealthCheck\System'
 if (-not (Test-Path $base)) {
     $base = Get-ChildItem 'C:\ClusterStorage' -Directory -ErrorAction SilentlyContinue |
         ForEach-Object { Join-Path $_.FullName 'Shares\SU1_Infrastructure_1\Updates\HealthCheck\System' } |
-        Where-Object { Test-Path $_ } | Select-Object -First 1
+        Where-Object { Test-Path $_ } |
+        Select-Object -First 1
 }
-$latest = $null
-if ($base) {
-    $latest = Get-ChildItem $base -Filter 'HealthCheckResult.EnvironmentChecker.*.json' -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+$latest = if ($base) {
+    Get-ChildItem $base -Filter 'HealthCheckResult.EnvironmentChecker.*.json' -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
 }
+
 if (-not $latest) {
-    Write-Warning "No HealthCheck result on this node; use the on-node check below or read the AzStackHciEnvironmentChecker event log (Event ID 17205)."
+    Write-Warning 'No cluster-wide HealthCheckResult file was found. Use the product completion cmdlet and Event ID 17205, then run a fresh system health precheck when appropriate.'
 }
 else {
-    Get-Content $latest.FullName -Raw | ConvertFrom-Json |
-        Where-Object { $_.Name -eq 'AzStackHci_Security_SecureBootStatus' } |
-        ForEach-Object {
-            $d = $_.AdditionalData.Detail
-            [pscustomobject]@{
-                NeedsAttention = ($d -match 'Installed:\s*False') -or ($d -notmatch 'BootManagerUpdatedAndInUse')
-                Detail = $d
-            }
-        }
+    Get-Content $latest.FullName -Raw |
+        ConvertFrom-Json |
+        Where-Object Name -eq 'AzStackHci_Security_SecureBootStatus' |
+        Select-Object Name,
+            @{n='Status';e={$_.AdditionalData.Status}},
+            @{n='Detail';e={$_.AdditionalData.Detail}},
+            TargetResourceName,
+            Timestamp
 }
 ```
 
-The same record is on the Windows event log as Event ID 17205 in `AzStackHciEnvironmentChecker` (read `AdditionalData.Detail` the same way), and in the Azure portal on the cluster's **Updates** tab when a pre-update health check fails.
+The cluster-wide file can be stale until a full health check runs. Compare its timestamp with the on-node completion check before drawing a conclusion.
 
-**Cross-check with the product completion cmdlet.** The Azure Local Secure Boot cmdlet reports the same posture the validator reads and is the authoritative per-node completion check:
+### 4. Understand the Detail states
 
-```powershell
-Test-AzSSecureBootUpdateCompleted -Verbose
+A complete result has this shape:
+
+```text
+Boot Manager Update Status: BootManagerUpdatedAndInUse. Windows UEFI CA cert Installed: True. Microsoft UEFI CA cert Installed: True. Microsoft Option ROM UEFI CA cert Installed: True. KEK cert Installed: True.
 ```
 
-`True` means the Secure Boot update is complete on that node; `False` means at least one item is not finished. The `-Verbose` output lists the same components the validator checks: `WindowsUEFICAInstalled`, `MicrosoftUEFICAInstalled`, `MicrosoftOptionROMUEFICAInstalled`, `KEKInstalled`, and `BootEFISignerUpdated`. On nodes without that cmdlet, read the registry instead:
+Common incomplete states:
 
-```powershell
-Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\Servicing\' -Name UEFICA2023Status
-```
-
-`Updated` means complete; `InProgress` or `NotStarted` means at least one item is outstanding.
-
-### 2. What it looks like: example failure signatures
-
-The Detail is a single composite line. Representative non-healthy examples:
-
-```
+```text
 Boot Manager Update Status: BootManagerUpdatedAndInUse. Windows UEFI CA cert Installed: True. Microsoft UEFI CA cert Installed: False. Microsoft Option ROM UEFI CA cert Installed: False. KEK cert Installed: True.
 ```
 
-```
-Boot Manager Update Status: BootManagerNotUpdated. Windows UEFI CA cert Installed: Unknown. Microsoft UEFI CA cert Installed: Unknown. Microsoft Option ROM UEFI CA cert Installed: Unknown. KEK cert Installed: Unknown.
+```text
+Boot Manager Update Status: BootManagerUpdatedButUnableToDetermineInUseStatus. Windows UEFI CA cert Installed: True. Microsoft UEFI CA cert Installed: True. Microsoft Option ROM UEFI CA cert Installed: True. KEK cert Installed: True.
 ```
 
-```
+```text
 An error occurred while checking Secure Boot status: Access denied while querying UEFI variables
 ```
 
-What each state means:
+| Signal | Meaning | Next path |
+| --- | --- | --- |
+| Any certificate is `False` | The certificate rollout is incomplete | Check the Solution Update history, OEM BIOS minimum, and reboot state |
+| Any certificate is `Unknown` | The validator could not establish the firmware state | Preserve the read error and escalate if permissions do not explain it |
+| `BootManagerNotUpdated` | The updated boot manager is not present | Apply the supported Solution Update path |
+| `BootManagerUpdatedButUnableToDetermineInUseStatus` | The updated boot manager exists, but the validator cannot confirm that the node booted with it | Check the reboot-pending case and recheck after the approved reboot |
+| `BootManagerUpdatedAndInUse` with all certificates `True` | Complete | Verify every node, then refresh the system health result |
 
-- **A certificate `Installed: False`**: that 2023 certificate has not yet been added to the node's UEFI database. The rollout has not completed on this node (most commonly because the node has not yet gone through the 2603+ Solution Update, or its firmware has not applied the update, see remediation Case A).
-- **`BootManagerNotUpdated`**: the updated (Windows UEFI CA 2023 signed) boot manager has not been applied yet.
-- **`BootManagerUpdatedButUnableToDetermineInUseStatus`**: the updated boot manager is present but not yet confirmed in use; this usually clears after a reboot.
-- **Certificates `Unknown` with an error line**: the check could not read the UEFI variables (for example access-denied); resolve the read error, then re-evaluate.
+### 5. Determine why the rollout is incomplete
 
-A healthy node reads: `Boot Manager Update Status: BootManagerUpdatedAndInUse` with all four certificates `Installed: True`.
+#### Case 1: BIOS or UEFI firmware is below the OEM minimum
 
-### 3. Identify the affected nodes
+Collect the model and BIOS version:
 
 ```powershell
-Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
-    if (Get-Command Test-AzSSecureBootUpdateCompleted -ErrorAction SilentlyContinue) {
-        [pscustomobject]@{ Completed = [string](Test-AzSSecureBootUpdateCompleted) }
-    }
-    else {
-        $s = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\Servicing\' -Name UEFICA2023Status -ErrorAction SilentlyContinue
-        [pscustomobject]@{ Completed = "UEFICA2023Status=$($s.UEFICA2023Status)" }
-    }
-} | Sort-Object PSComputerName | Select-Object PSComputerName, Completed
+Get-CimInstance Win32_ComputerSystem |
+    Select-Object Manufacturer, Model
+
+Get-CimInstance Win32_BIOS |
+    Select-Object Manufacturer, SMBIOSBIOSVersion, ReleaseDate
 ```
 
-Nodes that return `False` (or a `UEFICA2023Status` other than `Updated`) are the ones to remediate.
+Compare the exact model with the OEM guidance linked in the Related section. Known Dell examples from the Azure Local Secure Boot guidance include:
 
-### 4. Consequences if you do not fix this
+| Dell model | Minimum BIOS version |
+| --- | --- |
+| AX-640 | 2.21.2 |
+| AX-6515 | 2.14.1 |
+| AX-740 | 2.21.2 |
+| C6420 | 2.21.0 |
+| R440 | 2.21.1 |
+| R640 | 2.21.2 |
+| R740 | 2.21.2 |
+| R940 | 2.21.2 |
+| XC740xd | 2.21.2 |
 
-There is no imminent impact: nodes keep booting and running. The cluster is not yet on the 2023 Secure Boot certificate baseline, so it remains exposed to the CVE-2023-24932 (BlackLotus) Secure Boot bypass class, and once the 2011 certificates expire (June 2026) some Secure Boot related functions become limited. The finding will keep surfacing in readiness and pre-update health checks until the rollout completes.
+This table is not a universal compatibility matrix. For Dell models not listed, and for HPE, Lenovo, DataON, Hitachi, or other systems, use the current OEM Secure Boot page and the qualified Azure Local solution guidance.
 
-### 5. Remediation
+If the BIOS is below the required version, use a separate firmware maintenance step. Do not combine an ad hoc firmware change with manual Secure Boot servicing.
 
-On Azure Local the 2023 Secure Boot certificates are installed by the **platform update's built-in orchestration**, not by a manual per-node registry edit. Do not hand-edit `AvailableUpdates`; drive the fix through the Solution Update and, where required, OEM firmware. The two guides linked below own the detailed, validated procedure; this section summarizes it for this validator.
+#### Case 2: Another reboot is pending
 
-1. **Apply Azure Local Solution Update 2603 or later.** The update runs a Cluster-Aware Updating plugin that installs the 2023 certificates node by node, sequences the required reboots, and gates on safety (Secure Boot enabled, BitLocker handled). Use planned maintenance windows and validate on one node per hardware model first. Solution updates retry the Secure Boot certificate update on a best-effort basis across releases.
+```powershell
+$servicingPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\Servicing'
+$status = Get-ItemProperty -Path $servicingPath -Name UEFICA2023Status -ErrorAction SilentlyContinue
+$errorCode = Get-ItemProperty -Path $servicingPath -Name UEFICA2023Error -ErrorAction SilentlyContinue
+$restartRequired = $null -ne (
+    Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot' -ErrorAction SilentlyContinue |
+        Where-Object Name -match 'RestartRequired'
+)
 
-2. **If a node stays incomplete because of its BIOS version (Case A):** some OEM models require a minimum BIOS version before the certificates can be installed. Confirm the model and BIOS version, and apply the OEM BIOS/UEFI firmware update if it is below the minimum:
+[pscustomobject]@{
+    UEFICA2023Status = $status.UEFICA2023Status
+    UEFICA2023Error  = $errorCode.UEFICA2023Error
+    RestartRequired  = $restartRequired
+    RebootPending    = $restartRequired -or (
+        $status.UEFICA2023Status -eq 'InProgress' -and
+        $errorCode.UEFICA2023Error -eq 2147942750
+    )
+}
+```
 
-   ```powershell
-   (Get-CimInstance -Class Win32_BIOS).SMBIOSBIOSVersion
-   ```
+If `RebootPending` is `True`, schedule a controlled reboot of the drained node. If it is `False`, do not assume the rollout is complete. Re-run `Test-AzSSecureBootUpdateCompleted -Verbose`.
 
-   Apply Secure Boot updates and BIOS/UEFI firmware updates in separate maintenance steps, not on the same reboot. See the canonical Secure Boot TSG (linked below) for the per-OEM minimum-BIOS table and the firmware-update prerequisites.
+#### Case 3: The known BIOS and reboot cases do not apply
 
-3. **If a node stays incomplete because it needs another reboot (Case B):** the number of reboots required is not deterministic. Reboot the node (drained) and re-check, or wait for the next Solution Update to continue.
+Collect the evidence in the escalation section and contact Microsoft Support. Do not repeatedly reboot or make manual Secure Boot registry changes without a supported diagnosis.
 
-**Background and step-by-step remediation (read these):**
+### 6. Apply the supported remediation
 
-- [Troubleshooting guide: Azure Local UEFI 2023 Secure Boot Update](https://github.com/Azure/AzureLocal-Supportability/blob/main/TSG/Security/TSG-Azure-Local-UEFI-2023-Secure-Boot-Update.md): the step-by-step completion checks, the per-OEM minimum-BIOS table, and the reboot/BIOS cases.
-- [Manage Secure Boot updates (Microsoft Learn)](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-boot-updates): how Azure Local orchestrates the rollout, monitoring, and the recommended before/during/after workflow.
+#### Path A: Platform-managed Solution Update
 
-This is a [MEDIUM RISK] change: the rollout is a measured-boot change with reboots and a BitLocker-recovery risk if the recovery key is not backed up; the DBX revocation stage is irreversible while Secure Boot stays enabled, so let the platform orchestration sequence it and follow the canonical TSG rather than forcing it by hand.
+Apply the current Azure Local Solution Update. The platform orchestration installs the Secure Boot update node by node and retries incomplete nodes in supported update cycles.
 
-### 6. Verification: prove the failure cleared
+If the Solution Update itself cannot download, stage, or reach required endpoints, investigate that as an update-connectivity problem. See [Troubleshooting external connectivity failures in Environment Checker](./Troubleshooting-External-Connectivity-Failures-in-Environment-Checker.md) rather than attributing the network failure to Secure Boot.
 
-On each remediated node, confirm the product completion cmdlet now returns `True`:
+After the update, run the completion check on every node. A newly deployed 2603 or later cluster, or a node added on that release, may not receive the certificate rollout during deployment or Add Node itself; the rollout can occur during a later Solution Update.
+
+#### Path B: Controlled reboot for a deployed member
+
+Before a manual reboot, prove the cluster can lose the target node:
+
+```powershell
+$node = '<node-name>'
+if ($node -eq '<node-name>') {
+    throw 'Replace <node-name> with the exact cluster node name.'
+}
+
+$nodes = @(Get-ClusterNode -ErrorAction Stop)
+$target = @($nodes | Where-Object Name -eq $node)
+if ($target.Count -ne 1 -or $target[0].State -ne 'Up') {
+    throw "Expected one Up target node named $node."
+}
+
+$otherNodes = @($nodes | Where-Object Name -ne $node)
+if (@($otherNodes | Where-Object State -ne 'Up').Count -gt 0) {
+    throw 'Every other cluster node must be Up before the drain.'
+}
+
+$quorum = Get-ClusterQuorum -ErrorAction Stop
+$witnessVote = 0
+if ($quorum.QuorumResource) {
+    $witnessName = if ($quorum.QuorumResource.Name) {
+        $quorum.QuorumResource.Name
+    }
+    else {
+        [string]$quorum.QuorumResource
+    }
+    $witness = Get-ClusterResource -Name $witnessName -ErrorAction Stop
+    if ($witness.State -ne 'Online') {
+        throw "The quorum witness $witnessName is not Online."
+    }
+    $witnessVote = 1
+}
+
+$votingNodes = @(
+    $nodes |
+        Where-Object {
+            $_.State -eq 'Up' -and
+            $_.NodeWeight -gt 0 -and
+            ($null -eq $_.DynamicWeight -or $_.DynamicWeight -gt 0)
+        }
+)
+$remainingVotes = @($votingNodes | Where-Object Name -ne $node).Count + $witnessVote
+$currentVotes = $votingNodes.Count + $witnessVote
+$requiredVotes = [math]::Floor($currentVotes / 2) + 1
+if ($remainingVotes -lt $requiredVotes) {
+    throw "Pausing $node would leave $remainingVotes vote(s); $requiredVotes are required for quorum."
+}
+
+$virtualDisks = @(Get-VirtualDisk -ErrorAction Stop)
+if ($virtualDisks.Count -eq 0) {
+    throw 'No virtual disks were returned. Do not drain the node until storage health can be established.'
+}
+
+$unhealthyVirtualDisks = @(
+    $virtualDisks |
+        Where-Object {
+            $states = @($_.OperationalStatus)
+            $_.HealthStatus -ne 'Healthy' -or
+            $states.Count -eq 0 -or
+            @($states | Where-Object { [string]$_ -ne 'OK' }).Count -gt 0
+        }
+)
+if ($unhealthyVirtualDisks.Count -gt 0) {
+    $unhealthyVirtualDisks |
+        Select-Object FriendlyName, HealthStatus, OperationalStatus |
+        Format-Table -AutoSize
+    throw 'One or more virtual disks are not Healthy/OK. Do not drain the node.'
+}
+
+if (@(Get-StorageJob).Count -gt 0) {
+    throw 'Wait for all storage jobs to finish before draining the node.'
+}
+
+[pscustomobject]@{
+    ReadyToDrain = $true
+    TargetNode = $node
+    RemainingVotes = $remainingVotes
+    RequiredVotes = $requiredVotes
+    VirtualDiskCount = $virtualDisks.Count
+}
+```
+
+Before the drain, retrieve the BitLocker recovery password from the approved escrow location and confirm it matches the node:
+
+```powershell
+Get-BitLockerVolume |
+    Select-Object MountPoint, ProtectionStatus, VolumeStatus
+
+manage-bde.exe -protectors -get C: -Type RecoveryPassword
+```
+
+Do not proceed until the recovery password is retrievable.
+
+Drain the node:
+
+```powershell
+Suspend-ClusterNode -Name $node -Drain -Wait
+
+Get-ClusterNode -Name $node |
+    Select-Object Name, State
+
+Get-ClusterGroup |
+    Where-Object {
+        [string]$_.OwnerNode -eq $node -and
+        $_.GroupType -eq 'VirtualMachine'
+    } |
+    Select-Object Name, OwnerNode, State
+```
+
+Proceed only when the node is paused and the virtual-machine query returns no rows. Reboot through the approved maintenance workflow. Resume the node afterward:
+
+```powershell
+Resume-ClusterNode -Name $node
+
+Get-StorageJob
+Get-VirtualDisk |
+    Select-Object FriendlyName, HealthStatus, OperationalStatus
+```
+
+Wait until storage jobs are empty and every virtual disk is `Healthy` with every operational status exactly `OK` before servicing another node.
+
+#### Path C: OEM BIOS or UEFI update
+
+Use the OEM procedure for the exact qualified server model. Treat BIOS or UEFI work as a separate maintenance action from Secure Boot certificate servicing.
+
+The canonical Azure Local Secure Boot guidance includes additional preparation for a manual BIOS update after the Secure Boot rollout has started. Follow that guide exactly, including its scheduled-task handling, node suspension, BitLocker suspension, reboot order, and final resume steps. Do not copy isolated commands from that workflow without its prerequisites.
+
+## Where this result appears
+
+### PowerShell on an Azure Local node
+
+Shown by `Test-AzSSecureBootUpdateCompleted -Verbose`, the servicing registry values, and the Environment Checker result Detail.
+
+### Azure portal
+
+Shown on the Azure Local cluster **Updates** page after a pre-update system health check. The portal view can remain stale until the next full health check.
+
+### Windows event logs
+
+Shown in the `AzStackHciEnvironmentChecker` log as Event ID 17205:
+
+```powershell
+Get-WinEvent -LogName AzStackHciEnvironmentChecker `
+    -FilterXPath '*[System[(EventID=17205)]]' `
+    -MaxEvents 2000 |
+    ForEach-Object {
+        try {
+            $payload = $_.Message | ConvertFrom-Json
+            if ($payload.Name -eq 'AzStackHci_Security_SecureBootStatus') {
+                [pscustomobject]@{
+                    TimeCreated = $_.TimeCreated
+                    Status = $payload.AdditionalData.Status
+                    Severity = $payload.Severity
+                    Detail = $payload.AdditionalData.Detail
+                }
+            }
+        }
+        catch {
+        }
+    } |
+    Select-Object -First 1
+```
+
+Check `TimeCreated`. A historical 17205 result is evidence of the prior health check, not current node health.
+
+### Component and tool log files
+
+The Environment Checker writes under the profile of the account that ran it:
+
+```powershell
+$logRoot = Join-Path $env:USERPROFILE '.AzStackHci'
+Get-ChildItem -LiteralPath $logRoot -File -ErrorAction SilentlyContinue |
+    Where-Object Name -in @(
+        'AzStackHciEnvironmentChecker.log',
+        'AzStackHciEnvironmentReport.json',
+        'AzStackHciEnvironmentReport.xml'
+    ) |
+    Select-Object Name, FullName, LastWriteTime, Length
+```
+
+The product completion cmdlet writes a timestamped log under:
+
+```powershell
+Get-ChildItem 'C:\CloudContent\MASLogs\ASSecurityOSConfigLogs' `
+    -Filter 'ASOSConfig_ASTestSecureBootUpdateCompleted_*.log' `
+    -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 5 FullName, LastWriteTime, Length
+```
+
+### Where this result is not evident
+
+- **Cluster logs from `Get-ClusterLog`:** the certificate posture does not appear there as an authoritative failover-cluster event.
+- **Failover Cluster Manager:** the result does not appear as a failed role, resource, or node property.
+- **Windows Admin Center on a standalone host:** the specific Environment Checker result does not appear there.
+- **Windows Admin Center in the Azure portal:** the specific result does not appear there. Use the Azure Local **Updates** page instead.
+
+## Verify the fix
+
+On every node:
 
 ```powershell
 Test-AzSSecureBootUpdateCompleted -Verbose
 ```
 
-All five components (`WindowsUEFICAInstalled`, `MicrosoftUEFICAInstalled`, `MicrosoftOptionROMUEFICAInstalled`, `KEKInstalled`, `BootEFISignerUpdated`) should report as done, and `UEFICA2023Status` in the registry should read `Updated`. Then re-run the pre-update health check so the validator re-evaluates cluster-wide:
+The command must return `True`, and all five verbose component values must be complete.
+
+Then refresh the cluster-wide health result:
 
 ```powershell
 Invoke-SolutionUpdatePrecheck -SystemHealth
-Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate
+Get-SolutionUpdateEnvironment |
+    Format-List HealthState, HealthCheckDate
 ```
 
-Confirm `HealthState` is `Success` with a current `HealthCheckDate`, then re-read the Detail (Step 1). A healthy node reports `Boot Manager Update Status: BootManagerUpdatedAndInUse` with all four certificates `Installed: True`.
+Confirm:
 
-> **Note:** the Azure portal readiness view and the cluster-wide health-check result refresh only when a full health check or `Invoke-SolutionUpdatePrecheck` runs, not on a targeted per-node re-test, so confirm the fix on-node with `Test-AzSSecureBootUpdateCompleted` rather than waiting on the portal.
+1. `HealthState` is `Success`.
+2. `HealthCheckDate` is current.
+3. The refreshed `AzStackHci_Security_SecureBootStatus` Detail reports `BootManagerUpdatedAndInUse`.
+4. All four certificate fields read `Installed: True`.
+5. Every cluster node independently returns `True` from `Test-AzSSecureBootUpdateCompleted`.
+
+Do not close the issue from `UEFICA2023Status=Updated` alone.
+
+## Evidence to collect and when to escalate
+
+Collect only the bounded evidence needed for this check:
+
+```powershell
+$out = 'C:\SecureBootStatus-Evidence'
+New-Item -Path $out -ItemType Directory -Force | Out-Null
+
+Get-ComputerInfo OsName, OsVersion, OsBuildNumber |
+    Out-File (Join-Path $out 'os.txt')
+
+Get-CimInstance Win32_ComputerSystem |
+    Select-Object Manufacturer, Model |
+    ConvertTo-Json |
+    Out-File (Join-Path $out 'system.json')
+
+Get-CimInstance Win32_BIOS |
+    Select-Object Manufacturer, SMBIOSBIOSVersion, ReleaseDate |
+    ConvertTo-Json |
+    Out-File (Join-Path $out 'bios.json')
+
+Test-AzSSecureBootUpdateCompleted -Verbose 4>&1 |
+    Out-File (Join-Path $out 'completion.txt')
+
+Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\Servicing' |
+    Select-Object UEFICA2023Status, UEFICA2023Error |
+    ConvertTo-Json |
+    Out-File (Join-Path $out 'servicing.json')
+```
+
+Also collect:
+
+- The latest matching Event ID 17205 JSON and its timestamp.
+- The latest `ASOSConfig_ASTestSecureBootUpdateCompleted_*.log`.
+- The Environment Checker log and report files.
+- The Solution Update version and update history.
+- The exact OEM model, current BIOS version, and the OEM minimum-version source used.
+- BitLocker status and whether a recovery prompt occurred. Do not include the recovery password.
+
+Escalate immediately if a node does not boot, enters a boot loop, or the cluster loses service after a Secure Boot or firmware action. Otherwise, contact Microsoft Support when:
+
+- The product completion cmdlet remains `False` after the supported update and required controlled reboots.
+- The BIOS meets the current OEM minimum and the known reboot-pending case does not apply.
+- UEFI variables cannot be read.
+- Secure Boot servicing logs show repeated DB, KEK, boot-manager, or firmware-apply failures.
+- A firmware update must proceed while Secure Boot servicing is still pending.
+
+## Glossary
+
+| Term | Meaning in this guide |
+| --- | --- |
+| BIOS / UEFI firmware | The server firmware that initializes hardware and enforces Secure Boot policy before Windows starts. |
+| BitLocker recovery password | The 48-digit key used to unlock an encrypted volume when measured-boot values change unexpectedly. |
+| Boot manager signer | The certificate authority that signed `bootmgfw.efi`. The updated file is signed by Windows UEFI CA 2023. |
+| `db` | The Secure Boot allowed-signature database. Three of the 2023 certificates checked here are stored in `db`. |
+| DBX | The Secure Boot revoked-signature database. Revocation changes can be irreversible while Secure Boot remains enabled. |
+| KEK | Key Exchange Key database. It authorizes updates to Secure Boot signature databases. |
+| Measured boot | TPM measurements of the boot chain. Firmware and Secure Boot changes can alter these measurements and trigger BitLocker recovery. |
+| UEFI CA | A certificate authority trusted by UEFI Secure Boot to validate signed boot components. |
+| Solution Update | The Azure Local platform update workflow that orchestrates supported node-by-node servicing. |
+
+::: audience-css
+
+# Source Articles
+
+- [Troubleshooting guide: Azure Local UEFI 2023 Secure Boot Update](../Security/TSG-Azure-Local-UEFI-2023-Secure-Boot-Update.md)
+- [Manage Secure Boot updates](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-boot-updates)
+- [OEM pages for Secure Boot](https://support.microsoft.com/topic/original-equipment-manufacturer-oem-pages-for-secure-boot-9ecc3ba4-fb50-4bd3-9e9b-f16b35b8fb68)
+- [Frequently asked questions about the Secure Boot update process](https://support.microsoft.com/topic/frequently-asked-questions-about-the-secure-boot-update-process-b34bf675-b03a-4d34-b689-98ec117c7818)
+- [Get support for Azure Local](https://learn.microsoft.com/azure/azure-local/manage/get-support)
+
+:::

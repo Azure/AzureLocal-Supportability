@@ -1,3 +1,39 @@
+---
+ArticleType: "TSG"
+Article_ID: "20260917170004"
+Title: "AzStackHci_Hardware_Test_Tpm_Version"
+Status: "Active"
+Audience: ["Engineering", "CSS", "OEM Partners", "External"]
+LastUpdated: "2026-09-18"
+Region: ["All"]
+AppliesTo:
+  Product: "Azure Local"
+  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
+  OEM: ["All"]
+  OS: ["23H2", "24H2"]
+  SolutionMinorBuild: []
+  ExtensionName: ""
+  ExtensionVersion: []
+Component: "Environment Validator"
+Engineering_ID:
+  Source: "ADO Work Item"
+  ID: 38583985
+Tags: ["Validation", "TPM", "Firmware", "BitLocker", "Cloud Deployment"]
+---
+
+[[_TOC_]]
+
+::: audience-css
+
+# Revision History
+
+| Date | Version | Summary |
+| --- | --- | --- |
+| 2026-09-18 | 2.1 | Expanded the BitLocker safety gate to cover every protected volume and require explicit external escrow confirmation before firmware changes. |
+| 2026-09-17 | 2.0 | Added mandatory publication metadata, read-only validation evidence, explicit OEM constraints, all eight admin surfaces, and safer deployed-member gates. |
+
+:::
+
 # AzStackHci_Hardware_Test_Tpm_Version
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -52,9 +88,9 @@ as `1.2`) is a **FAILURE**.
 
 > **Important coverage note.** This check evaluates the TPM **version** only. If no TPM is
 > present at all, `Win32_Tpm` returns nothing and this specific check does not raise a
-> failure. Whether the TPM is **present and enabled** is covered by the companion check
-> `AzStackHci_Hardware_TpmProperties` (`Test-TpmProperties`), which fails when a TPM is
-> missing or disabled. If you are investigating a TPM problem, check both.
+> failure. The companion check `AzStackHci_Hardware_TpmProperties`
+> (`Test-TpmProperties`) fails for a present-but-disabled TPM, but an absent TPM can pass
+> both checks. Verify TPM presence directly with `Get-Tpm` or `Win32_Tpm`.
 
 While this check is failing, deployment is blocked at the Hardware validation stage and
 the machine cannot proceed. Unlike a software setting, the fix is a **firmware and
@@ -67,6 +103,33 @@ node**, not an existing cluster member. The remediation is usually short (set th
 in firmware and re-validate), but two cautions apply: a host being vetted may have been
 **recycled from another project and could already have BitLocker enabled**, and the
 cluster-drain precaution is needed only if the machine is already a live, deployed member.
+
+### Validation scope and fidelity
+
+This article is validated to **T3 / L1** only. The diagnostic commands and the current
+validator source were checked read-only on Azure Local solution build 10.2610 with
+Environment Checker module 10.2610.0.2039. No TPM, BIOS, firmware, Secure Boot,
+BitLocker, or deployed-member state was changed.
+
+A safe end-to-end failure injection is not available:
+
+- A Hyper-V virtual TPM reports TPM 2.0. Removing the virtual TPM tests the separate
+  presence check, not the TPM 1.2 branch in `Test-TpmVersion`.
+- A real failure requires a physical TPM that reports 1.2. Changing a shared hardware
+  TPM can clear keys, consume a finite vendor switch allowance, be one-way, or be
+  impossible on a fixed module.
+- Therefore, a VM cannot faithfully reproduce the TPM 1.2 failure, and shared physical
+  lab hardware must not be changed merely to manufacture it.
+
+### Terms used in this article
+
+| Term | Meaning |
+| --- | --- |
+| TPM | Trusted Platform Module, the hardware or firmware root of trust used to protect keys and measurements. |
+| TPM 1.2 / TPM 2.0 | Different TCG specification generations. Azure Local requires TPM 2.0. |
+| PTT / fTPM | Intel Platform Trust Technology or AMD firmware TPM, firmware implementations of a TPM. |
+| Measured boot | Recording boot-component measurements in the TPM so later attestation can detect unexpected changes. |
+| Key protector | A mechanism, such as a TPM-sealed BitLocker protector, that unlocks encrypted data only when its conditions are met. |
 
 ## Where this failure appears
 
@@ -104,7 +167,7 @@ $r.AdditionalData.Detail
 You can also read the underlying values directly:
 
 ```powershell
-# Presence / enabled state (covered by Test-TpmProperties, shown here for context).
+# Direct presence / enabled-state verification.
 Get-Tpm | Select-Object TpmPresent, TpmReady, TpmEnabled
 
 # The version this check evaluates. It compares the FIRST comma-separated segment
@@ -158,6 +221,26 @@ In both sources the result for this check looks like this:
 > `AzStackHci_Hardware_Test_Tpm_Version`, is the same on both, so if you are matching strings
 > between the portal and the on-box output, expect the two forms.
 
+### Component log and report files
+
+The Environment Checker also writes its own artifacts under
+`%USERPROFILE%\.AzStackHci`. Check the account that ran the validation for:
+
+- `AzStackHciEnvironmentChecker.log`
+- `AzStackHciEnvironmentReport.json`
+- `AzStackHciEnvironmentReport.xml`
+
+Search the report files for `AzStackHci_Hardware_Test_Tpm_Version`. These files can
+lag a targeted `-Include` run until the next full validation, so use the direct
+validator result or Event ID 17205 when you need the freshest on-box result.
+
+### Where this check is not evident
+
+- **Cluster logs from `Get-ClusterLog`:** this pre-deployment validator result does not appear there because TPM version is not a failover-cluster event.
+- **Failover Cluster Manager:** this failure does not appear as a failed clustered role, resource, or node.
+- **Windows Admin Center on a standalone host:** the specific Environment Checker result does not appear there. Run the on-box PowerShell check in this article.
+- **Windows Admin Center in the Azure portal:** the specific result does not appear there. Use the deployment Validation view or the on-box sources above.
+
 ## How to fix it
 
 This check runs during **pre-deployment validation**, so the machine it flags is normally a
@@ -189,26 +272,34 @@ the machine's firmware setup (or with the vendor's management tooling), not from
 ### Before you start: decide whether and how this can be fixed (and who does it)
 
 The single most platform-variable fact is whether your exact server model can switch to TPM
-2.0 at all, so settle that first. Read the current state (step 1 below, non-disruptive), then
-consult your hardware vendor's TPM documentation for your model and use this table to decide
-the path and the owner **before** any disruptive change:
+2.0 at all, so settle that first. Read the current state (step 1 below, non-disruptive), confirm
+BMC remote-console access, then consult your hardware vendor's TPM documentation for the exact
+model. Use this table before scheduling downtime:
 
-| What your hardware reports / the vendor says | What it means | Who owns the action | What to do |
-| --- | --- | --- | --- |
-| TPM already reports **2.0** | This check should pass | No change needed | Re-confirm with step 1; if it still fails, see [When to escalate](#when-to-escalate) |
-| TPM present, reports **1.2**, vendor says it is **switchable to 2.0** | A firmware switch is possible (it clears the TPM) | Server / firmware admin; Windows admin confirms BitLocker | Escrow the BitLocker key first, then follow [How to fix it](#how-to-fix-it) |
-| TPM **1.2**, switch is **one-way or limited** (for example a toggle-count cap) | You can switch but cannot easily go back | Server / firmware admin **with hardware-vendor sign-off** | Confirm with the vendor, then treat it as a one-time change |
-| TPM is a **fixed module** that cannot report 2.0 | Cannot be fixed in firmware | Hardware vendor (OEM) | Engage the OEM; the module or machine must be brought to spec. Expect lead time |
-| **No TPM present** | Not deployable (this version check will not fail, but `Test-TpmProperties` will) | Hardware vendor (OEM) plus procurement | Confirm the machine is on the Azure Local supported hardware list; add or replace the TPM |
+| What your hardware reports / the vendor says | What it means | Owner | Planning window | What to do |
+| --- | --- | --- | --- | --- |
+| TPM already reports **2.0** | This check should pass | Azure Local administrator | About 10 minutes for read-only confirmation | Re-confirm with step 1; if it still fails, see [When to escalate](#when-to-escalate) |
+| TPM present, reports **1.2**, vendor says it is **reversibly switchable** | A firmware switch is possible, but it clears the TPM | Server / firmware admin; Windows admin confirms BitLocker | Use an approved maintenance window; firmware menus, reboot time, and post-check time vary by OEM | Confirm externally escrowed recovery evidence for every protected volume, confirm the remaining switch allowance if the OEM limits it, then follow the procedure |
+| TPM **1.2**, switch is **one-way or limited** | You may be unable to return to the prior state, or each switch consumes a finite allowance | Server / firmware admin with written OEM confirmation | Treat as a controlled hardware change, not a routine reboot | Obtain the exact OEM procedure and approval before suspending BitLocker or taking the host down |
+| TPM is a **fixed module** that cannot report 2.0 | There is no firmware setting that can satisfy the validator | Hardware vendor and procurement | Hardware replacement lead time is OEM and supply-chain dependent | Replace the module or server with an Azure Local qualified configuration |
+| **No TPM present** | Not deployable; both this version check and `Test-TpmProperties` can be silent, so verify presence directly | Hardware vendor and procurement | Hardware replacement lead time is OEM and supply-chain dependent | Confirm the qualified configuration and add or replace the required hardware |
 
 **Do not start any disruptive change until you have confirmed all three:** the switch is
-supported on your exact model, the **BitLocker recovery key is escrowed**, and (if this machine
-is already a deployed cluster member) it has been **drained** first. A TPM switch clears the
-module and is sometimes irreversible, so if any of the three is unknown, stop and confirm.
+supported on your exact model, **every protected BitLocker volume has an externally escrowed
+recovery-password protector**, and (if this machine is already a deployed cluster member) it
+has been **drained** first. A TPM switch clears the module and is sometimes irreversible, so
+if any of the three is unknown, stop and confirm.
 
 > **Setting expectations:** a firmware switch is usually quick, but a fixed-module or
 > unsupported-hardware case means a hardware change or replacement with real lead time and
 > possible procurement. Surface that to the customer early so the deployment schedule reflects it.
+
+> **OEM constraint:** do not infer that a setting exists because another model from the same
+> vendor exposes one. TPM behavior is model-specific. Some systems support a reversible switch
+> with a finite counter, some support only a one-way TPM 2.0 transition, and some use a fixed
+> TPM with no version selector. The OEM must identify the exact firmware menu or management-tool
+> property, whether it is writable, whether the action is reversible, and any remaining switch
+> count. If the documentation or tooling does not expose those facts, stop and open an OEM case.
 
 ### 1. Confirm the current TPM state
 
@@ -219,11 +310,37 @@ Get-Tpm | Select-Object TpmPresent, TpmReady, TpmEnabled
 (Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftTpm' -ClassName Win32_Tpm).SpecVersion
 ```
 
-- If `TpmPresent` is `False`, the machine has no usable TPM. This version check will not
-  fail (it only evaluates a present TPM), but `Test-TpmProperties` will, and the machine
-  is not deployable without a TPM. This is a hardware action, not a firmware setting.
+- If `TpmPresent` is `False`, the machine has no usable TPM. Neither this version check
+  nor `Test-TpmProperties` reliably fails for an absent TPM, so treat the direct result
+  as a validator coverage gap. The machine is not deployable without a TPM. This is a
+  hardware action, not a firmware setting.
 - If a TPM is present but `SpecVersion` starts with something other than `2.0`, continue
   below.
+
+For a rack or add-node batch, use the same read-only probe across the candidate hosts:
+
+```powershell
+function Get-AzureLocalTpmReadiness {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string[]]$ComputerName)
+
+    Invoke-Command -ComputerName $ComputerName -ScriptBlock {
+        $tpm = Get-Tpm
+        $cim = Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftTpm' -ClassName Win32_Tpm -ErrorAction SilentlyContinue
+        [pscustomobject]@{
+            ComputerName = $env:COMPUTERNAME
+            TpmPresent   = $tpm.TpmPresent
+            TpmReady     = $tpm.TpmReady
+            TpmEnabled   = $tpm.TpmEnabled
+            SpecVersion  = if ($cim) { [string]$cim.SpecVersion } else { $null }
+        }
+    } | Sort-Object ComputerName
+}
+```
+
+Call the function with the candidate host names from your deployment plan. A null
+`SpecVersion` is not a TPM 2.0 pass; verify presence directly with `Get-Tpm` or
+`Win32_Tpm`.
 
 ### 2. Check for BitLocker, and suspend it if present
 
@@ -234,20 +351,136 @@ module, which invalidates the TPM-sealed BitLocker key. If a protected volume is
 48-digit recovery password, which can strand the machine.
 
 ```powershell
-# Are any volumes protected? (On a truly clean, never-encrypted host this is empty.)
-Get-BitLockerVolume | Select-Object MountPoint, ProtectionStatus, VolumeStatus
+# [READ-ONLY] Before running this block, open the authorized external escrow system.
+# For each protected volume, confirm that the escrow record contains BOTH the same
+# recovery-password protector ID and its associated 48-digit recovery password.
+# Then enter only those externally verified protector IDs below. Do not paste recovery
+# passwords into this script.
+$externallyVerifiedRecoveryProtectorIds = @(
+    # Example: '{00000000-0000-0000-0000-000000000000}'
+)
+
+$verifiedIds = @(
+    $externallyVerifiedRecoveryProtectorIds |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { $_.Trim().Trim([char[]]'{}').ToUpperInvariant() } |
+        Select-Object -Unique
+)
+
+$allBitLockerVolumes = @(Get-BitLockerVolume -ErrorAction Stop)
+$protectedVolumes = @(
+    $allBitLockerVolumes |
+        Where-Object {
+            [string]$_.VolumeStatus -ne 'FullyDecrypted' -or
+            @($_.KeyProtector).Count -gt 0
+        }
+)
+
+$bitLockerPreflight = @(
+    foreach ($volume in $protectedVolumes) {
+        $recoveryProtectors = @(
+            $volume.KeyProtector |
+                Where-Object { [string]$_.KeyProtectorType -eq 'RecoveryPassword' }
+        )
+        $localRecoveryIds = @(
+            $recoveryProtectors |
+                ForEach-Object {
+                    ([string]$_.KeyProtectorId).Trim().Trim([char[]]'{}').ToUpperInvariant()
+                } |
+                Where-Object { $_ } |
+                Select-Object -Unique
+        )
+        $escrowConfirmedIds = @(
+            $localRecoveryIds |
+                Where-Object { $verifiedIds -contains $_ }
+        )
+
+        $result = if ([string]$volume.ProtectionStatus -eq 'Unknown') {
+            'STOP: BitLocker protection state is unknown'
+        } elseif ($localRecoveryIds.Count -eq 0) {
+            'STOP: no recovery-password protector'
+        } elseif ($escrowConfirmedIds.Count -eq 0) {
+            'STOP: external escrow not confirmed'
+        } else {
+            'READY: externally verified recovery protector'
+        }
+
+        [pscustomobject]@{
+            MountPoint                    = $volume.MountPoint
+            VolumeStatus                  = $volume.VolumeStatus
+            ProtectionStatus              = $volume.ProtectionStatus
+            LocalRecoveryProtectorIds     = $localRecoveryIds -join ', '
+            EscrowConfirmedProtectorIds   = $escrowConfirmedIds -join ', '
+            Result                        = $result
+        }
+    }
+)
+
+if ($protectedVolumes.Count -eq 0) {
+    Write-Host 'READY: no encrypted or protected BitLocker volumes were found.'
+} else {
+    $bitLockerPreflight |
+        Format-Table MountPoint, VolumeStatus, ProtectionStatus,
+            LocalRecoveryProtectorIds, EscrowConfirmedProtectorIds, Result -AutoSize
+}
+
+$blockedVolumes = @(
+    $bitLockerPreflight |
+        Where-Object { $_.Result -notlike 'READY:*' }
+)
+if ($blockedVolumes.Count -gt 0) {
+    throw 'STOP: one or more protected volumes lack confirmed external recovery evidence. Do not change TPM firmware.'
+}
 ```
 
-If every volume reports `ProtectionStatus = Off`, there is nothing to suspend; go to step 3.
-If any volume is protected, **confirm its recovery key is escrowed first**, then suspend it
-with `-RebootCount 0` so the suspend holds across the firmware change and reboot until you
-explicitly resume it:
+If no encrypted or protected volume is returned, there is nothing to suspend; go to step 3.
+Otherwise, the table must report **READY** for every returned mount point, including a volume
+that is already suspended and reports `ProtectionStatus = Off`.
+The script does not query your escrow system. A local recovery-password protector, by itself,
+does not prove that its password is stored externally. The **READY** result means only that
+an operator supplied a protector ID after independently confirming the matching protector ID
+and 48-digit password in the authorized escrow system. Do not continue if any record is absent,
+stale, inaccessible, or does not match.
+
+Suspend every returned volume with `-RebootCount 0` so the suspension holds across the
+firmware change and reboot. The block persists the pre-change protection state under
+`ProgramData`, so step 5 can restore only the volumes that were armed before this procedure:
 
 ```powershell
-Suspend-BitLocker -MountPoint "C:" -RebootCount 0
-# Repeat for any data volume that reports ProtectionStatus = On, for example:
-# Suspend-BitLocker -MountPoint "D:" -RebootCount 0
+$suspensionRecordPath = Join-Path $env:ProgramData (
+    'AzureLocalTSG\TpmVersion-BitLocker-Suspended.json'
+)
+$suspensionRecordDirectory = Split-Path -Parent $suspensionRecordPath
+New-Item -ItemType Directory -Path $suspensionRecordDirectory -Force | Out-Null
+
+$suspensionRecord = @(
+    $protectedVolumes | ForEach-Object {
+        [pscustomobject]@{
+            MountPoint = $_.MountPoint
+            ProtectionStatusBefore = [string]$_.ProtectionStatus
+            VolumeStatusBefore = [string]$_.VolumeStatus
+            RecordedAtUtc = [DateTime]::UtcNow.ToString('o')
+        }
+    }
+)
+$suspensionRecord |
+    ConvertTo-Json -Depth 4 |
+    Set-Content -LiteralPath $suspensionRecordPath -Encoding UTF8
+
+foreach ($mountPoint in $suspensionRecord.MountPoint) {
+    Suspend-BitLocker -MountPoint $mountPoint -RebootCount 0 -ErrorAction Stop
+}
+
+Get-BitLockerVolume |
+    Where-Object { $suspensionRecord.MountPoint -contains $_.MountPoint } |
+    Select-Object MountPoint, ProtectionStatus, VolumeStatus
+
+Write-Host "Persistent BitLocker suspension record: $suspensionRecordPath"
 ```
+
+Every listed volume must report `ProtectionStatus = Off` before you enter firmware setup.
+If the preflight or suspension block throws, stop before step 3 and resolve the recovery or
+BitLocker issue first.
 
 ### 3. Enable the TPM and set it to TPM 2.0 in firmware
 
@@ -282,13 +515,52 @@ The first segment of `SpecVersion` should now be `2.0`.
 ### 5. Resume BitLocker (only if you suspended it in step 2)
 
 ```powershell
-Resume-BitLocker -MountPoint "C:"
-# And any data volume you suspended, for example:
-# Resume-BitLocker -MountPoint "D:"
+$suspensionRecordPath = Join-Path $env:ProgramData (
+    'AzureLocalTSG\TpmVersion-BitLocker-Suspended.json'
+)
+if (-not (Test-Path -LiteralPath $suspensionRecordPath -PathType Leaf)) {
+    throw 'The BitLocker suspension record from step 2 was not found. Stop and determine the pre-change protection state before resuming any volume.'
+}
+$suspensionRecord = @(
+    Get-Content -LiteralPath $suspensionRecordPath -Raw |
+        ConvertFrom-Json
+)
+$mountPointsToResume = @(
+    $suspensionRecord |
+        Where-Object { $_.ProtectionStatusBefore -eq 'On' } |
+        ForEach-Object MountPoint
+)
+
+foreach ($mountPoint in $mountPointsToResume) {
+    Resume-BitLocker -MountPoint $mountPoint -ErrorAction Stop
+}
+
+$finalBitLockerState = @(
+    Get-BitLockerVolume |
+    Where-Object { $suspensionRecord.MountPoint -contains $_.MountPoint } |
+    Select-Object MountPoint, ProtectionStatus, VolumeStatus
+)
+$finalBitLockerState | Format-Table -AutoSize
+
+$resumeFailures = @(
+    $finalBitLockerState |
+        Where-Object {
+            $mountPointsToResume -contains $_.MountPoint -and
+            [string]$_.ProtectionStatus -ne 'On'
+        }
+)
+if ($resumeFailures.Count -gt 0) {
+    throw 'One or more volumes did not return to ProtectionStatus On. Keep the suspension record and resolve BitLocker before closing the change.'
+}
+
+Remove-Item -LiteralPath $suspensionRecordPath -Force -ErrorAction Stop
 ```
 
-Resuming reseals the BitLocker key to the new TPM. Because the version switch cleared the
-module, make sure each volume re-protects cleanly and a fresh recovery key is escrowed.
+Resuming allows the TPM-based protector to reseal against the new measured-boot state.
+Every volume whose recorded `ProtectionStatusBefore` was `On` must return to
+`ProtectionStatus = On`. A volume that was already suspended remains suspended, preserving
+its prior maintenance state. Confirm again that each previously verified protector ID and
+recovery password remains available in the authorized escrow system.
 
 ### If the machine is already a deployed, encrypted cluster member
 
@@ -303,23 +575,93 @@ This is a [MEDIUM RISK] change: draining live-migrates VMs off the node, and the
 unavailable until you resume it.
 
 ```powershell
-# Confirm the cluster is healthy and can lose this one node before you start.
-Get-ClusterNode | Select-Object Name, State          # every other node should be Up
-Get-VirtualDisk | Select-Object FriendlyName, HealthStatus, OperationalStatus  # all Healthy / OK
-Get-StorageJob                                       # should be empty (no active repair/resync)
+# Replace the placeholder with the exact node you will service.
+$node = '<node-name>'
+if ($node -eq '<node-name>') {
+    throw 'Replace <node-name> with the exact cluster node name.'
+}
 
-# Only when the cluster is healthy, pause and drain this node so its VMs live-migrate off.
-Suspend-ClusterNode -Name <node> -Drain
-Get-ClusterNode -Name <node> | Select-Object Name, State   # State should be Paused
+$nodes = @(Get-ClusterNode -ErrorAction Stop)
+$target = @($nodes | Where-Object Name -eq $node)
+if ($target.Count -ne 1 -or $target[0].State -ne 'Up') {
+    throw "Expected one Up target node named $node."
+}
+if (@($nodes | Where-Object { $_.Name -ne $node -and $_.State -ne 'Up' }).Count -gt 0) {
+    throw 'Every other cluster node must be Up before the drain.'
+}
+
+$quorum = Get-ClusterQuorum -ErrorAction Stop
+$witnessVote = 0
+if ($quorum.QuorumResource) {
+    $witnessName = if ($quorum.QuorumResource.Name) {
+        $quorum.QuorumResource.Name
+    } else {
+        [string]$quorum.QuorumResource
+    }
+    $witness = Get-ClusterResource -Name $witnessName -ErrorAction Stop
+    if ($witness.State -ne 'Online') {
+        throw "The quorum witness $witnessName is not Online."
+    }
+    $witnessVote = 1
+}
+
+$votingNodes = @(
+    $nodes | Where-Object {
+        $_.State -eq 'Up' -and
+        $_.NodeWeight -gt 0 -and
+        ($null -eq $_.DynamicWeight -or $_.DynamicWeight -gt 0)
+    }
+)
+$remainingVotes = @($votingNodes | Where-Object Name -ne $node).Count + $witnessVote
+$requiredVotes = [math]::Floor(($votingNodes.Count + $witnessVote) / 2) + 1
+if ($remainingVotes -lt $requiredVotes) {
+    throw "Pausing $node would leave $remainingVotes vote(s); $requiredVotes are required."
+}
+
+$virtualDisks = @(Get-VirtualDisk -ErrorAction Stop)
+if ($virtualDisks.Count -eq 0) {
+    throw 'No virtual disks were returned. Storage health is unverified.'
+}
+$unhealthy = @(
+    $virtualDisks | Where-Object {
+        $states = @($_.OperationalStatus)
+        $_.HealthStatus -ne 'Healthy' -or
+        $states.Count -eq 0 -or
+        @($states | Where-Object { [string]$_ -ne 'OK' }).Count -gt 0
+    }
+)
+if ($unhealthy.Count -gt 0) {
+    $unhealthy | Select-Object FriendlyName, HealthStatus, OperationalStatus
+    throw 'One or more virtual disks are not Healthy/OK.'
+}
+if (@(Get-StorageJob).Count -gt 0) {
+    throw 'Wait for all storage jobs to finish before draining the node.'
+}
+
+Suspend-ClusterNode -Name $node -Drain -Wait
+Get-ClusterNode -Name $node | Select-Object Name, State
+$remainingVmGroups = @(
+    Get-ClusterGroup | Where-Object {
+        [string]$_.OwnerNode -eq $node -and $_.GroupType -eq 'VirtualMachine'
+    }
+)
+if ($remainingVmGroups.Count -gt 0) {
+    $remainingVmGroups | Select-Object Name, OwnerNode, State
+    throw 'The drain is incomplete because virtual-machine groups remain on the node.'
+}
 ```
 
-Then run steps 2 through 5 above (suspend BitLocker, change firmware, confirm, resume
-BitLocker). Finally bring the node back and let storage resync before the next one:
+Proceed only after the node is `Paused` and the virtual-machine query returns no rows.
+Then run steps 2 through 5 above. Finally bring the node back and let storage resync
+before the next one:
 
 ```powershell
-Resume-ClusterNode -Name <node>
-Get-StorageJob                                       # wait until empty
-Get-VirtualDisk | Select-Object FriendlyName, HealthStatus   # back to Healthy
+Resume-ClusterNode -Name $node
+do {
+    Start-Sleep -Seconds 15
+    $jobs = @(Get-StorageJob)
+} while ($jobs.Count -gt 0)
+Get-VirtualDisk | Select-Object FriendlyName, HealthStatus, OperationalStatus
 ```
 
 Repeat for each remaining member, one node at a time, so the cluster always keeps quorum and
@@ -354,7 +696,9 @@ Open a support case if any of the following are true:
 - The machine stops at the BitLocker recovery screen after the change and the recovery key
   is not available.
 
-## Related
+::: audience-css
+
+# Source Articles
 
 - General Environment Checker remediation link shown in the validator output:
   https://aka.ms/hci-envch
@@ -364,3 +708,5 @@ Open a support case if any of the following are true:
 - [Suspend-BitLocker before firmware changes](https://learn.microsoft.com/powershell/module/bitlocker/suspend-bitlocker)
 - [Suspend-ClusterNode (pause and drain a node)](https://learn.microsoft.com/powershell/module/failoverclusters/suspend-clusternode)
 - [Resume-ClusterNode](https://learn.microsoft.com/powershell/module/failoverclusters/resume-clusternode)
+
+:::
