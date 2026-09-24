@@ -192,7 +192,7 @@ Get-WinEvent -LogName AzStackHciEnvironmentChecker -FilterXPath "*[System[(Event
 ```powershell
 Get-ChildItem C:\Users\*\.AzStackHci\AzStackHciEnvironmentChecker.log -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1 |
-    Select-String -Pattern 'azgnrelay', 'FAILURE' | Select-Object -Last 20
+    Select-String -Pattern '\.servicebus\.', 'FAILURE' | Select-Object -Last 20
 ```
 
 **Resolve the exact relay hostname before any network test.** Do not construct a
@@ -252,7 +252,14 @@ Get-SolutionUpdate | Select-Object DisplayName, Version, State, HealthCheckResul
 
 A healthy node reports `Test Analysis - Overall Result: True` with an HTTP `StatusCode` of `200` (or `403` - both mean the endpoint was reached). A node that needs attention reports `Overall Result: False` with one of the following `Detail` signatures. The line `Test Analysis - Layer 3 (tnc): True/False` is the key discriminator: `tnc` is the result of `Test-NetConnection` to the endpoint on 443, so `True` means the TCP connection worked and the failure is higher up the stack (proxy or TLS inspection), while `False` means even the TCP/DNS layer failed (firewall or DNS).
 
-**Sub-mode 1: DNS resolution failure** (`tnc: False`).
+> [!IMPORTANT]
+> Check `netsh winhttp show proxy` before routing a `tnc: False` result. The
+> `Test-NetConnection` probe is direct and is not proxy-aware. When an approved
+> WinHTTP proxy is configured, `tnc: False` can be expected because direct 443 is
+> blocked; treat the remaining HTTPS failure as the **proxy** sub-mode instead of
+> changing firewall, route, or DNS policy solely from `tnc`.
+
+**Sub-mode 1: DNS resolution failure** (`tnc: False`, with no approved WinHTTP proxy).
 
 ```
 Test Analysis - Overall Result: False
@@ -262,7 +269,7 @@ Test Analysis - Layer 3 (tnc): False
 
 The node cannot resolve the relay hostname. This is a DNS problem (step 5, "DNS resolution").
 
-**Sub-mode 2: TCP blocked by the firewall** (`tnc: False`).
+**Sub-mode 2: TCP blocked by the firewall** (`tnc: False`, with no approved WinHTTP proxy).
 
 ```
 Test Analysis - Overall Result: False
@@ -279,7 +286,8 @@ Test Analysis - Layer 3 (tnc): False
 
 DNS resolved, but the TCP connection to the endpoint on 443 never completed. A firewall or route is blocking the outbound connection (step 5, "Firewall / outbound 443 blocked").
 
-**Sub-mode 3: proxy or application-layer block** (`tnc: True`).
+**Sub-mode 3: proxy or application-layer block** (`tnc: True`, or `tnc: False`
+with an approved WinHTTP proxy configured).
 
 ```
 Test Analysis - Overall Result: False
@@ -318,8 +326,9 @@ Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
 
 Nodes returning `True` reach the exact emitted endpoint at the TCP layer (any
 remaining failure is proxy or TLS inspection); nodes returning `False` are
-blocked at the firewall or DNS layer. Run the relay-host extraction block above
-in the same session before this test.
+blocked on the direct path. If an approved WinHTTP proxy is configured, a direct
+`False` routes to the proxy sub-mode rather than proving a firewall or DNS defect.
+Run the relay-host extraction block above in the same session before this test.
 
 ### 4. Consequences if you do not fix this
 
@@ -340,7 +349,8 @@ Match the `Detail` signature from step 2 to the sub-mode and apply **only** the 
 > and follow the customer's change process before you make it. Record the current value
 > first so every change can be reversed.
 
-**Sub-mode: DNS resolution** (`The remote name could not be resolved`, `tnc: False`).
+**Sub-mode: DNS resolution** (`The remote name could not be resolved`, `tnc: False`,
+and no approved WinHTTP proxy is configured).
 
 > [!WARNING]
 > A cluster node's DNS configuration is also how it finds Active Directory, the cluster
@@ -367,7 +377,8 @@ Match the `Detail` signature from step 2 to the sub-mode and apply **only** the 
 
 Risk: [MEDIUM RISK] if a node's DNS servers are changed, because a node's DNS configuration also serves Active Directory and cluster name resolution, and a wrong value can break domain join, cluster communication, and management. [LOW RISK] when the fix is made on the DNS servers themselves (correcting forwarders), which is the recommended path and does not disrupt running workloads.
 
-**Sub-mode: firewall / outbound 443 blocked** (`Unable to connect to the remote server` or `timed out`, `tnc: False`).
+**Sub-mode: firewall / outbound 443 blocked** (`Unable to connect to the remote
+server` or `timed out`, `tnc: False`, and no approved WinHTTP proxy is configured).
 
 1. Allow outbound **TCP 443** and WebSocket upgrade traffic from every node to the exact relay hostname
    extracted from the emitted result. Add the applicable endpoint to the firewall
@@ -381,7 +392,8 @@ Risk: [MEDIUM RISK] if a node's DNS servers are changed, because a node's DNS co
 
 Risk: [LOW RISK] to the cluster. Allowing the documented outbound endpoint does not disrupt running workloads, but it is a change to customer network policy and needs the network owner's approval.
 
-**Sub-mode: proxy** (`Unable to connect to the remote server`, `tnc: True`).
+**Sub-mode: proxy** (`Unable to connect to the remote server`, `tnc: True`, or
+`tnc: False` when an approved WinHTTP proxy is configured).
 
 1. If the cluster uses a proxy, confirm the proxy is configured on the nodes and
    allows the exact `$relayHost` extracted from the emitted result in step 1. Do not
