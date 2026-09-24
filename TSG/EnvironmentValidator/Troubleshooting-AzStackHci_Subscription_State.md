@@ -1,36 +1,37 @@
----
-ArticleType: "TSG"
-Article_ID: "20260918154401"
-Title: "AzStackHci_Subscription_State"
-Status: "Active"
-Audience: ["Engineering", "CSS", "OEM Partners", "External"]
-LastUpdated: "2026-09-18"
-Region: ["All"]
-AppliesTo:
-  Product: "Azure Local"
-  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
-  OEM: ["All"]
-  OS: ["23H2", "24H2"]
-  SolutionMinorBuild: []
-  ExtensionName: ""
-  ExtensionVersion: []
-Component: "Environment Validator"
-Engineering_ID:
-  Source: "ADO Work Item"
-  ID: 38356879
-Tags: ["Solution Update", "Validation", "Diagnostics"]
----
-[[_TOC_]]
+<!-- tsg-metadata
+{
+  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "document_type": "troubleshoot",
+  "products": ["Azure Local"],
+  "detector": {
+    "type": "envchecker",
+    "signal": "AzStackHci_Subscription_State"
+  },
+  "validation": {
+    "fidelity_level": "L2",
+    "technical_grade": "A",
+    "reproduction_substrate": "vm",
+    "automation_status": "proven",
+    "last_validated": "2026-09-18",
+    "spec_ref": "AzStackHci_Subscription_State"
+  }
+}
+-->
 
-::: audience-css
+## Table of contents
+
+- [Overview](#overview)
+- [Requirements](#requirements)
+- [Troubleshooting steps](#troubleshooting-steps)
+- [Glossary](#glossary)
+- [Source articles](#source-articles)
 
 # Revision History
 
 | Date | Version | Summary |
 | --- | --- | --- |
+| 2026-09-24 | 2.1 | Aligned the article with the current validator scope, cmdlet output, and public repository format. |
 | 2026-09-18 | 2.0 | Added the publication contract, safe cloud-deployment recovery boundaries, and refreshed live validation evidence. |
-
-:::
 
 # AzStackHci_Subscription_State
 
@@ -53,7 +54,7 @@ Tags: ["Solution Update", "Validation", "Diagnostics"]
   </tr>
   <tr>
     <th style="text-align:left;">Applicable scenarios</th>
-    <td>Deployment, Update, and Upgrade readiness</td>
+    <td>Update and Upgrade readiness. The validator excludes this check during Deployment.</td>
   </tr>
   <tr>
     <th style="text-align:left;">Affected versions</th>
@@ -62,22 +63,23 @@ Tags: ["Solution Update", "Validation", "Diagnostics"]
 </table>
 
 > **At a glance**
-> - **What it is:** an Environment Validator (Environment Checker) check that confirms the cluster's **Azure Stack HCI subscription is Active** in Azure. On each node it runs `Get-AzureStackHCISubscriptionStatus` and confirms the "Azure Stack HCI" subscription reports `SubscriptionStatus = Active`.
+> - **What it is:** an Environment Validator (Environment Checker) check that confirms the cluster's **Azure Stack HCI subscription is Active** in Azure. On each node it runs `Get-AzureStackHCISubscriptionStatus` and confirms the "Azure Stack HCI" subscription reports `Status = Active`.
 > - **Why it matters:** if the subscription is not Active (disabled, warned, or deleted), or the node cannot reach Azure to check it, the cluster is losing or has lost its Azure management plane. The check surfaces that **before** a solution update so it can be fixed first.
 > - **Owner:** depends on the sub-mode. A non-active subscription is an **Azure subscription / billing owner** action; a "cannot connect" failure is a **network / firewall / proxy** action; a "not registered" failure is an **operator re-registration** action.
 > - **Read the Status and Detail:** this check reports a **FAILURE** status with a `Detail` string that names the exact sub-mode. Match the `Detail` to the right section below; each sub-mode has a different fix.
 
 ## Overview
 
-Every node's Azure Stack HCI subscription must be **Active** for the cluster to stay connected to its Azure management plane. This check runs `Get-AzureStackHCISubscriptionStatus` on each node, selects the subscription whose name begins with `Azure Stack HCI`, and passes when that subscription's `SubscriptionStatus` is `Active`. On current builds, if the cmdlet errors, the check also reads the local registration-state policy used by the Azure Local service. A readable Active policy can preserve a SUCCESS result while the cmdlet error is logged; if neither source gives a trustworthy state, the check fails closed.
+Every node's Azure Stack HCI subscription must be **Active** for the cluster to stay connected to its Azure management plane. This check runs `Get-AzureStackHCISubscriptionStatus` on each node, selects the subscription whose name begins with `Azure Stack HCI`, and passes when that subscription's `Status` is `Active`. On current builds, if the cmdlet errors, the check also reads the local registration-state policy used by the Azure Local service. A readable Active policy can preserve a SUCCESS result while the cmdlet error is logged; if neither source gives a trustworthy state, the check fails closed.
 
 - **Severity:** the check is defined at **Critical** severity. It reports a **FAILURE status** whenever the subscription is not Active or cannot be read, and that failure blocks the solution update. Treat a failure as actionable.
-- **When it runs:** the Arc Integration validator runs this check during **Deployment**, **Update**, and **Upgrade** readiness. In practice you see it as part of a pre-update health check, or in the deployment / upgrade validation output.
+- **When it runs:** the Arc Integration validator runs this check during **Update** and **Upgrade** readiness. It explicitly excludes the check during Deployment because the cluster is not registered yet.
+- **Excluded deployment type:** the validator excludes this check when the Azure environment is `Azure.local`, which covers disconnected operation. Use the disconnected-environment validation path instead.
 - **The four failure sub-modes (IMPORTANT).** Read the `Detail` string and branch:
   1. **Subscription not Active:** `Azure Stack HCI Subscription is inactive on computer <NODE>.` The subscription exists but its state is not `Active`. This is an Azure-side subscription or billing problem.
   2. **Status unavailable:** `Cannot determine Azure Stack HCI subscription status on <NODE>. Error: Error executing Get-AzureStackHCISubscriptionStatus: <reason>.` The cmdlet failed and the local registration-state policy did not return a trustworthy state.
   3. **Required cmdlet missing:** `Error checking subscription status on <NODE>: Get-AzureStackHCISubscriptionStatus cmdlet not found...`. The installed Azure Local management surface is incomplete.
-  4. **No Azure Stack HCI subscription found:** the probe returned no `Azure Stack HCI` subscription and no usable policy state.
+  4. **No Azure Stack HCI subscription found:** the cmdlet completed successfully but returned no subscription whose name begins with `Azure Stack HCI`.
 - **Who owns the fix.** A non-active subscription is owned by whoever owns the Azure subscription and billing. A connectivity failure is owned by the network / firewall / proxy admin. A missing registration is owned by the operator who registers the cluster with Azure.
 
 > **Most common in the field (start here).** In practice the most common actionable triggers are a node that cannot determine the state because both sources are unavailable, or a missing registration. A subscription that is genuinely disabled is less common. Read the current `Detail` string first and start with the matching sub-mode in step 5. A cmdlet error by itself is not proof that this validator failed on current builds; confirm the emitted Status and Detail.
@@ -87,6 +89,7 @@ Every node's Azure Stack HCI subscription must be **Active** for the cluster to 
 - Access to the Azure subscription the cluster is registered to, in the Azure portal, with permission to view the subscription's state (and, if it is disabled, to reactivate it or engage the subscription owner).
 - The cluster registered with Azure (Azure Arc), and outbound connectivity from every node to the Azure Stack HCI cloud endpoints.
 - A cluster node session to run `Get-AzureStackHCISubscriptionStatus` (the same cmdlet the check runs) for authoritative confirmation.
+- A connected Azure deployment. This check does not run for `Azure.local` disconnected deployments.
 
 ## Troubleshooting Steps
 
@@ -151,10 +154,10 @@ Get-SolutionUpdate | Select-Object DisplayName, Version, State, HealthCheckResul
 
 ```powershell
 Get-AzureStackHCISubscriptionStatus | Where-Object SubscriptionName -like 'Azure Stack HCI*' |
-    Select-Object SubscriptionName, SubscriptionStatus
+    Select-Object SubscriptionName, Status
 ```
 
-`SubscriptionStatus = Active` is healthy. Any other value or no matching row is
+`Status = Active` is healthy. Any other value or no matching row is
 actionable. A cmdlet error by itself is **inconclusive** on current builds because
 the validator can still return `SUCCESS` from the independently readable Active
 local-policy fallback. After any cmdlet error, use the refreshed validator result
@@ -221,14 +224,14 @@ Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
     try {
         $sub = Get-AzureStackHCISubscriptionStatus -ErrorAction Stop |
                Where-Object SubscriptionName -like 'Azure Stack HCI*'
-        [pscustomobject]@{ SubscriptionStatus = if ($sub) { $sub.SubscriptionStatus } else { 'NotFound' }; Error = $null }
+        [pscustomobject]@{ Status = if ($sub) { $sub.Status } else { 'NotFound' }; Error = $null }
     } catch {
-        [pscustomobject]@{ SubscriptionStatus = 'Error'; Error = $_.Exception.Message }
+        [pscustomobject]@{ Status = 'Error'; Error = $_.Exception.Message }
     }
-} | Sort-Object PSComputerName | Select-Object PSComputerName, SubscriptionStatus, Error
+} | Sort-Object PSComputerName | Select-Object PSComputerName, Status, Error
 ```
 
-Nodes reporting `Active` are healthy. Nodes reporting any other `SubscriptionStatus`, `NotFound`, or an `Error` are the ones to fix.
+Nodes reporting `Active` are healthy. Nodes reporting any other `Status`, `NotFound`, or an `Error` are the ones to fix.
 
 ### 4. Consequences if you do not fix this
 
@@ -243,15 +246,18 @@ Match the `Detail` string from step 2 to the sub-mode and apply the matching fix
 1. In the Azure portal, open **Subscriptions** and find the subscription the cluster is registered to.
 2. Check its **Status**. If it is Disabled, Warned, Past due, or Expired, the subscription itself needs to be returned to **Active**.
 3. Resolve the underlying cause with the subscription owner or Azure Billing / Support: a lapsed payment method, a spending limit reached, a policy or manual disable, or an expired offer. This is not an Azure Local change; it is an Azure subscription change.
-4. Once the subscription is Active again, re-run the readiness check (step 6). If the cluster's registration was removed while the subscription was inactive, re-register it (see "Not registered" below).
+4. Once the subscription is Active again, re-run the readiness check (step 6).
 
 Risk: [LOW RISK] on the cluster. Reactivating a subscription is an Azure billing / management action and does not change the cluster.
+
+If the subscription is Active but the cluster registration is missing, stop and use
+the separate [HIGH RISK] registration-recovery boundary under **Not registered** below.
 
 **Sub-mode: cannot connect to Azure** (`Unable to connect to service` / `Operation timed out`).
 
 1. From an affected node, confirm outbound connectivity to the required Azure Local endpoints (the same endpoints registration and Arc use). Firewall, proxy, or DNS changes are the usual cause. For the full list of required outbound endpoints and ports, see [Firewall requirements for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements).
 2. If the cluster uses a proxy, confirm the proxy is configured and reachable. See [Troubleshooting External Connectivity Failures in Environment Checker](./Troubleshooting-External-Connectivity-Failures-in-Environment-Checker.md) and the connectivity guidance in [Troubleshooting Connectivity Test DNS](./Troubleshooting-Connectivity-Test-Dns.md).
-3. Re-run `Get-AzureStackHCISubscriptionStatus` (step 1) from the node; when connectivity is restored it returns the subscription with a real `SubscriptionStatus`.
+3. Re-run `Get-AzureStackHCISubscriptionStatus` (step 1) from the node; when connectivity is restored it returns the subscription with a real `Status`.
 
 Risk: [LOW RISK]. Restoring outbound connectivity or a proxy setting does not disrupt running workloads.
 
@@ -296,7 +302,7 @@ First confirm on the affected nodes that the subscription now reads Active:
 
 ```powershell
 Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
-    (Get-AzureStackHCISubscriptionStatus | Where-Object SubscriptionName -like 'Azure Stack HCI*').SubscriptionStatus
+    (Get-AzureStackHCISubscriptionStatus | Where-Object SubscriptionName -like 'Azure Stack HCI*').Status
 } | Sort-Object PSComputerName
 ```
 
@@ -313,16 +319,12 @@ Confirm `HealthState` is `Success` with a current `HealthCheckDate`.
 
 ## Glossary
 
-- **Azure Stack HCI subscription:** the Azure subscription the Azure Local cluster is registered to, which carries its Azure management plane and billing. The check passes only when this subscription reports `SubscriptionStatus = Active`.
-- **`Get-AzureStackHCISubscriptionStatus`:** the on-node cmdlet that returns the registered subscriptions and their status. This check runs it and reads the `Azure Stack HCI` subscription's `SubscriptionStatus`.
-- **Arc Integration validator:** the Environment Validator component (`Invoke-AzStackHciArcIntegrationValidation`, surfaced as `Test-AzStackHciArcIntegration`) that validates the cluster's Azure / Arc integration during Deployment, Update, and Upgrade readiness. This subscription-state check (`Test-AzureStackHCISubscriptionState`) is one of its tests.
+- **Azure Stack HCI subscription:** the Azure subscription the Azure Local cluster is registered to, which carries its Azure management plane and billing. The check passes only when this subscription reports `Status = Active`.
+- **`Get-AzureStackHCISubscriptionStatus`:** the on-node cmdlet that returns the registered subscriptions and their status. This check runs it and reads the `Azure Stack HCI` subscription's `Status`.
+- **Arc Integration validator:** the Environment Validator component (`Invoke-AzStackHciArcIntegrationValidation`, surfaced as `Test-AzStackHciArcIntegration`) that validates the cluster's Azure / Arc integration during Update and Upgrade readiness. This subscription-state check (`Test-AzureStackHCISubscriptionState`) is excluded during Deployment and for `Azure.local`.
 - **Active:** the healthy subscription state. Disabled, Warned, Past due, Expired, or Deleted are non-active states that fail this check.
-
-::: audience-css
 
 # Source Articles
 
 - [Firewall requirements for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements)
 - [Azure Local registration overview](https://learn.microsoft.com/en-us/azure/azure-local/deploy/register-with-azure)
-
-:::
