@@ -77,18 +77,24 @@ Azure Arc **cluster connect** provides a secure way to connect to Arc-enabled Ku
 | Public Azure | `Azure_Kubernetes_Service_Azure_Arc` | Azure Arc | `servicebus.windows.net` |
 | Azure Government (Fairfax) | `Azure_Kubernetes_Service_Cluster_connect` | Cluster connect | `servicebus.usgovcloudapi.net` |
 
-- **What the check does:** on each node it issues an outbound HTTPS request to the cluster-connect relay endpoint for the cluster's region, `azgnrelay-<region>-l1.servicebus.windows.net` (for example `azgnrelay-eastus-l1.servicebus.windows.net`), on TCP port **443**. Reaching the endpoint is a success **even if the endpoint replies `403`** - the check is proving *reachability*, not authentication, so any HTTP response from the real endpoint (commonly `200` or `403`) passes.
+- **What the check does:** on each node it issues an outbound HTTPS request to the
+  source-defined cluster-connect relay endpoint on TCP port **443**. The current
+  public target is `azgnrelay-eastus-l1.servicebus.windows.net`; do not construct a
+  hostname from the cluster's region. Reaching the emitted endpoint is a success
+  **even if it replies `403`**: the check is proving *reachability*, not
+  authentication, so any HTTP response from the real endpoint (commonly `200` or
+  `403`) passes.
 - **Severity:** current target definitions mark the relay endpoint **Critical** and mandatory in both public Azure and Fairfax. Older builds can carry earlier target definitions, so use the severity in the fresh result when investigating an older release.
 
 > [!IMPORTANT]
-> **Azure Government uses a different endpoint family.** The public-cloud relay
-> pattern is `azgnrelay-<region>-l1.servicebus.windows.net`. Do not derive a
-> Government hostname by replacing only the suffix. The source-defined Fairfax
-> target uses a different name, for example
+> **Always use the source-emitted relay host.** The current public target is
+> `azgnrelay-eastus-l1.servicebus.windows.net`, regardless of the cluster's public
+> Azure region. Do not construct another `azgnrelay` hostname. The source-defined
+> Fairfax target uses a different name:
 > `azgns-usgovvirginia-fairfax-1p-public.servicebus.usgovcloudapi.net`.
 > Confirm and use the exact host emitted in the failing result's
-> `TargetResourceID` or `Detail`. Testing or allowing a constructed commercial-style
-> name does not clear the check, and the Government-cloud failure is Critical.
+> `TargetResourceID` or `Detail`. Testing or allowing any constructed hostname does
+> not clear the check.
 - **When it runs:** the Connectivity validator runs during **Deployment**, **Update**, **Scale-out (Add Node)**, and **Upgrade** readiness, and can also be run standalone at any time (see step 1).
 - **The failure is always the same class of problem:** the node's outbound connection to the relay endpoint did not complete. The `Detail` string tells you *where* it broke (DNS, TCP/firewall, proxy, or TLS inspection); step 2 maps each signature to its fix.
 
