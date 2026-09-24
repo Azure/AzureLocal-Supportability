@@ -1,31 +1,39 @@
----
-ArticleType: "TSG"
-Article_ID: "20260917160007"
-Title: "AzStackHci_DNS_ExternalDnsResolution"
-Status: "Active"
-Audience: ["Engineering", "CSS", "OEM Partners", "External"]
-LastUpdated: "2026-09-18"
-Region: ["All"]
-AppliesTo:
-  Product: "Azure Local"
-  DeploymentType: ["Hyperconverged", "Disaggregated", "Multi-Rack", "Disconnected", "Microsoft 365 Local"]
-  OEM: ["All"]
-  OS: ["23H2", "24H2"]
-  SolutionMinorBuild: []
-  ExtensionName: ""
-  ExtensionVersion: []
-Component: "DNS"
-Engineering_ID:
-  Source: "ADO Work Item"
-  ID: 38356875
-Tags: ["DNS", "Validation"]
----
-[[_TOC_]]
+<!-- tsg-metadata
+{
+  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "document_type": "troubleshoot",
+  "products": ["Azure Local"],
+  "detector": {
+    "type": "envchecker",
+    "signal": "AzStackHci_DNS_ExternalDnsResolution|AzStackHci_DNS_Test_External_Hostname_Resolution"
+  },
+  "validation": {
+    "fidelity_level": "L4",
+    "technical_grade": "A",
+    "reproduction_substrate": "vm",
+    "automation_status": "proven",
+    "last_validated": "2026-09-18",
+    "spec_ref": "AzStackHci_DNS_ExternalDnsResolution"
+  }
+}
+-->
+
+## Table of contents
+
+- [Overview](#overview)
+- [Quick fix](#quick-fix-start-here)
+- [Requirements](#requirements)
+- [Where this failure appears](#where-this-failure-appears)
+- [Remediation](#remediation)
+- [Verify the fix](#verify-the-fix)
+- [Glossary](#glossary)
+- [Source articles](#source-articles)
 
 # Revision History
 
 | Date | Description |
 | --- | --- |
+| 2026-09-24 | Added connected-cloud target mapping, complete Environment Checker log roots, guarded proxy rollback, and GitHub-compatible metadata. |
 | 2026-09-18 | Revalidated the live DNS failure and recovery loop and synchronized the standalone PR with the current publication design. |
 | 2026-09-17 | Retrofitted mandatory publication metadata, audience scope, revision history, and source-article layout without changing the technical procedure. |
 
@@ -92,21 +100,36 @@ Tags: ["DNS", "Validation"]
 
 ## Overview
 
-This Environment Validator check confirms that each Azure Local node can resolve an
-external (public) DNS name. On every node, for each DNS server configured on every
-network adapter that is up, the dedicated DNS validator resolves the public name
-`management.azure.com` and expects at least one A record back. It retries up to three
+This Environment Validator check confirms that each connected Azure Local node can resolve an
+external DNS name appropriate for its registration cloud. On every node, for each DNS server configured on every
+network adapter that is up, the dedicated DNS validator resolves the source-defined cloud target
+and expects at least one A record back. It retries up to three
 times before it fails, and it lists each failing node as its own bullet. If any
 configured DNS server returns no records (or no DNS server is configured at all), the
 check fails for that node.
+
+| Registration cloud | Source-defined external name |
+| --- | --- |
+| `AzureCloud` | `management.azure.com` |
+| `AzureUSGovernment` | `management.usgovcloudapi.net` |
+| `AzureChinaCloud` | `management.chinacloudapi.cn` |
+| `AzureGermanCloud` | `management.microsoftazure.de` |
+| `Azure.local` | This check is excluded because disconnected operation has no public-internet requirement. |
+
+Set `$externalName` to the value for the cluster's registration cloud before running
+the direct DNS examples below. Do not use the commercial Azure name for a sovereign
+cloud.
 
 - **Severity:** Critical. When this check fails on a node and no proxy is in use, it
   reports a FAILURE for that node and fails the pre-update health check overall.
 - **When it runs:** pre-deployment readiness, deployment, add-node, and the pre-update
   health check. In practice you will most often see it block a pending Azure Local
   update.
-- **Result names.** This is the dedicated DNS validator that resolves
-  `management.azure.com`. On current builds the same external-DNS test is reported under
+- **Excluded deployment type:** the validator excludes this check for `Azure.local`
+  disconnected deployments.
+- **Result names.** This is the dedicated DNS validator that resolves the
+  source-defined name for the registration cloud. On current builds the same
+  external-DNS test is reported under
   one of two result names, so search the health-check results for either:
   `AzStackHci_DNS_ExternalDnsResolution` or
   `AzStackHci_DNS_Test_External_Hostname_Resolution`.
@@ -132,8 +155,8 @@ field engineer checking your own imaging process, confirm the image does not pin
 servers and leaves them to be set by deployment, so each cluster picks up the customer's
 intended DNS rather than a stale value carried over from imaging.
 
-> **Related guide.** This guide is self-contained for the dedicated `management.azure.com`
-> DNS validator: the discovery, per-node fan-out, remediation, verification, and a DNS
+> **Related guide.** This guide is self-contained for the dedicated external-DNS
+> validator: the cloud target, discovery, per-node fan-out, remediation, verification, and a DNS
 > glossary are all below. A related guide covers the legacy connectivity DNS test
 > `AzStackHci_Connectivity_Test_Dns` (which resolves `microsoft.com`); the root cause and
 > fix are the same, so consult it only if you also see that older check. It is a separate,
@@ -159,11 +182,12 @@ cluster member. The supported fix differs:
 > can also interrupt the current remote session, so use local console or out-of-band access,
 > or confirm an alternate management path, before applying a node-side change.
 
-**Deployment-time only:** identify the management adapter by the node's known management
+**Deployment-time only:** set the cloud-specific target, identify the management adapter by the node's known management
 IPv4 address, capture its current DNS values, apply the documented DNS servers, and verify
 each configured server directly:
 
 ```powershell
+$externalName = '<source-defined-name-from-the-cloud-table>'
 $ManagementIp = '<node-management-ipv4>'
 $mgmt = @(Get-NetIPConfiguration | Where-Object {
     $_.NetAdapter.Status -eq 'Up' -and ($_.IPv4Address.IPAddress -contains $ManagementIp)
@@ -182,7 +206,7 @@ Set-DnsClientServerAddress -InterfaceAlias $mgmtAlias -ServerAddresses '<dns1>',
 
 foreach ($dns in ((Get-DnsClientServerAddress -InterfaceAlias $mgmtAlias -AddressFamily IPv4).ServerAddresses | Sort-Object -Unique)) {
     try {
-        $records = @(Resolve-DnsName -Name management.azure.com -Server $dns -Type A -DnsOnly -ErrorAction Stop)
+        $records = @(Resolve-DnsName -Name $externalName -Server $dns -Type A -DnsOnly -ErrorAction Stop)
         '{0}: {1} A record(s)' -f $dns, $records.Count
     }
     catch {
@@ -211,7 +235,7 @@ Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
 ```
 
 ```powershell
-$externalName = 'management.azure.com'
+$externalName = '<source-defined-name-from-the-cloud-table>'
 $dnsServers = @(Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
     Where-Object { $_.InterfaceAlias -in $upAliases -and $_.ServerAddresses } |
     ForEach-Object { $_.ServerAddresses } |
@@ -344,12 +368,13 @@ The dedicated validator lists each failing node as its own bullet and adds an
 `(Attempt: n/3)` retry suffix, for example:
 
 ```
+# Commercial Azure example
 - AzL-Node-01
   - Queried dns server 10.0.0.10 for management.azure.com on AzL-Node-01 (Attempt: 3/3). Result returned 0 A records. Expected at least 1. Error:
 ```
 
 This means the node reached the DNS server at that IP, but the server returned no A
-records for `management.azure.com` after three attempts. A `No DNS server configured`
+records for the cloud-specific external name after three attempts. A `No DNS server configured`
 message instead means the node's up adapters have no DNS server configured at all. A
 passing node reports a count of one or more and lists the resolved addresses.
 
@@ -463,20 +488,32 @@ place to look for this validator.
 - **Windows Admin Center in the Azure portal:** not evident in Windows Admin Center in
   the Azure portal for this validator; use the Azure portal **Updates** view instead.
 - **Component and tool log files on disk:** **Shown.** The Environment Checker writes
-  supporting evidence under `%USERPROFILE%\.AzStackHci` on the node and profile that ran
-  the check. List the files and timestamps, then search their text for either dedicated
-  validator name:
+  supporting evidence in different roots depending on how the validator was launched.
+  `%USERPROFILE%\.AzStackHci` is for standalone or manual runs. Deployment validation
+  writes under `C:\MasLogs`; legacy deployment, add-node or repair, and update paths use
+  `$env:LocalRootFolderPath\MasLogs`. List all existing roots and search their contents
+  for either dedicated validator name:
 
   ```powershell
-  $componentLogRoot = Join-Path $env:USERPROFILE '.AzStackHci'
-  $componentFiles = @(Get-ChildItem $componentLogRoot -File -ErrorAction SilentlyContinue |
-      Where-Object {
-          $_.Name -match 'AzStackHciEnvironmentChecker|AzStackHciEnvironmentReport'
-      })
+  $componentLogRoots = @(
+      (Join-Path $env:USERPROFILE '.AzStackHci')
+      'C:\MasLogs'
+  )
+  if ($env:LocalRootFolderPath) {
+      $componentLogRoots += Join-Path $env:LocalRootFolderPath 'MasLogs'
+  }
+  $componentLogRoots = @($componentLogRoots | Sort-Object -Unique |
+      Where-Object { Test-Path $_ })
+  $componentFiles = @($componentLogRoots | ForEach-Object {
+      Get-ChildItem $_ -File -ErrorAction SilentlyContinue |
+          Where-Object {
+              $_.Name -match 'AzStackHciEnvironmentChecker|AzStackHciEnvironmentReport'
+          }
+  })
   if ($componentFiles.Count -eq 0) {
       [pscustomobject]@{
           Status = 'NO FILES'
-          Detail = "No Environment Checker component files found under $componentLogRoot"
+          Detail = "No Environment Checker component files found under: $($componentLogRoots -join ', ')"
       }
   }
   else {
@@ -506,8 +543,8 @@ local workloads keep running.
 
 ## Remediation
 
-The check fails when a DNS server configured on a node cannot resolve the external name
-`management.azure.com`. The fix is a customer-side DNS change, either on the node's
+The check fails when a DNS server configured on a node cannot resolve the cloud-specific
+external name. The fix is a customer-side DNS change, either on the node's
 DNS-client configuration or on the upstream DNS server. The essential steps are below,
 including a per-node fan-out to find every affected node and an option-by-option decision
 tree for the fix.
@@ -540,10 +577,11 @@ the [Glossary](#glossary) at the end of this guide._
    as the same failure:
 
    ```powershell
-   $externalName = 'management.azure.com'
+   $externalName = '<source-defined-name-from-the-cloud-table>'
    $upAliases = @(Get-NetAdapter |
        Where-Object Status -eq 'Up' |
        Select-Object -ExpandProperty Name)
+   $externalName = '<source-defined-name-from-the-cloud-table>'
    $dnsServers = @(Get-DnsClientServerAddress -AddressFamily IPv4 |
        Where-Object { $_.InterfaceAlias -in $upAliases -and $_.ServerAddresses } |
        ForEach-Object { $_.ServerAddresses } |
@@ -648,10 +686,34 @@ the [Glossary](#glossary) at the end of this guide._
    - Confirm that DNS traffic on port 53 from the nodes to the DNS servers is not blocked
      by a firewall.
 
-4. If the cluster intentionally has no direct outbound name resolution and uses a proxy
-   for all outbound traffic, configure the WinHTTP proxy on each node. When a proxy is
-   present, this check self-skips and reports success. Only do this if a proxy is
-   genuinely part of the design.
+4. If the approved cluster design intentionally routes outbound traffic through a
+   WinHTTP proxy, confirm the approved proxy endpoint and bypass list with the platform
+   owner before changing any node. A proxy is node-wide system configuration, and this
+   check self-skips and reports success when a proxy is present. Do not configure a proxy
+   only to turn this check green.
+
+   Capture the current state on every node before applying the approved setting:
+
+   ```powershell
+   netsh winhttp show proxy
+   ```
+
+   Apply the proxy through the customer's approved Azure Local proxy procedure. After
+   the change, verify the proxy can resolve and reach the required cloud endpoints.
+
+   Rollback depends on the captured prior state:
+
+   ```powershell
+   # Use only when the captured prior state was Direct access (no proxy server).
+   netsh winhttp reset proxy
+
+   # If a proxy was already configured, restore its exact captured server and bypass list.
+   netsh winhttp set proxy proxy-server="<captured-proxy>" bypass-list="<captured-bypass-list>"
+   ```
+
+   Risk: [MEDIUM RISK]. WinHTTP proxy settings affect node-wide platform traffic,
+   including Arc and update operations. Require the approved-proxy precondition, retain
+   the captured prior state, and confirm rollback before applying the change.
 
 Re-pointing a node's DNS client during deployment or add-node work is a [LOW RISK] change:
 it is per-node, immediate, and reversible by restoring the previous servers. On an
@@ -716,7 +778,7 @@ $dnsServers = @(Get-DnsClientServerAddress -AddressFamily IPv4 |
 
 foreach ($dns in $dnsServers) {
     try {
-        $records = @(Resolve-DnsName -Name management.azure.com -Server $dns `
+        $records = @(Resolve-DnsName -Name $externalName -Server $dns `
             -Type A -DnsOnly -ErrorAction Stop)
         [pscustomobject]@{
             DnsServer = $dns
@@ -787,11 +849,7 @@ skip this section.
   the node routes outbound traffic through it, and this DNS check self-skips on that node
   and reports success.
 
-::: audience-css
-
 # Source Articles
 
 - [Troubleshooting AzStackHci_Connectivity_Test_Dns](./Troubleshooting-Connectivity-Test-Dns.md)
 - [Management adapter readiness guidance](./Networking/Troubleshoot-Network-Test-ManagementAdapterReadiness.md)
-
-:::
