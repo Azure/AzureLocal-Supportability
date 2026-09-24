@@ -563,6 +563,7 @@ the [Glossary](#glossary) at the end of this guide._
 1. List the DNS servers currently configured on the affected node's up adapters:
 
    ```powershell
+   $externalName = '<source-defined-name-from-the-cloud-table>'
    $upAliases = @(Get-NetAdapter |
        Where-Object Status -eq 'Up' |
        Select-Object -ExpandProperty Name)
@@ -768,6 +769,7 @@ directly against every configured DNS server on each node. Do not use only the n
 default resolver, because it can hide a configured server that still fails:
 
 ```powershell
+$externalName = '<source-defined-name-from-the-cloud-table>'
 $upAliases = @(Get-NetAdapter |
     Where-Object Status -eq 'Up' |
     Select-Object -ExpandProperty Name)
