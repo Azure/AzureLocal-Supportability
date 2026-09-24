@@ -211,7 +211,8 @@ Preserve the installed module and solution versions and escalate. Do not install
 Azure Stack HCI Subscription not found on computer NODE01.
 ```
 
-The probe returned no matching subscription and no usable registration-policy state. Use the support-led registration recovery boundary in step 5.
+The cmdlet completed successfully but returned no matching Azure Stack HCI
+subscription. Use the support-led registration recovery boundary in step 5.
 
 > A failure can occasionally appear with an **empty** `Detail` (a transient evaluation during Update or Upgrade). Re-run the readiness check (step 6). If it clears, it was transient. If it persists, run the authoritative on-box cmdlet in step 1 to see the real state, and branch on that.
 
@@ -231,7 +232,11 @@ Invoke-Command -ComputerName (Get-ClusterNode).Name -ScriptBlock {
 } | Sort-Object PSComputerName | Select-Object PSComputerName, Status, Error
 ```
 
-Nodes reporting `Active` are healthy. Nodes reporting any other `Status`, `NotFound`, or an `Error` are the ones to fix.
+Nodes reporting `Active` are healthy. Nodes reporting another `Status` or `NotFound`
+need the matching remediation. An `Error` row is inconclusive by itself because the
+validator can still return `SUCCESS` from the local-policy fallback. For an `Error`,
+read the fresh emitted validator `AdditionalData.Status` and `AdditionalData.Detail`
+before deciding that the node needs remediation.
 
 ### 4. Consequences if you do not fix this
 
