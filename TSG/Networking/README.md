@@ -11,6 +11,10 @@ For Network Environment Validator Resources, see [TSG/EnvironmentValidator/Netwo
 - [Deep Dive: Arc Gateway Outbound Traffic](Arc-Gateway-Outbound-Connectivity/DeepDive-ArcGateway-Outbound-Traffic.md)
 - [Troubleshoot: General Outbound Connectivity](Arc-Gateway-Outbound-Connectivity/Troubleshoot-Outbound-Connectivity.md)
 
+| Article | Type | Applicable products | Owner | Validation grade | Automation readiness | Last validation |
+| --- | --- | --- | --- | --- | --- | --- |
+| [General Outbound Connectivity](Arc-Gateway-Outbound-Connectivity/Troubleshoot-Outbound-Connectivity.md) | Troubleshoot | Azure Local, connected hyperconverged | Not assigned | Not graded (L0 static review) | Not assessed | 2026-09-28 |
+
 ### Top of Rack Switch Configuration
 - [Overview: Azure-Local-Deployment-Pattern](Top-Of-Rack-Switch/Overview-Azure-Local-Deployment-Pattern.md)
 - [Reference: 2-Node Switchless Storage](Top-Of-Rack-Switch/Reference-TOR-2Node-Switchless-Storage.md)

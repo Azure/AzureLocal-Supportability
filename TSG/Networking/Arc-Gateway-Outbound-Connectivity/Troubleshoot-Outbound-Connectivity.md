@@ -1,14 +1,18 @@
 # Azure Local - Troubleshoot Outbound Network Connectivity
 
-> **TL;DR:** You can use the `Test-AzureLocalConnectivity` function from the **AzStackHci.DiagnosticSettings** module, to validate / troubleshoot outbound connectivity issues from Azure Local nodes (_or any device or VM, such as pre-physical cluster deployment_) to the required Azure endpoints.
+Use `Test-AzureLocalConnectivity` from the **AzStackHci.DiagnosticSettings** module to investigate outbound connectivity failures from Azure Local nodes. The report helps distinguish unreachable endpoints, missing test inputs, TLS inspection, and private-address resolution.
+
+**Applies to:** Connected, hyperconverged Azure Local deployments, with or without Azure Arc Gateway. Pre-deployment tests on another Windows device assess that device's path only. This guide does not validate disconnected operations, disaggregated or multi-rack deployments, or connectivity from workload VMs and Azure Resource Bridge (ARB).
 
 ## Contents
 
 - [Overview](#overview)
 - [Symptoms](#symptoms)
 - [Issue Validation](#issue-validation)
+- [Prerequisites](#prerequisites)
 - [Mitigation Details](#mitigation-details)
 - [Output format](#output-format)
+- [Interpret results and verify resolution](#interpret-results-and-verify-resolution)
 - [Programmatic use with `-PassThru` (automation)](#programmatic-use-with--passthru-automation)
 - [Share test results with Microsoft (Optional)](#share-test-results-with-microsoft-optional)
 - [Demo and example output](#demo-and-example-output)
@@ -18,71 +22,93 @@
 
 ## Overview
 
-Connected instances of Azure Local require outbound / egress network connectivity from the management network of each Azure Local instance to a list of public endpoints. This connectivity lets Azure Local use Azure as its management and control plane. In short:
+Connected Azure Local instances require outbound connectivity from their management network to Azure public endpoints for deployment, updates, workload provisioning, and ongoing management.
 
-* **Required for day-one and day-two operations** — initial instance deployment, applying updates, and workload provisioning all depend on it.
-* **Ongoing connectivity is not optional** — it is vital for support, manageability, and licensing compliance, not just for the initial deployment.
-* **The endpoint list is scenario-specific** — it is reduced when using an Azure Arc Gateway, and varies (slightly) based on which Azure region is selected.
+The required endpoints depend on the Azure region, hardware vendor, enabled services, and whether you use Azure Arc Gateway. Use the endpoint list for your deployment rather than treating every destination discovered by a probe as a required firewall exception.
 
-For additional information on Azure Local Firewall requirements, please review - [Azure Local Firewall documentation](https://learn.microsoft.com/azure/azure-local/concepts/firewall-requirements).
+For the authoritative requirements, see [Firewall requirements for Azure Local](https://learn.microsoft.com/azure/azure-local/concepts/firewall-requirements).
 
 ## Symptoms
 
-Integrating Azure Local into your existing Firewall and/or Proxy Server infrastructure can be challenging depending on your organization's network security policies, such as requirements to define a strict access control list of the URL endpoints that are allowed to communicate from your Azure Local instance(s) "management network" to the required public endpoints.
-
-There are several symptoms or issues that will occur if the required endpoints are not accessible from the Azure Local instance(s), below are just a few examples:
+Blocked endpoints, DNS failures, proxy configuration, or TLS inspection can contribute to these symptoms:
 
 1. Azure Local instance cloud deployment and/or update operations fail with network failure or timeout.
-1. Physical machines show their "Azure Arc" status as "Disconnected" in Azure portal experience (_Arc agent not connected_).
-1. Deployment of new Azure Local VMs fails with RPC failure in Azure portal as the ARM deployment status.
-1. Updates fail at "update ARB and extensions" step with "SSL: CERTIFICATE_VERIFY_FAILED" shown in Azure portal update blade.
+2. Physical machines show an Azure Arc status of **Disconnected** in the Azure portal.
+3. Azure Local VM deployment reports a remote procedure call (RPC) failure in the Azure portal.
+4. An update fails at **update ARB and extensions** with `SSL: CERTIFICATE_VERIFY_FAILED`.
 
-Many other network related issues can also occur when the required endpoints are not accessible from the management (_physical machines and ARB_) network address space.
+These symptoms are not unique to connectivity problems. Capture the exact error, affected machines, and time of failure before changing network configuration.
 
 ## Issue Validation
 
-Azure Local includes built-in automation modules that are executed as part of Solution Update Readiness and Environment Checker modules, both of these modules include connectivity tests that validate network connectivity status to critical endpoints. The output of these can be viewed locally using PowerShell, or using Azure portal during updates.
+Start with the failed deployment or update readiness check. Azure Local Environment Checker and solution update readiness checks provide individual results, diagnostic details, and remediation guidance.
 
-> Note: For examples of how to use and view the output of Azure Local "Solution Update Environment" and "Environment Checker" built-in modules, see the [Appendix section](#appendix) at the bottom of this article.
+See the [Appendix](#appendix) for PowerShell examples. Record the failing endpoint and node, and compare the check timestamp with the incident. Use this module when you need additional endpoint, certificate, proxy, or DNS evidence.
 
-If you are finding it difficult to isolate the cause of the network related issue(s) or failure(s), and are experiencing issues as described in 'Symptoms' section, you can follow the steps in the 'Mitigation Details' below to gain further insights and diagnostic data to validate the required endpoints are accessible from your on-premises network.
+## Prerequisites
+
+- Open **Windows PowerShell 5.1 as Administrator** on the machine to test. PowerShell 7 is not supported by `Test-AzureLocalConnectivity`.
+- Identify your deployment's Azure region, Key Vault URL, and Arc Gateway URL if applicable. Replace every `<placeholder>` before running an example. Use the Key Vault's actual URI, including the correct cloud suffix.
+- **Environment Validator (`AzStackHci.EnvironmentChecker`) is required.** The diagnostic module checks for it and, if it is missing, prompts to install it from PowerShell Gallery. Manual installation is not required before an interactive run. Azure Local normally includes this dependency. Follow [Environment Checker guidance](https://learn.microsoft.com/azure/azure-local/manage/use-environment-checker) for installation and pre-deployment cleanup; do not replace deployment-managed modules as part of this guide.
+- **Allow Environment Validator to retrieve current connectivity targets.** `Test-AzureLocalConnectivity` calls Environment Validator's `Get-AzStackHciConnectivityTarget` to retrieve the target endpoint list from `https://aka.ms/HciConnectivityTargets`. Allowing outbound access to this URL and its redirect destination is highly recommended to obtain current targets. The diagnostic module's update switches do not control this separate dependency download.
+- For online installation, allow access to PowerShell Gallery. If Gallery access is unavailable, preinstall both modules through your approved process. `-NoAutoUpdate` does not disable installation of a missing Environment Validator dependency.
+- Use an Azure Local node for incident diagnosis. A staging device is useful before deployment only when it uses the intended DNS, routing, and firewall/proxy path. A successful staging-device test does not prove node or ARB connectivity.
+
+> [!IMPORTANT]
+> The connectivity test sends outbound requests, performs download measurements, and writes local diagnostic files. It does not remediate firewall, proxy, DNS, or certificate settings. Coordinate testing on bandwidth-constrained links, especially for cluster-wide runs. Installing or updating modules changes local software. In version 0.7.0, silent mode (`-NoOutput`) automatically accepts installation of a missing Environment Validator dependency. Preinstall both modules for unattended runs, and stop if required permissions or software-installation approval are missing.
 
 ## Mitigation Details
 
-To help with troubleshooting or root causing network connectivity issues, you can use the **Test-AzureLocalConnectivity** function which is included in the **AzStackHci.DiagnosticSettings** module. This function is intended for operators and Customer Service and Support (CSS) engineers, either to validate connectivity before deployment or to isolate a blocked firewall/proxy endpoint during active troubleshooting. It automates testing that connectivity is working correctly from Azure Local physical machines to the required public endpoints. The function supports Arc Gateway scenarios and has an `-AzureRegion` parameter to allow testing against a specific Azure region that matches your Azure Local instance deployment.
+The following tests collect evidence for your network administrator or Microsoft Support. Choose the options that match the affected deployment, then use [Interpret results and verify resolution](#interpret-results-and-verify-resolution) to decide the next action.
 
-Unlike the built-in readiness checks, which report an overall pass/fail, this function gives deeper per-endpoint diagnostics that are useful when isolating a blocked or intercepted endpoint:
+The module supplements built-in readiness checks with:
 
-* **Per-endpoint results** — every required URL is tested individually for DNS, TCP, and Layer-7 (HTTP/HTTPS) reachability, so you can pinpoint exactly which endpoint is blocked.
-* **SSL inspection detection** — flags endpoints where the certificate was substituted by a proxy, the typical cause of `SSL: CERTIFICATE_VERIFY_FAILED`, and captures the leaf/intermediate/root certificate chain.
-* **Private Link / RFC1918 detection** — warns when an endpoint resolves to a private IP, helping distinguish intentional Private Link from a misconfiguration.
-* **Scenario-aware endpoint list** — automatically adjusts for Arc Gateway, Azure region, and your hardware OEM partner endpoints.
+* **Per-endpoint results** - DNS and Layer-7 (HTTP/HTTPS) results help isolate unreachable endpoints. Direct TCP tests are optional: add `-IncludeTCPConnectivityTests` when you need direct-path evidence.
+* **TLS inspection evidence** - captures certificate-chain details and flags suspected interception. Certificate verification errors can also have other causes; review the chain and response together.
+* **Private-address detection** - identifies RFC1918 addresses and checks proxy-bypass evidence to help distinguish intentional private endpoints from incorrect DNS configuration.
+* **Scenario-aware endpoint selection** - uses Azure region, Arc Gateway options, and hardware vendor detection to select endpoints.
 
-> Note: This article documents version **0.6.8** of the module. For the parameters added or changed in recent versions (including the 0.6.7 cluster / performance features and the 0.6.8 additions), see [Key parameter changes from previous versions](#key-parameter-changes-from-previous-versions).
+> [!NOTE]
+> This article documents **AzStackHci.DiagnosticSettings 0.7.0** and connectivity output schema **1.2**. See [Key parameter changes from previous versions](#key-parameter-changes-from-previous-versions) for changes affecting earlier examples.
 
-The 'Test-AzureLocalConnectivity' function has a dependency on the Azure Local Environment Checker module being installed, which is installed by default on all Azure Local physical machines. If Environment Checker module (_AzStackHci.EnvironmentChecker_) is not installed on the device running the connectivity test, you will be prompted to install the module first. The device used to install the AzStackHci.DiagnosticSettings module and test connectivity must have access to the PowerShell Gallery, in order to download the module (_nuget package_) to install it.
+**Validation scope:** Reviewed against the installed 0.7.0 module source, with static PowerShell checks and synthetic result-handling tests. The procedures have not been validated on a live Azure Local cluster as part of this article revision.
 
 ### Install and run connectivity tests
 
-To install the AzStackHci.DiagnosticSettings module and perform connectivity tests for a support or troubleshooting scenario, use the commands below:
+1. **[READ-ONLY] Check the PowerShell version and installed modules.** Expect PowerShell `5.1` with edition `Desktop`, and note whether Environment Validator is installed. Risk is not applicable to this inventory check.
 
 ```PowerShell
-# Install the AzStackHci.DiagnosticSettings module, this can be on an Azure Local
-# physical machine (recommended), or any device inside your network (if it is using
-# the same firewall / proxy configuration as your Azure Local instance). 
-# Answer "Y", to proceed with install.
-Install-Module -Name "AzStackHci.DiagnosticSettings" -Repository PSGallery
-
-# Test Azure Local Connectivity for a specific target Azure region.
-# /// ACTION: Update <AzureRegionName> and <YourKeyVaultName> to match the values
-# of your Azure Region and Key Vault.
-Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -KeyVaultURL "https://<YourKeyVaultName>.vault.azure.net"
-
-# Optional parameters for more detailed output, add: "-Verbose" and "-Debug" to the
-# function above, which will output full diagnostic level responses from the remote
-# endpoint web server.
-# The output from the function is automatically saved in the PowerShell transcript.
+$PSVersionTable | Select-Object PSVersion, PSEdition
+Get-Module -ListAvailable -Name AzStackHci.DiagnosticSettings, AzStackHci.EnvironmentChecker |
+    Select-Object Name, Version, Path
 ```
+
+2. **[LOW RISK] Install the diagnostic module if it is not already installed.** Skip installation if the inventory above lists it. The command installs the current PowerShell Gallery release for all users and requires administrator rights and software-installation approval. Stop on installation errors rather than bypassing security controls.
+
+```PowerShell
+Install-Module -Name AzStackHci.DiagnosticSettings `
+    -Repository PSGallery -Scope AllUsers -ErrorAction Stop
+```
+
+In a fresh Windows PowerShell session, import the module and verify the loaded version:
+
+```PowerShell
+Import-Module -Name AzStackHci.DiagnosticSettings -ErrorAction Stop
+Get-Module -Name AzStackHci.DiagnosticSettings | Select-Object Name, Version, Path
+```
+
+The test checks for newer releases by default and notifies you when one is available. To approve installation, rerun the command with `-AutoUpdate`. If an update is installed, the current run stops; open a fresh session, import and verify the new version, then rerun the test. There is no need to pin installation to 0.7.0, which is the version reviewed for this article. Retain previous approved versions if rollback is needed; select one explicitly in a fresh session and verify it with `Get-Module`.
+
+3. **Run the test for the affected region.** Supply your actual Key Vault URI. Add `-ArcGatewayURL` if applicable, as shown in [Arc Gateway deployments](#arc-gateway-deployments).
+
+```PowerShell
+Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
+    -KeyVaultURL "https://<YourKeyVaultName>.vault.azure.net"
+```
+
+Expect endpoint results and report paths at completion. Add `-Verbose` or `-Debug` when more request details are needed. If no results are returned, resolve the reported prerequisite or execution error before interpreting connectivity. Open the HTML report and retain the transcript for the failing run.
+
+**[LOW RISK] Missing dependency installation:** If prompted to install `AzStackHci.EnvironmentChecker`, enter `Y` only with software-installation approval and PowerShell Gallery access. Installation adds the module for all users and requires administrator rights. Declining stops the test. If installation fails, stop and resolve the error; do not interpret the incomplete run as a connectivity result. After installation, verify the module appears in the inventory command above. For removal of a separately installed staging-device copy, follow the linked Environment Checker cleanup guidance; do not remove deployment-managed modules.
 
 ### Run tests across all cluster nodes (`-Scope Cluster`)
 
@@ -92,7 +118,7 @@ Cluster mode requirements:
 
 * The **AzStackHci.DiagnosticSettings** module must be installed (at the same version) on every cluster node. If a node is missing the module or has a different version, the run fails fast and lists the affected nodes — unless you add `-InstallMissingModuleOnNodes` (see below).
 * Standard Kerberos / `Invoke-Command` remoting is used (no CredSSP or TrustedHosts changes are required).
-* The orchestrating session must be elevated (Administrator) and have remote access to every node.
+* Start from an elevated Windows PowerShell 5.1 session directly on a cluster node (for example, through a remote desktop or console session), with remote access to every node. Starting cluster fan-out inside an existing PowerShell remoting session can encounter the Kerberos double-hop restriction. Do not enable CredSSP or modify TrustedHosts to work around it; use a direct session on the node or run node-scope tests separately.
 
 ```PowerShell
 # Run the connectivity test on every node in the cluster and produce a
@@ -101,7 +127,9 @@ Cluster mode requirements:
 Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -Scope Cluster
 ```
 
-Each node runs its own Layer-7 sweep in parallel (per-node default `-Parallelism 8`), so the orchestrator only holds one lightweight remoting job per node. To automatically copy (side-load) the orchestrator's exact module version to any node that is missing it or has a different version, add `-InstallMissingModuleOnNodes`. This is opt-in by design (it never modifies remote nodes silently) and copies from the orchestrator's installed module folder, so it does **not** require PowerShell Gallery or internet access on the nodes:
+Each node runs its own Layer-7 sweep with a default of eight parallel workers. Cluster operations have a 30-minute deadline; timed-out or failed nodes must be treated as incomplete coverage, not as successful tests.
+
+**Optional module side-loading:** After reviewing the pre-flight list of missing or mismatched modules and obtaining software-installation approval, add `-InstallMissingModuleOnNodes` to copy the orchestrator's exact module version to those nodes. The copy does not require PowerShell Gallery access on the nodes, but it does not provision the Environment Checker dependency. Stop if copying or importing fails. Verify that a subsequent run passes the version pre-flight; retain prior approved versions for rollback and use a fresh session to select one if needed.
 
 ```PowerShell
 # Cluster test, automatically side-loading the orchestrator's module version
@@ -113,21 +141,20 @@ Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
 
 ### Arc Gateway deployments
 
-If your Azure Local deployment uses Arc Gateway, use the `-ArcGatewayDeployment` and `-ArcGatewayURL` parameters together. When `-ArcGatewayDeployment` is specified, the function only tests URLs that do **not** support Arc Gateway (i.e., the endpoints that must remain directly accessible even with Arc Gateway enabled).
+If your Azure Local deployment uses Arc Gateway, supply `-ArcGatewayURL`. This automatically enables gateway mode, which skips direct tests for entries marked as supporting Arc Gateway and tests the gateway endpoint and remaining direct-access endpoints. You may also specify `-ArcGatewayDeployment` explicitly, but that switch requires `-ArcGatewayURL`.
 
 ```PowerShell
 # Test connectivity for Arc Gateway deployment.
-# Both -ArcGatewayDeployment and -ArcGatewayURL are required together.
+# -ArcGatewayURL automatically enables gateway mode.
 # /// ACTION: Update parameters below to match your Azure Region, Key Vault, and Arc Gateway URL.
 Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
     -KeyVaultURL "https://<YourKeyVaultName>.vault.azure.net" `
-    -ArcGatewayDeployment `
     -ArcGatewayURL "https://<YourArcGatewayID>.gw.arc.azure.com"
 ```
 
 ### OEM hardware partner endpoints
 
-Hardware detection based on your hardware OEM vendor is built into the module automatically, however if you want to override this or target a specific OEM's endpoints you can use the `-IncludeOEMUrls` parameter:
+The module detects the original equipment manufacturer (OEM) automatically. To select a different vendor, such as when testing from a staging VM, use `-IncludeOEMUrls`:
 
 ```PowerShell
 # Include OEM-specific endpoints for your hardware vendor.
@@ -137,12 +164,17 @@ Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
     -IncludeOEMUrls "<YourOEMPartner>"
 ```
 
-### Air-gapped and offline environments (`-NoAutoUpdate` and `-ForceGitHubEndpointsUpdate`)
+### Control module updates and GitHub endpoint refresh
 
-By default the function checks the PowerShell Gallery for a newer module version and downloads the latest endpoint lists from GitHub (`raw.githubusercontent.com`) before it runs. Two parameters control this behaviour for restricted or air-gapped environments:
+By default the function checks PowerShell Gallery for a newer module version (notification only) and attempts to refresh endpoint lists from GitHub (`raw.githubusercontent.com`). It does not install an update unless you specify `-AutoUpdate`. These parameters control update and endpoint-list retrieval, not the connectivity probes:
 
-* **`-NoAutoUpdate`** skips the PowerShell Gallery update check **and** skips the GitHub endpoint download, using the cached endpoint files bundled with the module instead. Use this when no outbound calls to PSGallery or GitHub are permitted.
+* **`-NoAutoUpdate`** skips the PowerShell Gallery update check and GitHub endpoint-list download, using the bundled cache instead. Endpoint probes and download measurements still make outbound requests; this is not an offline test or a network-access control.
 * **`-ForceGitHubEndpointsUpdate`** forces the endpoint-list refresh from GitHub **even when `-NoAutoUpdate` is specified**. This decouples the endpoint refresh from the module update check, so you can leave the installed module untouched while still pulling the freshest endpoint list. It only has an effect together with `-NoAutoUpdate` (without it, the GitHub refresh is already attempted by default). If the download is blocked or fails, the run gracefully falls back to the cached endpoint files.
+
+If `-ForceGitHubEndpointsUpdate` is used alone, the module warns that it has no additional effect. For unattended runs, preinstall dependencies and also specify `-ExcludeUploadResults` to skip the upload prompt.
+
+> [!IMPORTANT]
+> These switches do not make the test offline. Environment Validator is required; the module prompts to install it if missing during an interactive run. Its `Get-AzStackHciConnectivityTarget` function retrieves the endpoint list through `https://aka.ms/HciConnectivityTargets`, independently of this module's GitHub endpoint refresh. Allowing that download is highly recommended even when `-NoAutoUpdate` is used. Endpoint probes and download measurements also require outbound connectivity.
 
 ```PowerShell
 # Leave the installed module untouched (no PSGallery check) but still refresh the
@@ -159,7 +191,7 @@ Two parameters can reduce the wall-clock time of a full endpoint sweep:
 
 * **`-RequestMethod`** controls the HTTP method used to test each endpoint:
   * `Auto` (**default**) — try an HTTP `HEAD` request first (status line and headers only, no body download) and automatically fall back to `GET` for any endpoint that rejects or under-answers `HEAD` (for example a `405 Method Not Allowed`, `400 Bad Request`, or an ambiguous `403`). This gives the speed of `HEAD` with `GET` as a safety net.
-  * `Get` — always use `GET` (full body download). This preserves the behaviour of versions prior to 0.6.7 and is useful for baseline comparisons.
+    * `Get` - always use `GET`. Use this to compare request-method behavior with versions before 0.6.7; it does not disable newer retry or classification logic.
   * `Head` — always use `HEAD` with no fallback. Fastest, but some endpoints (certain storage SAS URLs and CDN edge nodes) respond differently to `HEAD` than `GET`.
 * **`-Parallelism`** (1–16, default `1`) fans the Layer-7 endpoint sweep out across that many process-isolated background workers. At `1` the test runs sequentially (identical to earlier behaviour). With `-Scope Cluster`, each node uses a per-node default of `8`.
 
@@ -167,7 +199,7 @@ Two parameters can reduce the wall-clock time of a full endpoint sweep:
 # Faster sweep: HEAD-first with GET fallback (default) and 8 parallel workers.
 Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -Parallelism 8
 
-# Preserve pre-0.6.7 behaviour (GET only, sequential).
+# Use GET-only, sequential requests for comparison.
 Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -RequestMethod Get -Parallelism 1
 ```
 
@@ -175,20 +207,17 @@ Output ordering is preserved regardless of `-Parallelism` (results are re-sorted
 
 ### Supported Azure regions
 
-For the most recent / up to date list of supported Azure regions review the ["Azure requirements" - System requirements for Azure Local](https://learn.microsoft.com/azure/azure-local/concepts/system-requirements-23h2#azure-requirements) article. At the time of publishing this article, the list of valid Azure Region names for Azure Local include:
+Version 0.7.0 accepts these exact `-AzureRegion` values (case-insensitive). These are module input names, not a guarantee that every Azure service is available in each region:
 
 * `EastUS`, `WestEurope`, `AustraliaEast`, `CanadaCentral`, `CentralIndia`, `JapanEast`, `SouthCentral`, `SouthEastAsia`, `USGovVirginia`
 
+Use `SouthCentral` for South Central US. Confirm current deployment availability in [Azure requirements](https://learn.microsoft.com/azure/azure-local/concepts/system-requirements-23h2#azure-requirements).
+
 ### Testing an individual endpoint
 
-If you would like to test an individual public endpoint using PowerShell for troubleshooting or support purposes, you can use the **Test-Layer7Connectivity** function with the `-Debug` switch. Example syntax is shown below:
+After completing the installation steps, use `Test-Layer7Connectivity` to investigate an individual endpoint. Match the URL and port to the failing report row:
 
 ```PowerShell
-# Install the "AzStackHci.DiagnosticSettings" module
-Install-Module -Name "AzStackHci.DiagnosticSettings" -Repository PSGallery
-
-# To test an individual endpoint (after installing the module), with
-# Verbose and Debug output, use the "Test-Layer7Connectivity" function, as shown below:
 $url = 'https://graph.microsoft.com/v1.0/'
 Test-Layer7Connectivity -url $url -port 443 -Verbose -Debug
 ```
@@ -197,20 +226,22 @@ Test-Layer7Connectivity -url $url -port 443 -Verbose -Debug
 
 ### HTML report (default)
 
-The function now generates an **HTML report** by default (replacing the previous CSV format). The HTML report includes:
+The default HTML report includes:
 
-* **Color-coded rows** — Failed endpoints are highlighted in red, successful in green, and skipped in yellow for quick visual identification.
+* **Color-coded rows** - Connectivity failures are highlighted in red and successful endpoints in green. Configuration gaps and advisory redirect failures are warnings; a warning is not proof that an additional firewall rule is required.
 * **Summary section** — Hostname, timestamp, Azure region, hardware OEM, and download speed are displayed at the top of the report.
 * **Scrollable table** — A synchronized dual-scrollbar table allows horizontal scrolling of the wide results table from both the top and bottom.
 * **Full endpoint details** — Each row includes the URL, port, Arc Gateway support status, source, IP address, Layer 7 status, response, response time, certificate chain details (leaf, intermediate, root), and notes.
 
+Version 0.7.0 adds conditional **Direct TCP Diagnostics** and **DNS Diagnostics** columns when evidence is available. IP addresses are displayed as text, preferring IPv4 when both families are returned. This display preference does not change the tested TCP destination.
+
 ### JSON output (always generated)
 
-A JSON output file is **always generated** in addition to the primary report format. The JSON file includes all test results plus summary metadata (hostname, timestamp, Azure region, hardware OEM, download speed). This is useful for programmatic analysis or integration with monitoring tools.
+A completed report includes a JSON file alongside HTML or CSV. Schema `1.2` includes the endpoint results, run metadata, redirect classification, and nested TCP/DNS evidence. Early prerequisite failures or file-write errors can prevent artifact creation; check reported paths rather than assuming a file exists.
 
 ### CSV format (optional)
 
-To generate a CSV file instead of HTML, use the `-OutputFormat` parameter:
+Use `-OutputFormat CSV` for spreadsheet analysis. Diagnostic evidence is flattened into CSV columns; JSON retains the nested objects:
 
 ```PowerShell
 Test-AzureLocalConnectivity -AzureRegion "EastUS" -OutputFormat CSV
@@ -218,15 +249,15 @@ Test-AzureLocalConnectivity -AzureRegion "EastUS" -OutputFormat CSV
 
 ### Output file location
 
-All output files are saved to: `C:\ProgramData\AzStackHci.DiagnosticSettings\`
+Connectivity reports and transcripts are saved under `C:\ProgramData\AzStackHci.DiagnosticSettings\Reports\Connectivity\`.
 
-To copy the run's output files to an additional location (for example a network share), use the `-ExportPath` parameter. Files are still always saved to `C:\ProgramData\AzStackHci.DiagnosticSettings\` and copied to the specified path in addition:
+Use `-ExportPath` to copy the run's artifacts to an additional **absolute local path**. UNC shares (such as `\\server\share`) and relative paths are not supported. The canonical reports remain in the folder above if the additional copy fails:
 
 ```PowerShell
-Test-AzureLocalConnectivity -AzureRegion "EastUS" -ExportPath "\\fileshare\AzureLocalDiagnostics"
+Test-AzureLocalConnectivity -AzureRegion "EastUS" -ExportPath "C:\Temp\AzureLocalDiagnostics"
 ```
 
-Output files generated:
+Node-scope filenames:
 
 | File | Description |
 |------|-------------|
@@ -234,41 +265,102 @@ Output files generated:
 | `AzureLocal_ConnectivityTest_<Region>_<Hostname>_<DateTime>.json` | JSON test results with summary metadata (always generated) |
 | `Transcript_AzureLocal_ConnectivityTest_<Region>_<Hostname>_<DateTime>.log` | PowerShell transcript log |
 
+In cluster scope, use the returned `ReportPath` and `JSONReportPath` for the merged report on the orchestrator. Per-node report paths refer to files on the corresponding remote node. Do not construct cluster filenames from the node-scope patterns above. The module warns about recognized canonical artifacts older than 180 days; it does not delete them automatically.
+
+## Interpret results and verify resolution
+
+### Decide which findings need action
+
+Start with the summary, then inspect the affected endpoint's URL, port, response, certificate chain, and notes. A service can be reachable while returning an HTTP error to an unauthenticated probe; use the module's classification and supporting evidence, not the HTTP status alone.
+
+| Finding | Next action |
+| --- | --- |
+| Connectivity failure, not an advisory redirect | Correlate the failure with DNS, proxy, routing, and firewall logs for the same node and time. Confirm the endpoint is required for your scenario before requesting a targeted change. |
+| `ConfigGap` | Supply the missing test input, such as the actual Key Vault URL, and rerun. This is not evidence of a blocked endpoint. |
+| `SSLInspected` | Review the certificate chain with the network team. Azure Local does not support HTTPS inspection; apply the documented exception through your approved change process. Do not bypass certificate validation. |
+| `PrivateLink` | Check the resolved address and intended DNS/routing configuration. Arc endpoints must resolve publicly; a proxy bypass does not make Arc Private Link supported. Other private endpoints require scenario-appropriate routing and proxy bypass. |
+| CRL/OCSP offline | Investigate reachability of certificate revocation endpoints. Unavailable revocation checks are distinct from an intercepted certificate. |
+| `Skipped`, an untested placeholder, or a failed node collection | Treat as untested or incomplete, not as success. Confirm whether the exclusion is expected and obtain missing evidence where needed. |
+| Download speed `Failed` | The measurement was unavailable or incomplete. Review endpoint results separately; this value does not mean every endpoint failed. |
+
+Follow the [Azure Local firewall requirements](https://learn.microsoft.com/azure/azure-local/concepts/firewall-requirements) for HTTPS inspection and Private Link restrictions. Do not disable the firewall, change authentication policy, or open every discovered redirect destination to make the report green.
+
+### Redirects and wildcard probes
+
+In schema `1.2`, each row includes `RedirectDisposition`:
+
+| Value | Meaning |
+| --- | --- |
+| `NotRedirect` | The row is not classified as a redirected destination. |
+| `RequiredDependency` | The module classified the destination as part of a required redirect chain; connectivity failures remain failures. |
+| `Advisory` | The probe discovered the destination, but its requirement is unverified. Connectivity failures are warnings, while raw status and `ResultCategory` are unchanged. |
+
+Use `RedirectReason`, `RedirectOriginUrls`, and `RedirectTargetUrl` to trace the evidence. Wildcard **Test for** rows probe concrete hostnames using ports matched from the loaded endpoint inventory. Unmatched hosts are skipped; the module no longer assumes ports 80 and 443 for every wildcard probe.
+
+### TCP and DNS evidence
+
+With `-IncludeTCPConnectivityTests`, `TCPDiagnostics` captures direct TCP source-address, interface, route, and DNS-answer evidence where available. Direct TCP probes do not validate a proxy-mediated application path, so a failed direct connection alone does not prove that HTTPS through the proxy is blocked.
+
+`DNSResolutionStatus` describes normal resolution. After normal DNS fails, `DNSDiagnostics` can contain bounded queries to configured resolvers. Namespace policies, ambiguous interfaces, route checks, or time limits can prevent these diagnostic queries; review `CollectionStatus` and `SkipReason`. Diagnostic-only answers, including private-address annotations, do not replace the original failed result or identify which server answered a normal DNS request.
+
+### Verify after an approved change
+
+1. Retain the original report and record the affected nodes, endpoints, and test time. Ask the network owner to preserve the previous settings and define rollback before applying any approved change.
+2. Rerun the same test from each affected node with the same region and scenario options. Confirm that the targeted failures are resolved and no new required-endpoint failures appear. Compare endpoint inventories if the lists refreshed between runs.
+3. Review configuration gaps, TLS/Private Link findings, advisories, and collection errors separately. Zero hard failures is not proof of complete coverage.
+4. Rerun the original deployment or update readiness check using its supported workflow. Confirm a fresh successful result before retrying the affected operation. Reading an old `Get-SolutionUpdateEnvironment` result alone does not rerun a check.
+5. If the original failure persists, stop broadening network exceptions. Escalate with both reports and the original operation error; have the network owner roll back any change that introduced a regression.
+
 ## Programmatic use with `-PassThru` (automation)
 
-The `-PassThru` switch returns the test results to the PowerShell pipeline so you can act on them programmatically (for example, to fail a CI pipeline) without re-parsing the JSON report file. In v0.6.8 the returned value is a single **structured object** (`[pscustomobject]`) that matches the on-disk JSON summary (`SchemaVersion` `1.1`): all run-level fields are real properties on the object, and the per-endpoint rows are nested under a `.Results` property.
+The `-PassThru` switch returns a **structured object** (`[pscustomobject]`) for automation without re-parsing the JSON report. In module version 0.7.0, the object and JSON use `SchemaVersion` `1.2`. Node-scope endpoint rows are under `.Results`; cluster-scope node objects are under `.Nodes`.
 
-> **Caller contract:** assign the result directly (`$results = Test-AzureLocalConnectivity ... -PassThru`). Access the per-endpoint rows through `$results.Results`. Because a single object is now returned, run-level properties survive `Where-Object` / `Select-Object` / `Sort-Object` on `.Results` (they no longer depend on note-properties bolted onto the results collection, as in 0.6.7).
+> **Caller contract:** assign the result directly (`$ConnectivityTests = Test-AzureLocalConnectivity ... -PassThru`). Filter `$ConnectivityTests.Results`, keeping `$ConnectivityTests` for run-level metadata. Preinstall both modules for unattended use, supply the region and scenario inputs, and disable the upload prompt explicitly.
 
 ### Node scope (`-Scope Node`, default)
 
-`-PassThru` returns the structured object described above. The per-endpoint rows are under `$results.Results`, and each **row** includes a `ResultCategory` field that classifies the outcome, so you no longer need to parse free-text notes to tell a genuine connectivity failure apart from a configuration gap:
+`-PassThru` returns the structured object described above. The per-endpoint rows are under `$ConnectivityTests.Results`, and each **row** includes a `ResultCategory` field that classifies the outcome, so you no longer need to parse free-text notes to tell a genuine connectivity failure apart from a configuration gap:
 
 | `ResultCategory` | Meaning |
 |------------------|---------|
 | `Success` | Endpoint reachable. |
-| `ConnectivityFailure` | Endpoint could not be reached (DNS / TCP / Layer-7 failure). |
+| `ConnectivityFailure` | Connectivity test failed. Check `RedirectDisposition` before treating the row as a hard failure. |
 | `ConfigGap` | A required parameter was not supplied (for example `-KeyVaultURL` left unsubstituted) — a setup issue, not a blocked endpoint. |
 | `SSLInspected` | SSL/TLS inspection was detected on the path to the endpoint. |
 | `PrivateLink` | Endpoint resolved to a private (RFC1918) address — possible Private Link configuration. |
 | `Skipped` | Endpoint was not tested (for example, skipped under Arc Gateway, or an untested wildcard placeholder). |
 
-The object also carries run-level summary values as real properties, including `SchemaVersion`, `Hostname`, `Timestamp`, `AzureRegion`, `HardwareOEM`, `DownloadSpeed`, `ReportPath` / `JSONReportPath` (on-disk report locations), `RequestMethod`, `Parallelism`, `TotalDurationSeconds`, `Layer7WallClockSeconds`, `Layer7TotalDurationSeconds`, `Layer7TestedEndpoints`, the proxy fields (`ProxyEnabled`, `ProxyServer`, `ProxyHttp`, `ProxyHttps`, `ProxyBypassList`, `NoProxyList`), and the diagnostic state flags `SSLInspectionDetected` / `SSLInspectedURLs`, `PrivateLinkDetected` / `PrivateLinkCriticalArray` / `PrivateLinkProxyBypassArray` / `PrivateLinkDetectedArray` / `OtherRfc1918Count` / `PrivateLinkBypassConfirmedArray` / `PrivateLinkBypassMissingArray`, and `CRLOfflineDetected` / `CRLOfflineURLs`.
+Run-level properties include report paths, hostname, region, download speed, request method, parallelism, timing, captured proxy settings, and SSL inspection, Private Link, and revocation-offline findings. Per-row `RedirectDisposition`, `RedirectReason`, `RedirectOriginUrls`, `RedirectTargetUrl`, `DNSResolutionStatus`, `TCPDiagnostics`, and `DNSDiagnostics` provide the schema 1.2 evidence described above.
+
+The following example fails on non-advisory connectivity failures and critical Arc private-address resolution. It is not a complete readiness gate: also review `ConfigGap`, `SSLInspected`, other Private Link findings, skipped tests, and collection coverage according to your scenario. Add `-ArcGatewayURL` for gateway deployments.
 
 ```PowerShell
-# Capture results and fail an automation run on any connectivity failure.
-$results = Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -NoOutput -PassThru
+# Capture results without update checks or the upload prompt.
+$ConnectivityTests = Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
+    -KeyVaultURL "https://<YourKeyVaultName>.vault.azure.net" `
+    -NoAutoUpdate -ExcludeUploadResults -NoOutput -PassThru -ErrorAction Stop
+if ($null -eq $ConnectivityTests -or $null -eq $ConnectivityTests.Results -or @($ConnectivityTests.Results).Count -eq 0) {
+    throw "No endpoint results were returned. Review the transcript and errors."
+}
 
-# Per-row classification (rows are under .Results)
-$failures = @($results.Results | Where-Object ResultCategory -eq 'ConnectivityFailure')
+# Preserve advisory redirects as warnings, not hard failures.
+$advisories = @($ConnectivityTests.Results | Where-Object {
+    $_.ResultCategory -eq 'ConnectivityFailure' -and $_.RedirectDisposition -eq 'Advisory'
+})
+if ($advisories.Count -gt 0) {
+    Write-Warning "$($advisories.Count) redirect advisory failure(s); review applicability before changing firewall rules."
+}
+$failures = @($ConnectivityTests.Results | Where-Object {
+    $_.ResultCategory -eq 'ConnectivityFailure' -and $_.RedirectDisposition -ne 'Advisory'
+})
 $failures | Format-Table URL, Port, Layer7Status, ResultCategory -AutoSize
 if ($failures.Count -gt 0) {
     throw "$($failures.Count) endpoint connectivity failure(s) detected."
 }
 
 # Run-level flags (real properties on the returned object)
-if ($results.PrivateLinkCriticalArray.Count -gt 0) {
-    throw "Arc endpoint(s) resolved to a private IP: $($results.PrivateLinkCriticalArray -join ', ')"
+if ($ConnectivityTests.PrivateLinkCriticalArray.Count -gt 0) {
+    throw "Arc endpoint(s) resolved to a private IP: $($ConnectivityTests.PrivateLinkCriticalArray -join ', ')"
 }
 ```
 
@@ -278,43 +370,53 @@ With `-Scope Cluster -PassThru`, the function returns the **same unified structu
 
 | Property | Description |
 |----------|-------------|
-| `SchemaVersion` | Contract schema version (`1.1`). |
+| `SchemaVersion` | Contract schema version (`1.2`), also used by nested node objects. |
 | `Scope` | `Cluster`. |
 | `ClusterName` | Cluster name from `Get-Cluster`. |
 | `OrchestratorMachine` | Node that orchestrated the run. |
 | `RunGuid` | Unique identifier for the cluster run. |
 | `StartTime` / `EndTime` / `Duration` | Orchestration timing. |
 | `ReportPath` / `JSONReportPath` | The **merged** cluster report and JSON on the orchestrator (local to the caller). |
-| `ExportPath` | Folder containing the cluster report and per-node output. |
+| `ExportPath` | Folder containing the merged cluster artifacts on the orchestrator. Per-node files remain on their respective nodes. |
 | `Nodes` | Array of per-node structured objects. Each entry carries `Hostname`, `Collected`, `Error`, `Results` (that node's per-endpoint rows), and the same run-level/detection fields as a node-scope run (per-node `ReportPath` / `JSONReportPath` point to files on the remote node). |
 | `Errors` | Per-node error messages (empty when the node succeeded). |
 
 ```PowerShell
 # Run a cluster test and inspect per-node results programmatically.
-$cluster = Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -Scope Cluster -PassThru
+$cluster = Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
+    -KeyVaultURL "https://<YourKeyVaultName>.vault.azure.net" `
+    -Scope Cluster -NoAutoUpdate -ExcludeUploadResults -PassThru -ErrorAction Stop
+if ($null -eq $cluster -or $null -eq $cluster.Nodes -or @($cluster.Nodes).Count -eq 0) {
+    throw "No cluster results were returned. Review the pre-flight errors."
+}
 
 foreach ($node in $cluster.Nodes) {
-    if (-not $node.Collected -or $node.Error) {
-        Write-Warning "$($node.Hostname) collection failed: $($node.Error -join '; ')"
+    if (-not $node.Collected -or $node.Error -or $null -eq $node.Results -or @($node.Results).Count -eq 0) {
+        Write-Warning "$($node.Hostname) collection failed or returned no endpoint results: $($node.Error -join '; ')"
         continue
     }
 
-    $failures = @($node.Results | Where-Object ResultCategory -eq 'ConnectivityFailure')
-    Write-Host "$($node.Hostname) : $($failures.Count) connectivity failure(s)"
+    $failures = @($node.Results | Where-Object {
+        $_.ResultCategory -eq 'ConnectivityFailure' -and $_.RedirectDisposition -ne 'Advisory'
+    })
+    $advisories = @($node.Results | Where-Object {
+        $_.ResultCategory -eq 'ConnectivityFailure' -and $_.RedirectDisposition -eq 'Advisory'
+    })
+    Write-Host "$($node.Hostname) : $($failures.Count) connectivity failure(s), $($advisories.Count) redirect advisory failure(s)"
 }
 ```
 
 ## Share test results with Microsoft (Optional)
 
-The 'Test-AzureLocalConnectivity' function includes an option to upload the test results to Microsoft, this is controlled by a User Prompt that asks if you would like to **Upload the Transcript file and report file to Microsoft**. If you **answer "Y"** to the prompt, the function will automatically upload the output files to Microsoft, the transfer uses the built-in log transfer method that uses secure protocols, more information on the upload process is available [here](https://learn.microsoft.com/azure/azure-local/manage/collect-logs?tabs=powershell#about-on-demand-log-collection).
+Where the Azure Local log-collection command is available, the function offers to upload diagnostic results to Microsoft. Upload occurs only after you accept the prompt. See [Collect diagnostic logs for Azure Local](https://learn.microsoft.com/azure/azure-local/manage/collect-logs?tabs=powershell#about-on-demand-log-collection) for the transfer process.
 
-To skip the upload prompt, use the `-ExcludeUploadResults` switch.
+Use `-ExcludeUploadResults` to skip the prompt, including in automation. If upload is unavailable on a staging device, retain the local artifacts and use your support case's approved transfer method.
 
-If you are working with Microsoft customer service and support (CSS), and have a support request (SR) case open, you could share some of the "Share Test Results" log upload text output that shows your cluster's "AEORegion", "ARODeviceARMResourceUri" and "CorrelationId" with the SR case owner.
+Review files under your organization's data-handling policy before sharing: reports can contain hostnames, IP addresses, resource identifiers, and proxy or certificate details. Do not post diagnostic files in a public GitHub issue. For an existing support request, share the upload's `CorrelationId` and other requested identifiers privately with the case owner.
 
 ## Demo and example output
 
-Example output is shown in the animated GIF image below, which shows an interactive console demo.
+The following recording illustrates the interactive workflow. It is not a version-specific reference for the 0.7.0 report layout; use the parameter and output guidance in this article for current behavior.
 
 The primary source of information is **opening the HTML output file** in a web browser on your laptop or desktop PC. The HTML report provides an interactive, color-coded view of all test results. Alternatively, use the JSON output for programmatic analysis or the CSV format for spreadsheet workflows.
 
@@ -322,10 +424,10 @@ The primary source of information is **opening the HTML output file** in a web b
 
 ## Parameter reference
 
-The full parameter block is shown below for reference. You can also discover the same information at any time with `Get-Help Test-AzureLocalConnectivity -Full`.
+The following reference summarizes the public parameters for version 0.7.0; it is not a script to run. Use `Get-Command Test-AzureLocalConnectivity -Syntax` for installed command syntax and `Get-Help Test-AzureLocalConnectivity -Full` for help.
 
 <details>
-<summary>Full parameter block (click to expand)</summary>
+<summary>Parameter summary (click to expand)</summary>
 
 ```PowerShell
 [CmdletBinding(DefaultParameterSetName = 'Default')]
@@ -341,11 +443,11 @@ param (
     [System.Uri]$KeyVaultURL,
 
     # Switch to ONLY test URLs that do NOT support Arc Gateway.
-    # Must be used together with -ArcGatewayURL (mandatory parameter set).
+    # Requires -ArcGatewayURL; optional when the URL is supplied.
     [switch]$ArcGatewayDeployment,
 
     # Custom Arc Gateway URL including https:// prefix.
-    # Must be used together with -ArcGatewayDeployment (mandatory parameter set).
+    # Automatically enables -ArcGatewayDeployment.
     # Example: https://1be59945-12c0-4cda-9580-84a66a1120a0.gw.arc.azure.com
     [System.Uri]$ArcGatewayURL,
 
@@ -371,11 +473,12 @@ param (
 
     # Skip the PowerShell Gallery update check AND skip downloading endpoint
     # lists from GitHub (uses cached endpoint files bundled with the module).
-    # Use in air-gapped environments or CI pipelines.
+    # Does not control Environment Validator's separate endpoint download.
     [switch]$NoAutoUpdate,
 
-    # Opt in to auto-installing a newer module version from PowerShell Gallery
-    # before running. Default behaviour is notify-only (non-destructive).
+    # Opt in to installing a newer module version from PowerShell Gallery.
+    # If installed, this run stops; import in a fresh session and rerun.
+    # Default behaviour is notification only.
     [switch]$AutoUpdate,
 
     # Force downloading the latest endpoint lists from GitHub even when
@@ -384,12 +487,13 @@ param (
     # to the cached endpoint files if the download is blocked or fails.
     [switch]$ForceGitHubEndpointsUpdate,
 
-    # Suppress all console output from the function.
+    # Suppress normal console output, not every warning/error or upload prompt.
+    # Silent mode automatically accepts installing missing Environment Validator.
     [switch]$NoOutput,
 
     # Return the structured results object (Node scope) or the unified cluster
     # structured object (Cluster scope) for further processing in PowerShell.
-    # Per-endpoint rows are under the .Results property (SchemaVersion 1.1).
+    # Node rows are under .Results; cluster nodes are under .Nodes (schema 1.2).
     [switch]$PassThru,
 
     # Output report format. Default is HTML. CSV is also available.
@@ -399,7 +503,7 @@ param (
 
     # HTTP request method for each endpoint test.
     #   'Auto' (default) - HEAD first, GET fallback on 405/400/ambiguous response.
-    #   'Get'  - GET only (pre-0.6.7 byte-identical behaviour).
+    #   'Get'  - GET only; does not revert newer retry/classification logic.
     #   'Head' - HEAD only, no fallback (fastest; some endpoints reject HEAD).
     [ValidateSet('Get', 'Head', 'Auto')]
     [string]$RequestMethod = 'Auto',
@@ -421,10 +525,9 @@ param (
     # dependency (copies from the orchestrator's installed module folder).
     [switch]$InstallMissingModuleOnNodes,
 
-    # Optional additional path to copy the report/transcript/JSON to. Results
-    # are ALWAYS saved to C:\ProgramData\AzStackHci.DiagnosticSettings; when a
-    # different path is specified the run folder is additionally copied there
-    # (never instead of ProgramData).
+    # Optional additional absolute local copy target; UNC/relative paths rejected.
+    # Canonical connectivity artifacts are routed under Reports\Connectivity
+    # beneath the default path. Use returned report paths to locate artifacts.
     [string]$ExportPath = 'C:\ProgramData\AzStackHci.DiagnosticSettings'
 )
 ```
@@ -437,60 +540,79 @@ param (
 |--------|---------|
 | `-Scope` | **New in 0.6.7.** `Node` (default) tests the current node only; `Cluster` enumerates `Get-ClusterNode` and runs the test on every node via `Invoke-Command`, aggregating per-node results into a tabbed HTML report. |
 | `-InstallMissingModuleOnNodes` | **New in 0.6.7.** Only valid with `-Scope Cluster`. Side-loads the orchestrator's exact module version to nodes that are missing it or have a version mismatch (drift). Opt-in; no PowerShell Gallery / internet dependency. |
-| `-ExportPath` | **New in 0.6.7.** Optional additional folder to copy the report, transcript, and JSON to. Results are **always** saved to `C:\ProgramData\AzStackHci.DiagnosticSettings`; a different path is copied there *in addition*, never instead. |
+| `-ExportPath` | Copies artifacts to an additional absolute local path; UNC shares are not supported. Since 0.6.9, canonical connectivity artifacts are under `C:\ProgramData\AzStackHci.DiagnosticSettings\Reports\Connectivity`. |
 | `-Parallelism` | **New in 0.6.7.** Fans the Layer-7 sweep out across 1–16 process-isolated workers. Default `1` (sequential). Per-node default is `8` under `-Scope Cluster`. |
-| `-RequestMethod` | **New in 0.6.7.** `Auto` (default), `Get`, or `Head`. **Behaviour change:** the default is now `Auto` (HEAD-first with GET fallback). Use `-RequestMethod Get` to preserve pre-0.6.7 behaviour. |
-| `-PassThru` | **Restructured in 0.6.8.** Now returns a single structured object (`SchemaVersion` `1.1`) with run-level fields as real properties and per-endpoint rows under `.Results`. Node scope and Cluster scope share one contract; in Cluster scope the per-node objects are nested under a `.Nodes` array. See [Programmatic use with -PassThru](#programmatic-use-with--passthru-automation). |
-| `-AutoUpdate` | **New in 0.6.7.** Opt in to auto-installing a newer module version from PowerShell Gallery. Default is notify-only (non-destructive). |
+| `-RequestMethod` | **New in 0.6.7.** `Auto` (default), `Get`, or `Head`. The default is HEAD-first with GET fallback. Use `-RequestMethod Get` for GET-only comparisons; this does not revert newer retry or classification logic. |
+| `-PassThru` | Structured object since 0.6.8; **schema 1.2 in 0.7.0** adds redirect classification and TCP/DNS diagnostic evidence. Node rows remain under `.Results`; cluster node objects remain under `.Nodes`. See [Programmatic use with -PassThru](#programmatic-use-with--passthru-automation). |
+| `-AutoUpdate` | **New in 0.6.7.** Opt in to installing a newer module version from PowerShell Gallery. An installation stops the current run; import in a fresh session and rerun. Default is notification only. |
 | `-ForceGitHubEndpointsUpdate` | **New in 0.6.8.** Forces the endpoint-list refresh from GitHub even when `-NoAutoUpdate` is specified, leaving the installed module untouched. Only meaningful together with `-NoAutoUpdate`; falls back to cached endpoint files if the download is blocked. |
-| `-ArcGatewayDeployment` and `-ArcGatewayURL` | Now a **mandatory parameter set** — both must be specified together. Previously they were independent optional parameters. |
+| `-ArcGatewayDeployment` and `-ArcGatewayURL` | In 0.7.0, supplying the URL automatically enables gateway mode. The switch remains supported and requires the URL if used. |
 | `-OutputFormat` | Controls the report format: `HTML` (default) or `CSV`. JSON is always generated alongside. |
 | `-IncludeOEMUrls` | Allows testing OEM hardware partner specific endpoints (DataOn, Dell, HPE, Hitachi, Lenovo, or TestAll). |
-| `-NoAutoUpdate` | Skips the PowerShell Gallery update check **and** skips downloading endpoint lists from GitHub (uses cached endpoint files). Use in air-gapped environments. |
-| `-NoOutput` | Suppresses all console output for automation/scripting scenarios. |
+| `-NoAutoUpdate` | Skips this module's PowerShell Gallery update check and GitHub endpoint-list refresh. Does not suppress Environment Validator's endpoint download or connectivity probes. |
+| `-NoOutput` | Suppresses normal console output, not every warning/error or upload prompt. In 0.7.0, silent mode automatically accepts installation of missing Environment Validator; preinstall dependencies for unattended runs. |
 | `USGovVirginia` | Azure region included in the `-AzureRegion` validated set. |
 | HTML output | Default output format is HTML with color-coded rows and summary section. |
 | JSON output | **Always generated** alongside the primary report format. |
-| Download speed test | Uses **parallel multi-session downloads** for more accurate bandwidth measurement. |
+| Download speed test | In 0.7.0, bounded recovery handles eligible transport failures, and numeric throughput requires a complete transfer. A failed measurement does not prevent endpoint reporting. |
 | Private Link detection | Detects and warns if endpoints resolve to RFC1918 private IP addresses (possible Private Link configuration). |
 
 ## Appendix
 
 ### Environment Checker Connectivity Tests
 
-To view the output from Azure Local **Environment Checker** Connectivity Validation tests, use the PowerShell command below:
+Run the Environment Checker connectivity validator and retain its full result set. These diagnostics send test traffic and write diagnostic logs; they do not change firewall settings. Review failure details and remediation rather than only endpoint names:
 
 ```PowerShell
-Invoke-AzStackHciConnectivityValidation -PassThru | Where-Object -Property Status -eq FAILURE | Sort-Object TargetResourceName | Format-Table TargetResourceName -Autosize
+$validation = @(Invoke-AzStackHciConnectivityValidation -PassThru -ErrorAction Stop)
+if ($validation.Count -eq 0) {
+    throw "Environment Checker returned no results. Review its logs."
+}
+$validation | Where-Object { $_.Status -in @('FAILURE', 'FAILED') } |
+    Sort-Object TargetResourceName |
+    Format-List TargetResourceName, Status, Description, Remediation, AdditionalData
 ```
 
 For additional information for how to use Azure Local Environment Checker module, review the [Troubleshooting External Connectivity Failures in Environment Checker](../../EnvironmentValidator/Troubleshooting-External-Connectivity-Failures-in-Environment-Checker.md) article.
 
-And the Microsoft Learn article is here: [Readiness of your environment for Azure Local - "Run readiness checks" section](https://learn.microsoft.com/azure/azure-local/manage/use-environment-checker?tabs=connectivity#run-readiness-checks).
+For prerequisites, result interpretation, and log locations, see [Run Environment Checker readiness checks](https://learn.microsoft.com/azure/azure-local/manage/use-environment-checker?tabs=connectivity#run-readiness-checks). An empty filtered view only means no matching failures were displayed; inspect the full `$validation` results for warnings and incomplete tests.
 
 ### Solution Update Environment Tests
 
-To view the output from **all tests** included Azure Local **Solution Update Readiness**, which includes connectivity validation and tests for critical public endpoints, use the PowerShell command below:
+**[READ-ONLY]** On a deployed Azure Local node, retrieve existing solution update health-check results. Risk is not applicable to this query. It does not initiate a fresh check; inspect `HealthCheckDate` before using the evidence:
 
 ```PowerShell
-# Check Solution Update Environment
-$Result = Get-SolutionUpdateEnvironment -FullHealthCheckDetails
-
-# View "not equal to SUCCESS" alerts
-$Result.HealthCheckResult | Where-Object {$_.Status -ne "SUCCESS"} | Format-List Title, Status, Severity, Description, AdditionalData, Remediation
-
-# Create "C:\Temp" folder, if it does not exist
-if(-not(Test-Path "C:\Temp\")) { New-Item -Path "C:\Temp\" -Type Directory | Out-Null }
-
-# Output to Text format
-$Result.HealthCheckResult | Out-File "C:\Temp\HealthResult-$((Get-Cluster).Name).txt"
-
-# Output to JSON format
-$Result.HealthCheckResult | ConvertTo-Json -Depth 10 | Out-File "C:\Temp\HealthResult-$((Get-Cluster).Name).json"
+$result = Get-SolutionUpdateEnvironment -FullHealthCheckDetails -ErrorAction Stop
+$result | Format-List HealthState, HealthCheckDate
+if ($null -eq $result -or $null -eq $result.HealthCheckResult -or @($result.HealthCheckResult).Count -eq 0) {
+    throw "No health-check details were returned. Use the supported workflow to refresh the checks."
+}
+$result.HealthCheckResult | Where-Object { $_.Status -ne 'SUCCESS' } |
+    Format-List Title, Status, Severity, Description, AdditionalData, Remediation
 ```
 
-For additional information for how to analyze and understand the **$Results.HealthCheckResult** array, refer to this article: [Solution Update Readiness Checker - "using PowerShell" section](https://learn.microsoft.com/azure/azure-local/update/update-troubleshooting-23h2#using-powershell).
+Retain the displayed details with the incident evidence. For fresh-check and retry procedures, follow [Troubleshoot solution updates using PowerShell](https://learn.microsoft.com/azure/azure-local/update/update-troubleshooting-23h2#using-powershell). System health checks and checks for a specific pending update can use different validation logic; inspect the check associated with the failed operation.
 
 ## How to get additional support
 
-If you need assistance with connectivity, please open a Support Request (SR) case with Microsoft CSS support using Azure portal.
+If the failure persists, open a support request through the Azure portal. Provide the affected operation and exact error, node names, incident time and time zone, module version, Azure region, gateway/proxy scenario, and before-and-after HTML/JSON reports and transcripts. Include collection errors and recent network changes. Share these through the case's private upload channel, not this public repository.
+
+<!-- tsg-metadata
+{
+    "schema": "azure-local-supportability/tsg-metadata/v1",
+    "document_type": "troubleshoot",
+    "products": ["Azure Local - connected hyperconverged deployments"],
+    "detector": {
+        "type": "command",
+        "signal": "Test-AzureLocalConnectivity: ResultCategory and RedirectDisposition; cluster node Collected and Error"
+    },
+    "validation": {
+        "fidelity_level": "L0",
+        "technical_grade": null,
+        "reproduction_substrate": "none",
+        "automation_status": "not-assessed",
+        "last_validated": "2026-09-28",
+        "spec_ref": ""
+    }
+}
+-->
