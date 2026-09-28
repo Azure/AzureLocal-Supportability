@@ -2,7 +2,7 @@
 
 Use `Test-AzureLocalConnectivity` from the **AzStackHci.DiagnosticSettings** module to investigate outbound connectivity failures from Azure Local nodes. The report helps distinguish unreachable endpoints, missing test inputs, TLS inspection, and private-address resolution.
 
-**Applies to:** Connected, hyperconverged Azure Local deployments, with or without Azure Arc Gateway. Pre-deployment tests on another Windows device assess that device's path only. This guide does not validate disconnected operations, disaggregated or multi-rack deployments, or connectivity from workload VMs and Azure Resource Bridge (ARB).
+**Applies to:** Connected hyperconverged and disaggregated Azure Local deployments, with or without Azure Arc Gateway. Use this guide to troubleshoot and validate outbound connectivity from the tested nodes; it does not provide complete deployment validation. Pre-deployment tests on another Windows device assess that device's path only. This guide does not validate disconnected operations, multi-rack deployments, or connectivity from workload VMs and Azure Resource Bridge (ARB).
 
 ## Contents
 
@@ -604,7 +604,7 @@ If the failure persists, open a support request through the Azure portal. Provid
 {
     "schema": "azure-local-supportability/tsg-metadata/v1",
     "document_type": "troubleshoot",
-    "products": ["Azure Local - connected hyperconverged deployments"],
+    "products": ["Azure Local - connected hyperconverged deployments", "Azure Local - connected disaggregated deployments"],
     "detector": {
         "type": "command",
         "signal": "Test-AzureLocalConnectivity: ResultCategory and RedirectDisposition; cluster node Collected and Error"
