@@ -13,7 +13,7 @@ For Network Environment Validator Resources, see [TSG/EnvironmentValidator/Netwo
 
 | Article | Type | Applicable products | Owner | Validation grade | Automation readiness | Last validation |
 | --- | --- | --- | --- | --- | --- | --- |
-| [General Outbound Connectivity](Arc-Gateway-Outbound-Connectivity/Troubleshoot-Outbound-Connectivity.md) | Troubleshoot | Azure Local, connected hyperconverged | Not assigned | Not graded (L0 static review) | Not assessed | 2026-09-28 |
+| [General Outbound Connectivity](Arc-Gateway-Outbound-Connectivity/Troubleshoot-Outbound-Connectivity.md) | Troubleshoot | Azure Local, connected hyperconverged | Neil Bird (@NeilBird) | Not graded | Not assessed | 2026-09-28 |
 
 ### Top of Rack Switch Configuration
 - [Overview: Azure-Local-Deployment-Pattern](Top-Of-Rack-Switch/Overview-Azure-Local-Deployment-Pattern.md)

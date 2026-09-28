@@ -124,7 +124,9 @@ Cluster mode requirements:
 # Run the connectivity test on every node in the cluster and produce a
 # single, tabbed cluster HTML report.
 # /// ACTION: Update <AzureRegionName> to match your Azure Region.
-Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" -Scope Cluster
+Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
+    -KeyVaultURL "https://<YourKeyVaultName>.vault.azure.net" `
+    -Scope Cluster
 ```
 
 Each node runs its own Layer-7 sweep with a default of eight parallel workers. Cluster operations have a 30-minute deadline; timed-out or failed nodes must be treated as incomplete coverage, not as successful tests.
@@ -135,6 +137,7 @@ Each node runs its own Layer-7 sweep with a default of eight parallel workers. C
 # Cluster test, automatically side-loading the orchestrator's module version
 # to any node that is missing it or has a version mismatch (drift).
 Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
+    -KeyVaultURL "https://<YourKeyVaultName>.vault.azure.net" `
     -Scope Cluster `
     -InstallMissingModuleOnNodes
 ```
