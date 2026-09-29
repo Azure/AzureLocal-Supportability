@@ -37,3 +37,4 @@
 * [Update fails due to Arc Agent install failure (lockdown on azcmagent.log)](./Update-fails-due-to-Arc-Agent-install-failure.md)
 * [2604 | Previous CAU run status was canceled](./Previous-CAU-run-status-was-canceled.md)
 * [Live migration fails with "No mapping between account names and security IDs" (0x80070534)](./Live-migration-fails-with-No-mapping-between-account-names-and-security-IDs.md)
+* [Solution update fails at RegisterCloudManagementClusterExtensions with connection refused on port 42545](./Known-Issue-Solution-update-fails-at-RegisterCloudManagementClusterExtensions-with-connection-refused.md)
