@@ -301,20 +301,62 @@ header, exception, status code, retry count, latency, and TCP result.
 ## Collect results from every node
 
 Run this from an Azure Local node in an elevated domain session that can connect to the
-other nodes. It runs a fresh validator process on each up node and returns structured
-results. The command does not change node or cluster state.
+other nodes. It runs a fresh validator process on every intended node and returns
+structured results. The command does not change node or cluster state.
+
+For an existing cluster, leave `$intendedNodes` empty and the command inventories every
+cluster member, including members that are currently down. For deployment or scale-out,
+populate `$intendedNodes` with every planned machine name, including a prospective node
+that has not joined the cluster. A selected node that is unreachable or returns no
+recognizable validator objects remains visible as `NO DATA`.
 
 ```powershell
-$nodes = @(Get-ClusterNode |
-    Where-Object State -eq 'Up' |
-    Select-Object -ExpandProperty Name)
+$intendedNodes = @(
+    # 'NODE01'
+    # 'NODE02'
+)
 
-$clusterResults = Invoke-Command -ComputerName $nodes -ScriptBlock {
+if ($intendedNodes.Count -eq 0) {
+    try {
+        $intendedNodes = @(Get-ClusterNode -ErrorAction Stop |
+            Select-Object -ExpandProperty Name)
+    }
+    catch {
+        throw 'Could not inventory cluster members. For deployment or scale-out, populate $intendedNodes with every planned machine name.'
+    }
+}
+
+$intendedNodes = @($intendedNodes |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+    Sort-Object -Unique)
+
+if ($intendedNodes.Count -eq 0) {
+    throw 'No intended nodes were identified. Populate $intendedNodes and retry.'
+}
+
+$remoteErrors = @()
+$returnedResults = @(Invoke-Command -ComputerName $intendedNodes -ScriptBlock {
     Import-Module AzStackHci.EnvironmentChecker -Force
     $started = [DateTime]::UtcNow
 
     try {
         $results = @(Invoke-AzStackHciConnectivityValidation -PassThru -ErrorAction Stop)
+        $recognized = @($results | Where-Object {
+            $_.PSObject.Properties.Name -contains 'Status' -or
+            $_.PSObject.Properties.Name -contains 'AdditionalData'
+        })
+
+        if ($recognized.Count -eq 0) {
+            return [pscustomobject]@{
+                Node       = $env:COMPUTERNAME
+                StartedUtc = $started
+                Status     = 'NO DATA'
+                Failed     = $null
+                Targets    = @()
+                Error      = 'The validator returned no recognizable result objects.'
+            }
+        }
+
         $failed = @($results | Where-Object {
             $_.AdditionalData.Status -eq 'FAILURE' -or
             "$($_.Status)" -eq 'FAILURE' -or
@@ -348,14 +390,45 @@ $clusterResults = Invoke-Command -ComputerName $nodes -ScriptBlock {
             Error      = $_.Exception.Message
         }
     }
-}
+} -ErrorAction Continue -ErrorVariable +remoteErrors)
+
+$clusterResults = @($intendedNodes | ForEach-Object {
+    $node = $_
+    $returned = @($returnedResults | Where-Object {
+        $_.Node -ieq $node -or $_.PSComputerName -ieq $node
+    })
+
+    if ($returned.Count -gt 0) {
+        $returned[-1]
+    }
+    else {
+        $nodeErrors = @($remoteErrors | Where-Object {
+            $_.OriginInfo -and $_.OriginInfo.PSComputerName -ieq $node
+        } | ForEach-Object { $_.Exception.Message })
+
+        [pscustomobject]@{
+            Node       = $node
+            StartedUtc = $null
+            Status     = 'NO DATA'
+            Failed     = $null
+            Targets    = @()
+            Error      = if ($nodeErrors.Count) {
+                $nodeErrors -join ' | '
+            }
+            else {
+                'The selected node returned no result. Confirm remoting and validator execution, then retry.'
+            }
+        }
+    }
+})
 
 $clusterResults | ConvertTo-Json -Depth 8
 ```
 
 Expected output:
 
-- `SUCCESS`: the validator ran and returned no failed targets on that node.
+- `SUCCESS`: the validator returned recognizable results and no failed targets on that
+  node.
 - `FAILURE`: inspect every object in `Targets`.
 - `NO DATA`: the validation result is not established. Fix the execution, module, or
   remoting problem before declaring success.
@@ -370,8 +443,8 @@ identify the failing layer.
 | The validator reports `Overall Result: True`, even when the HTTP status is 404 | Connectivity succeeded for this target | Do not override the validator with a blanket "only HTTP 200 passes" rule. Some host-root connectivity targets prove the expected server and request path are reachable even though the root resource is not a content page. |
 | The remote name cannot be resolved; TCP test is false or absent | DNS or hostname resolution | Resolve the exact hostname from the affected node and through the configured DNS servers. Use the DNS-specific TSG if resolution fails. |
 | `Unable to connect`, timeout, or connection refused; the emitted target port test is false | Firewall, route, network access control, proxy path, or service unavailable | Test the exact hostname and emitted port from the same node. Confirm the destination resolves to current addresses and that the source node is included in the rule. |
-| HTTP 403 or 407; server header or response URI identifies a proxy | Proxy access or authentication | Record `netsh winhttp show proxy`, the responding server, method, status, and response URI. Confirm the service, not the proxy, generated the response. |
-| The emitted target port is reachable, but HTTPS closes during send or TLS negotiation | TLS inspection, application firewall, IPS, certificate trust, or protocol policy | Compare direct and inspected paths, collect the certificate chain, and have the security owner review resets or inspection logs. |
+| HTTP 403 or 407; server header or response URI identifies a proxy | Proxy access policy or an unsupported authenticated-proxy requirement | Record `netsh winhttp show proxy`, the responding server, method, status, and response URI. Azure Local supports only non-authenticated proxies. Confirm the service, not the proxy, generated the response. |
+| The emitted target port is reachable, but HTTPS closes during send or TLS negotiation | TLS inspection, application firewall, IPS, certificate trust, or protocol policy | Determine whether inspection is present. Azure Local required endpoints must bypass HTTPS inspection. If the path is not inspected, collect the certificate chain and have the security owner review resets, trust, and protocol policy. |
 | The requested host succeeds, then a redirected host fails | Missing redirect destination in the allow list | Record every `Location` and final URL. Allow the required redirected host, not only the short link. |
 | The destination is reachable with `curl`, but the validator still fails or tests an unexpected retired target | Product target or validator drift | Record the module version, manifest final URL, target definition, validator result, and raw log. Escalate to Microsoft support or the Environment Validator product group. |
 
@@ -414,8 +487,10 @@ Mitigation direction:
 - **[MEDIUM RISK]** Allow the exact emitted host and port from every Azure Local node.
 - **[MEDIUM RISK]** If a proxy is approved, confirm it permits the HTTPS request to
   the emitted port and does not return its own block page.
-- **[MEDIUM RISK]** If the target port succeeds but the HTTPS request closes, have
-  the security owner review TLS inspection, certificate trust, and IPS resets.
+- **[MEDIUM RISK]** If the target port succeeds but the HTTPS request closes, require
+  a narrowly scoped HTTPS-inspection bypass for the required endpoint. If inspection
+  is not present, have the security owner review certificate trust, protocol policy,
+  and IPS resets.
 
 Do not derive the target from the cluster region. Use the emitted URI.
 
@@ -543,8 +618,9 @@ to the customer team that owns the network control.
 | --- | --- | --- |
 | DNS | Correct the DNS record, forwarder, conditional forwarder, or DNS egress path for the exact hostname. | **[MEDIUM RISK]** when changing a shared DNS service. Record the prior configuration and restore it if unrelated clients regress. |
 | Firewall, route, or network access control | Permit the required protocol and port from every Azure Local node to the exact current hostname or supported service tag. | **[MEDIUM RISK]** shared network change. Use the narrowest rule and retain the prior rule set for rollback. |
-| Proxy | Allow the destination and method, configure required authentication, and ensure the proxy returns the service response rather than its own block page. | **[MEDIUM RISK]** shared proxy policy change. Roll back only the new scoped exception if verification or security review fails. |
-| TLS inspection or IPS | Add a narrowly scoped inspection bypass or correct the trust and protocol policy for the required service. | **[MEDIUM RISK]** security-control change. Require security-owner approval and a documented rollback. Do not disable inspection globally. |
+| Proxy | Provide an approved, scoped non-authenticated proxy path for the destination and method, and ensure the proxy returns the service response rather than its own block page. Do not configure username or password authentication; authenticated proxies are not supported. | **[MEDIUM RISK]** shared proxy policy change. Roll back only the new scoped exception if verification or security review fails. |
+| TLS inspection | Add a narrowly scoped HTTPS-inspection bypass for the required Azure Local endpoint. Trusting the inspection certificate is not an equivalent remediation because HTTPS inspection is unsupported. | **[MEDIUM RISK]** security-control change. Require security-owner approval and a documented rollback. Do not disable inspection globally. |
+| Certificate trust, TLS protocol, application firewall, or IPS without inspection | Correct the certificate chain, time, supported protocol, or security policy that resets the uninspected connection. | **[MEDIUM RISK]** shared security-policy change. Record the prior configuration and restore it if unrelated traffic regresses. |
 | Redirect | Allow the current redirected destination as well as the original short-link host. | **[MEDIUM RISK]** network allow-list change. Re-resolve the redirect during verification and remove only the newly added destination if rollback is required. |
 | Product-target drift | Do not add speculative network rules. Escalate with the evidence package below. | No customer network change is authorized until Microsoft confirms the current target definition. |
 
