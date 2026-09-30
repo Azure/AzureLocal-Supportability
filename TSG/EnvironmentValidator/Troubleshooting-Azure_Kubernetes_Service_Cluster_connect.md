@@ -38,11 +38,11 @@
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr>
     <th style="text-align:left; width: 200px;">Name</th>
-    <td><strong>Azure_Kubernetes_Service_Azure_Arc</strong> in public Azure; <strong>Azure_Kubernetes_Service_Cluster_connect</strong> in Azure Government (Fairfax)</td>
+    <td><strong>Azure_Kubernetes_Service_Azure_Arc</strong> in public Azure; <strong>Azure_Kubernetes_Service_Cluster_connect</strong> in Azure Government</td>
   </tr>
   <tr>
     <th style="text-align:left;">Validator / test</th>
-    <td><code>Invoke-AzStackHciConnectivityValidation</code> (target "Azure Arc" in public Azure; "Cluster connect" in Fairfax)</td>
+    <td><code>Invoke-AzStackHciConnectivityValidation</code> (target "Azure Arc" in public Azure; "Cluster connect" in Azure Government)</td>
   </tr>
   <tr>
     <th style="text-align:left;">Component</th>
@@ -63,7 +63,7 @@
 </table>
 
 > **At a glance**
-> - **What it is:** an Environment Validator (Environment Checker) connectivity check that confirms each Azure Local node can reach the **Azure Arc cluster-connect endpoint** over outbound HTTPS. Public Azure reports it under `Azure_Kubernetes_Service_Azure_Arc`; Fairfax reports it under `Azure_Kubernetes_Service_Cluster_connect`.
+> - **What it is:** an Environment Validator (Environment Checker) connectivity check that confirms each Azure Local node can reach the **Azure Arc cluster-connect endpoint** over outbound HTTPS. Public Azure reports it under `Azure_Kubernetes_Service_Azure_Arc`; Azure Government reports it under `Azure_Kubernetes_Service_Cluster_connect`.
 > - **Why it matters:** cluster connect is the secure reverse tunnel that lets you reach Arc-enabled Kubernetes (AKS enabled by Azure Arc) on this cluster **without opening any inbound port**. If a node cannot reach the relay, `az connectedk8s proxy`, the Azure portal Kubernetes view, and cluster-connect-based `kubectl` access to the workload cluster stop working.
 > - **Owner:** a **network / firewall / proxy / DNS** action. The fix is to allow the node's outbound connection to the relay endpoint; it is not an Azure Local configuration change.
 > - **Read the Detail:** this check reports the outbound test result in a `Detail` string. The line `Test Analysis - Layer 3 (tnc): True/False` tells you whether the low-level TCP connection worked, which selects the right fix below.
@@ -75,7 +75,7 @@ Azure Arc **cluster connect** provides a secure way to connect to Arc-enabled Ku
 | Cloud | Result name | Display title | Relay family |
 | --- | --- | --- | --- |
 | Public Azure | `Azure_Kubernetes_Service_Azure_Arc` | Azure Arc | `servicebus.windows.net` |
-| Azure Government (Fairfax) | `Azure_Kubernetes_Service_Cluster_connect` | Cluster connect | `servicebus.usgovcloudapi.net` |
+| Azure Government | `Azure_Kubernetes_Service_Cluster_connect` | Cluster connect | `servicebus.usgovcloudapi.net` |
 
 - **What the check does:** on each node it issues an outbound HTTPS request to the
   source-defined cluster-connect relay endpoint on TCP port **443**. The current
@@ -84,15 +84,14 @@ Azure Arc **cluster connect** provides a secure way to connect to Arc-enabled Ku
   **even if it replies `403`**: the check is proving *reachability*, not
   authentication, so any HTTP response from the real endpoint (commonly `200` or
   `403`) passes.
-- **Severity:** current target definitions mark the relay endpoint **Critical** and mandatory in both public Azure and Fairfax. Older builds can carry earlier target definitions, so use the severity in the fresh result when investigating an older release.
+- **Severity:** current target definitions mark the relay endpoint **Critical** and mandatory in both public Azure and Azure Government. Older builds can carry earlier target definitions, so use the severity in the fresh result when investigating an older release.
 
 > [!IMPORTANT]
 > **Always use the source-emitted relay host.** The current public target is
 > `azgnrelay-eastus-l1.servicebus.windows.net`, regardless of the cluster's public
-> Azure region. Do not construct another `azgnrelay` hostname. The source-defined
-> Fairfax target uses a different name:
-> `azgns-usgovvirginia-fairfax-1p-public.servicebus.usgovcloudapi.net`.
-> Confirm and use the exact host emitted in the failing result's
+> Azure region. Do not construct another `azgnrelay` hostname. Azure Government
+> uses a separate source-defined host in the `servicebus.usgovcloudapi.net`
+> endpoint family. Confirm and use the exact host emitted in the failing result's
 > `TargetResourceID` or `Detail`. Testing or allowing any constructed hostname does
 > not clear the check.
 - **When it runs:** the Connectivity validator runs during **Deployment**, **Update**, **Scale-out (Add Node)**, and **Upgrade** readiness, and can also be run standalone at any time (see step 1).
@@ -117,6 +116,12 @@ Azure Arc **cluster connect** provides a secure way to connect to Arc-enabled Ku
   health-check JSON or Event ID 17205 result. The standalone
   `Invoke-AzStackHciConnectivityValidation` command is optional because the active
   manifest may omit the **Cluster connect** target.
+- An elevated PowerShell session under an account with local administrator and
+  cluster-administrator rights.
+- Working PowerShell remoting from the operator node to every cluster node. The
+  collection and verification steps use `Get-ClusterNode`, `Invoke-Command`, and
+  `Invoke-SolutionUpdatePrecheck`; resolve remoting or authorization failures before
+  interpreting connectivity results.
 
 ## Troubleshooting Steps
 
@@ -128,7 +133,7 @@ Azure Arc **cluster connect** provides a secure way to connect to Arc-enabled Ku
 Invoke-AzStackHciConnectivityValidation
 ```
 
-Look for **Azure Kubernetes Service -> Azure Arc** in public Azure or **Azure Kubernetes Service -> Cluster connect** in Fairfax. A failing target is shown as **Needs Attention / Critical** with the relay URL and a help link. The run also writes its own log and report (see below), and the failing URL to `FailedUrls.txt`.
+Look for **Azure Kubernetes Service -> Azure Arc** in public Azure or **Azure Kubernetes Service -> Cluster connect** in Azure Government. A failing target is shown as **Needs Attention / Critical** with the relay URL and a help link. The run also writes its own log and report (see below), and the failing URL to `FailedUrls.txt`.
 
 > **Note:** this target is validated as part of the cluster's **pre-update / deployment readiness** run, and on newer builds it may not appear in every ad-hoc standalone `Invoke-AzStackHciConnectivityValidation` run (the connectivity target set is versioned). So the **authoritative** confirmation for this specific check is the pre-update health-check result below (the `HealthCheckResult.EnvironmentChecker.*.json`, Event ID 17205, or the portal Updates tab), which is populated by the readiness run that actually evaluates it. After running the exact-host extraction block later in this step, use `Test-NetConnection -ComputerName $relayHost -Port 443` to test raw reachability, and use the health-check result to confirm the check's own pass/fail.
 
@@ -202,7 +207,7 @@ Get-ChildItem C:\Users\*\.AzStackHci\AzStackHciEnvironmentChecker.log -ErrorActi
 ```
 
 **Resolve the exact relay hostname before any network test.** Do not construct a
-hostname from a region. The public and Fairfax targets use different naming
+hostname from a region. Public Azure and Azure Government use different naming
 families. The following reads the newest local Event ID 17205 result and extracts
 the source-emitted Service Bus hostname from `TargetResourceID` or `Detail`:
 
@@ -338,7 +343,7 @@ Run the relay-host extraction block above in the same session before this test.
 
 ### 4. Consequences if you do not fix this
 
-While this check fails, **Azure Arc cluster connect does not work** for this cluster: you cannot reach Arc-enabled Kubernetes (AKS enabled by Azure Arc) through the secure reverse tunnel. That breaks `az connectedk8s proxy`, the Azure portal's Kubernetes resource view, and cluster-connect-based `kubectl` access to the workload cluster. Current public Azure and Fairfax target definitions mark this relay endpoint Critical and mandatory, so it can block readiness until outbound connectivity is restored. The cluster's local VMs and workloads keep running.
+While this check fails, **Azure Arc cluster connect does not work** for this cluster: you cannot reach Arc-enabled Kubernetes (AKS enabled by Azure Arc) through the secure reverse tunnel. That breaks `az connectedk8s proxy`, the Azure portal's Kubernetes resource view, and cluster-connect-based `kubectl` access to the workload cluster. Current public Azure and Azure Government target definitions mark this relay endpoint Critical and mandatory, so it can block readiness until outbound connectivity is restored. The cluster's local VMs and workloads keep running.
 
 ### 5. Remediation
 
@@ -482,7 +487,7 @@ connection succeeds; for the **proxy** and **TLS-inspection** sub-modes it does
 ## Glossary
 
 - **Azure Arc cluster connect:** a feature that provides secure connectivity to Arc-enabled Kubernetes clusters from anywhere without opening any inbound port, by maintaining an outbound connection from the cluster to an Azure Relay endpoint. This check verifies that outbound path.
-- **Result name:** public Azure emits `Azure_Kubernetes_Service_Azure_Arc` with title **Azure Arc**; Fairfax emits `Azure_Kubernetes_Service_Cluster_connect` with title **Cluster connect** for the relay endpoint.
+- **Result name:** public Azure emits `Azure_Kubernetes_Service_Azure_Arc` with title **Azure Arc**; Azure Government emits `Azure_Kubernetes_Service_Cluster_connect` with title **Cluster connect** for the relay endpoint.
 - **Azure Relay / Service Bus relay:** the Azure service that hosts the cluster-connect
   reverse tunnel. Public-cloud hosts normally use `servicebus.windows.net`; Azure
   Government hosts use `servicebus.usgovcloudapi.net`. Always read the exact hostname
