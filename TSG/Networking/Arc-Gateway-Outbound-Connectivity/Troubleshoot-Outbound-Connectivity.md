@@ -55,7 +55,7 @@ See the [Appendix](#appendix) for PowerShell examples. Record the failing endpoi
 - Use an Azure Local node for incident diagnosis. A staging device is useful before deployment only when it uses the intended DNS, routing, and firewall/proxy path. A successful staging-device test does not prove node or ARB connectivity.
 
 > [!IMPORTANT]
-> The connectivity test sends outbound requests, performs download measurements, and writes local diagnostic files. It does not remediate firewall, proxy, DNS, or certificate settings. Coordinate testing on bandwidth-constrained links, especially for cluster-wide runs. Installing or updating modules changes local software. In version 0.7.0, silent mode (`-NoOutput`) automatically accepts installation of a missing Environment Validator dependency. Before unattended runs, verify both modules are available on every target device. If Environment Validator is missing on an Azure Local node, stop rather than allowing automatic installation. Preinstall missing dependencies only on non-Azure Local test devices, with the required permissions and software-installation approval.
+> The connectivity test sends outbound requests, performs download measurements, and writes local diagnostic files. It does not remediate firewall, proxy, DNS, or certificate settings. Coordinate testing on bandwidth-constrained links, especially for cluster-wide runs. Installing or updating modules changes local software. Silent mode (`-NoOutput`) automatically accepts installation of a missing Environment Validator dependency. Before unattended runs, verify both modules are available on every target device. If Environment Validator is missing on an Azure Local node, stop rather than allowing automatic installation. Preinstall missing dependencies only on non-Azure Local test devices, with the required permissions and software-installation approval.
 
 ## Mitigation Details
 
@@ -69,7 +69,7 @@ The module supplements built-in readiness checks with:
 * **Scenario-aware endpoint selection** - uses Azure region, Arc Gateway options, and hardware vendor detection to select endpoints.
 
 > [!NOTE]
-> This article documents **AzStackHci.DiagnosticSettings 0.7.0** and connectivity output schema **1.2**. See [Key parameter changes from previous versions](#key-parameter-changes-from-previous-versions) for changes affecting earlier examples.
+> This article applies to **AzStackHci.DiagnosticSettings 0.7.0 or later**, with version **0.7.0** and connectivity output schema **1.2** as the documented baseline. Later releases may add or change parameters and output fields; check the installed command's help and returned `SchemaVersion` before using automation examples. See [Key parameter changes from previous versions](#key-parameter-changes-from-previous-versions) for changes affecting earlier examples.
 
 **Validation evidence:** `Test-AzureLocalConnectivity` version 0.7.0 was exercised repeatedly on a Windows hardware test device across all supported Azure regions and produced schema 1.2 reports with real endpoint results. The result-handling examples were also exercised with synthetic data. The retained reports demonstrate node-scope safe-proxy validation; cluster fan-out remains outside this evidence. Validation fidelity is L2.
 
@@ -225,7 +225,7 @@ Output ordering is preserved regardless of `-Parallelism` (results are re-sorted
 
 ### Supported Azure regions
 
-Version 0.7.0 accepts these exact `-AzureRegion` values (case-insensitive). These are module input names, not a guarantee that every Azure service is available in each region:
+The baseline `-AzureRegion` values for version 0.7.0 or later are listed below (case-insensitive). Later releases may expand this list; check `Get-Help Test-AzureLocalConnectivity -Full` for your installed version. These are module input names, not a guarantee that every Azure service is available in each region:
 
 * `EastUS`, `WestEurope`, `AustraliaEast`, `CanadaCentral`, `CentralIndia`, `JapanEast`, `SouthCentral`, `SouthEastAsia`, `USGovVirginia`
 
@@ -251,7 +251,7 @@ The default HTML report includes:
 * **Scrollable table** — A synchronized dual-scrollbar table allows horizontal scrolling of the wide results table from both the top and bottom.
 * **Full endpoint details** — Each row includes the URL, port, Arc Gateway support status, source, IP address, Layer 7 status, response, response time, certificate chain details (leaf, intermediate, root), and notes.
 
-Version 0.7.0 adds conditional **Direct TCP Diagnostics** and **DNS Diagnostics** columns when evidence is available. IP addresses are displayed as text, preferring IPv4 when both families are returned. This display preference does not change the tested TCP destination.
+Starting with version 0.7.0, the report includes conditional **Direct TCP Diagnostics** and **DNS Diagnostics** columns when evidence is available. IP addresses are displayed as text, preferring IPv4 when both families are returned. This display preference does not change the tested TCP destination.
 
 ### JSON output (always generated)
 
@@ -331,9 +331,11 @@ With `-IncludeTCPConnectivityTests`, `TCPDiagnostics` captures direct TCP source
 
 ## Programmatic use with `-PassThru` (automation)
 
-The `-PassThru` switch returns a **structured object** (`[pscustomobject]`) for automation without re-parsing the JSON report. In module version 0.7.0, the object and JSON use `SchemaVersion` `1.2`. Node-scope endpoint rows are under `.Results`; cluster-scope node objects are under `.Nodes`.
+The `-PassThru` switch returns a **structured object** (`[pscustomobject]`) for automation without re-parsing the JSON report. The examples for module version 0.7.0 or later use the schema `1.2` contract introduced in 0.7.0. Check the returned `SchemaVersion` when using later releases. Node-scope endpoint rows are under `.Results`; cluster-scope node objects are under `.Nodes`.
 
 > **Caller contract:** assign the result directly (`$ConnectivityTests = Test-AzureLocalConnectivity ... -PassThru`). Filter `$ConnectivityTests.Results`, keeping `$ConnectivityTests` for run-level metadata. Verify both modules are available according to [Prerequisites](#prerequisites), supply the region and scenario inputs, and disable the upload prompt explicitly. On Azure Local nodes, a missing Environment Validator dependency is a stop condition, not an instruction to install it.
+
+The examples below display the returned schema version immediately after capturing results, using `$ConnectivityTests.SchemaVersion` for node scope and `$cluster.SchemaVersion` for cluster scope. Reading this property is **[READ-ONLY]**; risk is not applicable. The documented baseline returns `1.2`. A different version does not necessarily indicate a failure, but if the value differs or is missing, confirm that the fields your automation relies on remain compatible before interpreting results or using them as an automated gate.
 
 ### Node scope (`-Scope Node`, default)
 
@@ -357,6 +359,8 @@ The following example fails on non-advisory connectivity failures and critical A
 $ConnectivityTests = Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
     -KeyVaultURL "https://<YourKeyVaultName>.vault.azure.net" `
     -NoAutoUpdate -ExcludeUploadResults -NoOutput -PassThru -ErrorAction Stop
+$ConnectivityTests.SchemaVersion
+
 if ($null -eq $ConnectivityTests -or $null -eq $ConnectivityTests.Results -or @($ConnectivityTests.Results).Count -eq 0) {
     throw "No endpoint results were returned. Review the transcript and errors."
 }
@@ -404,6 +408,8 @@ With `-Scope Cluster -PassThru`, the function returns the **same unified structu
 $cluster = Test-AzureLocalConnectivity -AzureRegion "<AzureRegionName>" `
     -KeyVaultURL "https://<YourKeyVaultName>.vault.azure.net" `
     -Scope Cluster -NoAutoUpdate -ExcludeUploadResults -PassThru -ErrorAction Stop
+$cluster.SchemaVersion
+
 if ($null -eq $cluster -or $null -eq $cluster.Nodes -or @($cluster.Nodes).Count -eq 0) {
     throw "No cluster results were returned. Review the pre-flight errors."
 }
@@ -434,7 +440,7 @@ Review files under your organization's data-handling policy before sharing: repo
 
 ## Demo and example output
 
-The following recording illustrates the interactive workflow. It is not a version-specific reference for the 0.7.0 report layout; use the parameter and output guidance in this article for current behavior.
+The following recording illustrates the interactive workflow. It is not a version-specific reference for the report layout in 0.7.0 or later; use the parameter and output guidance in this article, together with your installed command's help.
 
 The primary source of information is **opening the HTML output file** in a web browser on your laptop or desktop PC. The HTML report provides an interactive, color-coded view of all test results. Alternatively, use the JSON output for programmatic analysis or the CSV format for spreadsheet workflows.
 
@@ -442,7 +448,7 @@ The primary source of information is **opening the HTML output file** in a web b
 
 ## Parameter reference
 
-The following reference summarizes the public parameters for version 0.7.0; it is not a script to run. Use `Get-Command Test-AzureLocalConnectivity -Syntax` for installed command syntax and `Get-Help Test-AzureLocalConnectivity -Full` for help.
+The following reference summarizes the baseline public parameters for version 0.7.0 or later; it is not an exhaustive reference for additions in later releases or a script to run. Use `Get-Command Test-AzureLocalConnectivity -Syntax` for installed command syntax and `Get-Help Test-AzureLocalConnectivity -Full` for help.
 
 <details>
 <summary>Parameter summary (click to expand)</summary>
@@ -564,15 +570,15 @@ param (
 | `-PassThru` | Structured object since 0.6.8; **schema 1.2 in 0.7.0** adds redirect classification and TCP/DNS diagnostic evidence. Node rows remain under `.Results`; cluster node objects remain under `.Nodes`. See [Programmatic use with -PassThru](#programmatic-use-with--passthru-automation). |
 | `-AutoUpdate` | **New in 0.6.7.** Opt in to installing a newer module version from PowerShell Gallery. An installation stops the current run; import in a fresh session and rerun. Default is notification only. |
 | `-ForceGitHubEndpointsUpdate` | **New in 0.6.8.** Forces the endpoint-list refresh from GitHub even when `-NoAutoUpdate` is specified, leaving the installed module untouched. Only meaningful together with `-NoAutoUpdate`; falls back to cached endpoint files if the download is blocked. |
-| `-ArcGatewayDeployment` and `-ArcGatewayURL` | In 0.7.0, supplying the URL automatically enables gateway mode. The switch remains supported and requires the URL if used. |
+| `-ArcGatewayDeployment` and `-ArcGatewayURL` | Starting with 0.7.0, supplying the URL automatically enables gateway mode. The switch remains supported and requires the URL if used. |
 | `-OutputFormat` | Controls the report format: `HTML` (default) or `CSV`. JSON is always generated alongside. |
 | `-IncludeOEMUrls` | Allows testing OEM hardware partner specific endpoints (DataOn, Dell, HPE, Hitachi, Lenovo, or TestAll). |
 | `-NoAutoUpdate` | Skips this module's PowerShell Gallery update check and GitHub endpoint-list refresh. Does not suppress Environment Validator's endpoint download or connectivity probes. |
-| `-NoOutput` | Suppresses normal console output, not every warning/error or upload prompt. In 0.7.0, silent mode automatically accepts installation of missing Environment Validator. Verify dependencies before unattended runs; stop if Environment Validator is missing on an Azure Local node. |
+| `-NoOutput` | Suppresses normal console output, not every warning/error or upload prompt. Silent mode automatically accepts installation of missing Environment Validator. Verify dependencies before unattended runs; stop if Environment Validator is missing on an Azure Local node. |
 | `USGovVirginia` | Azure region included in the `-AzureRegion` validated set. |
 | HTML output | Default output format is HTML with color-coded rows and summary section. |
 | JSON output | **Always generated** alongside the primary report format. |
-| Download speed test | In 0.7.0, bounded recovery handles eligible transport failures, and numeric throughput requires a complete transfer. A failed measurement does not prevent endpoint reporting. |
+| Download speed test | Starting with 0.7.0, bounded recovery handles eligible transport failures, and numeric throughput requires a complete transfer. A failed measurement does not prevent endpoint reporting. |
 | Private Link detection | Detects and warns if endpoints resolve to RFC1918 private IP addresses (possible Private Link configuration). |
 
 ## Appendix
