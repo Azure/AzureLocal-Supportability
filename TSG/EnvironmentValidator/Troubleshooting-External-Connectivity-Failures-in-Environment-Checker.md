@@ -457,18 +457,22 @@ cloud, Arc Gateway state, and manifest version. Always use the current failed re
 `Name`, `DisplayName`, `TargetResourceName`, `AdditionalData.Status`, and
 `AdditionalData.Detail`.
 
-### Example 1: Azure Arc regional service endpoint
+### Example 1: Azure Arc service endpoint
 
 | Field | Representative value |
 | --- | --- |
 | Result name | `Azure_Kubernetes_Service_Azure_Arc` |
 | Display name | `Azure Arc` |
-| Target family | `https://<region>.obo.arc.azure.com:8084` |
+| Current manifest target | `https://gbl.his.arc.azure.com` |
 | Common evidence | `Unable to connect`, timeout, HTTP 403, or a TLS send failure |
 | Required distinction | The same result name can represent several Azure Arc endpoint families. Filter on the exact emitted target URI. |
 
-This family demonstrates why a generic `TCP 443` test is insufficient. The emitted
-regional target uses HTTPS on port `8084`.
+The global manifest resolved from `https://aka.ms/hciconnectivitytargets` on
+October 1, 2026 emits `gbl.his.arc.azure.com` for this Azure Arc target. A
+September 30, 2026 fleet snapshot also contained older, fleet-observed
+`https://<region>.obo.arc.azure.com:8084` results. That older family is historical
+evidence, not a current allow-list value. In every case, parse and test the URI emitted
+by the affected build rather than copying either example.
 
 **[READ-ONLY]** Parse and test the exact target:
 
