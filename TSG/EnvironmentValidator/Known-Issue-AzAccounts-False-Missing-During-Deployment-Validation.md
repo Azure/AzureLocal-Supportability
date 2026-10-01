@@ -85,8 +85,8 @@ signal for this article.
 | Azure portal or ARM deployment output | Shown | Open the failed Validate operation and inspect its Environment Validator results for the result name and message above. |
 | Node deployment logs | Shown | The same result is written under the available deployment log roots: `C:\CloudDeployment\Logs`, `C:\CloudContent\MASLogs`, or `C:\MASLogs`. |
 | Windows event logs | shown | Open the `AzStackHciEnvironmentChecker` log and inspect shared Event ID `17205` for `AzStackHci_OSImageRecipeValidation_Package_Version` from the failed validation run. |
-| Cluster logs and Failover Cluster Manager | not-evident | The failure occurs during deployment Validate and does not identify a cluster role or resource failure. |
-| Windows Admin Center | not-evident | This issue is identified from the failed deployment validation result, not a Windows Admin Center health signal. |
+| Cluster logs and Failover Cluster Manager | absent | The failure occurs during deployment Validate and does not identify a cluster role or resource failure. |
+| Windows Admin Center | absent | This issue is identified from the failed deployment validation result, not a Windows Admin Center health signal. |
 
 ## Check whether you are affected
 
