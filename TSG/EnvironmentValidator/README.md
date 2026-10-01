@@ -24,6 +24,7 @@ This folder contains the TSG's related to Environment Validators.
 * [Troubleshooting Secure Boot Status (AzStackHci_Security_SecureBootStatus)](./Troubleshooting-AzStackHci_Security_SecureBootStatus.md)
 * [Troubleshooting ASR Rule Group Policy Conflict (Security AsrRuleGPConflict)](./Troubleshooting-AzStackHci_Security_AsrRuleGPConflict.md)
 * [Troubleshooting ARB Resource Lock (ARBStack ARBIsLocked)](./Troubleshooting-AzStackHci_ARBStack_ARBIsLocked.md)
+* [Troubleshooting Azure Kubernetes Service Cluster Connect (Azure_Kubernetes_Service_Cluster_connect)](./Troubleshooting-Azure_Kubernetes_Service_Cluster_connect.md)
 * [Troubleshooting Subscription State (AzStackHci_Subscription_State)](./Troubleshooting-AzStackHci_Subscription_State.md)
 * [Known Issue: High Disk Space Usage in TEMP](Known-Issue-High-Disk-Space-usage-in-TEMP.md)
 * [Known Issue: WinRM cannot process the configuration request](Known-Issue-WinRM-cannot-process-the-configuration-request.md)
