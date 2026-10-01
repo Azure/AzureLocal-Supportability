@@ -39,6 +39,7 @@
 
 - [Overview](#overview)
 - [Requirements](#requirements)
+- [Recommended network subnet design](#recommended-network-subnet-design)
 - [Known validation limitation](#known-validation-limitation)
 - [Symptoms and impact](#symptoms-and-impact)
 - [Diagnosis](#diagnosis)
@@ -51,7 +52,7 @@
 
 This validator checks whether the management IPv4 subnet intersects any storage IPv4 subnet. Management and storage address ranges must be separate. Each storage subnet must also be unique and must not intersect another storage subnet.
 
-An overlap exists whenever two address ranges share one or more addresses. The prefixes don't need to be identical. For example, `10.10.16.0/22` overlaps `10.10.16.0/24` because the `/22` contains the entire `/24`.
+An overlap exists whenever two address ranges share one or more addresses. The prefixes don't need to be identical. For example, `198.51.100.0/24` overlaps `198.51.100.0/25` because the `/24` contains the entire `/25`.
 
 Separating traffic with VLANs doesn't make overlapping Layer 3 address ranges valid.
 
@@ -68,14 +69,44 @@ Examples:
 
 | Management subnet | Storage subnet | Result | Reason |
 | --- | --- | --- | --- |
-| `10.10.16.0/22` | `10.10.16.0/24` | Invalid | The management range contains the storage range. |
-| `10.10.16.0/24` | `10.10.16.0/22` | Invalid | The storage range contains the management range. |
-| `10.10.16.0/24` | `10.10.16.0/24` | Invalid | The ranges are identical. |
-| `10.10.16.0/24` | `10.10.17.0/24` | Valid | The ranges don't intersect. |
+| `198.51.100.0/24` | `198.51.100.0/25` | Invalid | The management range contains the storage range. |
+| `198.51.100.0/25` | `198.51.100.0/24` | Invalid | The storage range contains the management range. |
+| `198.51.100.0/24` | `198.51.100.0/24` | Invalid | The ranges are identical. |
+| `198.51.100.0/24` | `203.0.113.0/24` | Valid | The ranges don't intersect. |
+
+The prefixes in this guide use the address blocks reserved for documentation. Don't copy them into a deployment.
+
+## Recommended network subnet design
+
+Choose address ranges through the customer network-planning and IP address management process. Don't use a fixed range only because it appears in an example.
+
+A valid plan has these properties:
+
+- The management range is routable as required by the customer environment.
+- The management range doesn't contain, and isn't contained by, a storage range.
+- Each storage range is unique and doesn't contain, and isn't contained by, another storage range.
+- VLAN separation complements the IP plan but doesn't replace non-overlapping Layer 3 ranges.
+- Every node and deployment input uses the approved prefixes consistently.
+
+Example valid design:
+
+```text
+Management: 198.51.100.0/24
+Storage 1:  203.0.113.0/25
+Storage 2:  203.0.113.128/25
+```
+
+Example invalid design:
+
+```text
+Management: 198.51.100.0/24
+Storage 1:  198.51.100.0/25   # Contained by the management range
+Storage 2:  203.0.113.0/24
+```
 
 ## Known validation limitation
 
-Some Environment Checker versions can report success for a containment-style overlap when the prefixes have different prefix lengths. For example, the validator might not detect that management prefix `10.10.16.0/22` contains storage prefix `10.10.16.0/24`.
+Some Environment Checker versions can report success for a containment-style overlap when the prefixes have different prefix lengths. For example, the validator might not detect that management prefix `198.51.100.0/24` contains storage prefix `198.51.100.0/25`.
 
 The affected and corrected package-version boundaries aren't established in this guide. Independently compare the complete CIDR ranges regardless of the installed Environment Checker version.
 
@@ -95,7 +126,7 @@ An overlapping configuration can cause ambiguous route and cluster-network selec
 Example validator failure:
 
 ```text
-Management IP 10.71.1.10 on subnet 10.71.1.0/24 overlaps with storage subnet(s): 10.71.1.0/24.
+Management IP <management IP> on subnet <management CIDR> overlaps with storage subnet(s): <storage CIDR>.
 ```
 
 ## Diagnosis
@@ -140,6 +171,12 @@ Run this script from a PowerShell session on an administrative workstation or Az
 
 ```powershell
 $ErrorActionPreference = 'Stop'
+
+$managementCidr = '<management CIDR>'
+$storageCidrs = @(
+    '<storage CIDR 1>'
+    '<storage CIDR 2>'
+)
 
 function ConvertTo-IPv4Number {
     param(
@@ -190,12 +227,6 @@ function Get-IPv4CidrRange {
     }
 }
 
-$managementCidr = '10.10.16.0/22'
-$storageCidrs = @(
-    '10.10.16.0/24'
-    '10.10.20.0/24'
-)
-
 $managementRange = Get-IPv4CidrRange -Cidr $managementCidr
 $storageRanges = $storageCidrs | ForEach-Object {
     Get-IPv4CidrRange -Cidr $_
@@ -232,11 +263,11 @@ $storageComparisons
 Example affected output:
 
 ```text
-FirstPrefix     SecondPrefix    Overlaps
------------     ------------    --------
-10.10.16.0/22   10.10.16.0/24       True
-10.10.16.0/22   10.10.20.0/24      False
-10.10.16.0/24   10.10.20.0/24      False
+FirstPrefix       SecondPrefix      Overlaps
+-----------       ------------      --------
+198.51.100.0/24   198.51.100.0/25       True
+198.51.100.0/24   203.0.113.0/24       False
+198.51.100.0/25   203.0.113.0/24       False
 ```
 
 **Expected healthy result:** Every `Overlaps` value is `False`.
