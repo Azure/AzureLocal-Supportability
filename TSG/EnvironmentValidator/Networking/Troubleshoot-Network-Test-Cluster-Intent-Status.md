@@ -1,23 +1,3 @@
-<!-- tsg-metadata
-{
-  "schema": "azure-local-supportability/tsg-metadata/v1",
-  "document_type": "troubleshoot",
-  "products": ["Azure Local"],
-  "detector": {
-    "type": "envchecker",
-    "signal": "AzStackHci_Network_Test_Network_Cluster_Intent_Status"
-  },
-  "validation": {
-    "fidelity_level": "L1",
-    "technical_grade": null,
-    "reproduction_substrate": "hardware",
-    "automation_status": "manual",
-    "last_validated": "2026-09-30",
-    "spec_ref": ""
-  }
-}
--->
-
 # AzStackHci_Network_Test_Network_Cluster_Intent_Status
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -198,24 +178,9 @@ If you've resolved the underlying issue, you can retry the intent provisioning:
 Intent <IntentName> on host <NodeName> in pending state and hasn't stabilized. ConfigurationStatus: Validating ProvisioningStatus: <empty>
 ```
 
-This section applies only when repeated samples show the same intent and host alternating between `Validating` and `Success / Completed`. An individual `Validating` result does not prove this issue because Network ATC can report `Validating` during normal drift detection.
+An individual `Validating` result does not prove this issue because Network ATC can report `Validating` during normal drift detection.
 
-Do not use this mitigation when:
-
-- An intent remains `Failed`, `ProvisioningFailed`, or `Pending`.
-- `Get-NetIntentStatus` or the Network ATC event logs report a concrete adapter, symmetry, VLAN, RDMA, DCB, IP, or switch error.
-- An administrator is actively changing intents, adapters, switches, VLANs, IP addresses, or GlobalOverrides.
-- `Get-NetIntent -GlobalOverrides` does not return an existing cluster override.
-
-**Contributing factor:** This behavior has been observed after a Global Intent failure. Reapplying the existing GlobalOverrides values can stabilize the status, but the exact root cause and affected or fixed build boundaries are not established by this article.
-
-#### Remediation Steps
-
-##### Step 1: Confirm the Flipping Behavior
-
-**Action type: [READ-ONLY]**
-
-Run `Get-NetIntentStatus` repeatedly and preserve timestamps:
+Confirm that the same intent and host repeatedly alternate between `Validating` and `Success / Completed`:
 
 ```powershell
 $ErrorActionPreference = "Stop"
@@ -233,153 +198,9 @@ $ErrorActionPreference = "Stop"
 }
 ```
 
-Proceed only if the same intent and host transition between `Validating` and `Success / Completed` during the observation period.
+If the same intent and host transition between `Validating` and `Success / Completed` during the observation period, follow [Troubleshoot Network ATC intent status flapping](../../Networking/Host-Network/Troubleshoot-NetworkATC-Intent-Status-Flapping.md).
 
-**Stop condition:** If the status remains stable or becomes failed with a concrete error, do not continue with this mitigation.
-
-##### Step 2: Exclude a Concrete Network ATC Failure
-
-**Action type: [READ-ONLY]**
-
-Review these event channels for the same observation window:
-
-- `Microsoft-Windows-Networking-NetworkAtc/Operational`
-- `Microsoft-Windows-Networking-NetworkAtc/Admin`
-
-**Stop condition:** If the logs identify a concrete adapter, configuration, or hardware failure, resolve that issue instead. Do not use GlobalOverrides reapplication to bypass an understood failure.
-
-##### Step 3: Capture GlobalOverrides and Check Safety Gates
-
-**Action type: [READ-ONLY]**
-
-Before making a cluster-scoped change:
-
-1. Confirm that all cluster nodes are up, critical cluster groups are online, and virtual disks are healthy.
-2. Schedule a maintenance window and monitor cluster and workload connectivity.
-3. Confirm that out-of-band access is available for every node.
-4. Capture the existing GlobalOverrides values.
-
-```powershell
-$ErrorActionPreference = "Stop"
-
-Get-ClusterNode
-Get-ClusterGroup
-Get-VirtualDisk
-
-$globalIntent = Get-NetIntent -GlobalOverrides
-if ($null -eq $globalIntent -or $null -eq $globalIntent.ClusterOverride) {
-    throw "No existing Network ATC cluster override was found. Stop and escalate."
-}
-
-$clusterOverride = $globalIntent.ClusterOverride
-$clusterOverride | Format-List *
-Get-NetIntentStatus -GlobalOverrides | Format-List *
-```
-
-Save the complete output.
-
-The field-observed mitigation in this section is limited to the following configurable properties:
-
-- `EnableNetworkNaming`
-- `EnableLiveMigrationNetworkSelection`
-
-**Stop condition:** Do not continue if the current values are ambiguous, cluster health is degraded, out-of-band access is unavailable, or another configurable GlobalOverrides property is populated. Escalate to Microsoft CSS or the Windows Network ATC product group.
-
-##### Step 4: Reapply the Existing GlobalOverrides Values
-
-**Risk label: [HIGH RISK]**
-
-This operation removes and recreates a cluster-scoped Network ATC object. It can trigger Network ATC reconciliation and might interrupt management, compute, live migration, or storage connectivity. Do not remove or recreate individual production intents as part of this procedure.
-
-Create the replacement object before removing the current object. Copy the existing values exactly; do not use values from another cluster or from an example.
-
-```powershell
-$ErrorActionPreference = "Stop"
-
-$newClusterOverride = New-NetIntentGlobalClusterOverrides
-
-if ($null -ne $clusterOverride.EnableNetworkNaming) {
-    $newClusterOverride.EnableNetworkNaming =
-        $clusterOverride.EnableNetworkNaming
-}
-
-if ($null -ne $clusterOverride.EnableLiveMigrationNetworkSelection) {
-    $newClusterOverride.EnableLiveMigrationNetworkSelection =
-        $clusterOverride.EnableLiveMigrationNetworkSelection
-}
-
-Write-Host "Existing GlobalOverrides values:"
-$clusterOverride | Format-List *
-
-Write-Host "Replacement GlobalOverrides values:"
-$newClusterOverride | Format-List *
-```
-
-Compare the existing and replacement values before continuing.
-
-**Stop condition:** If the values do not match, do not remove the current GlobalOverrides object.
-
-```powershell
-Remove-NetIntent -GlobalOverrides
-Add-NetIntent -GlobalClusterOverrides $newClusterOverride
-```
-
-Run this sequence once. Do not loop the remove and add operation.
-
-**Expected result:** The GlobalOverrides object is recreated with the same effective values.
-
-**Rollback:** If `Add-NetIntent` fails, immediately restore the captured object:
-
-```powershell
-Add-NetIntent -GlobalClusterOverrides $newClusterOverride
-
-Get-NetIntent -GlobalOverrides |
-    Select-Object -ExpandProperty ClusterOverride |
-    Format-List *
-```
-
-If the object cannot be restored or connectivity is affected, stop all further Network ATC changes and escalate with the command output and event logs.
-
-##### Step 5: Verify Stability
-
-**Action type: [READ-ONLY]**
-
-First verify that the effective GlobalOverrides values match the captured values:
-
-```powershell
-Get-NetIntent -GlobalOverrides |
-    Select-Object -ExpandProperty ClusterOverride |
-    Format-List *
-```
-
-Then repeat the status observation:
-
-```powershell
-1..10 | ForEach-Object {
-    Write-Host "Run $_ of 10 - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-
-    Get-NetIntentStatus |
-        Format-Table IntentName, Host, LastConfigApplied,
-            ConfigurationStatus, ProvisioningStatus, Error -AutoSize
-
-    if ($_ -lt 10) {
-        Start-Sleep -Seconds 30
-    }
-}
-```
-
-The mitigation succeeds only when every applicable intent remains `Success / Completed` throughout the observation period and no new Network ATC Admin or Operational error appears.
-
-If an update was blocked, rerun update readiness validation before retrying the update. Update success alone does not prove that the intent status is stable.
-
-If status continues to oscillate, do not repeat the mitigation or remove and recreate the cluster intents. Escalate with:
-
-- Azure Local solution and OS versions.
-- Before-and-after repeated `Get-NetIntentStatus` output.
-- Before-and-after GlobalOverrides values.
-- Network ATC Operational and Admin event logs covering the observation and mitigation window.
-- Cluster, storage, and workload health before and after the operation.
-- The exact output and timestamp of any failed mitigation or rollback step.
+If the status remains stable or becomes failed with a concrete error, continue with the applicable failed-intent branch in this article instead.
 
 ---
 
