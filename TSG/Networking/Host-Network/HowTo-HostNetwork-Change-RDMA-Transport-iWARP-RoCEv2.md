@@ -114,7 +114,7 @@ Use the command-line checks in this guide as the authoritative go/no-go gates. O
 | Node PowerShell | Network ATC intent and convergence, adapter transport, RDMA capability, cluster resources, CSVs, storage health, and SBL connections. | This is the primary execution and verification surface for this guide. |
 | Failover Cluster Manager | Clustered VM roles, MOC, the Storage Pool resource, CSV state, owner node, and pending or failed resource transitions. | Use it as a second read-only view. Do not select similarly named resources from the GUI instead of the sealed identities. |
 | Windows Admin Center on a standalone host | High-level cluster, server, VM, network, and storage health. | Useful for situational awareness. The target RDMA transport and Network ATC convergence may not be fully exposed, so do not use Windows Admin Center alone as the completion gate. |
-| Windows Admin Center in the Azure portal | The Azure Local cluster and server extension can show high-level health and management symptoms. | The transport override, per-adapter readback, and complete Network ATC convergence evidence are not evident there for this change. Use the PowerShell gates in this guide. |
+| Windows Admin Center in the Azure portal | The Azure Local cluster and server extension can show high-level health and management symptoms. | This procedure has not characterized transport-override or per-adapter convergence evidence in this surface. Use the PowerShell gates in this guide as the required authority. |
 | Azure portal | Azure Local resource connectivity and Azure Local VM management symptoms. | Use it to observe management-plane recovery after MOC and the appliance return. It is not the transport or storage recovery authority. |
 | Windows Event Viewer | Network ATC, failover-clustering, SMB, Hyper-V, and storage events near the change window. | Review relevant operational logs when a state transition or convergence check fails. Save the event time, provider, ID, and message in the support package. |
 | Cluster logs | Resource arbitration and state transitions across the maintenance window. | If escalation is required, run `Get-ClusterLog -UseLocalTime -TimeSpan 60 -Destination $EvidenceRoot` before logs age out. |
@@ -152,6 +152,15 @@ Windows can show the consequence of a stalled path:
 Collect a bounded, synchronized Windows timeline from every node:
 
 ```powershell
+$Cluster = Get-Cluster -ErrorAction Stop
+$Nodes = @(Get-ClusterNode -ErrorAction Stop | Sort-Object Name)
+$EvidenceRoot = Join-Path $env:SystemDrive (
+    "AzureLocal-RdmaTransport-Preflight-{0}" -f
+    (Get-Date -Format 'yyyyMMdd-HHmmss')
+)
+New-Item -ItemType Directory -Path $EvidenceRoot `
+    -ErrorAction Stop | Out-Null
+
 $EventStart = (Get-Date).AddMinutes(-30)
 
 $ClusterEvents = Invoke-Command -ComputerName $Nodes.Name `
@@ -258,7 +267,9 @@ Run all commands from an elevated Windows PowerShell session on one cluster node
 Set the change direction and create an evidence folder on a local system drive. Do not place the evidence folder on a CSV.
 
 ```powershell
-$ErrorActionPreference = 'Stop'
+$PreviousErrorActionPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Stop'
 
 $TargetTransport = 'iWARP' # Use either 'iWARP' or 'RoCEv2'
 $TransportValues = @{
@@ -316,6 +327,37 @@ try {
         "unavailable. Stop and reconcile the pointer before continuing."
     )
 }
+
+$InitialStatePath = Join-Path $EvidenceRoot 'phase-state.json'
+$InitialTempPath = "$InitialStatePath.tmp"
+try {
+    [pscustomobject]@{
+        ChangeId = $ChangeId
+        Phase = 'Initialized'
+        UpdatedUtc = (Get-Date).ToUniversalTime().ToString('o')
+        TargetTransport = $TargetTransport
+        Operation = $Operation
+        DesiredTransport = $DesiredTransport
+        DesiredTransportValue = $DesiredTransportValue
+        ActiveValidationStartUtc = ''
+        RollbackOriginPhase = ''
+    } | ConvertTo-Json |
+        Set-Content -LiteralPath $InitialTempPath -ErrorAction Stop
+    Move-Item -LiteralPath $InitialTempPath `
+        -Destination $InitialStatePath -Force -ErrorAction Stop
+}
+catch {
+    Remove-Item -LiteralPath $InitialTempPath -Force `
+        -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $ActivePointer -Force `
+        -ErrorAction SilentlyContinue
+    throw (
+        "The initial phase state could not be persisted. The active pointer " +
+        "was removed so the operation can be started again safely. " +
+        "$($_.Exception.Message)"
+    )
+}
+
 Start-Transcript -Path (Join-Path $EvidenceRoot 'operator-transcript.txt') -ErrorAction Stop
 
 $Cluster = Get-Cluster -ErrorAction Stop
@@ -511,6 +553,10 @@ function Set-ChangePhase {
 }
 
 Set-ChangePhase -Phase Initialized
+}
+finally {
+    $ErrorActionPreference = $PreviousErrorActionPreference
+}
 ```
 
 Expected result:
@@ -777,7 +823,7 @@ if (
     throw "Every CSV must be Online before the change."
 }
 
-if ($TargetTransport -eq 'iWARP') {
+if ($SourceTransport -eq 'iWARP' -or $TargetTransport -eq 'iWARP') {
     $FirewallState = @(Invoke-Command -ComputerName $Nodes.Name -ScriptBlock {
         $Rules = @(Get-NetFirewallRule -Name 'FPSSMBD-iWARP-In-TCP' `
             -ErrorAction SilentlyContinue)
@@ -811,7 +857,7 @@ Expected result:
 - One non-primordial pool and all virtual disks are healthy.
 - `Get-StorageJob` returns no rows.
 - Every CSV is online.
-- For an iWARP target, the built-in firewall rule is present and usable on every node.
+- When either the source or target is iWARP, the built-in firewall rule is present and usable on every node.
 
 Save all output under `$EvidenceRoot`. Stop on any deviation.
 
@@ -1071,7 +1117,10 @@ Stop if any identity is ambiguous. Do not select the appliance VM or infrastruct
 Do not restart the article from the beginning and do not repeat the last state-changing command blindly. Open an elevated Windows PowerShell session on a cluster node, load the sealed state, inspect the last completed phase, and re-read the authoritative resource state.
 
 ```powershell
-$ErrorActionPreference = 'Stop'
+$PreviousErrorActionPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Stop'
+
 $ActivePointer = 'C:\AzureLocal-RdmaTransport-Active.txt'
 if (-not (Test-Path -LiteralPath $ActivePointer)) {
     throw "No active RDMA transport change pointer exists."
@@ -1474,6 +1523,10 @@ function Set-ChangePhase {
 }
 
 $PhaseState | Format-List *
+}
+finally {
+    $ErrorActionPreference = $PreviousErrorActionPreference
+}
 ```
 
 Re-run only the read-only verification for the next phase. The named phase means the previous phase completed, not that the current live state is still healthy.
@@ -2684,9 +2737,132 @@ Stop if the clean hold cannot complete within 30 minutes. Do not start customer 
 
 ## Return workload startup to the application owner
 
+**Action type:** [STATE-CHANGING]
+
+**Risk:** [HIGH RISK]
+
+**Owner:** Workload owner, with the cluster administrator monitoring storage and platform health
+
+**Required phase:** `StorageHoldPassed`
+
+Before authorizing any customer VM startup, prove that the durable checkpoint and the
+current storage state still satisfy the startup gate:
+
+```powershell
+$StartupPhaseState = Get-Content -LiteralPath (
+    Join-Path $EvidenceRoot 'phase-state.json'
+) -Raw | ConvertFrom-Json
+if ("$($StartupPhaseState.Phase)" -ne 'StorageHoldPassed') {
+    throw "Customer workload startup requires the durable StorageHoldPassed phase."
+}
+
+$StartupHealthFaults = @(Get-HealthFault -ErrorAction Stop)
+$StartupStorageJobs = @(Get-StorageJob -ErrorAction Stop)
+$StartupVirtualDisks = @(Get-VirtualDisk -ErrorAction Stop)
+$StartupCsvs = @(Get-ClusterSharedVolume -ErrorAction Stop)
+$StartupBadVirtualDisks = @($StartupVirtualDisks | Where-Object {
+    "$($_.HealthStatus)" -ne 'Healthy' -or
+    "$($_.OperationalStatus)" -notmatch 'OK'
+})
+$StartupBadCsvs = @($StartupCsvs | Where-Object State -ne 'Online')
+
+if (
+    $StartupHealthFaults.Count -gt 0 -or
+    $StartupStorageJobs.Count -gt 0 -or
+    $StartupVirtualDisks.Count -lt 1 -or
+    $StartupBadVirtualDisks.Count -gt 0 -or
+    $StartupCsvs.Count -lt 1 -or
+    $StartupBadCsvs.Count -gt 0
+) {
+    throw "Storage or platform health changed after the clean hold. Do not start customer workloads."
+}
+```
+
 The application or VM owner decides the startup order and starts the customer workloads. The cluster administrator does not bulk-start VMs without workload-owner approval.
 
-After startup, verify that every recorded customer VM is `Running` and that its Hyper-V heartbeat and shutdown integration services are healthy.
+After startup, verify every recorded customer VM by its sealed VM ID. Require the
+clustered VM group and Hyper-V VM to be running, and require both the `Heartbeat` and
+`Shutdown` integration services to exist, be enabled, and report `OK`:
+
+```powershell
+$ResourceManifest = Get-Content -LiteralPath (
+    Join-Path $EvidenceRoot 'resource-manifest.json'
+) -Raw | ConvertFrom-Json
+$CustomerVmEntries = @($ResourceManifest.ClusteredVms | Where-Object {
+    "$($_.VmId)" -ne "$($ResourceManifest.ControlPlaneVm.VmId)"
+})
+
+$VmIntegrationState = @($CustomerVmEntries | ForEach-Object {
+    $Entry = $_
+    $Group = Get-ClusterGroup -Name "$($Entry.GroupName)" -ErrorAction Stop
+    $RemoteState = @(Invoke-Command -ComputerName "$($Group.OwnerNode)" `
+        -ArgumentList "$($Entry.VmId)" -ScriptBlock {
+            param($SealedVmId)
+
+            $Vm = Get-VM -Id ([guid]$SealedVmId) -ErrorAction Stop
+            $Services = @(Get-VMIntegrationService -VM $Vm -ErrorAction Stop)
+            foreach ($ServiceName in @('Heartbeat', 'Shutdown')) {
+                $Match = @($Services | Where-Object Name -eq $ServiceName)
+                if ($Match.Count -eq 1) {
+                    [pscustomobject]@{
+                        VmId = "$($Vm.VMId)"
+                        VmName = "$($Vm.Name)"
+                        VmState = "$($Vm.State)"
+                        Service = $ServiceName
+                        Present = $true
+                        Enabled = [bool]$Match[0].Enabled
+                        PrimaryStatus = "$($Match[0].PrimaryStatusDescription)"
+                        SecondaryStatus = "$($Match[0].SecondaryStatusDescription)"
+                    }
+                } else {
+                    [pscustomobject]@{
+                        VmId = "$($Vm.VMId)"
+                        VmName = "$($Vm.Name)"
+                        VmState = "$($Vm.State)"
+                        Service = $ServiceName
+                        Present = $false
+                        Enabled = $false
+                        PrimaryStatus = ''
+                        SecondaryStatus = ''
+                    }
+                }
+            }
+        } -ErrorAction Stop)
+
+    foreach ($Row in $RemoteState) {
+        [pscustomobject]@{
+            GroupName = "$($Entry.GroupName)"
+            GroupState = "$($Group.State)"
+            OwnerNode = "$($Group.OwnerNode)"
+            VmId = "$($Row.VmId)"
+            VmName = "$($Row.VmName)"
+            VmState = "$($Row.VmState)"
+            Service = "$($Row.Service)"
+            Present = [bool]$Row.Present
+            Enabled = [bool]$Row.Enabled
+            PrimaryStatus = "$($Row.PrimaryStatus)"
+            SecondaryStatus = "$($Row.SecondaryStatus)"
+        }
+    }
+})
+
+$VmIntegrationState |
+    Tee-Object -FilePath (
+        Join-Path $EvidenceRoot 'customer-vm-integration-services.txt'
+    ) |
+    Format-Table -AutoSize
+
+$BadVmIntegrationState = @($VmIntegrationState | Where-Object {
+    $_.GroupState -ne 'Online' -or
+    $_.VmState -ne 'Running' -or
+    -not $_.Present -or
+    -not $_.Enabled -or
+    $_.PrimaryStatus -ne 'OK'
+})
+if ($BadVmIntegrationState.Count -gt 0) {
+    throw "A customer VM or required Hyper-V integration service is not healthy."
+}
+```
 
 The workload owner must also confirm:
 
@@ -2697,6 +2873,13 @@ The workload owner must also confirm:
 - The agreed customer communication checkpoint records service restoration.
 
 Do not treat `Running` VM state as proof that the application is healthy.
+
+If VM startup, either integration-service check, an application probe, or storage
+health fails, stop starting additional workloads. The workload owner must shut down
+the newly started customer VMs in dependency order. Preserve the evidence, restore a
+clean storage hold, and obtain rollback approval before entering the documented
+rollback sequence. Do not proceed to representative load or active validation while
+any startup or health failure remains.
 
 ## Validate active RDMA under representative load
 
@@ -2918,8 +3101,9 @@ $SblConnections = @(Invoke-Command -ComputerName $Nodes.Name -ScriptBlock {
             'ClientRdmaCapable',
             'ServerRdmaCapable',
             'Selected',
-            'RdmaConnectionCount',
-            'TcpConnectionCount'
+            'CurrentChannels',
+            'Failed',
+            'FailureCount'
         )
         $MissingProperties = @($RequiredProperties | Where-Object {
             $null -eq $Connection.PSObject.Properties[$_]
@@ -2927,7 +3111,7 @@ $SblConnections = @(Invoke-Command -ComputerName $Nodes.Name -ScriptBlock {
         if ($MissingProperties.Count -gt 0) {
             throw (
                 "The SBL connection object does not expose required " +
-                "active-traffic counters: $($MissingProperties -join ',')."
+                "active-channel properties: $($MissingProperties -join ',')."
             )
         }
         $Connection | Select-Object `
@@ -2935,7 +3119,7 @@ $SblConnections = @(Invoke-Command -ComputerName $Nodes.Name -ScriptBlock {
                 ServerName, ClientInterfaceIndex,
                 ServerInterfaceIndex, ClientIpAddress, ServerIpAddress,
                 ClientRdmaCapable, ServerRdmaCapable, Selected,
-                RdmaConnectionCount, TcpConnectionCount
+                CurrentChannels, MaxChannels, Failed, FailureCount
     }
 } -ErrorAction Stop)
 $SblConnections | Format-Table -AutoSize
@@ -2943,8 +3127,9 @@ $BadSblConnections = @($SblConnections | Where-Object {
     -not $_.ClientRdmaCapable -or
     -not $_.ServerRdmaCapable -or
     -not $_.Selected -or
-    [int]$_.RdmaConnectionCount -lt 1 -or
-    [int]$_.TcpConnectionCount -gt 0
+    [int]$_.CurrentChannels -lt 1 -or
+    [bool]$_.Failed -or
+    [int]$_.FailureCount -ne 0
 })
 $ExpectedSblNodes = @($Nodes.Name | ForEach-Object {
     "$_".Split('.')[0].ToUpperInvariant()
@@ -2966,8 +3151,8 @@ if (
 ) {
     throw (
         "Every sealed node must report a selected, RDMA-capable active SBL " +
-        "connection with at least one RDMA connection and zero TCP data " +
-        "connections."
+        "connection with at least one current channel and no failed-channel " +
+        "state or failure count."
     )
 }
 
@@ -3119,8 +3304,9 @@ function Test-ActiveRdmaState {
                     'ClientRdmaCapable',
                     'ServerRdmaCapable',
                     'Selected',
-                    'RdmaConnectionCount',
-                    'TcpConnectionCount'
+                    'CurrentChannels',
+                    'Failed',
+                    'FailureCount'
                 )
                 $MissingProperties = @($RequiredProperties | Where-Object {
                     $null -eq $Connection.PSObject.Properties[$_]
@@ -3128,15 +3314,15 @@ function Test-ActiveRdmaState {
                 if ($MissingProperties.Count -gt 0) {
                     throw (
                         "The SBL connection object does not expose required " +
-                        "active-traffic counters: " +
+                        "active-channel properties: " +
                         "$($MissingProperties -join ',')."
                     )
                 }
                 $Connection | Select-Object `
                     @{Name='Node';Expression={$env:COMPUTERNAME}},
                     ClientIpAddress, ServerIpAddress, ClientRdmaCapable,
-                    ServerRdmaCapable, Selected, RdmaConnectionCount,
-                    TcpConnectionCount
+                    ServerRdmaCapable, Selected, CurrentChannels,
+                    MaxChannels, Failed, FailureCount
             }
         } -ErrorAction Stop)
     $ExpectedSblNodes = @($Nodes.Name | ForEach-Object {
@@ -3157,8 +3343,9 @@ function Test-ActiveRdmaState {
             -not $_.ClientRdmaCapable -or
             -not $_.ServerRdmaCapable -or
             -not $_.Selected -or
-            [int]$_.RdmaConnectionCount -lt 1 -or
-            [int]$_.TcpConnectionCount -gt 0
+            [int]$_.CurrentChannels -lt 1 -or
+            [bool]$_.Failed -or
+            [int]$_.FailureCount -ne 0
         }).Count -eq 0
     )
 
@@ -3652,7 +3839,7 @@ Success requires:
 - Network ATC remains successful and completed on every node.
 - Every storage adapter remains on the desired transport with RDMA enabled.
 - SBL connections report both client and server RDMA capability.
-- Every selected SBL channel reports active RDMA and zero TCP data connections.
+- Every selected SBL connection is RDMA-capable, has at least one current channel, does not report `Failed`, and has `FailureCount` equal to zero.
 - Representative storage activity completes without storage, cluster, or network faults.
 - The pool, virtual disks, CSVs, MOC, appliance VM, and customer workloads remain healthy.
 
@@ -4117,7 +4304,7 @@ If the target was iWARP, keep the built-in iWARP firewall rule enabled until RoC
 | Pool, virtual disk, or CSV does not recover | Stop. Do not run repair, recreate resources, or disable Storage Spaces Direct. Contact Microsoft Support. |
 | MOC or appliance VM does not recover | Stop before customer workload startup. Collect cluster and VM state and contact Microsoft Support. |
 | RDMA capability is absent after recovery | Stop workload expansion. Reconfirm adapter transport, Network ATC, firewall for iWARP, and fabric readiness for RoCEv2. |
-| A selected SBL channel reports TCP data connections or no RDMA connection | Treat the desired transport as unverified. Collect SBL connection, adapter, intent, and network evidence before proceeding. |
+| A selected SBL connection has no current channels, reports `Failed`, has a nonzero `FailureCount`, or is not RDMA-capable | Treat the desired transport as unverified. Collect SBL connection, adapter, intent, and network evidence before proceeding. |
 | RoCEv2 shows drops or pause storms | Stop the validation load. Engage the network team and OEM to verify PFC, ETS, ECN/WRED, and endpoint congestion response. |
 
 ## Evidence and escalation package
@@ -4131,7 +4318,7 @@ Collect and retain:
 - Before and after cluster, quorum, pool, virtual-disk, CSV, MOC, appliance VM, and customer VM state.
 - Before and after `Get-StorageJob` and `Get-HealthFault`.
 - SBL RDMA connection output under representative load.
-- SBL RDMA and TCP connection-count checks.
+- SBL RDMA capability, selection, current-channel, failed-state, and failure-count checks.
 - For RoCEv2, switch-port PFC, ECN/WRED, drop, and queue evidence from the network team.
 - Exact UTC timestamps for the quiesce, intent submission, convergence, recovery, and active validation phases.
 
