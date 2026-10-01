@@ -44,7 +44,7 @@
   <tr><th style="text-align:left;">Affected versions</th><td><strong>Confirmed in Azure Local 2604</strong></td></tr>
   <tr><th style="text-align:left;">Audience</th><td>Azure Local deployment administrators and systems integrators</td></tr>
   <tr><th style="text-align:left;">Primary owner</th><td>Deployment administrator</td></tr>
-  <tr><th style="text-align:left;">Execution surface</th><td>Azure Local nodes and the Azure deployment result</td></tr>
+  <tr><th style="text-align:left;">Execution surface</th><td>mixed</td></tr>
   <tr><th style="text-align:left;">Risk summary</th><td>Account-profile changes are low risk. Correcting a node system locale requires an administrator and a node restart.</td></tr>
 </table>
 
