@@ -537,7 +537,7 @@ function Set-ChangePhase {
             $ActiveValidationStartUtc
         ).ToUniversalTime().ToString('o')
     }
-    [pscustomobject]@{
+    $NextState = [pscustomobject]@{
         ChangeId = $ChangeId
         Phase = $Phase
         UpdatedUtc = (Get-Date).ToUniversalTime().ToString('o')
@@ -547,9 +547,35 @@ function Set-ChangePhase {
         DesiredTransportValue = $DesiredTransportValue
         ActiveValidationStartUtc = $PersistedValidationStart
         RollbackOriginPhase = $PersistedRollbackOrigin
-    } | ConvertTo-Json |
-        Set-Content -LiteralPath $TempPath
-    Move-Item -LiteralPath $TempPath -Destination $StatePath -Force
+    }
+    try {
+        $NextState | ConvertTo-Json |
+            Set-Content -LiteralPath $TempPath -ErrorAction Stop
+        Move-Item -LiteralPath $TempPath -Destination $StatePath `
+            -Force -ErrorAction Stop
+
+        $PersistedState = Get-Content -LiteralPath $StatePath -Raw `
+            -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        if (
+            "$($PersistedState.ChangeId)" -ne $ChangeId -or
+            "$($PersistedState.Phase)" -ne $Phase -or
+            "$($PersistedState.Operation)" -ne $Operation -or
+            "$($PersistedState.DesiredTransport)" -ne $DesiredTransport -or
+            [int]$PersistedState.DesiredTransportValue -ne
+                $DesiredTransportValue -or
+            "$($PersistedState.ActiveValidationStartUtc)" -ne
+                $PersistedValidationStart -or
+            "$($PersistedState.RollbackOriginPhase)" -ne
+                $PersistedRollbackOrigin
+        ) {
+            throw "The persisted phase state does not match the requested transition."
+        }
+    }
+    catch {
+        Remove-Item -LiteralPath $TempPath -Force `
+            -ErrorAction SilentlyContinue
+        throw "Failed to persist phase '$Phase': $($_.Exception.Message)"
+    }
 }
 
 Set-ChangePhase -Phase Initialized
@@ -627,7 +653,9 @@ foreach ($Property in @($CurrentAdapterOverride.PSObject.Properties | Sort-Objec
     AdapterNames = $AdapterNames
     ExplicitAdapterOverrides = $ExplicitAdapterOverrides
 } | ConvertTo-Json -Depth 12 |
-    Set-Content -LiteralPath (Join-Path $EvidenceRoot 'network-atc-baseline.json')
+    Set-Content -LiteralPath (
+        Join-Path $EvidenceRoot 'network-atc-baseline.json'
+    ) -ErrorAction Stop
 
 $ExplicitAdapterOverrides
 ```
@@ -1096,14 +1124,18 @@ $ResourceManifest = [ordered]@{
 }
 
 $ResourceManifest | ConvertTo-Json -Depth 20 |
-    Set-Content -LiteralPath (Join-Path $EvidenceRoot 'resource-manifest.json')
+    Set-Content -LiteralPath (
+        Join-Path $EvidenceRoot 'resource-manifest.json'
+    ) -ErrorAction Stop
 
 Get-FileHash -Algorithm SHA256 -LiteralPath @(
     (Join-Path $EvidenceRoot 'network-atc-baseline.json'),
     (Join-Path $EvidenceRoot 'resource-manifest.json')
-) | Select-Object Path, Algorithm, Hash |
+) -ErrorAction Stop | Select-Object Path, Algorithm, Hash |
     ConvertTo-Json -Depth 4 |
-    Set-Content -LiteralPath (Join-Path $EvidenceRoot 'baseline-hashes.json')
+    Set-Content -LiteralPath (
+        Join-Path $EvidenceRoot 'baseline-hashes.json'
+    ) -ErrorAction Stop
 
 Set-ChangePhase -Phase BaselineSealed
 ```
@@ -1371,7 +1403,8 @@ if ("$($PhaseState.Phase)" -eq 'Initialized') {
             }
         } else {
             $ActiveValidationStartUtc.ToString('o') |
-                Set-Content -LiteralPath $ActiveValidationStartUtcPath
+                Set-Content -LiteralPath $ActiveValidationStartUtcPath `
+                    -ErrorAction Stop
         }
     }
 }
@@ -1507,7 +1540,7 @@ function Set-ChangePhase {
             $ActiveValidationStartUtc
         ).ToUniversalTime().ToString('o')
     }
-    [pscustomobject]@{
+    $NextState = [pscustomobject]@{
         ChangeId = $ChangeId
         Phase = $Phase
         UpdatedUtc = (Get-Date).ToUniversalTime().ToString('o')
@@ -1517,9 +1550,35 @@ function Set-ChangePhase {
         DesiredTransportValue = $DesiredTransportValue
         ActiveValidationStartUtc = $PersistedValidationStart
         RollbackOriginPhase = $PersistedRollbackOrigin
-    } | ConvertTo-Json |
-        Set-Content -LiteralPath $TempPath
-    Move-Item -LiteralPath $TempPath -Destination $StatePath -Force
+    }
+    try {
+        $NextState | ConvertTo-Json |
+            Set-Content -LiteralPath $TempPath -ErrorAction Stop
+        Move-Item -LiteralPath $TempPath -Destination $StatePath `
+            -Force -ErrorAction Stop
+
+        $PersistedState = Get-Content -LiteralPath $StatePath -Raw `
+            -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        if (
+            "$($PersistedState.ChangeId)" -ne $ChangeId -or
+            "$($PersistedState.Phase)" -ne $Phase -or
+            "$($PersistedState.Operation)" -ne $Operation -or
+            "$($PersistedState.DesiredTransport)" -ne $DesiredTransport -or
+            [int]$PersistedState.DesiredTransportValue -ne
+                $DesiredTransportValue -or
+            "$($PersistedState.ActiveValidationStartUtc)" -ne
+                $PersistedValidationStart -or
+            "$($PersistedState.RollbackOriginPhase)" -ne
+                $PersistedRollbackOrigin
+        ) {
+            throw "The persisted phase state does not match the requested transition."
+        }
+    }
+    catch {
+        Remove-Item -LiteralPath $TempPath -Force `
+            -ErrorAction SilentlyContinue
+        throw "Failed to persist phase '$Phase': $($_.Exception.Message)"
+    }
 }
 
 $PhaseState | Format-List *
@@ -2958,7 +3017,7 @@ After the workload owner completes application health probes, dependency checks,
 } | ConvertTo-Json |
     Set-Content -LiteralPath (
         Join-Path $EvidenceRoot "application-validation-$Operation.json"
-    )
+    ) -ErrorAction Stop
 ```
 
 Do not create the attestation until the checks have actually passed. The final validation block rejects a missing, stale, incomplete, or failed attestation.
