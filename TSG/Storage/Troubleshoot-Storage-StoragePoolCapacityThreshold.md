@@ -12,7 +12,7 @@
     "technical_grade": null,
     "reproduction_substrate": "hardware",
     "automation_status": "ready",
-    "last_validated": "2026-08-17",
+    "last_validated": "2026-10-03",
     "spec_ref": "AzStackHci_Storage_StoragePoolCapacityThreshold"
   }
 }
@@ -74,15 +74,18 @@
     <td>Triage: minutes. Adding disks (A1) or adjusting the alert (A4/A5): low and
     online. Converting fixed&rarr;thin (A2) or the thin reclaim (Path B): a
     maintenance window; slab consolidation can take <strong>hours</strong> on large
-    volumes.</td>
+    volumes. If whole VMs or files were simply deleted, Path B's no-downtime
+    pre-branch may resolve it in about 15 minutes with no window at all.</td>
   </tr>
   <tr>
     <th style="text-align:left;">Downtime / maintenance window</th>
     <td>Triage and the add-capacity / alert options (A1, A4, A5) are
-    <strong>online</strong>. <strong>A2</strong> (convert, then Path B),
-    <strong>A3</strong> (evacuate + recreate a volume), and <strong>Path B</strong>
-    require data movement or a VM-offline window; Path B's window lasts through slab
-    consolidation.</td>
+    <strong>online</strong>. <strong>A2</strong> (convert, then Path B) and
+    <strong>A3</strong> (evacuate + recreate a volume) require data movement.
+    <strong>Path B</strong> is conditional: reclaiming capacity from
+    <strong>deleted whole files</strong> is automatic and needs
+    <strong>no downtime</strong>; only <strong>interior fragmentation</strong>
+    requires slab consolidation and a VM-offline window.</td>
   </tr>
 </table>
 
@@ -110,8 +113,9 @@ Then branch on `ProvisioningType`:
   capacity, convert to thin, or adjust the alert. Go to
   [Path A](#path-a-fixed-provisioned-volumes).
 - **`Thin`** &rarr; capacity from deleted data can be reclaimed. Go to
-  [Path B](#path-b-thin-provisioned-volumes-reclaim-unused-capacity) (needs a
-  maintenance window).
+  [Path B](#path-b-thin-provisioned-volumes-reclaim-unused-capacity). If whole VMs
+  or files were deleted, its no-downtime pre-branch may be all you need; only
+  interior fragmentation needs a maintenance window.
 
 > [!NOTE]
 > This is the short form of
@@ -303,10 +307,11 @@ As pool allocation climbs past the reserve toward full, risk escalates:
 Act while the alert is still an early warning. Do the cheapest, most reversible
 things first, and escalate only as needed:
 
-1. **Audit and prune.** Merge or remove stale Hyper-V checkpoints, and find and
-   remove orphaned or stale `.vhdx` files. On thin volumes the reclaimed space
-   returns to the pool gradually (about 15 minutes; see
-   [Path B](#path-b-thin-provisioned-volumes-reclaim-unused-capacity)).
+1. **Audit and prune.** Merge stale Hyper-V checkpoints, and remove the leftover
+   virtual disks of VMs you deleted (see
+   [Path B](#path-b-thin-provisioned-volumes-reclaim-unused-capacity) for how to do
+   that safely). On thin volumes the reclaimed space returns to the pool gradually
+   (about 15 minutes).
 2. **Restrict new provisioning.** Stop creating new virtual disks or volumes on
    the pressured pool.
 3. **Freeze automated thin-disk or volume expansion** so background growth cannot
@@ -452,18 +457,298 @@ Set-StoragePool -FriendlyName "<pool name>" -ThinProvisioningAlertThresholds @(8
 ## Path B: Thin-provisioned volumes (reclaim unused capacity)
 
 > [!IMPORTANT]
-> **Ownership gate (read before starting).** This is a scheduled
-> maintenance-window procedure that takes VMs offline; it is owned by the
-> customer's cluster or storage administrator. If you are not that
-> administrator, or you are unsure whether you are authorized to take these
-> workloads offline, stop here and hand off. The read-only Quick triage and the
-> [Verify](#verify) queries are always safe to run; the numbered steps below
-> are not.
+> **Ownership gate (read before starting).** Capacity work on a production volume
+> is owned by the customer's cluster or storage administrator. The read-only Quick
+> triage and the [Verify](#verify) queries are always safe to run. Everything else
+> here changes state: the no-downtime branch below can end in **deleting leftover
+> virtual disks**, which is irreversible, and the **numbered consolidation steps**
+> are a scheduled maintenance-window procedure that takes VMs offline. If you are
+> not that administrator, or you are unsure whether you are authorized to delete
+> those disks or take these workloads offline, stop here and hand off.
 
 On thin volumes, capacity that was written and later deleted can remain committed
 to the pool in partially used 256 MB "slabs". A slab is only returned to the pool
-once all of its blocks are free. The supported procedure consolidates the live
-data into fewer slabs and releases the emptied slabs back to the pool.
+once all of its blocks are free. Deleting a whole file frees its slabs outright and
+they are returned automatically; when live data still occupies part of a slab,
+consolidation is needed to move that data into fewer slabs so the emptied ones can
+be released.
+
+### Before you start: is consolidation even the right tool?
+
+Two different mechanisms return capacity to the pool, and **only one of them needs
+an offline window**. Identify which case you are in before scheduling anything.
+
+- **Whole files were deleted** (VMs deleted, VHDX removed, ISOs purged). The slabs
+  those files occupied become entirely free, and ReFS returns them to the pool
+  **on its own**, with no `Optimize-Volume` and **no downtime**. Microsoft
+  documents this as a gradual process that takes *"15 minutes or so after the
+  files are deleted"*, and notes that *"if there are many workloads running on the
+  system, it may take longer for all of the space to be returned to the pool"*
+  ([thin provisioning FAQ][thin-prov]). Running workloads **slow this down; they
+  do not block it**.
+- **Interior fragmentation** (data deleted from *inside* a VHDX or a guest file
+  system). Blocks are freed inside slabs that still hold other live data, so no
+  whole slab frees and automatic reclamation returns nothing. This is the only
+  case that needs slab consolidation, and therefore the only case that needs the
+  offline window.
+
+**If you deleted whole VMs or files, start here. This path needs no downtime:**
+
+1. **Confirm the virtual disk files are actually gone, not just the VMs.**
+   Removing a VM does not always remove its disks, and a leftover disk keeps its
+   capacity no matter how long you wait. What to do depends on how the VMs were
+   created and removed:
+
+   - **Azure Local VMs (managed in Azure).** *"Deleting a VM doesn't delete all the
+     resources associated with the VM. For example, it doesn't delete the data disks
+     and the network interfaces associated with the VM. You need to locate and delete
+     these resources separately"* ([Delete a VM][delete-vm]). In the Azure portal, open
+     the resource group the VM was in, select **Show hidden types**, and delete the
+     data disks that belonged to the VMs you removed. **[HIGH RISK]** A deleted disk
+     cannot be recovered, so delete only disks you can attribute to a VM you removed.
+     Do not delete Azure Local disk or image files from the host: deleting a data disk
+     is one of the operations Microsoft says to perform *"only via the Azure portal or
+     the Azure CLI"* ([supported operations][unsupported-ops]), and a file removed on
+     the host leaves its Azure resource behind.
+   - **Unmanaged Hyper-V VMs removed with local tools** (`Remove-VM`, Hyper-V Manager,
+     Failover Cluster Manager, or Windows Admin Center). `Remove-VM` *"deletes the
+     virtual machine's configuration file, but does not delete any virtual hard
+     drives"* ([Remove-VM][remove-vm]), so the disk files stay on the volume. Check
+     each one with the steps below before you remove it.
+   - **Anything else**, including an Azure Local VM that was removed with local tools,
+     or a file you cannot attribute to a VM you removed: leave it in place and open a
+     support case.
+
+   **Check an unmanaged VM's leftover disks before you remove them.** **[READ-ONLY]**
+   Paste this function once into an elevated PowerShell session (**Run as
+   administrator**) on a cluster node, at its console or over Remote Desktop. Do not
+   paste it into an `Enter-PSSession` session: from there it cannot reach the other
+   nodes, so it stops with an error. It only reads; it changes nothing.
+
+   ```powershell
+   function Test-UnusedVirtualDisk {
+       [CmdletBinding()]
+       param(
+           [Parameter(Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
+           [Alias('FullName')]
+           [string[]]$Path
+       )
+       begin {
+           # Read-only. Any error while collecting stops the function before it returns a verdict.
+           $ErrorActionPreference = 'Stop'
+           # Ignore default parameter values set in the session, so none of them can hide an error.
+           $PSDefaultParameterValues = @{}
+           $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+           if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+               throw 'Run this in an elevated PowerShell session (Run as administrator).'
+           }
+           $nodes = @(Get-ClusterNode | ForEach-Object { $_.Name })
+           if ($nodes.Count -eq 0) { throw 'Get-ClusterNode returned no nodes.' }
+           # Files are checked only under a Cluster Shared Volume, and every path is compared in one standard form.
+           $csvRoots = @(Get-ClusterSharedVolume | ForEach-Object { $_.SharedVolumeInfo } | ForEach-Object { [IO.Path]::GetFullPath($_.FriendlyVolumeName).TrimEnd('\') + '\' })
+           if ($csvRoots.Count -eq 0) { throw 'Get-ClusterSharedVolume returned no volumes.' }
+           # Folders that Azure Local manages: VM images, and the disks and settings of Azure Local VMs.
+           try {
+               # Get-MocContainer returns its results as one array object; ForEach-Object unrolls it.
+               $containers = @(Get-MocContainer -location (Get-MocConfig).cloudLocation | ForEach-Object { $_ })
+           } catch {
+               throw "Could not read the Azure Local storage folders. $($_.Exception.Message)"
+           }
+           $managed = @($containers | ForEach-Object { [IO.Path]::GetFullPath((Join-Path $_.properties.path $_.ID)).TrimEnd('\') + '\' })
+           if ($managed.Count -eq 0) { throw 'No Azure Local storage folders were returned.' }
+           foreach ($folder in $managed) {
+               if (-not (Test-Path -LiteralPath $folder)) { throw "Azure Local storage folder not found: $folder" }
+           }
+           # Every disk that a VM on any node uses, and every parent of it, read on that VM's node.
+           $inUse = @{}
+           $inUseId = @{}
+           $seenVm = @{}
+           foreach ($node in $nodes) {
+               try { $vms = @(Get-VM -ComputerName $node) }
+               catch { throw "Could not list the VMs on node $node. Every node must respond. $($_.Exception.Message)" }
+               foreach ($vm in $vms) {
+                   $seenVm["$($vm.Id)"] = $true
+                   try { $drives = @($vm | Get-VMHardDiskDrive) + @($vm | Get-VMSnapshot | Get-VMHardDiskDrive) }
+                   catch { throw "Could not read the disks of VM '$($vm.Name)' on node $node. $($_.Exception.Message)" }
+                   foreach ($drive in $drives) {
+                       if ($null -ne $drive.DiskNumber) { continue }
+                       if (-not $drive.Path) { throw "VM '$($vm.Name)' on node $node has a virtual disk with no path." }
+                       $p = $drive.Path
+                       $depth = 0
+                       while ($p) {
+                           $why = "Used by VM '$($vm.Name)' on node $node."
+                           if ($depth -gt 0) { $why = "Parent of a disk used by VM '$($vm.Name)' on node $node." }
+                           $inUse[[IO.Path]::GetFullPath($p).ToLowerInvariant()] = $why
+                           if ($p -like '*.vhds') { break }
+                           try { $vhd = Get-VHD -ComputerName $node -Path $p }
+                           catch { throw "Could not read '$p' (VM '$($vm.Name)' on node $node). $($_.Exception.Message)" }
+                           if ($vhd.DiskIdentifier) { $inUseId["$($vhd.DiskIdentifier)"] = $why }
+                           $p = $vhd.ParentPath
+                           $depth++
+                           if ($depth -gt 64) { throw "The parent chain of '$($drive.Path)' is longer than 64 disks." }
+                       }
+                   }
+               }
+           }
+           # Every clustered VM must have been seen, so a VM that moved between nodes during the check is not missed.
+           foreach ($vm in @(Get-ClusterGroup | Where-Object { "$($_.GroupType)" -eq 'VirtualMachine' } | Get-VM)) {
+               if (-not $seenVm.ContainsKey("$($vm.Id)")) { throw "Clustered VM '$($vm.Name)' was not found on any node. Run the check again." }
+           }
+           $reasonFor = {
+               param([string]$File)
+               $lower = $File.ToLowerInvariant()
+               $onCsv = $false
+               foreach ($root in $csvRoots) { if ($lower.StartsWith($root.ToLowerInvariant())) { $onCsv = $true } }
+               if (-not $onCsv) { return 'Not a full path under a Cluster Shared Volume (C:\ClusterStorage\<volume>\). Give the path in that form.' }
+               if (-not (Test-Path -LiteralPath $File -PathType Leaf)) { return 'File not found.' }
+               if ([IO.Path]::GetExtension($lower) -notin '.vhd', '.vhdx') { return 'Not a .vhd or .vhdx file. Checkpoint (.avhdx, .avhd) and VHD Set (.vhds) files are never cleared by this check.' }
+               foreach ($folder in $managed) {
+                   if ($lower.StartsWith($folder.ToLowerInvariant())) { return 'Inside an Azure Local storage folder. Manage it through Azure, not from the host.' }
+               }
+               if ($lower -match '\\mocarb\\' -or $lower -match '^[a-z]:\\clusterstorage\\infrastructure_\d+\\') { return 'Azure Local infrastructure data.' }
+               if ($inUse.ContainsKey($lower)) { return $inUse[$lower] }
+               # Ask every node, so the reason names the node that has the file attached.
+               $unread = $null
+               foreach ($node in $nodes) {
+                   try { $v = Get-VHD -ComputerName $node -Path $File }
+                   catch { if (-not $unread) { $unread = $node }; continue }
+                   if ($v.Attached) { return "Attached on node $node." }
+                   if ($v.DiskIdentifier -and $inUseId.ContainsKey("$($v.DiskIdentifier)")) { return 'Same disk identifier as a disk in use. ' + $inUseId["$($v.DiskIdentifier)"] }
+               }
+               if ($unread) { return "Node $unread could not read it. It may be in use on another node, or it may not be a valid virtual disk." }
+               return $null
+           }
+       }
+       process {
+           foreach ($item in $Path) {
+               $file = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($item))
+               $reason = & $reasonFor $file
+               $verdict = 'Keep'
+               if (-not $reason) {
+                   $verdict = 'NoReferenceFound'
+                   $reason = 'No VM on any node uses it or depends on it, and no node has it attached. Remove it only if it belonged to a VM you removed.'
+               }
+               $size = $null
+               if (Test-Path -LiteralPath $file -PathType Leaf) { $size = [math]::Round((Get-Item -LiteralPath $file).Length / 1GB, 2) }
+               [pscustomobject]@{ Path = $file; SizeGB = $size; Verdict = $verdict; Reason = $reason }
+           }
+       }
+   }
+   ```
+
+   The function reads every node in the cluster. If anything prevents a complete
+   answer, it stops with an error and returns no verdicts: a node that does not
+   respond, a VM disk or parent disk it cannot read, Azure Local storage information
+   it cannot read, or a clustered VM it did not find. In that case nothing was
+   checked. Fix the condition the error names and run it again, or open a support
+   case. Do not work around it.
+
+   Run it on the disk files of the VMs you removed. To check every virtual disk in a
+   folder those VMs used:
+
+   ```powershell
+   Get-ChildItem -LiteralPath 'C:\ClusterStorage\<volume>\<folder the removed VMs used>' -Recurse -File |
+       Where-Object { $_.Extension -in '.vhd', '.vhdx' } |
+       Test-UnusedVirtualDisk | Format-List Path, SizeGB, Verdict, Reason
+   ```
+
+   Each file gets a `Verdict`:
+
+   - `Keep`: do not remove it. `Reason` says why: a VM on a named node uses it or
+     depends on it as a parent disk, a node has it attached or cannot read it, it is
+     inside an Azure Local storage folder (manage it through Azure instead), it is a
+     checkpoint or VHD Set file (see the note below), or the path is not a full path
+     under `C:\ClusterStorage\`.
+   - `NoReferenceFound`: no VM on any node uses it or depends on it, no node has it
+     attached, and it is not in an Azure Local storage folder. The function cannot see
+     templates, golden images, ISO libraries, or backup copies, which legitimately
+     have no VM. Remove the file only if you can attribute it to a VM you removed.
+
+   > [!NOTE]
+   > The check always returns `Keep` for checkpoint files (`.avhdx`, `.avhd`) and VHD
+   > Set files (`.vhds`). Do not delete either kind by hand.
+   >
+   > - **Checkpoints** are differencing disks in a chain that Hyper-V owns. To free
+   >   space held by checkpoints of a VM that still exists, merge them through Hyper-V
+   >   (`Get-VM | Get-VMSnapshot`, then `Remove-VMSnapshot`). When `Remove-VM` deletes
+   >   a VM, its checkpoints *"are deleted and merged into the virtual hard disk files
+   >   after the virtual machine is deleted"* ([Remove-VM][remove-vm]), so a checkpoint
+   >   file that outlives its VM means that merge did not finish. Open a support case.
+   > - **A VHD Set** is shared storage for a guest cluster. The VM configuration names
+   >   the `.vhds` file, but the data is in a companion file (named
+   >   `<name>_<GUID>.avhdx` when Hyper-V creates the set) that no VM configuration
+   >   names. Open a support case rather than deleting VHD Set files.
+
+   > [!WARNING]
+   > **Deleting a virtual disk file is irreversible and destroys whatever it
+   > contains.** `NoReferenceFound` means no VM on this cluster uses the file; it does
+   > not mean nothing else needs it. If you cannot attribute a file to a VM you
+   > removed, leave it in place and open a support case. Reclaiming capacity is never
+   > worth deleting a disk you could not identify.
+
+   **Remove each file in two stages: rename it first, delete it later.** For each
+   file with the verdict `NoReferenceFound`, run the following. It runs the whole
+   check again at that moment and renames the file only if the verdict is still
+   `NoReferenceFound`. **[MEDIUM RISK]**
+
+   ```powershell
+   $file = '<full path of one file with the verdict NoReferenceFound>'
+   $check = $null
+   $check = Test-UnusedVirtualDisk -Path $file
+   if ($check.Verdict -eq 'NoReferenceFound') { Rename-Item -LiteralPath $file -NewName ((Split-Path $file -Leaf) + '.pending-delete') -ErrorAction Stop; "Renamed to $file.pending-delete" } else { "Not renamed. $($check.Reason)" }
+   ```
+
+   The rename frees no capacity yet, and you can undo it. If a VM fails to start, or
+   an application or backup job reports a missing file, put the name back:
+
+   ```powershell
+   Rename-Item -LiteralPath '<full path>.pending-delete' -NewName '<original file name>'
+   ```
+
+   When nothing has reported the file missing (start any stopped VMs you still need,
+   and let one backup cycle complete), delete it. **[HIGH RISK]**
+
+   ```powershell
+   Remove-Item -LiteralPath '<full path>.pending-delete'
+   ```
+2. Wait at least 15 minutes; longer on a busy cluster.
+3. Re-measure with the [Verify](#verify) queries.
+
+If the pool has dropped below threshold, **you are done, with no maintenance
+window**. Continue to the consolidation procedure only if the pool is still above
+threshold *and* the volume genuinely shows large interior free space.
+
+> [!CAUTION]
+> **Moving VM disks to another volume does not relieve pool pressure, and can
+> break Arc management.** Every CSV on the cluster draws from the **same storage
+> pool** (Azure Local uses [one pool per cluster][s2d-overview]), so relocating a
+> VHDX from one CSV to another moves the data without returning a single byte to
+> the pool. It is motion with no benefit for this problem.
+>
+> For **Arc-managed Azure Local VMs (23H2+)** it is also actively harmful. Moving
+> a VHD/VHDX to another CSV with host-side tools (`Move-VMStorage`, Failover
+> Cluster Manager, or a manual file move) is *storage live migration*, which
+> Microsoft lists among operations that *"can lead to Azure Local VMs becoming
+> unmanageable from the Azure portal"* ([unsupported VM operations][unsupported-ops]).
+> Azure tracks each disk's location through a **storage path**
+> (`Microsoft.AzureStackHCI/storagecontainers`) resource; a host-side move leaves
+> that resource pointing at the old volume, and the VM, disk, and
+> network-interface resources can be left stale and undeletable.
+>
+> There is **no supported in-place move** of an existing Arc VM disk between
+> volumes: a storage path is selected at **creation** time. To place a workload on
+> a different volume, create the disk or VM against a storage path on that volume
+> through Azure, rather than moving files on the host.
+>
+> This restriction applies to **Arc-managed** VMs. For traditional (non-Arc)
+> clustered Hyper-V VMs, `Move-VMStorage` with the cluster resource updated
+> accordingly remains supported, though the same one-pool point applies: it still
+> will not free pool capacity.
+>
+> Live-migrating a VM to a **different node** does not help either. The CSV is
+> cluster-shared, so the virtual disk file stays on the same volume and stays in
+> use, just from another node. Stopping the workload is the only action that makes
+> its slabs movable.
 
 > [!NOTE]
 > This procedure recovers capacity only when the volume genuinely holds far less
@@ -472,22 +757,54 @@ data into fewer slabs and releases the emptied slabs back to the pool.
 > close to `Size × resiliency`). If footprint matches the data actually written,
 > there is nothing to reclaim.
 
-**Procedure (requires an offline window for VMs on the affected volume; the window lasts through slab consolidation, which can take hours on large volumes):** [MEDIUM RISK]
+> [!TIP]
+> **Cheapest checks first. A consolidation pass is not a cheap probe.** The steps
+> above cost little and can make the maintenance window unnecessary: remove the
+> leftover disks of VMs you deleted, confirm the provisioning type, and if whole
+> files were deleted just wait and re-measure.
+>
+> Running consolidation with the workload still up, to see what it recovers before
+> committing to a window, is a reasonable probe. It is non-destructive, it
+> relocates data rather than deleting any, it runs at low priority, and a
+> disappointing result costs time rather than data. Two things to weigh before
+> doing it:
+>
+> - On a multi-terabyte volume it is **hours** of back-end relocation I/O, and
+>   because every volume shares the one pool, that load is felt by workloads on
+>   other volumes. It is cheap in risk, not in cost.
+> - On a pool that is already **close to full**, be more careful. ReFS allocates
+>   on write, so relocating live data writes the new copy before releasing the
+>   old. Whether that transiently raises pool allocation on a nearly-full pool is
+>   not established here either way, and pool exhaustion is the one failure in
+>   this article that takes VMs offline. On a pool with comfortable headroom this
+>   is not a concern; near the limit, do the read-only checks above first.
+>
+> A probe that recovers little is not proof the procedure does not work. It is
+> the expected result when the workload is still holding its files.
 
-1. *(Optional, no downtime)* Merge Hyper-V checkpoints that are no longer needed
-   (`Get-VM | Get-VMSnapshot`, then `Remove-VMSnapshot`). Checkpoint files pin
-   extra slabs and reduce what consolidation can recover.
+**Procedure for interior fragmentation (requires an offline window for VMs on the affected volume; the window lasts through slab consolidation, which can take hours on large volumes):** [MEDIUM RISK]
 
-2. **Take the VMs on the affected volume offline** so their virtual disk file
-   handles are released (required for consolidation). First find where each VM is
-   running:
+> [!TIP]
+> **Preparation (optional, no downtime, do this before the window).** Merge
+> Hyper-V checkpoints that are no longer needed (`Get-VM | Get-VMSnapshot`, then
+> `Remove-VMSnapshot`). Checkpoint files hold live data that pins extra slabs and
+> reduces what consolidation can recover. This is preparation, not part of the
+> maintenance window.
+
+1. **Take the VMs on the affected volume offline.** Consolidation works by
+   relocating live data out of partially used slabs so whole slabs can be freed,
+   and it cannot relocate data belonging to files that are actively in use. Those
+   slabs are reported as "pinned unmovable" and skipped, which is the main reason
+   a pass run against a live volume recovers far less than one run against a
+   quiesced volume. Stopping the workload is what makes that data movable. First
+   find where each VM is running:
 
    ```powershell
    Get-ClusterGroup | Where-Object GroupType -eq 'VirtualMachine' |
        Select-Object Name, OwnerNode, State
    ```
 
-   **Prefer a clean guest shutdown**, which releases the file handles **without**
+   **Prefer a clean guest shutdown**, which releases the VM's files **without**
    writing a saved-state file:
 
    ```powershell
@@ -495,7 +812,7 @@ data into fewer slabs and releases the emptied slabs back to the pool.
    ```
 
    If a guest will not shut down cleanly (hung, or no integration services), a
-   forced turn-off also releases the file handles **without** writing a
+   forced turn-off also releases the VM's files **without** writing a
    saved-state file, but only as a last resort **[HIGH RISK]**:
 
    ```powershell
@@ -509,14 +826,17 @@ data into fewer slabs and releases the emptied slabs back to the pool.
    > after the workload owner has approved it for that specific VM.
 
    > [!CAUTION]
-   > Do **not** substitute `Save-VM` (or the **Save** automatic stop action) or
-   > `Suspend-VM` here. **Saving** releases the handles but writes a saved-state
-   > file the size of the VM's memory onto the very volume you are trying to free.
-   > **Suspending** only *pauses* the VM, its memory stays in host RAM and its
-   > virtual disk handles stay **open**, so slab consolidation cannot proceed.
-   > Putting the cluster resource into redirected access is likewise **not**
-   > sufficient. The VM's file handles must actually be released, which means a
-   > shutdown or turn-off.
+   > Do **not** substitute `Save-VM`, or the **Save** automatic stop action, here.
+   > **Saving** writes a saved-state file roughly the size of the VM's memory onto
+   > the very volume you are trying to free, consuming the capacity you are trying
+   > to recover.
+   >
+   > `Suspend-VM` (pause) writes no state file, but it leaves the virtual disk
+   > files open and the guest's memory resident on the host, so it is not a
+   > reliable substitute for a shutdown. Putting the cluster resource into
+   > redirected access is **not** a substitute either, because the VMs keep running
+   > and their files stay in use. To make a file's slabs movable, the workload
+   > holding it has to be stopped.
 
    > [!IMPORTANT]
    > For **Arc-managed VMs** (Azure Local 23H2+), stop the VM from Azure (portal
@@ -525,14 +845,16 @@ data into fewer slabs and releases the emptied slabs back to the pool.
    > agent / Arc Resource Bridge view of the VM state. Once workloads on the volume
    > are stopped cluster-wide, proceed with consolidation.
 
-3. **Consolidate slabs** on the volume. Run this on the CSV **owner node**.
+2. **Consolidate slabs** on the volume. Run this on the CSV **owner node**.
    Resolve the CSV's `C:\ClusterStorage\<volume>` path to its volume object with
    `Get-Volume -FilePath`, confirm it is the volume you intend, then pipe it to
    `Optimize-Volume`:
 
    ```powershell
-   # Identify the CSV owner node, and run the rest on that node
-   Get-ClusterSharedVolume | Select-Object Name, OwnerNode
+   # Identify the CSV owner node, and run the rest on that node.
+   # Path is the C:\ClusterStorage\... folder; Name is the cluster resource name, not a path.
+   Get-ClusterSharedVolume |
+       Select-Object Name, OwnerNode, @{N = 'Path'; E = { @($_.SharedVolumeInfo)[0].FriendlyVolumeName }}
 
    $csv = "C:\ClusterStorage\<volume>"
    $vol = Get-Volume -FilePath $csv
@@ -559,6 +881,19 @@ data into fewer slabs and releases the emptied slabs back to the pool.
    > multi-terabyte volumes.
 
    > [!NOTE]
+   > **Consolidation runs at low priority by default.** `Optimize-Volume`
+   > documents `-NormalPriority` as running the operation at normal priority, and
+   > states that *"By default, the priority is low"*
+   > ([Optimize-Volume](https://learn.microsoft.com/powershell/module/storage/optimize-volume)),
+   > matching `defrag /h` (*"Runs the operation at normal priority (default is
+   > low)"*). The pass therefore yields to workload I/O rather than competing with
+   > it. Note that this governs *scheduling priority*, not total cost: on a
+   > multi-terabyte volume, consolidation still performs hours of back-end data
+   > relocation, and the pool's physical disks are shared by **every** volume in
+   > the pool, so sustained relocation I/O can be felt by workloads on other
+   > volumes. Prefer a low-usage window on large or busy systems.
+
+   > [!NOTE]
    > **Substrate matters if you are validating in a lab.** The reclaim is only
    > observable on **physical S2D hardware**. On a nested or VM-based cluster,
    > `Optimize-Volume -SlabConsolidate` reports every purgable slab pinned
@@ -567,17 +902,17 @@ data into fewer slabs and releases the emptied slabs back to the pool.
    > not a failure of the procedure and not a defect in the volume. Grade this
    > remediation only on physical S2D, never on a nested or VM cluster.
 
-4. **Wait about 15 minutes** after consolidation completes. The capacity is
+3. **Wait about 15 minutes** after consolidation completes. The capacity is
    returned to the pool by the **ReFS background unmap workitem**, which runs
    after `Optimize-Volume -SlabConsolidate` finishes. This wait, not the next
    step, is what releases the emptied slabs.
 
    > [!NOTE]
-   > VMs only need to stay offline through the consolidation in Step 3. Once
-   > Step 3 reports complete, you can bring the VMs back online (Step 6) and run
+   > VMs only need to stay offline through the consolidation in Step 2. Once
+   > Step 2 reports complete, you can bring the VMs back online (Step 5) and run
    > the remaining steps with workloads online, shortening the maintenance window.
 
-5. **(Optional) Rebalance the pool allocation:**
+4. **(Optional) Rebalance the pool allocation:**
 
    ```powershell
    Optimize-StoragePool -FriendlyName "<pool name>" -Verbose
@@ -586,13 +921,13 @@ data into fewer slabs and releases the emptied slabs back to the pool.
    `Optimize-StoragePool` rebalances Storage Spaces allocations across the pool;
    it is primarily used to spread data onto newly added drives and is a finalize
    step here, not the mechanism that frees the slabs (that already happened in
-   Step 4). Monitor with `Get-StorageJob` and wait until no `Optimize` jobs are
+   Step 3). Monitor with `Get-StorageJob` and wait until no `Optimize` jobs are
    running before re-measuring pool fill. If it finishes in seconds with no jobs,
    that is expected when there is nothing to rebalance; it does **not** mean
    reclamation failed; confirm the result with the pool fill query in
    [Verify](#verify).
 
-6. **Bring the VMs back online.** For **traditional non-Arc Hyper-V VMs**, start
+5. **Bring the VMs back online.** For **traditional non-Arc Hyper-V VMs**, start
    them on the host:
 
    ```powershell
@@ -604,17 +939,27 @@ data into fewer slabs and releases the emptied slabs back to the pool.
    > **through Azure** (the VM resource in the portal or CLI), not with host
    > `Start-VM`. Driving an Arc VM's power state directly on the host bypasses the
    > control plane and can desynchronize the Arc agent and Arc Resource Bridge
-   > view of the VM state; this mirrors the stop-side boundary in Step 2.
+   > view of the VM state; this mirrors the stop-side boundary in Step 1.
 
 > [!NOTE]
-> A consolidation pass can legitimately return little or no capacity, most often
-> because the volume's footprint already matches the data actually written (there
-> is nothing to reclaim; see the note at the start of Path B), or because slabs
-> are still pinned by data in use (confirm every VM on the volume is stopped in
-> Step 2 and that stale checkpoints were merged in Step 1). If real interior free
-> space exists, all workloads were offline, and checkpoints were merged, but the
-> pool still does not drop after the unmap wait (Step 4), open a Microsoft support
-> case rather than repeating the procedure.
+> A consolidation pass can legitimately return little or no capacity. The most
+> common reasons, in order: the volume's footprint already matches the data
+> actually written, so there is nothing to reclaim (see the note at the start of
+> this procedure); or slabs are still pinned by data in use (confirm every VM on
+> the volume is stopped in Step 1 and that stale checkpoints were merged in the
+> preparation step). Note that some slabs report "pinned unmovable" even on a
+> fully quiesced volume, so a partial reclaim is not by itself a failure. If real
+> interior free space exists, all workloads were offline, and checkpoints were
+> merged, but the pool still does not drop after the unmap wait (Step 3), open a
+> Microsoft support case rather than repeating the procedure.
+
+> [!IMPORTANT]
+> **Do not use `fsutil behavior query DisableDeleteNotify` to decide whether this
+> guide applies, and do not change that setting as part of it.** A reading of
+> `ReFS DisableDeleteNotify = 1` does not mean capacity cannot be returned. On a
+> healthy two-node Azure Local cluster that reported `ReFS DisableDeleteNotify = 1`,
+> deleting 32 GB of files from a thin two-way mirror volume returned all 72 GB of
+> pool allocation they had added within about a minute, while 17 VMs were running.
 
 ## Choose the right option
 
@@ -625,7 +970,8 @@ data into fewer slabs and releases the emptied slabs back to the pool.
 | Fixed | Remove unneeded volumes | A3: shrink/remove (ReFS = evacuate + recreate) |
 | Fixed | Stop the alert (risk accepted) | A4: disable the Health Service alert |
 | Fixed | Move the alert threshold | A5: raise `ThinProvisioningAlertThresholds` |
-| Thin | Return deleted-data capacity to the pool | Path B: SlabConsolidate + ReFS unmap |
+| Thin | Return capacity from **deleted whole files/VMs** | Path B pre-branch: remove leftover disks (through Azure for Azure Local VMs, after the check for unmanaged VMs), wait, re-measure (no downtime) |
+| Thin | Return capacity stranded by **interior fragmentation** | Path B: SlabConsolidate + ReFS unmap (offline window) |
 
 ## Verify
 
@@ -752,8 +1098,12 @@ firm conditions is met. Do not simply re-run the procedure.
   *operational state* is `Incomplete` / read-only from a drive-quorum loss rather
   than capacity, that is a separate, higher-severity problem. Escalate immediately.)
 - **Path B completed with every precondition met** (confirmed real interior free
-  space, every VM on the volume stopped, checkpoints merged) and you waited out the
-  ReFS unmap, but pool `AllocatedSize` still does not drop.
+  space, every VM on the volume stopped, checkpoints merged) and you waited out
+  the ReFS unmap, but pool `AllocatedSize` still does not drop.
+- **A leftover disk cannot be removed safely with the steps in Path B**: a file you
+  cannot attribute to a VM you removed, a disk of an Azure Local VM that was removed
+  with local tools, a checkpoint or VHD Set file that outlived its VM, or a
+  `Test-UnusedVirtualDisk` error you cannot fix. Leave the files in place.
 - The reserve-capacity fault (`InsufficientReserveCapacity`) **persists after**
   you have added capacity or reduced footprint.
 
@@ -775,5 +1125,15 @@ Include the data-collection output above with any Microsoft support case.
 - [Azure Local Health Service settings (volume and pool capacity thresholds)](https://learn.microsoft.com/azure/azure-local/manage/health-service-settings)
 - [Azure Local Health Service faults reference (`Get-HealthFault` fault types)](https://learn.microsoft.com/azure/azure-local/manage/health-service-faults)
 - [Set-VM (automatic stop action)](https://learn.microsoft.com/powershell/module/hyper-v/set-vm)
+- [Storage thin provisioning in Azure Local (reclamation behavior and FAQ)](https://learn.microsoft.com/azure/azure-local/manage/manage-thin-provisioning-23h2)
+- [Supported and unsupported operations for Azure Local VMs](https://learn.microsoft.com/azure/azure-local/manage/virtual-machine-operations)
+- [Manage Azure Local VMs (delete a VM and its leftover resources)](https://learn.microsoft.com/azure/azure-local/manage/manage-arc-virtual-machines#delete-a-vm)
+- [Create a storage path for Azure Local VMs](https://learn.microsoft.com/azure/azure-local/manage/create-storage-path)
+
+[thin-prov]: https://learn.microsoft.com/azure/azure-local/manage/manage-thin-provisioning-23h2
+[unsupported-ops]: https://learn.microsoft.com/azure/azure-local/manage/virtual-machine-operations
+[delete-vm]: https://learn.microsoft.com/azure/azure-local/manage/manage-arc-virtual-machines#delete-a-vm
+[remove-vm]: https://learn.microsoft.com/powershell/module/hyper-v/remove-vm
+[s2d-overview]: https://learn.microsoft.com/windows-server/storage/storage-spaces/storage-spaces-direct-overview
 
 ---
