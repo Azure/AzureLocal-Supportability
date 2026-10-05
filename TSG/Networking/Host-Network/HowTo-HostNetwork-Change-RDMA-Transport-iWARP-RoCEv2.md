@@ -286,8 +286,10 @@ $DesiredTransport = $TargetTransport
 $DesiredTransportValue = [int]$TransportValues[$DesiredTransport]
 
 $ChangeId = Get-Date -Format 'yyyyMMdd-HHmmss'
-$EvidenceRoot = "C:\AzureLocal-RdmaTransport-$ChangeId"
-$ActivePointer = 'C:\AzureLocal-RdmaTransport-Active.txt'
+$EvidenceRoot = Join-Path $env:SystemDrive `
+    "AzureLocal-RdmaTransport-$ChangeId"
+$ActivePointer = Join-Path $env:SystemDrive `
+    'AzureLocal-RdmaTransport-Active.txt'
 
 if (Test-Path -LiteralPath $ActivePointer) {
     $ExistingEvidenceRoot = "$(Get-Content -LiteralPath $ActivePointer -Raw)".Trim()
@@ -1153,7 +1155,8 @@ $PreviousErrorActionPreference = $ErrorActionPreference
 try {
     $ErrorActionPreference = 'Stop'
 
-$ActivePointer = 'C:\AzureLocal-RdmaTransport-Active.txt'
+$ActivePointer = Join-Path $env:SystemDrive `
+    'AzureLocal-RdmaTransport-Active.txt'
 if (-not (Test-Path -LiteralPath $ActivePointer)) {
     throw "No active RDMA transport change pointer exists."
 }
@@ -1617,6 +1620,92 @@ Re-run any function-definition block needed by the next phase, such as `Set-Seal
 
 If the live resource state does not match the checkpoint, stop and reconcile the discrepancy before continuing or rolling back.
 
+### Define the mutation-failure evidence helper
+
+Re-run this function definition after any session loss before resuming a
+state-changing step. It records the mutation error and an authoritative
+post-failure state read before it throws the step's stop guidance.
+
+```powershell
+function Write-MutationFailureEvidence {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$OperationName,
+
+        [Parameter(Mandatory)]
+        [System.Management.Automation.ErrorRecord]$MutationError,
+
+        [Parameter(Mandatory)]
+        [scriptblock]$ReadAuthoritativeState,
+
+        [Parameter(Mandatory)]
+        [string]$StopGuidance
+    )
+
+    $CapturedUtc = (Get-Date).ToUniversalTime()
+    $SafeOperationName = $OperationName -replace '[^A-Za-z0-9_-]', '-'
+    $EvidencePath = Join-Path $EvidenceRoot (
+        'mutation-failure-{0}-{1}.json' -f
+        $SafeOperationName,
+        $CapturedUtc.ToString('yyyyMMddTHHmmssfffZ')
+    )
+
+    $Phase = ''
+    $PhaseReadError = ''
+    try {
+        $Phase = "$(
+            (Get-Content -LiteralPath (
+                Join-Path $EvidenceRoot 'phase-state.json'
+            ) -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop).Phase
+        )"
+    }
+    catch {
+        $PhaseReadError = "$($_.Exception.Message)"
+    }
+
+    $StateReadError = ''
+    try {
+        $AuthoritativeState = @(& $ReadAuthoritativeState)
+    }
+    catch {
+        $AuthoritativeState = @()
+        $StateReadError = "$($_.Exception.Message)"
+    }
+
+    $FailureRecord = [pscustomobject]@{
+        ChangeId = $ChangeId
+        Operation = $Operation
+        DesiredTransport = $DesiredTransport
+        Phase = $Phase
+        PhaseReadError = $PhaseReadError
+        FailedOperation = $OperationName
+        CapturedUtc = $CapturedUtc.ToString('o')
+        MutationError = "$($MutationError.Exception.Message)"
+        StateReadError = $StateReadError
+        AuthoritativeState = $AuthoritativeState
+    }
+
+    try {
+        $FailureRecord | ConvertTo-Json -Depth 20 |
+            Set-Content -LiteralPath $EvidencePath -ErrorAction Stop
+    }
+    catch {
+        throw (
+            "$StopGuidance The mutation failed with " +
+            "'$($MutationError.Exception.Message)', and failure evidence " +
+            "could not be written: $($_.Exception.Message)"
+        )
+    }
+
+    throw (
+        "$StopGuidance The mutation failed with " +
+        "'$($MutationError.Exception.Message)'. Authoritative post-failure " +
+        "state was captured in '$EvidencePath'."
+    )
+}
+```
+
 ## Quiesce workloads and the platform
 
 ### Step 1: Gracefully shut down customer VMs
@@ -1748,15 +1837,53 @@ $ControlPlaneGroup = @(Get-ClusterGroup -ErrorAction Stop |
 if ($ControlPlaneGroup.Count -ne 1) {
     throw "The sealed appliance cluster group no longer resolves uniquely."
 }
-Invoke-Command -ComputerName "$($ControlPlaneGroup[0].OwnerNode)" `
-    -ArgumentList "$($ControlPlaneEntry.VmId)" -ScriptBlock {
-        param($VmId)
-        $Vm = Get-VM -Id ([guid]$VmId) -ErrorAction Stop
-        if ($Vm.State -ne 'Off') {
-            # Without -TurnOff, -Save, or -Force, Stop-VM requests guest OS shutdown.
-            Stop-VM -VM $Vm -ErrorAction Stop
+try {
+    Invoke-Command -ComputerName "$($ControlPlaneGroup[0].OwnerNode)" `
+        -ArgumentList "$($ControlPlaneEntry.VmId)" -ScriptBlock {
+            param($VmId)
+            $Vm = Get-VM -Id ([guid]$VmId) -ErrorAction Stop
+            if ($Vm.State -ne 'Off') {
+                # Without -TurnOff, -Save, or -Force, Stop-VM requests guest OS shutdown.
+                Stop-VM -VM $Vm -ErrorAction Stop
+            }
+        } -ErrorAction Stop
+}
+catch {
+    Write-MutationFailureEvidence `
+        -OperationName 'stop-appliance-vm' `
+        -MutationError $_ `
+        -StopGuidance (
+            'The appliance VM did not stop gracefully. Do not force it off. ' +
+            'Contact Microsoft Support.'
+        ) `
+        -ReadAuthoritativeState {
+            $CurrentGroup = @(Get-ClusterGroup -ErrorAction Stop |
+                Where-Object {
+                    "$($_.Id)" -eq "$($ControlPlaneEntry.GroupId)" -and
+                    "$($_.Name)" -eq "$($ControlPlaneEntry.GroupName)"
+                })
+            $CurrentVm = @()
+            if ($CurrentGroup.Count -eq 1) {
+                $CurrentVm = @(Invoke-Command `
+                    -ComputerName "$($CurrentGroup[0].OwnerNode)" `
+                    -ArgumentList "$($ControlPlaneEntry.VmId)" -ScriptBlock {
+                        param($VmId)
+                        Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
+                            Select-Object VMId, Name, State
+                    } -ErrorAction Stop)
+            }
+            [pscustomobject]@{
+                GroupId = "$($ControlPlaneEntry.GroupId)"
+                GroupName = "$($ControlPlaneEntry.GroupName)"
+                GroupMatches = $CurrentGroup.Count
+                GroupState = "$($CurrentGroup[0].State)"
+                OwnerNode = "$($CurrentGroup[0].OwnerNode)"
+                VmId = "$($ControlPlaneEntry.VmId)"
+                VmMatches = $CurrentVm.Count
+                VmState = "$($CurrentVm[0].State)"
+            }
         }
-    } -ErrorAction Stop
+}
 ```
 
 Verification:
@@ -1807,7 +1934,25 @@ if ($MocResource.Count -ne 1) {
 }
 
 if ("$($MocResource[0].State)" -ne 'Offline') {
-    $MocResource[0] | Stop-ClusterResource -Wait 900 -ErrorAction Stop
+    try {
+        $MocResource[0] |
+            Stop-ClusterResource -Wait 900 -ErrorAction Stop
+    }
+    catch {
+        Write-MutationFailureEvidence `
+            -OperationName 'stop-moc-resource' `
+            -MutationError $_ `
+            -StopGuidance (
+                'The MOC resource did not reach Offline. Do not repeat the ' +
+                'operation while the resource is Pending. Contact Microsoft Support.'
+            ) `
+            -ReadAuthoritativeState {
+                @(Get-ClusterResource -ErrorAction Stop | Where-Object {
+                    "$($_.Id)" -eq "$($Moc.Id)" -and
+                    "$($_.Name)" -eq "$($Moc.Name)"
+                }) | Select-Object Id, Name, State, OwnerNode, OwnerGroup
+            }
+    }
 }
 
 $MocResource = Get-ClusterResource -Name "$($Moc.Name)"
@@ -1971,7 +2116,25 @@ if ($PoolResource.Count -ne 1) {
 }
 
 if ("$($PoolResource[0].State)" -ne 'Offline') {
-    $PoolResource[0] | Stop-ClusterResource -Wait 1800 -ErrorAction Stop
+    try {
+        $PoolResource[0] |
+            Stop-ClusterResource -Wait 1800 -ErrorAction Stop
+    }
+    catch {
+        Write-MutationFailureEvidence `
+            -OperationName 'stop-storage-pool-resource' `
+            -MutationError $_ `
+            -StopGuidance (
+                'The Storage Pool resource did not reach Offline. Stop and ' +
+                'contact Microsoft Support before any repair action.'
+            ) `
+            -ReadAuthoritativeState {
+                @(Get-ClusterResource -ErrorAction Stop | Where-Object {
+                    "$($_.Id)" -eq "$($Pool.Id)" -and
+                    "$($_.Name)" -eq "$($Pool.Name)"
+                }) | Select-Object Id, Name, State, OwnerNode, OwnerGroup
+            }
+    }
 }
 
 $PoolResource = Get-ClusterResource -Name "$($Pool.Name)"
@@ -2468,7 +2631,25 @@ if ($PoolResource.Count -ne 1) {
 }
 
 if ("$($PoolResource[0].State)" -ne 'Online') {
-    $PoolResource[0] | Start-ClusterResource -Wait 1800 -ErrorAction Stop
+    try {
+        $PoolResource[0] |
+            Start-ClusterResource -Wait 1800 -ErrorAction Stop
+    }
+    catch {
+        Write-MutationFailureEvidence `
+            -OperationName 'start-storage-pool-resource' `
+            -MutationError $_ `
+            -StopGuidance (
+                'The Storage Pool resource did not return Online. Contact ' +
+                'Microsoft Support before any repair action.'
+            ) `
+            -ReadAuthoritativeState {
+                @(Get-ClusterResource -ErrorAction Stop | Where-Object {
+                    "$($_.Id)" -eq "$($Pool.Id)" -and
+                    "$($_.Name)" -eq "$($Pool.Name)"
+                }) | Select-Object Id, Name, State, OwnerNode, OwnerGroup
+            }
+    }
 }
 
 $PoolResource = Get-ClusterResource -Name "$($Pool.Name)"
@@ -2505,8 +2686,56 @@ foreach ($AuxiliaryRecord in $AuxiliaryVirtualDiskResources) {
 
     if ("$($AuxiliaryRecord.OriginalState)" -eq 'Online' -and
         "$($ClusterResource[0].State)" -ne 'Online') {
-        $ClusterResource[0] |
-            Start-ClusterResource -Wait 1800 -ErrorAction Stop
+        try {
+            $ClusterResource[0] |
+                Start-ClusterResource -Wait 1800 -ErrorAction Stop
+        }
+        catch {
+            Write-MutationFailureEvidence `
+                -OperationName (
+                    'start-auxiliary-resource-{0}' -f
+                    "$($AuxiliaryRecord.ResourceName)"
+                ) `
+                -MutationError $_ `
+                -StopGuidance (
+                    "Manual-attach resource " +
+                    "'$($AuxiliaryRecord.ResourceName)' did not return to " +
+                    "its sealed state. Stop and contact Microsoft Support."
+                ) `
+                -ReadAuthoritativeState {
+                    $CurrentVirtualDisk = @(Get-VirtualDisk `
+                        -ErrorAction Stop | Where-Object {
+                            "$($_.UniqueId)" -eq
+                                "$($AuxiliaryRecord.VirtualDiskUniqueId)" -and
+                            "$($_.FriendlyName)" -eq
+                                "$($AuxiliaryRecord.VirtualDiskName)"
+                        })
+                    $CurrentClusterResource = @(Get-ClusterResource `
+                        -ErrorAction Stop | Where-Object {
+                            "$($_.Id)" -eq
+                                "$($AuxiliaryRecord.ResourceId)" -and
+                            "$($_.Name)" -eq
+                                "$($AuxiliaryRecord.ResourceName)"
+                        })
+                    [pscustomobject]@{
+                        VirtualDiskMatches = $CurrentVirtualDisk.Count
+                        VirtualDiskUniqueId =
+                            "$($AuxiliaryRecord.VirtualDiskUniqueId)"
+                        VirtualDiskName =
+                            "$($AuxiliaryRecord.VirtualDiskName)"
+                        VirtualDiskHealth =
+                            "$($CurrentVirtualDisk[0].HealthStatus)"
+                        VirtualDiskOperational =
+                            "$($CurrentVirtualDisk[0].OperationalStatus)"
+                        ResourceMatches = $CurrentClusterResource.Count
+                        ResourceId = "$($AuxiliaryRecord.ResourceId)"
+                        ResourceName = "$($AuxiliaryRecord.ResourceName)"
+                        ResourceState =
+                            "$($CurrentClusterResource[0].State)"
+                        OriginalState = "$($AuxiliaryRecord.OriginalState)"
+                    }
+                }
+        }
     }
 
     $CurrentResource = Get-ClusterResource -Name "$($AuxiliaryRecord.ResourceName)"
@@ -2550,7 +2779,25 @@ if ($MocResource.Count -ne 1) {
     throw "The sealed MOC resource identity no longer resolves uniquely."
 }
 if ("$($MocResource[0].State)" -ne 'Online') {
-    $MocResource[0] | Start-ClusterResource -Wait 900 -ErrorAction Stop
+    try {
+        $MocResource[0] |
+            Start-ClusterResource -Wait 900 -ErrorAction Stop
+    }
+    catch {
+        Write-MutationFailureEvidence `
+            -OperationName 'start-moc-resource' `
+            -MutationError $_ `
+            -StopGuidance (
+                'The MOC resource did not return Online. Stop before ' +
+                'customer workload startup and contact Microsoft Support.'
+            ) `
+            -ReadAuthoritativeState {
+                @(Get-ClusterResource -ErrorAction Stop | Where-Object {
+                    "$($_.Id)" -eq "$($Moc.Id)" -and
+                    "$($_.Name)" -eq "$($Moc.Name)"
+                }) | Select-Object Id, Name, State, OwnerNode, OwnerGroup
+            }
+    }
 }
 
 $ControlPlaneGroup = @(Get-ClusterGroup | Where-Object {
@@ -2561,7 +2808,49 @@ if ($ControlPlaneGroup.Count -ne 1) {
     throw "The sealed appliance cluster-group identity no longer resolves uniquely."
 }
 if ("$($ControlPlaneGroup[0].State)" -ne 'Online') {
-    $ControlPlaneGroup[0] | Start-ClusterGroup -Wait 1800 -ErrorAction Stop
+    try {
+        $ControlPlaneGroup[0] |
+            Start-ClusterGroup -Wait 1800 -ErrorAction Stop
+    }
+    catch {
+        Write-MutationFailureEvidence `
+            -OperationName 'start-appliance-cluster-group' `
+            -MutationError $_ `
+            -StopGuidance (
+                'The appliance clustered role did not return Online. Stop ' +
+                'before customer workload startup and contact Microsoft Support.'
+            ) `
+            -ReadAuthoritativeState {
+                $CurrentGroup = @(Get-ClusterGroup -ErrorAction Stop |
+                    Where-Object {
+                        "$($_.Id)" -eq
+                            "$($ControlPlaneEntry.GroupId)" -and
+                        "$($_.Name)" -eq
+                            "$($ControlPlaneEntry.GroupName)"
+                    })
+                $CurrentVm = @()
+                if ($CurrentGroup.Count -eq 1) {
+                    $CurrentVm = @(Invoke-Command `
+                        -ComputerName "$($CurrentGroup[0].OwnerNode)" `
+                        -ArgumentList "$($ControlPlaneEntry.VmId)" `
+                        -ScriptBlock {
+                            param($VmId)
+                            Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
+                                Select-Object VMId, Name, State
+                        } -ErrorAction Stop)
+                }
+                [pscustomobject]@{
+                    GroupId = "$($ControlPlaneEntry.GroupId)"
+                    GroupName = "$($ControlPlaneEntry.GroupName)"
+                    GroupMatches = $CurrentGroup.Count
+                    GroupState = "$($CurrentGroup[0].State)"
+                    OwnerNode = "$($CurrentGroup[0].OwnerNode)"
+                    VmId = "$($ControlPlaneEntry.VmId)"
+                    VmMatches = $CurrentVm.Count
+                    VmState = "$($CurrentVm[0].State)"
+                }
+            }
+    }
 }
 ```
 
