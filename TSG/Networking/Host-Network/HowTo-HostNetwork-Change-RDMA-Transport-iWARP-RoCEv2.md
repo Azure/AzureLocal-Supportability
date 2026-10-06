@@ -580,6 +580,84 @@ function Set-ChangePhase {
     }
 }
 
+function Write-MutationFailureEvidence {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$OperationName,
+
+        [Parameter(Mandatory)]
+        [System.Management.Automation.ErrorRecord]$MutationError,
+
+        [Parameter(Mandatory)]
+        [scriptblock]$ReadAuthoritativeState,
+
+        [Parameter(Mandatory)]
+        [string]$StopGuidance
+    )
+
+    $CapturedUtc = (Get-Date).ToUniversalTime()
+    $SafeOperationName = $OperationName -replace '[^A-Za-z0-9_-]', '-'
+    $EvidencePath = Join-Path $EvidenceRoot (
+        'mutation-failure-{0}-{1}.json' -f
+        $SafeOperationName,
+        $CapturedUtc.ToString('yyyyMMddTHHmmssfffZ')
+    )
+
+    $Phase = ''
+    $PhaseReadError = ''
+    try {
+        $Phase = "$(
+            (Get-Content -LiteralPath (
+                Join-Path $EvidenceRoot 'phase-state.json'
+            ) -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop).Phase
+        )"
+    }
+    catch {
+        $PhaseReadError = "$($_.Exception.Message)"
+    }
+
+    $StateReadError = ''
+    try {
+        $AuthoritativeState = @(& $ReadAuthoritativeState)
+    }
+    catch {
+        $AuthoritativeState = @()
+        $StateReadError = "$($_.Exception.Message)"
+    }
+
+    $FailureRecord = [pscustomobject]@{
+        ChangeId = $ChangeId
+        Operation = $Operation
+        DesiredTransport = $DesiredTransport
+        Phase = $Phase
+        PhaseReadError = $PhaseReadError
+        FailedOperation = $OperationName
+        CapturedUtc = $CapturedUtc.ToString('o')
+        MutationError = "$($MutationError.Exception.Message)"
+        StateReadError = $StateReadError
+        AuthoritativeState = $AuthoritativeState
+    }
+
+    try {
+        $FailureRecord | ConvertTo-Json -Depth 20 |
+            Set-Content -LiteralPath $EvidencePath -ErrorAction Stop
+    }
+    catch {
+        throw (
+            "$StopGuidance The mutation failed with " +
+            "'$($MutationError.Exception.Message)', and failure evidence " +
+            "could not be written: $($_.Exception.Message)"
+        )
+    }
+
+    throw (
+        "$StopGuidance The mutation failed with " +
+        "'$($MutationError.Exception.Message)'. Authoritative post-failure " +
+        "state was captured in '$EvidencePath'."
+    )
+}
+
 Set-ChangePhase -Phase Initialized
 }
 finally {
@@ -2799,6 +2877,18 @@ if ("$($MocResource[0].State)" -ne 'Online') {
             }
     }
 }
+$MocResource = @(Get-ClusterResource -ErrorAction Stop | Where-Object {
+    "$($_.Id)" -eq "$($Moc.Id)" -and "$($_.Name)" -eq "$($Moc.Name)"
+})
+if ($MocResource.Count -ne 1) {
+    throw "The sealed MOC resource identity no longer resolves uniquely."
+}
+if ("$($MocResource[0].State)" -ne 'Online') {
+    throw (
+        "The MOC resource is '$($MocResource[0].State)', expected Online. " +
+        "Stop before customer workload startup and contact Microsoft Support."
+    )
+}
 
 $ControlPlaneGroup = @(Get-ClusterGroup | Where-Object {
     "$($_.Id)" -eq "$($ControlPlaneEntry.GroupId)" -and
@@ -2852,15 +2942,47 @@ if ("$($ControlPlaneGroup[0].State)" -ne 'Online') {
             }
     }
 }
+$ControlPlaneGroup = @(Get-ClusterGroup -ErrorAction Stop | Where-Object {
+    "$($_.Id)" -eq "$($ControlPlaneEntry.GroupId)" -and
+    "$($_.Name)" -eq "$($ControlPlaneEntry.GroupName)"
+})
+if ($ControlPlaneGroup.Count -ne 1) {
+    throw "The sealed appliance cluster-group identity no longer resolves uniquely."
+}
+if ("$($ControlPlaneGroup[0].State)" -ne 'Online') {
+    throw (
+        "The appliance clustered role is '$($ControlPlaneGroup[0].State)', " +
+        "expected Online. Stop before customer workload startup and contact " +
+        "Microsoft Support."
+    )
+}
+
+$ControlPlaneState = @(Invoke-Command `
+    -ComputerName "$($ControlPlaneGroup[0].OwnerNode)" `
+    -ArgumentList "$($ControlPlaneEntry.VmId)" `
+    -ScriptBlock {
+        param($VmId)
+        Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
+            Select-Object VMId, Name, State
+    } -ErrorAction Stop)
+if (
+    $ControlPlaneState.Count -ne 1 -or
+    "$($ControlPlaneState[0].VMId)" -ne "$($ControlPlaneEntry.VmId)" -or
+    "$($ControlPlaneState[0].State)" -ne 'Running'
+) {
+    throw (
+        "The appliance VM did not return to the sealed Running state. Stop " +
+        "before customer workload startup and contact Microsoft Support."
+    )
+}
 ```
 
 Verification:
 
 ```powershell
-Get-ClusterResource -Name "$($Moc.Name)" |
-    Format-Table Name, State, OwnerNode
-Get-ClusterGroup -Name "$($ControlPlaneEntry.GroupName)" |
-    Format-Table Name, State, OwnerNode
+$MocResource | Format-Table Name, State, OwnerNode
+$ControlPlaneGroup | Format-Table Name, State, OwnerNode
+$ControlPlaneState | Format-Table VMId, Name, State
 ```
 
 Expected result: MOC and the appliance clustered role are `Online`, and the appliance VM is `Running`.
