@@ -91,6 +91,9 @@
 
 ## Quick triage (start here)
 
+Stretched clusters are not supported in Azure Local
+([stretched clusters][stretched]), and this guide does not cover them.
+
 Run this on any cluster node. It shows how full the pool is and, crucially, whether
 the volumes are **Fixed** or **Thin**, which decides the entire remediation path:
 
@@ -106,12 +109,6 @@ Get-VirtualDisk | Format-Table FriendlyName, ProvisioningType, Size, FootprintOn
 # 3) Any active storage health faults?
 Get-HealthFault
 ```
-
-If step 1 lists more than one pool, stop here and open a support case: Azure Local
-uses one storage pool per cluster, and in a stretched cluster *"each site maintains
-its own Storage Spaces Direct storage pool"*
-([Failover Clustering topologies][fc-topologies]). This guide, including Path B,
-does not cover stretched clusters.
 
 Then branch on `ProvisioningType`:
 
@@ -317,8 +314,7 @@ things first, and escalate only as needed:
    confirm are no longer needed, and remove the leftover virtual disks of VMs you
    deleted (see [Path B](#path-b-thin-provisioned-volumes-reclaim-unused-capacity)
    for how to do both safely). On thin volumes the reclaimed space returns to the
-   pool gradually (about 15 minutes), except on a stretched cluster, where it is not
-   returned.
+   pool gradually (about 15 minutes).
 2. **Restrict new provisioning.** Stop creating new virtual disks or volumes on
    the pressured pool.
 3. **Freeze automated thin-disk or volume expansion** so background growth cannot
@@ -474,24 +470,9 @@ Set-StoragePool -FriendlyName "<pool name>" -ThinProvisioningAlertThresholds @(8
 > you are not that administrator, or you are unsure whether you are authorized to
 > delete those disks or take these workloads offline, stop here and hand off.
 
-> [!IMPORTANT]
-> **Path B does not apply to stretched clusters.** A stretched cluster has its nodes
-> in two sites, with Storage Replica replicating volumes between them. Microsoft
-> documents that *"Because TRIM is disabled for stretched clusters, storage isn't
-> returned to the pool after data is deleted"* ([thin provisioning][thin-prov]).
-> Both branches below depend on freed space being returned to the pool, so neither
-> one recovers capacity there. Stretched clusters are also not supported in Azure
-> Local ([stretched clusters][stretched]). If the cluster you are working on is
-> stretched, do not use Path B; open a support case.
->
-> To tell whether a cluster is stretched, look at step 1 of the
-> [Quick triage](#quick-triage-start-here): a stretched cluster has one storage pool
-> for each site, so step 1 lists more than one pool. This exclusion depends on how
-> the cluster is built, not on the `fsutil`
-> `DisableDeleteNotify` reading, which does not tell you whether this guide applies
-> (see the note at the end of this path). A rack aware cluster is not a stretched
-> cluster either: it keeps a single storage pool across its two racks
-> ([rack aware clusters][rack-aware]).
+> [!NOTE]
+> Stretched clusters are not supported in Azure Local
+> ([stretched clusters][stretched]), and Path B does not cover them.
 
 On thin volumes, capacity that was written and later deleted can remain committed
 to the pool in partially used 256 MB "slabs". A slab is only returned to the pool
@@ -1302,7 +1283,6 @@ case instead.
 | Fixed | Move the alert threshold | A5: raise `ThinProvisioningAlertThresholds` |
 | Thin | Return capacity from **deleted whole files/VMs** | Path B pre-branch: remove leftover disks (through Azure for Azure Local VMs, after the check for unmanaged VMs), wait, re-measure (no downtime) |
 | Thin | Return capacity stranded by **interior fragmentation** | Path B: SlabConsolidate + ReFS unmap (offline window) |
-| Any, on a stretched cluster (more than one pool) | Any | Not covered by this guide: open a support case |
 
 ## Verify
 
@@ -1435,12 +1415,10 @@ firm conditions is met. Do not simply re-run the procedure.
   cannot attribute to a VM you removed, a disk of an Azure Local VM that was removed
   with local tools, a checkpoint or VHD Set file that outlived its VM, or a
   `Test-UnusedVirtualDisk` error you cannot fix. Leave the files in place.
-- **Path B cannot start, or its window cannot continue**: step 1 of the
-  [Quick triage](#quick-triage-start-here) lists more than one storage pool (a
-  stretched cluster), `Get-VirtualMachineOnVolume` stops with an error you cannot
-  fix, a VM in the list shows `DoNotStop`, a VM with `StopFrom` set to `Azure`
-  cannot be found in Azure, a VM's state ends in `Critical`, or a checkpoint merge
-  does not finish.
+- **Path B cannot start, or its window cannot continue**:
+  `Get-VirtualMachineOnVolume` stops with an error you cannot fix, a VM in the list
+  shows `DoNotStop`, a VM with `StopFrom` set to `Azure` cannot be found in Azure, a
+  VM's state ends in `Critical`, or a checkpoint merge does not finish.
 - The reserve-capacity fault (`InsufficientReserveCapacity`) **persists after**
   you have added capacity or reduced footprint.
 
@@ -1467,10 +1445,8 @@ Include the data-collection output above with any Microsoft support case.
 - [Manage Azure Local VMs (delete a VM and its leftover resources)](https://learn.microsoft.com/azure/azure-local/manage/manage-arc-virtual-machines#delete-a-vm)
 - [Create a storage path for Azure Local VMs](https://learn.microsoft.com/azure/azure-local/manage/create-storage-path)
 - [Stretched clusters overview (Azure Stack HCI 22H2 article; stretched clusters are not supported in Azure Local)](https://learn.microsoft.com/azure/azure-local/concepts/stretched-clusters)
-- [Azure Local rack aware clustering overview (a single storage pool across two racks)](https://learn.microsoft.com/azure/azure-local/concepts/rack-aware-cluster-overview)
 - [Can't power on Hyper-V VM and merge operations fail (insufficient free space)](https://learn.microsoft.com/troubleshoot/windows-server/virtualization/cannot-power-on-hyper-v-vm)
 - [Virtual machines enter the paused state due to low disk free space](https://learn.microsoft.com/troubleshoot/windows-server/virtualization/virtual-machines-enter-paused-state-low-disk-free)
-- [Failover Clustering topologies (a stretch cluster has a storage pool for each site)](https://learn.microsoft.com/windows-server/failover-clustering/topologies#stretch-cluster)
 - [Hyper-V checkpoint troubleshooting (merge failures, including insufficient disk space)](https://learn.microsoft.com/troubleshoot/windows-server/virtualization/hyper-v-snapshots-checkpoints-differencing-disks)
 
 [thin-prov]: https://learn.microsoft.com/azure/azure-local/manage/manage-thin-provisioning-23h2
@@ -1480,9 +1456,7 @@ Include the data-collection output above with any Microsoft support case.
 [s2d-overview]: https://learn.microsoft.com/windows-server/storage/storage-spaces/storage-spaces-direct-overview
 [stretched]: https://learn.microsoft.com/azure/azure-local/concepts/stretched-clusters
 [ckpt-ts]: https://learn.microsoft.com/troubleshoot/windows-server/virtualization/hyper-v-snapshots-checkpoints-differencing-disks
-[rack-aware]: https://learn.microsoft.com/azure/azure-local/concepts/rack-aware-cluster-overview
 [ckpt-poweron]: https://learn.microsoft.com/troubleshoot/windows-server/virtualization/cannot-power-on-hyper-v-vm
 [paused-critical]: https://learn.microsoft.com/troubleshoot/windows-server/virtualization/virtual-machines-enter-paused-state-low-disk-free
-[fc-topologies]: https://learn.microsoft.com/windows-server/failover-clustering/topologies#stretch-cluster
 
 ---
