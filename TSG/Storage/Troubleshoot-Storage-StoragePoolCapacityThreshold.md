@@ -12,7 +12,7 @@
     "technical_grade": null,
     "reproduction_substrate": "hardware",
     "automation_status": "ready",
-    "last_validated": "2026-10-06",
+    "last_validated": "2026-10-07",
     "spec_ref": "AzStackHci_Storage_StoragePoolCapacityThreshold"
   }
 }
@@ -985,14 +985,14 @@ Id       : 00000000-0000-0000-0000-000000000003
 **Preparation (optional, no downtime, before the window): merge only the
 checkpoints that the workload owner approves.** **[MEDIUM RISK]** Checkpoint files
 hold data that pins extra slabs and reduces what consolidation can recover.
-Removing a checkpoint deletes it, and Hyper-V merges its differencing disk
-(`.avhdx`) into the parent disk; it does not revert the VM. **This cannot be
-undone:** the checkpoint is gone, and the only recovery is to restore the VM from a
-backup, which returns it to the time of that backup, not to the checkpoint. For
-Azure Local VMs (`StopFrom` set to `Azure`), Microsoft lists checkpoints with local
-tools as supported on Azure Local 2504 and later
-([supported operations][unsupported-ops]); on an earlier release, open a support
-case instead.
+Removing a checkpoint deletes it. Hyper-V then merges, deletes, or keeps the
+differencing disks (`.avhdx`) involved, depending on the VM's other checkpoints (see
+below); it does not revert the VM. **This cannot be undone:** the checkpoint is
+gone, and the only recovery is to restore the VM from a backup, which returns it to
+the time of that backup, not to the checkpoint. For Azure Local VMs (`StopFrom` set
+to `Azure`), Microsoft lists checkpoints with local tools as supported on Azure
+Local 2504 and later ([supported operations][unsupported-ops]); on an earlier
+release, open a support case instead.
 
 - **List** the checkpoints of the VMs that use the volume. **[READ-ONLY]**
 
@@ -1011,69 +1011,285 @@ case instead.
   from a point in time they would accept going back to. Record who approved it.
   Remove nothing without that approval.
 - **Select** one approved checkpoint by its `Id` from the list. Only a `Standard`
-  checkpoint can be selected. Select one only from a VM whose `State` in the VM list
-  is `Running` or `Off`: Microsoft's checkpoint troubleshooting checklist says to
-  *"Verify that the VM isn't in the "saved," "creating checkpoint," or "stopping"
-  state"* ([Hyper-V checkpoint troubleshooting][ckpt-ts]). **[READ-ONLY]**
+  checkpoint can be selected. The VM must be `Running` or `Off`, with nothing else
+  in progress, and the removal step checks that again right before it removes
+  anything. Microsoft's checkpoint troubleshooting checklist says to *"Verify that
+  the VM isn't in the "saved," "creating checkpoint," or "stopping" state"*
+  ([Hyper-V checkpoint troubleshooting][ckpt-ts]). **[READ-ONLY]**
 
   ```powershell
   $c = @($checkpoints | Where-Object { $_.Id -eq '<Id of one approved checkpoint>' -and "$($_.SnapshotType)" -eq 'Standard' }); "Selected $($c.Count) checkpoint(s). $($c.VMName) $($c.Name)"
   ```
 
-- **Check that there is room for the merge.** **[READ-ONLY]** This lists the
-  checkpoint (`.avhdx`) files that the VM's disks are built on, with their sizes:
+- **Work out what the removal writes, and check that there is room for it.**
+  **[READ-ONLY]** Removing a checkpoint does not always merge that checkpoint's own
+  differencing disk. Hyper-V works it out from all of the VM's checkpoints: a disk
+  that nothing needs any more is merged with the one disk built on it, deleted when
+  no disk is built on it, and kept while two or more are. When the VM's checkpoints
+  branch (someone applied an older checkpoint and kept the newer ones), removing one
+  checkpoint can delete a file and merge a disk of another branch. In a lab test,
+  removing the checkpoint at the end of one branch also merged the VM's current disk
+  into its base disk.
+
+  Paste these two functions once into the elevated session that you used for the VM
+  list. `Test-CheckpointRemoval` only reads. `Remove-ApprovedCheckpoint` removes the
+  checkpoint, and only after you confirm.
 
   ```powershell
-  Get-VM -ComputerName $c[0].ComputerName -Id $c[0].VMId | Get-VMHardDiskDrive | Where-Object Path | ForEach-Object { $p = $_.Path; while ($p -like '*.avhdx') { $v = Get-VHD -ComputerName $c[0].ComputerName -Path $p; '{0}  {1:N1} GB' -f $p, ($v.FileSize / 1GB); $p = $v.ParentPath } }
+  function Test-CheckpointRemoval {
+      [CmdletBinding()]
+      param(
+          [Parameter(Mandatory = $true)]
+          [AllowNull()]
+          [AllowEmptyCollection()]
+          [object[]]$Checkpoint,
+          [switch]$Quiet
+      )
+      # Read-only. Works out what Hyper-V writes when this one checkpoint is removed. Any error stops the function.
+      $ErrorActionPreference = 'Stop'
+      # Ignore default parameter values set in the session, so none of them can hide an error.
+      $PSDefaultParameterValues = @{}
+      $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run this in an elevated PowerShell session (Run as administrator).' }
+      $sel = @($Checkpoint | Where-Object { $_ })
+      if ($sel.Count -ne 1) { throw 'Select exactly one approved Standard checkpoint first.' }
+      $s = $sel[0]
+      $vm = Get-VM -ComputerName $s.ComputerName -Id $s.VMId
+      if (@($vm.OperationalStatus) -contains 'MergingDisks') { throw "VM '$($vm.Name)' is still merging disks. Wait until that merge has finished." }
+      $snaps = @(Get-VMSnapshot -VM $vm)
+      if (@($snaps | Where-Object { "$($_.Id)" -eq "$($s.Id)" }).Count -ne 1) { throw 'The selected checkpoint no longer exists. List and select again.' }
+      # Paths are compared as full paths in lower case. Only disk files on Cluster Shared Volumes are covered.
+      $csvBase = $env:SystemDrive.ToLowerInvariant() + '\clusterstorage\'
+      $norm = {
+          param([string]$P)
+          $x = $P.Trim()
+          if ($x.StartsWith('\\?\', [StringComparison]::Ordinal)) { $x = $x.Substring(4) }
+          if ($x -notmatch '^[A-Za-z]:\\') { throw "'$P' is not a disk file on this cluster. A VM with this disk is not covered here." }
+          $x = [IO.Path]::GetFullPath($x).ToLowerInvariant()
+          if (-not $x.StartsWith($csvBase, [StringComparison]::Ordinal)) { throw "'$P' is not on a Cluster Shared Volume. A VM with this disk is not covered here." }
+          if ($x.EndsWith('.vhds')) { throw "'$P' is a VHD Set. A VM with this disk is not covered here." }
+          $x
+      }
+      # Follow the disks of the VM and of every checkpoint up to the first disk that is not a checkpoint differencing
+      # disk (.avhdx). $use counts what still uses each disk once the selected checkpoint is gone.
+      $vhd = @{}; $par = @{}; $kids = @{}; $use = @{}; $start = @()
+      $owners = @(@{ Sel = $false; Drives = @(Get-VMHardDiskDrive -VM $vm) }) + @($snaps | ForEach-Object { @{ Sel = ("$($_.Id)" -eq "$($s.Id)"); Drives = @(Get-VMHardDiskDrive -VMSnapshot $_) } })
+      foreach ($o in $owners) {
+          foreach ($d in $o.Drives) {
+              $k = & $norm "$($d.Path)"
+              if ($o.Sel) { $start += $k } else { $use[$k] = 1 + [int]$use[$k] }
+              $p = "$($d.Path)"
+              while ($p) {
+                  $pk = & $norm $p
+                  if ($vhd.ContainsKey($pk)) { break }
+                  $v = Get-VHD -ComputerName $s.ComputerName -Path $p
+                  $vhd[$pk] = $v; $par[$pk] = ''; $p = ''
+                  if ($pk -match '\.avhdx?$') {
+                      if (-not $v.ParentPath) { throw "'$($v.Path)' has no parent disk." }
+                      $par[$pk] = & $norm $v.ParentPath
+                      $p = "$($v.ParentPath)"
+                  }
+              }
+          }
+      }
+      foreach ($k in @($vhd.Keys)) { $kids[$k] = @() }
+      foreach ($k in @($vhd.Keys)) { if ($par[$k]) { $kids[$par[$k]] += $k } }
+      $rootOf = { param([string]$K) while ($par[$K]) { $K = $par[$K] }; $K }
+      $roots = @($owners[0].Drives | ForEach-Object { & $rootOf (& $norm "$($_.Path)") })
+      foreach ($k in $start) { if ($roots -notcontains (& $rootOf $k)) { throw "The checkpoint has a disk that the VM no longer uses ('$($vhd[$k].Path)'). This is not covered here." } }
+      foreach ($k in @($vhd.Keys)) { if ([int]$use[$k] -eq 0 -and $start -notcontains $k -and @($kids[$k]).Count -eq 1) { throw "No checkpoint uses '$($vhd[$k].Path)' any more, but a disk is still built on it, so this check cannot tell what Hyper-V merges next. Remove no checkpoints of this VM; open a support case." } }
+      # Remove the checkpoint on paper, the way Hyper-V does it: a disk that nothing uses any more is deleted when no disk
+      # is built on it, merged with the disk built on it when there is one, and kept while two or more are built on it.
+      $rows = New-Object System.Collections.ArrayList
+      $todo = New-Object System.Collections.Queue
+      foreach ($k in $start) { $todo.Enqueue($k) }
+      $steps = 0
+      while ($todo.Count -gt 0) {
+          if (++$steps -gt 1000) { throw 'Could not work out what the removal does.' }
+          $x = $todo.Dequeue()
+          if (-not $vhd.ContainsKey($x) -or [int]$use[$x] -gt 0) { continue }
+          $kx = @($kids[$x])
+          if ($kx.Count -ge 2) { [void]$rows.Add([pscustomobject]@{ Action = 'Keep'; Disk = $vhd[$x].Path; Removed = ''; Data = 0.0; Need = 0.0; Volume = '' }); continue }
+          if ($kx.Count -eq 0) {
+              if ($x -notmatch '\.avhdx?$') { throw "Could not tell what Hyper-V does with '$($vhd[$x].Path)'." }
+              [void]$rows.Add([pscustomobject]@{ Action = 'Delete'; Disk = $vhd[$x].Path; Removed = $vhd[$x].Path; Data = 0.0; Need = 0.0; Volume = '' })
+              $p = $par[$x]
+              $vhd.Remove($x)
+              if ($p) { $kids[$p] = @($kids[$p] | Where-Object { $_ -ne $x }); $todo.Enqueue($p) }
+              continue
+          }
+          $y = $kx[0]; $t = $vhd[$x]; $f = $vhd[$y]
+          if ($f.BlockSize -le 0 -or ("$($t.VhdType)" -ne 'Fixed' -and $t.BlockSize -le 0)) { throw "Could not read the block size of '$($f.Path)' or '$($t.Path)'." }
+          # Each block of the merged disk (2 MB) can add a whole block (32 MB on a dynamic disk) to the disk it goes into.
+          $grow = 0.0
+          if ("$($t.VhdType)" -ne 'Fixed') { $grow = [Math]::Min([Math]::Ceiling([double]$f.FileSize / $f.BlockSize) * $t.BlockSize, [Math]::Max(0.0, [double]$t.Size - [double]$t.FileSize)) }
+          [void]$rows.Add([pscustomobject]@{ Action = 'Merge'; Disk = $t.Path; Removed = $f.Path; Data = [double]$f.FileSize; Need = [double]$f.FileSize + $grow; Volume = '' })
+          $use[$x] = [int]$use[$y]
+          $kids[$x] = @($kids[$y])
+          foreach ($g in @($kids[$y])) { $par[$g] = $x }
+          $vhd.Remove($y)
+          $todo.Enqueue($x)
+      }
+      if ($rows.Count -eq 0) { throw 'Could not work out what the removal does.' }
+      # For each volume a merge writes to: its free space, and how its virtual disk grows in the pool. A thin virtual
+      # disk takes pool space in whole allocation units (unit size times columns, for each copy).
+      $vols = @{}
+      foreach ($r in @($rows | Where-Object { $_.Need -gt 0 })) {
+          $v = Get-Volume -FilePath $r.Disk -ErrorAction Stop
+          $id = "$($v.UniqueId)"
+          if (-not $vols.ContainsKey($id)) {
+              $vd = @($v | Get-Partition -ErrorAction Stop | Get-Disk -ErrorAction Stop | Get-VirtualDisk -ErrorAction Stop)
+              if ($vd.Count -ne 1) { throw "Could not find the virtual disk of the volume that holds '$($r.Disk)'." }
+              $parts = @($vd[0]) + @(Get-StorageTier -VirtualDisk $vd[0] -ErrorAction Stop)
+              $copies = ($parts | ForEach-Object { [Math]::Max([int]$_.NumberOfDataCopies, 1 + [int]$_.PhysicalDiskRedundancy) } | Measure-Object -Maximum).Maximum
+              $unit = ($parts | ForEach-Object { [double]$_.AllocationUnitSize * [int]$_.NumberOfColumns } | Measure-Object -Maximum).Maximum
+              $thin = "$($vd[0].ProvisioningType)" -ne 'Fixed'
+              if ($thin -and $unit -le 0) { throw "Could not read the allocation unit of virtual disk '$($vd[0].FriendlyName)'." }
+              $pool = Get-StoragePool -VirtualDisk $vd[0] -ErrorAction Stop
+              $vols[$id] = [pscustomobject]@{ Volume = $v.FileSystemLabel; Free = [double]$v.SizeRemaining; Keep = [Math]::Max(0.05 * $v.Size, 10GB); Need = 0.0; Copies = [int]$copies; Unit = [double]$unit; Thin = $thin; Pool = $pool }
+          }
+          $vols[$id].Need += $r.Need
+          $r.Volume = $vols[$id].Volume
+      }
+      # The pool keeps a reserve free for repairs: the size of one capacity drive per server, up to four.
+      $pools = @($vols.Values | Group-Object { $_.Pool.UniqueId } | ForEach-Object {
+          $pl = $_.Group[0].Pool
+          $big = (@(Get-PhysicalDisk -StoragePool $pl -ErrorAction Stop | Where-Object { "$($_.Usage)" -ne 'Journal' }) | Measure-Object Size -Maximum).Maximum
+          if (-not ($big -gt 0)) { throw "Could not read the capacity drives of pool '$($pl.FriendlyName)'." }
+          $need = 0.0
+          foreach ($o in @($_.Group | Where-Object Thin)) { $need += ([Math]::Ceiling($o.Need / $o.Unit) + 1) * $o.Unit * $o.Copies }
+          [pscustomobject]@{ Name = $pl.FriendlyName; Free = [double]$pl.Size - [double]$pl.AllocatedSize; Need = $need; Keep = [double]$big * [Math]::Min(4, @(Get-ClusterNode).Count) }
+      })
+      # A merge that is already running elsewhere in the cluster uses the same free space.
+      $merging = @(Get-ClusterNode | ForEach-Object { Get-VM -ComputerName $_.Name } | Where-Object { @($_.OperationalStatus) -contains 'MergingDisks' } | ForEach-Object { $_.Name })
+      $room = $vols.Count -eq 0 -or $merging.Count -eq 0
+      foreach ($o in @($vols.Values) + $pools) { if ($o.Need -gt 0 -and $o.Free - $o.Need -lt $o.Keep) { $room = $false } }
+      $state = "$($vm.State)"
+      $busy = (@($vm.OperationalStatus) | ForEach-Object { "$_" }) -join ', '
+      if (-not $Quiet) {
+          foreach ($o in $vols.Values) { Write-Host ('Volume {0}: {1:N1} GB free. The merge can need up to {2:N1} GB, and the volume should keep {3:N1} GB free.' -f $o.Volume, ($o.Free / 1GB), ($o.Need / 1GB), ($o.Keep / 1GB)) }
+          foreach ($o in $pools) { Write-Host ('Pool {0}: {1:N1} GB free. The merge can need up to {2:N1} GB, and the pool should keep {3:N1} GB free as its reserve.' -f $o.Name, ($o.Free / 1GB), ($o.Need / 1GB), ($o.Keep / 1GB)) }
+          if ($vols.Count -eq 0) { Write-Host 'Nothing is merged, so this removal needs no free space.' }
+          if ($merging.Count -and $vols.Count) { Write-Host "Another merge is running (VM $($merging -join ', ')). Wait until it has finished." }
+          if ($room) { Write-Host 'There is room for this removal.' } else { Write-Host 'NOT ENOUGH ROOM. Do not remove this checkpoint now.' }
+          if (($state -ne 'Running' -and $state -ne 'Off') -or $busy -ne 'Ok') { Write-Host "VM '$($vm.Name)' is $state ($busy). The removal step refuses until it is Running or Off with nothing else in progress (Ok)." }
+      }
+      $rows | ForEach-Object { [pscustomobject]@{ Action = $_.Action; Disk = $_.Disk; Removed = $_.Removed; DataGB = [Math]::Round($_.Data / 1GB, 1); NeedGB = [Math]::Round($_.Need / 1GB, 1); Volume = $_.Volume; Room = $room } }
+  }
+  function Remove-ApprovedCheckpoint {
+      [CmdletBinding()]
+      param(
+          [Parameter(Mandatory = $true)]
+          [AllowNull()]
+          [AllowEmptyCollection()]
+          [object[]]$Checkpoint
+      )
+      # Asks first. Then reads the checkpoint, the room for the merge and the VM state again, and removes the checkpoint
+      # only if all of them still allow it. Any error stops the function before it removes anything. Returns the plan.
+      $ErrorActionPreference = 'Stop'
+      $PSDefaultParameterValues = @{}
+      $sel = @($Checkpoint | Where-Object { $_ })
+      if ($sel.Count -ne 1) { throw 'Nothing was removed. Select exactly one approved Standard checkpoint first.' }
+      $s = $sel[0]
+      $choices = [Management.Automation.Host.ChoiceDescription[]]@('&Yes', '&No')
+      $answer = $Host.UI.PromptForChoice('Remove checkpoint', "Remove checkpoint '$($s.Name)' of VM '$($s.VMName)'? This cannot be undone.", $choices, 1)
+      if ($answer -ne 0) { Write-Host 'Nothing was removed.'; return }
+      $fresh = Get-VMSnapshot -ComputerName $s.ComputerName -Id $s.Id
+      if ("$($fresh.SnapshotType)" -ne 'Standard') { throw 'Nothing was removed. The checkpoint is not a Standard checkpoint.' }
+      $plan = @(Test-CheckpointRemoval -Checkpoint @($fresh) -Quiet)
+      if (-not $plan[0].Room) { throw 'Nothing was removed. There is not enough room for the merge. Run Test-CheckpointRemoval to see why.' }
+      $vm = Get-VM -ComputerName $s.ComputerName -Id $s.VMId
+      $state = "$($vm.State)"
+      $busy = (@($vm.OperationalStatus) | ForEach-Object { "$_" }) -join ', '
+      if (($state -ne 'Running' -and $state -ne 'Off') -or $busy -ne 'Ok') { throw "Nothing was removed. VM '$($s.VMName)' is $state ($busy). Remove a checkpoint only while its VM is Running or Off with nothing else in progress (Ok)." }
+      Remove-VMSnapshot -VMSnapshot $fresh -Confirm:$false -WhatIf:$false
+      Write-Host "Removal of checkpoint '$($s.Name)' of VM '$($s.VMName)' started. Wait for the merge to finish."
+      $plan
+  }
   ```
 
-  A merge writes the checkpoint's data into the parent disk before it deletes the
-  `.avhdx` file, and the deleted file returns its space to the pool only later, like
-  any deleted file. Add up the sizes listed, then check two limits:
-
-  - **Each volume that holds the listed files** needs at least the sum of the
-    sizes listed on it. The paths show the volume, and it is not always the one
-    you are consolidating. Compare the sum with `SizeRemaining` from
-    `Get-Volume -FilePath '<full path of a listed .avhdx file>'`.
-  - **The pool** needs that sum times the number of copies that volume keeps: 2
-    for a two-way mirror, 3 for a three-way mirror, 4 for a nested two-way
-    mirror. For mirror-accelerated parity, use the count of its mirror tier,
-    since new writes land there first. Compare the result with the pool's free
-    space: `Size` minus `AllocatedSize` in the [Verify](#verify) query, which
-    reports bytes (1 GB is 1,073,741,824 bytes). In a lab test on a two-way
-    mirror, merging a checkpoint that held 3 GB of data added 6 GB of pool
-    allocation.
-
-  If either one cannot take it with room to spare, do not remove the checkpoint; add
-  capacity first ([Option A1](#option-a1-add-capacity-recommended-when-growth-is-expected-low-risk))
-  or open a support case. Microsoft's guidance is to make sure that *"sufficient
-  free space exists for merges (ideally, space equal to the disk size)"*
-  ([Hyper-V checkpoint troubleshooting][ckpt-ts]).
-- **Remove** the selected checkpoint. `-Confirm` makes PowerShell ask before it
-  removes anything:
+  Then work out what removing the selected checkpoint does:
 
   ```powershell
-  if ($c.Count -ne 1) { 'Nothing was removed. Select exactly one approved Standard checkpoint first.' } else { $c | Remove-VMSnapshot -Confirm }
+  $plan = $null
+  $plan = Test-CheckpointRemoval -Checkpoint $c
+  $plan | Format-List Action, Disk, Removed, DataGB, NeedGB, Volume
   ```
 
-  Do not add `-IncludeAllChildSnapshots`, and do not remove checkpoints by VM or by
-  name: those remove checkpoints that nobody approved.
+  Each entry is one thing that Hyper-V does:
+
+  - `Merge`: writes the disk in `Removed` into `Disk`, then deletes `Removed`.
+  - `Delete`: deletes `Disk`, and writes nothing.
+  - `Keep`: keeps `Disk`, because two or more disks are built on it. Nothing is
+    written now. It can be merged later, when only one disk is still built on it.
+
+  `NeedGB` is the most that a merge can add to the volume that holds `Disk`, and it
+  can be much more than `DataGB`, the size of the disk being merged. A checkpoint
+  disk stores changes in 2 MB blocks, and each of them can add a whole 32 MB block to
+  a dynamic disk. In a lab test, merging 0.3 GB of scattered changes grew the dynamic
+  disk they went into by 4 GB. The function reports room only when, after the most
+  that the merges can add:
+
+  - each volume that a merge writes to still has 5% of its size free, and at least
+    10 GB;
+  - the pool still has its reserve free: the size of one capacity drive per server,
+    up to four. A thin volume takes pool space in whole allocation units of its
+    virtual disk (allocation unit size times columns), so for each thin volume the
+    function rounds up to whole units, adds one more, and counts every copy that the
+    volume keeps (for a parity volume, more than parity uses). A fixed volume
+    already holds all of its pool space, so its merges add nothing to the pool;
+  - no other VM in the cluster is merging disks, because that merge uses the same
+    free space. This does not apply when the removal merges nothing.
+
+  Remove the checkpoint only if the function reports room. If it stops with an
+  error or reports `NOT ENOUGH ROOM`, do not remove the checkpoint now. If another
+  merge is running, wait for it and check again; otherwise add capacity first
+  ([Option A1](#option-a1-add-capacity-recommended-when-growth-is-expected-low-risk))
+  or open a support case. The estimate assumes the worst case, so it can refuse a
+  merge that would have fitted. Microsoft's guidance is to make sure that
+  *"sufficient free space exists for merges (ideally, space equal to the disk
+  size)"* ([Hyper-V checkpoint troubleshooting][ckpt-ts]).
+- **Remove** the selected checkpoint. Paste this block on its own: the function
+  asks you to confirm, and a line pasted after it would be read as the answer.
+
+  ```powershell
+  $plan = $null
+  $plan = Remove-ApprovedCheckpoint -Checkpoint $c
+  ```
+
+  After you answer, the function reads the checkpoint, the room for the merge, and
+  the VM again. It removes the checkpoint only if there is still room, the VM is
+  still `Running` or `Off`, and nothing else is in progress on it:
+  `OperationalStatus` must be just `Ok`. Hyper-V reports another status while a VM
+  is creating, applying or deleting a checkpoint, merging disks, exporting or
+  migrating ([VM operational status][vm-status]). Otherwise it stops and removes
+  nothing. Do not remove checkpoints with `Remove-VMSnapshot` directly: by VM, by
+  name, or with `-IncludeAllChildSnapshots`, it removes checkpoints that nobody
+  approved, and it skips these checks. If the function printed `Nothing was removed`
+  or stopped with an error, nothing changed: skip the next step.
 - **Wait for the merge to finish, and check that it did,** before you remove the
   next checkpoint, and before the window starts. The merge continues after the
-  command returns. This waits while the VM reports `MergingDisks`, printing its
-  state every 30 seconds, then shows the result: **[READ-ONLY]**
+  command returns, and it can take a moment to show. This checks the VM every 30
+  seconds, printing its state, and stops when two checks in a row show no merge
+  (`MergingDisks`), then shows the result: **[READ-ONLY]**
 
   ```powershell
   $vm = Get-VM -ComputerName $c[0].ComputerName -Id $c[0].VMId
-  while (@($vm.OperationalStatus) -contains 'MergingDisks' -and "$($vm.State)" -notlike '*Critical') { '{0}  {1}  {2}' -f (Get-Date -Format T), $vm.State, $vm.Status; Start-Sleep -Seconds 30; $vm = Get-VM -ComputerName $c[0].ComputerName -Id $c[0].VMId }
+  $idle = 0; while ($idle -lt 2 -and "$($vm.State)" -notlike '*Critical') { Start-Sleep -Seconds 30; $vm = Get-VM -ComputerName $c[0].ComputerName -Id $c[0].VMId; if (@($vm.OperationalStatus) -contains 'MergingDisks') { $idle = 0 } else { $idle++ }; '{0}  {1}  {2}' -f (Get-Date -Format T), $vm.State, $vm.Status }
   $vm | Format-List Name, State, Status, OperationalStatus
   "Checkpoints left: $(@($vm | Get-VMSnapshot).Count)"
   ```
 
-  Then run the size check above again. The merge finished when `OperationalStatus`
-  no longer lists `MergingDisks`, the state does not end in `Critical`, the list of
-  `.avhdx` files is shorter than before the removal, and no disk is built on more
-  `.avhdx` files than the VM has checkpoints left. Otherwise the merge did not
+  Then check that each disk that the removal was to merge or delete is gone:
+  **[READ-ONLY]**
+
+  ```powershell
+  if (-not $plan) { 'Nothing was removed.' }; $plan | Where-Object Removed | ForEach-Object { '{0}  {1}' -f $(if (-not (Test-Path -LiteralPath (Split-Path -Parent $_.Removed))) { 'CANNOT CHECK' } elseif (Test-Path -LiteralPath $_.Removed) { 'STILL THERE' } elseif ($_.Action -eq 'Merge' -and -not (Test-Path -LiteralPath $_.Disk)) { 'TARGET MISSING' } else { 'gone' }), $_.Removed }
+  ```
+
+  The merge finished when `OperationalStatus` no longer lists `MergingDisks`, the
+  state does not end in `Critical`, the VM has one checkpoint fewer, and each disk
+  listed is `gone` (a `Keep` entry has nothing to check). Otherwise the merge did not
   finish: remove no more checkpoints, do not start the window, and open a support
   case. A merge that cannot finish can also leave the VM unable to start
   ([Can't power on Hyper-V VM and merge operations fail][ckpt-poweron]), which
@@ -1457,6 +1673,7 @@ Include the data-collection output above with any Microsoft support case.
 [stretched]: https://learn.microsoft.com/azure/azure-local/concepts/stretched-clusters
 [ckpt-ts]: https://learn.microsoft.com/troubleshoot/windows-server/virtualization/hyper-v-snapshots-checkpoints-differencing-disks
 [ckpt-poweron]: https://learn.microsoft.com/troubleshoot/windows-server/virtualization/cannot-power-on-hyper-v-vm
+[vm-status]: https://learn.microsoft.com/windows/win32/hyperv_v2/msvm-computersystem
 [paused-critical]: https://learn.microsoft.com/troubleshoot/windows-server/virtualization/virtual-machines-enter-paused-state-low-disk-free
 
 ---
