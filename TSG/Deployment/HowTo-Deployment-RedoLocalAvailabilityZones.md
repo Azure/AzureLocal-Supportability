@@ -2,12 +2,12 @@
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr>
-    <th style="text-align:left; width: 180px;">Component</th>
+    <th style="text-align:left; width: 180px;">Component</th>f
     <td><strong>Storage / Cluster</strong></td>
   </tr>
   <tr>
     <th style="text-align:left; width: 180px;">Topic</th>
-    <td><strong>Local Availability Zones</strong>: Clean up and reconfigure LAZ on a SAN (Fibre Channel) cluster</td>
+    <td><strong>Local Availability Zones</strong>: Clean up and reconfigure LAZ on a SAN cluster</td>
   </tr>
   <tr>
     <th style="text-align:left; width: 180px;">Applicable Scenarios</th>
@@ -38,7 +38,7 @@ There is currently no `Remove-AsLocalAvailabilityZones` cmdlet, so cleanup must 
 
 ## Prerequisites
 
-- SAN (Fibre Channel) Azure Local cluster with LAZ previously configured
+- SAN Azure Local cluster with LAZ previously configured
 - Administrative access to a cluster node (Remote PowerShell or console)
 - The cluster must be healthy — all nodes online and communicating
 
