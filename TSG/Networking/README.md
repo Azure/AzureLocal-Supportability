@@ -35,6 +35,11 @@ For Network Environment Validator Resources, see [TSG/EnvironmentValidator/Netwo
 
 ### Host Network
 - [Troubleshoot: Merged Storage Cluster Networks block Update](Host-Network/Troubleshoot-ClusterNetworks-MergedStorageNetworksBlockUpdate.md)
+- [Troubleshoot: Network ATC Intent Status Flapping](Host-Network/Troubleshoot-NetworkATC-Intent-Status-Flapping.md)
+
+| Article | Type | Applicable products | Owner | Validation grade | Automation readiness | Last validation |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Network ATC Intent Status Flapping](Host-Network/Troubleshoot-NetworkATC-Intent-Status-Flapping.md) | Troubleshoot | Azure Local | Windows Network ATC | Not graded | Manual | Not validated |
 
 ### Diagnostics
 - [How to collect SDN or Networking related logs](Diagnostics/HowTo-Diagnostic-SendNetworkingLogs.md)
