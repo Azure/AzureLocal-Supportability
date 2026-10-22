@@ -137,7 +137,7 @@ Use every target portal address from this node's current configuration, not only
 `SourceAddress` and `InterfaceAlias` identify the TCP test's selected path, not an iSCSI session's binding. A different source address warrants network investigation; it does not by itself justify a reset. Use `Get-IscsiConnection` above to check actual iSCSI paths.
 
 - **Error #1:** If any `TcpTestSucceeded` value is `False`, stop. A reset cannot fix reachability; give the failed address to the storage network owner.
-- **Error #2:** Compare portal bindings and session connection addresses with the configured initiator-address/target-portal pairs. Reset only if you find stale state. Otherwise, have the storage administrator check target access for this node's initiator IQN; the error alone does not justify a reset.
+- **Error #2:** Compare portal bindings and session connection addresses with the configured initiator-address/target-portal pairs. Also run the read-only checks `iscsicli ListPersistentTargets` and `iscsicli ListTargetPortals`, and compare their stored entries with the authoritative node configuration; disconnected stored logins do not appear in the live-session listing. If either listing fails, stop and escalate rather than treating it as empty. Reset only if you find stale state. Otherwise, have the storage administrator check target access for this node's initiator IQN; the error alone does not justify a reset.
 
 ### Command-to-Symptom Mapping (required)
 
@@ -200,11 +200,13 @@ Before Step 2, escalate to Microsoft Customer Support Services (CSS) and obtain 
 # Source: https://learn.microsoft.com/en-us/powershell/module/iscsi/get-iscsitargetportal
 # Source: iscsicli.exe built-in usage text (run: iscsicli /?)
 $log = "C:\MASLogs\iscsi-state-before-reset.txt"
-Get-IscsiSession      | Format-List * | Out-File $log
-Get-IscsiTargetPortal | Format-List * | Out-File $log -Append
-Get-IscsiSession | ForEach-Object { Get-IscsiConnection -IscsiSession $_ | Format-List * } | Out-File $log -Append
-iscsicli ListPersistentTargets | Out-File $log -Append
-iscsicli ListTargetPortals | Out-File $log -Append
+Get-IscsiSession -ErrorAction Stop | Format-List * | Out-File $log -NoClobber -ErrorAction Stop
+ Get-IscsiTargetPortal -ErrorAction Stop | Format-List * | Out-File $log -Append -ErrorAction Stop
+ Get-IscsiSession -ErrorAction Stop | ForEach-Object { Get-IscsiConnection -IscsiSession $_ -ErrorAction Stop | Format-List * } | Out-File $log -Append -ErrorAction Stop
+ iscsicli ListPersistentTargets | Out-File $log -Append -ErrorAction Stop
+ if ($LASTEXITCODE -ne 0) { throw 'Stored login evidence capture failed. Stop before reset.' }
+ iscsicli ListTargetPortals | Out-File $log -Append -ErrorAction Stop
+ if ($LASTEXITCODE -ne 0) { throw 'Target portal evidence capture failed. Stop before reset.' }
 #EndRunCommand
 ```
 
