@@ -137,7 +137,7 @@ Use every target portal address from this node's current configuration, not only
 `SourceAddress` and `InterfaceAlias` identify the TCP test's selected path, not an iSCSI session's binding. A different source address warrants network investigation; it does not by itself justify a reset. Use `Get-IscsiConnection` above to check actual iSCSI paths.
 
 - **Error #1:** If any `TcpTestSucceeded` value is `False`, stop. A reset cannot fix reachability; give the failed address to the storage network owner.
-- **Error #2:** Compare portal bindings and session connection addresses with the configured initiator-address/target-portal pairs. Reset only if you find stale state. Otherwise, have the storage administrator check target access for this node's initiator IQN; the error alone does not justify a reset.
+- **Error #2:** Compare portal bindings and session connection addresses with the configured initiator-address/target-portal pairs. Also run the read-only checks `iscsicli ListPersistentTargets` and `iscsicli ListTargetPortals`, and compare their stored entries with the authoritative node configuration; disconnected stored logins do not appear in the live-session listing. If either listing fails, stop and escalate rather than treating it as empty. Reset only if you find stale state. Otherwise, have the storage administrator check target access for this node's initiator IQN; the error alone does not justify a reset.
 
 ### Command-to-Symptom Mapping (required)
 
@@ -200,11 +200,13 @@ Before Step 2, escalate to Microsoft Customer Support Services (CSS) and obtain 
 # Source: https://learn.microsoft.com/en-us/powershell/module/iscsi/get-iscsitargetportal
 # Source: iscsicli.exe built-in usage text (run: iscsicli /?)
 $log = "C:\MASLogs\iscsi-state-before-reset.txt"
-Get-IscsiSession      | Format-List * | Out-File $log
-Get-IscsiTargetPortal | Format-List * | Out-File $log -Append
-Get-IscsiSession | ForEach-Object { Get-IscsiConnection -IscsiSession $_ | Format-List * } | Out-File $log -Append
-iscsicli ListPersistentTargets | Out-File $log -Append
-iscsicli ListTargetPortals | Out-File $log -Append
+Get-IscsiSession -ErrorAction Stop | Format-List * | Out-File $log -NoClobber -ErrorAction Stop
+ Get-IscsiTargetPortal -ErrorAction Stop | Format-List * | Out-File $log -Append -ErrorAction Stop
+ Get-IscsiSession -ErrorAction Stop | ForEach-Object { Get-IscsiConnection -IscsiSession $_ -ErrorAction Stop | Format-List * } | Out-File $log -Append -ErrorAction Stop
+ iscsicli ListPersistentTargets | Out-File $log -Append -ErrorAction Stop
+ if ($LASTEXITCODE -ne 0) { throw 'Stored login evidence capture failed. Stop before reset.' }
+ iscsicli ListTargetPortals | Out-File $log -Append -ErrorAction Stop
+ if ($LASTEXITCODE -ne 0) { throw 'Target portal evidence capture failed. Stop before reset.' }
 #EndRunCommand
 ```
 
@@ -349,9 +351,9 @@ iscsicli ListTargetPortals
 
 **Verify**: the two cmdlets return nothing, `ListPersistentTargets` reports 0 targets, and `ListTargetPortals` lists no portals.
 
-[HIGH RISK] Only after the four checks pass, re-run node configuration on this node through the same path that ran it before. This changes node and storage configuration. Reconfirm Section 6 and the CSS-approved recovery plan before retrying; stop and escalate if any gate is no longer satisfied.
+[HIGH RISK] Only after the four checks pass, re-run node configuration on this node through the same path that ran it before. This changes node and storage configuration. Reconfirm [Section 5 - Preconditions Check](#section-5---preconditions-check) and the CSS-approved recovery plan before retrying; stop and escalate if any gate is no longer satisfied.
 
-Success: node configuration proceeds past the iSCSI step. Re-run the session and connection checks in Section 4: for every discovered target, each configured initiator-address/target-portal pair has one connected, persistent session on that path, with no unexpected paths. If a path is missing or extra, do not declare recovery.
+Success: node configuration proceeds past the iSCSI step. Re-run the session and connection checks in the [Section 3 validation commands](#powershell-validation-steps): for every discovered target, each configured initiator-address/target-portal pair has one connected, persistent session on that path, with no unexpected paths. If a path is missing or extra, do not declare recovery.
 
 ### Rollback and assisted recovery
 
@@ -359,7 +361,7 @@ There is no automatic rollback for Step 2 or the node-configuration retry in Ste
 
 If removal partly succeeds and reports an error, preserve that error, re-read the current state as directed in Step 2, and stop at the documented stop condition. If the retry fails, paths are missing or unexpected, or workload impact occurs, stop further changes and contact CSS and the storage administrator with the before/after listings. They must determine the supported recovery path using the authoritative configuration and secured recovery material.
 
-Assisted recovery is complete only when node configuration proceeds past the iSCSI step and the Section 4 checks confirm the intended connected, persistent paths with no missing or unexpected paths. Do not declare recovery based only on successful removal. If these checks fail, keep the case escalated.
+Assisted recovery is complete only when node configuration proceeds past the iSCSI step and the [Section 3 validation commands](#powershell-validation-steps) confirm the intended connected, persistent paths with no missing or unexpected paths. Do not declare recovery based only on successful removal. If these checks fail, keep the case escalated.
 
 ### If the above doesn't work
 
@@ -369,7 +371,7 @@ Assisted recovery is complete only when node configuration proceeds past the iSC
 | Error #2 persists after a clean reset | The node discovered no targets. Have the storage administrator check target access for this node's initiator IQN and configured portals; verify host portal-to-initiator bindings before assigning a cause. |
 | A session or portal is still listed after removal | Use current listing values for each remaining entry. If the same entry remains after one retry, stop and escalate with the file from Step 1. If a stored login remains, stop at 2a instead. |
 | Paths or portals return after a reboot | Capture the four listings from Step 3 and escalate with the file from Step 1; do not repeat the reset or node configuration without rechecking the safety gates. |
-| `The session cannot be logged out since a device on that session is currently being used` | Something is holding the LUNs. Re-check Section 6, wait for the storage stack to settle, run 2b again. Do not force it on a node serving storage. |
+| `The session cannot be logged out since a device on that session is currently being used` | Something is holding the LUNs. Re-check [Section 5 - Preconditions Check](#section-5---preconditions-check), wait for the storage stack to settle, run 2b again. Do not force it on a node serving storage. |
 
 ### Command-to-Symptom Mapping (required)
 
