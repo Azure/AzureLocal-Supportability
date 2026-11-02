@@ -22,14 +22,14 @@ We have introduced three new components called `ControlPlaneOperations`, `KnownI
 
 | Component | Synopsis |
 | --- | --- |
-| [ControlPlaneOperations](/tools/CSSTools/1.2605.5.1611/insights/ControlPlaneOperations.md) | Checks the state of the Azure Local Control Plane services, such as Microsoft Onprem Cloud, Azure Resource Bridge, Arc Services, and AKS Arc. |
-| [HostCompute](/tools/CSSTools/1.2605.5.1611/insights/HostCompute.md) | Checks the state of the host compute, including cluster node state. |
-| [HostNetwork](/tools/CSSTools/1.2605.5.1611/insights/HostNetwork.md) | Checks the state of the host network, including Network ATC intent operational state. |
-| [HostStorage](/tools/CSSTools/1.2605.5.1611/insights/HostStorage.md) | Checks the state of the host storage, including Cluster Shared Volumes. |
-| [KnownIssues](/tools/CSSTools/1.2605.5.1611/insights/KnownIssues.md) | Checks for common known issues on the Azure Local environment. The analyzers executed depend on the installed version of Azure Local. |
-| [LifecycleOrchestration](/tools/CSSTools/1.2605.5.1611/insights/LifecycleOrchestration.md) | Checks the state of the Azure Lifecycle and Orchestration services such as ECE, LCM, and Update. |
-| [OperatingSystem](/tools/CSSTools/1.2605.5.1611/insights/OperatingSystem.md) | Checks the state of the operating system. |
-| [VirtualMachines](/tools/CSSTools/1.2605.5.1611/insights/VirtualMachines.md) | Checks the state of virtual machines, including VM network adapter configuration. |
+| [ControlPlaneOperations](./insights/ControlPlaneOperations.md) | Checks the state of the Azure Local Control Plane services, such as Microsoft Onprem Cloud, Azure Resource Bridge, Arc Services, and AKS Arc. |
+| [HostCompute](./insights/HostCompute.md) | Checks the state of the host compute, including cluster node state. |
+| [HostNetwork](./insights/HostNetwork.md) | Checks the state of the host network, including Network ATC intent operational state. |
+| [HostStorage](./insights/HostStorage.md) | Checks the state of the host storage, including Cluster Shared Volumes. |
+| [KnownIssues](./insights/KnownIssues.md) | Checks for common known issues on the Azure Local environment. The analyzers executed depend on the installed version of Azure Local. |
+| [LifecycleOrchestration](./insights/LifecycleOrchestration.md) | Checks the state of the Azure Lifecycle and Orchestration services such as ECE, LCM, and Update. |
+| [OperatingSystem](./insights/OperatingSystem.md) | Checks the state of the operating system. |
+| [VirtualMachines](./insights/VirtualMachines.md) | Checks the state of virtual machines, including VM network adapter configuration. |
 
 
 ## Insight Remediation
@@ -39,19 +39,19 @@ As we continue to onboard more diagnostics and issue checks, we will continue to
 
 | Remediation | Synopsis |
 | --- | --- |
-| [DisableWindowsUpdate](/tools/CSSTools/1.2605.5.1611/remediations/DisableWindowsUpdate.md) | Disables automatic Windows Update by configuring the appropriate registry settings under `HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU`. |
-| [IncreaseWmiQuotaConfig](/tools/CSSTools/1.2605.5.1611/remediations/IncreaseWmiQuotaConfig.md) | Increases the WMI Provider Host quota configuration to support more memory and handles for WMI providers. |
-| [RemovedFailedUpdateEceActionPlans](/tools/CSSTools/1.2605.5.1611/remediations/RemovedFailedUpdateEceActionPlans.md) | Removes failed `MAS Update` ECE action plans from the system. |
-| [RemoveHealthCheckFilesForUpdates](/tools/CSSTools/1.2605.5.1611/remediations/RemoveHealthCheckFilesForUpdates.md) | Removes health check files created for updates from the system. |
-| [UnlockAzureLocalAccounts](/tools/CSSTools/1.2605.5.1611/remediations/UnlockAzureLocalAccounts.md) | Remediates a specified Azure Local account by ensuring it exists, is not disabled, is a member of the correct groups, and is not locked. |
+| [DisableWindowsUpdate](./remediations/DisableWindowsUpdate.md) | Disables automatic Windows Update by configuring the appropriate registry settings under `HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU`. |
+| [IncreaseWmiQuotaConfig](./remediations/IncreaseWmiQuotaConfig.md) | Increases the WMI Provider Host quota configuration to support more memory and handles for WMI providers. |
+| [RemovedFailedUpdateEceActionPlans](./remediations/RemovedFailedUpdateEceActionPlans.md) | Removes failed `MAS Update` ECE action plans from the system. |
+| [RemoveHealthCheckFilesForUpdates](./remediations/RemoveHealthCheckFilesForUpdates.md) | Removes health check files created for updates from the system. |
+| [UnlockAzureLocalAccounts](./remediations/UnlockAzureLocalAccounts.md) | Remediates a specified Azure Local account by ensuring it exists, is not disabled, is a member of the correct groups, and is not locked. |
 
 ## Core Framework
 In addition to some code and reliability fixes, we have added some new functions.
-- [Get-AzsSupportEceManagementClusterName](/tools/CSSTools/1.2605.5.1611/functions/Get-AzsSupportEceManagementClusterName.md): Retrieves the name of the management cluster in the ECE infrastructure.
-- [Invoke-AzsSupportInsightRemediation](/tools/CSSTools/1.2605.5.1611/functions/Invoke-AzsSupportInsightRemediation.md): Executes a specified remediation script for Azure Stack Insights.
-- [Show-AzsSupportEnvironmentValidatorSummary](/tools/CSSTools/1.2605.5.1611/functions/Show-AzsSupportEnvironmentValidatorSummary.md): Retrieves and displays a comprehensive summary of environment validator results from the event log.
+- [Get-AzsSupportEceManagementClusterName](./functions/Get-AzsSupportEceManagementClusterName.md): Retrieves the name of the management cluster in the ECE infrastructure.
+- [Invoke-AzsSupportInsightRemediation](./functions/Invoke-AzsSupportInsightRemediation.md): Executes a specified remediation script for Azure Stack Insights.
+- [Show-AzsSupportEnvironmentValidatorSummary](./functions/Show-AzsSupportEnvironmentValidatorSummary.md): Retrieves and displays a comprehensive summary of environment validator results from the event log.
 
-A comprehensive list of all our functions can be found under [functions](/tools/CSSTools/1.2605.5.1611/functions).
+A comprehensive list of all our functions can be found under [functions](./functions).
 
 
 ## Detailed Changes

@@ -30,7 +30,7 @@ Checks for modified CSV DiskRunChkDsk settings
 
 ## Windows.Cluster.StoragePoolResource
 
-This script checks the operational state of the Cluster
+Checks cluster storage RDMA when a Storage Pool cluster resource exists.
 
 | Rule | Synopsis |
 | --- | --- |
@@ -132,5 +132,4 @@ Consolidated storage volume analyzer.
 | Windows.Storage.VolumeRecommendations.MinVolumesPerNode | Checks that the cluster has at least one volume per node. |
 | Windows.Storage.VolumeRecommendations.VolumeSize | Checks that a volume does not exceed the recommended maximum size. |
 | Windows.Storage.VolumeRecommendations.ReserveCapacity | Checks that the storage pool has enough reserve capacity for in-place repairs. |
-
 
