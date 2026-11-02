@@ -8,6 +8,13 @@ detected by insights.
 > Only run a remediation when an insight explicitly provides guidance to run it. Remediations make
 > changes to the system; review each remediation's description, expected impact, and whether a
 > maintenance window is recommended before executing it.
+>
+> The `AzureLocal.KI.SmbServer.EventLogPublisher` Known Issues rule reports configuration state only.
+> A missing publisher registry path or `Enabled` value is reported as WARNING.
+> Its associated `SetSmbServerEventLogPublisher` remediation applies the SMBServer crash workaround
+> and remains explicitly opt-in. It creates the publisher registry path if missing and sets `Enabled`
+> to DWORD `0` by default; run it with `-Parameters @{ Enabled = 1 }` to revert. Reduced SMBServer
+> Event Log diagnostic visibility is expected.
 
 ## Running a remediation
 
@@ -38,4 +45,11 @@ node they are invoked on and return a `RemediationObject` describing the outcome
 | [ReplaceIgvmAgentBinary](./ReplaceIgvmAgentBinary.md) | Replaces AszIgvmAgent.exe from the bundled package and restarts the IgvmAgent service. |
 | [ResetCredSSPConfiguration](./ResetCredSSPConfiguration.md) | Resets CredSSP authentication configuration to the correct state required for Azure Local operations. |
 | [RestartHealthServiceProcesses](./RestartHealthServiceProcesses.md) | Stops every healthpih.exe process on the local node so the Health service starts a single replacement plugin host. |
+| [SetSmbServerEventLogPublisher](./SetSmbServerEventLogPublisher.md) | Sets the SMBServer Event Log publisher Enabled registry value on the local node. |
 | [UnlockAzureLocalAccounts](./UnlockAzureLocalAccounts.md) | Remediates a specified Azure Local account by ensuring it exists, is not disabled, is a member of the correct groups, and is not locked. |
+
+Documentation status for the new 1.2609.30.2 reference:
+
+| Article | Type | Applicable products | Owner | Validation grade | Automation readiness | Last validation |
+| --- | --- | --- | --- | --- | --- | --- |
+| [SetSmbServerEventLogPublisher](./SetSmbServerEventLogPublisher.md) | Reference | Azure Local (24H2) | Repository maintainers | Not graded | Not assessed | 2026-11-02 (L0) |

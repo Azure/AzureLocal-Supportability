@@ -7,8 +7,8 @@ Runs commands on local and remote computers.
 
 ```
 Invoke-AzsSupportCommand -ComputerName <String[]> [-Credential <PSCredential>] -ScriptBlock <ScriptBlock>
- [-HideComputerName] [-ArgumentList <Object>] [-AsJob] [-Wait] [-PassThru] [-Activity <String>]
- [-ExecutionTimeout <Int32>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-Session <Object[]>] [-HideComputerName] [-ArgumentList <Object>] [-AsJob] [-Wait] [-PassThru]
+ [-Activity <String>] [-ExecutionTimeout <Int32>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -67,6 +67,22 @@ Parameter Sets: (All)
 Aliases:
 
 Required: True
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Session
+Specifies the exact PSSessions to use for remote execution.
+When supplied, the command does not create or reuse other cached sessions.
+
+```yaml
+Type: Object[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
 Position: Named
 Default value: None
 Accept pipeline input: False

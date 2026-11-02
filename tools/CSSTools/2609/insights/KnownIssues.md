@@ -105,6 +105,7 @@ This analyzer checks for known issues related to 2601 builds.
 | AzureLocal.Update.OSConfigSecuredCoreEnforcement | Detects the OSConfig SetSecuredCore guest configuration SET document that causes the
     UpdateSecuredCore solution update step to fail with 'OSConfig enforcement failed for N items'. |
 | AzureLocal.KI.SDN.FailoverClusterApi.Unsigned | Detects a stray Microsoft.NetworkController.FailoverClusterApi.dll left in the HCIOrchestrator profile. |
+| AzureLocal.KI.SmbServer.EventLogPublisher | Checks whether the opt-in SMBServer Event Log publisher workaround is configured as DWORD zero. |
 
 ## AzureLocal.2602
 
@@ -120,6 +121,7 @@ This analyzer checks for known issues related to 2602 builds.
 | AzureLocal.Update.OSConfigSecuredCoreEnforcement | Detects the OSConfig SetSecuredCore guest configuration SET document that causes the
     UpdateSecuredCore solution update step to fail with 'OSConfig enforcement failed for N items'. |
 | AzureLocal.KI.SDN.FailoverClusterApi.Unsigned | Detects a stray Microsoft.NetworkController.FailoverClusterApi.dll left in the HCIOrchestrator profile. |
+| AzureLocal.KI.SmbServer.EventLogPublisher | Checks whether the opt-in SMBServer Event Log publisher workaround is configured as DWORD zero. |
 
 ## AzureLocal.2603
 
@@ -135,6 +137,7 @@ This analyzer checks for known issues related to 2603 builds.
 | AzureLocal.Update.OSConfigSecuredCoreEnforcement | Detects the OSConfig SetSecuredCore guest configuration SET document that causes the
     UpdateSecuredCore solution update step to fail with 'OSConfig enforcement failed for N items'. |
 | AzureLocal.KI.SDN.FailoverClusterApi.Unsigned | Detects a stray Microsoft.NetworkController.FailoverClusterApi.dll left in the HCIOrchestrator profile. |
+| AzureLocal.KI.SmbServer.EventLogPublisher | Checks whether the opt-in SMBServer Event Log publisher workaround is configured as DWORD zero. |
 
 ## AzureLocal.2604
 
@@ -150,6 +153,7 @@ This analyzer checks for known issues related to 2604 builds.
 | AzureLocal.Update.OSConfigSecuredCoreEnforcement | Detects the OSConfig SetSecuredCore guest configuration SET document that causes the
     UpdateSecuredCore solution update step to fail with 'OSConfig enforcement failed for N items'. |
 | AzureLocal.KI.SDN.FailoverClusterApi.Unsigned | Detects a stray Microsoft.NetworkController.FailoverClusterApi.dll left in the HCIOrchestrator profile. |
+| AzureLocal.KI.SmbServer.EventLogPublisher | Checks whether the opt-in SMBServer Event Log publisher workaround is configured as DWORD zero. |
 
 ## AzureLocal.2605
 
@@ -164,6 +168,7 @@ This analyzer checks for known issues related to 2605 builds.
 | AzureLocal.Update.OSConfigSecuredCoreEnforcement | Detects the OSConfig SetSecuredCore guest configuration SET document that causes the
     UpdateSecuredCore solution update step to fail with 'OSConfig enforcement failed for N items'. |
 | AzureLocal.KI.SDN.FailoverClusterApi.Unsigned | Detects a stray Microsoft.NetworkController.FailoverClusterApi.dll left in the HCIOrchestrator profile. |
+| AzureLocal.KI.SmbServer.EventLogPublisher | Checks whether the opt-in SMBServer Event Log publisher workaround is configured as DWORD zero. |
 
 ## AzureLocal.2606
 
@@ -178,6 +183,7 @@ This analyzer checks for known issues related to 2606 builds.
 | AzureLocal.Update.OSConfigSecuredCoreEnforcement | Detects the OSConfig SetSecuredCore guest configuration SET document that causes the
     UpdateSecuredCore solution update step to fail with 'OSConfig enforcement failed for N items'. |
 | AzureLocal.KI.SDN.FailoverClusterApi.Unsigned | Detects a stray Microsoft.NetworkController.FailoverClusterApi.dll left in the HCIOrchestrator profile. |
+| AzureLocal.KI.SmbServer.EventLogPublisher | Checks whether the opt-in SMBServer Event Log publisher workaround is configured as DWORD zero. |
 
 ## AzureLocal.2607
 
@@ -192,6 +198,30 @@ This analyzer checks for known issues related to 2607 builds.
 | AzureLocal.Update.OSConfigSecuredCoreEnforcement | Detects the OSConfig SetSecuredCore guest configuration SET document that causes the
     UpdateSecuredCore solution update step to fail with 'OSConfig enforcement failed for N items'. |
 | AzureLocal.KI.SDN.FailoverClusterApi.Unsigned | Detects a stray Microsoft.NetworkController.FailoverClusterApi.dll left in the HCIOrchestrator profile. |
+| AzureLocal.KI.SmbServer.EventLogPublisher | Checks whether the opt-in SMBServer Event Log publisher workaround is configured as DWORD zero. |
 | AzureLocal.KI.IgvmAgent | Detects an IGVM agent binary version mismatch on Azure Local 2607. |
 
+## AzureLocal.2608
+
+This analyzer checks for known issues related to 2608 builds.
+
+| Rule | Synopsis |
+| --- | --- |
+| AzureLocal.KI.SmbServer.EventLogPublisher | Checks whether the opt-in SMBServer Event Log publisher workaround is configured as DWORD zero. |
+
+## AzureLocal.2609
+
+This analyzer checks for known issues related to 2609 builds.
+
+| Rule | Synopsis |
+| --- | --- |
+| AzureLocal.KI.SmbServer.EventLogPublisher | Checks whether the opt-in SMBServer Event Log publisher workaround is configured as DWORD zero. |
+
+## AzureLocal.2610
+
+This analyzer checks for known issues related to 2610 builds.
+
+| Rule | Synopsis |
+| --- | --- |
+| AzureLocal.KI.SmbServer.EventLogPublisher | Checks whether the opt-in SMBServer Event Log publisher workaround is configured as DWORD zero. |
 

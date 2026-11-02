@@ -12,6 +12,12 @@ Get-AzsSupportStorageMissingDisks [[-Cluster] <String>] [[-Credential] <PSCreden
 
 ## DESCRIPTION
 Checks for any disks that are in PNP that are eligible for Storage Spaces but not added
+The successful result and parameters are unchanged when comparison data is available.
+If no non-primordial pool exists, terminates with error ID StorageMissingDisksNoStoragePool.
+If PNP disk enumeration is empty, terminates with error ID StorageMissingDisksNoPnpDevices.
+These states do not imply a healthy disk comparison.
+The PhysicalDisk analyzer records
+them on the missing-disk rule as NOT_APPLICABLE and UNKNOWN, respectively.
 
 ## EXAMPLES
 
