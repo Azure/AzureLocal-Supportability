@@ -240,12 +240,7 @@ function CredentialsHelper
 
         $eceWinServiceVersion = $eceWinService.Version.ToString()
         $eceWinServicePath = $eceWinService.Path
-
-        # Load Assemblies
-        [System.Reflection.Assembly]::LoadFile("$eceWinServicePath\content\ECEWinService\CloudEngine.dll") | Out-Null
-        [System.Reflection.Assembly]::LoadFile("$eceWinServicePath\content\ECEWinService\Microsoft.AzureStack.Orchestration.Common.Packaging.Contract.dll") | Out-Null
-        [System.Reflection.Assembly]::LoadFile("$eceWinServicePath\content\ECEWinService\Microsoft.AzureStack.Orchestration.Common.Packaging.dll") | Out-Null
-        [System.Reflection.Assembly]::LoadFile("$eceWinServicePath\content\ECEWinService\Microsoft.Diagnostics.Tracing.EventSource.dll") | Out-Null
+        Import-Module "$eceWinServicePath\content\ECEWinService\framework\EnterpriseCloudEngine.psd1" -ErrorAction Stop
 
         # Load MetricTelemetry.dll if it exists, otherwise fallback to Telemetry.dll
         $metricTelemetryPath = "$eceWinServicePath\content\ECEWinService\Microsoft.AzureStack.Solution.MetricTelemetry.dll"
