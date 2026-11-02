@@ -10,3 +10,10 @@
 * ["ScopeLocked" error during ARB upgrade](./Known-issue-ScopeLockedError-ARB-Upgrade.md)
 * [Solution upgrade failed at 'CleanUpDeploymentPackageAndNugetStoreOnNonSeedNodes' step](./Known-issue-Solution-upgrade-failed-at-CleanUpDeploymentPackageAndNugetStoreOnNonSeedNodes-step.md)
 * [Troubleshooting MSI Does Not Have Access to Subscription](../EnvironmentValidator/Troubleshooting-MSI-Does-Not-Have-Access-To-Subscription.md)
+
+## Solution upgrade
+
+| Article | Type | Applicable products | Owner | Validation grade | Automation readiness | Last validation |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Install PowerShell 7.6.7 before a solution upgrade](./How-to-install-PowerShell-7.6.7-before-a-solution-upgrade.md) | How-To | Azure Local, connected hyperconverged | Cluster administrator; Microsoft support for escalation | Not graded (L0 static review) | Manual | 2026-10-22 |
+| [Solution upgrade cancelled at Install software dependencies](./Known-issue-solution-upgrade-cancelled-at-Install-software-dependencies.md) | Troubleshoot | Azure Local, connected hyperconverged | Cluster administrator; Microsoft support for escalation | Not graded (L0 static review) | Manual | 2026-10-22 |
