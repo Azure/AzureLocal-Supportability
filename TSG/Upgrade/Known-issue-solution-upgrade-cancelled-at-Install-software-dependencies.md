@@ -37,7 +37,7 @@ Azure Local solution upgrade interrupted when the **Install software dependencie
 
 Scope is connected, hyperconverged deployments. Applicability to disconnected, disaggregated, or multi-rack deployments has not been validated. This guide does not cover cancellations at other steps or failures with a different error. Contact Microsoft support for those scenarios.
 
-**Impact and owner:** The solution upgrade is interrupted. The cluster administrator resumes the existing deployment within its approved upgrade maintenance window; later upgrade stages can restart nodes and affect workloads as described in the normal upgrade procedure.
+**Impact and owner:** The solution upgrade is interrupted. The cluster administrator resumes the existing deployment within its approved upgrade maintenance window.
 
 ## Symptoms and issue validation
 
