@@ -37,7 +37,7 @@ Azure Local solution upgrade interrupted when the **Install software dependencie
 
 Scope is connected, hyperconverged deployments. Applicability to disconnected, disaggregated, or multi-rack deployments has not been validated. This guide does not cover cancellations at other steps or failures with a different error. Contact Microsoft support for those scenarios.
 
-**Impact and owner:** The solution upgrade is interrupted. The cluster administrator resumes the existing deployment within its approved upgrade maintenance window; later upgrade stages can restart nodes and affect workloads as described in the normal upgrade procedure.
+**Impact and owner:** The solution upgrade is interrupted. The cluster administrator resumes the existing deployment within its approved upgrade maintenance window.
 
 ## Symptoms and issue validation
 
@@ -59,17 +59,6 @@ Use the current status of the existing deployment, not an older notification. If
 
 The screenshots document the reported cancellation and recovery sequence. This article has received static review only; the other administrator surfaces below have not been characterized and remain publication-validation gaps. `absent` does not mean that the issue cannot appear on that surface.
 
-| Administrator surface | Status | Evidence |
-| --- | --- | --- |
-| Azure portal | shown | Azure Local resource > Deployments shows the cancelled stage and step listed above. |
-| PowerShell on an Azure Local node | absent | No independent node-side detector is characterized; none is required before resuming this known issue. |
-| Windows event logs | absent | No event provider, event ID, or time-window check is characterized. |
-| Cluster logs using Get-ClusterLog | absent | No cluster-log signature or time-window check is characterized. |
-| Windows Failover Cluster Manager | absent | No matching role, resource, or health signal is characterized. |
-| Windows Admin Center (standalone host) | absent | No matching tool-page signal is characterized. |
-| Windows Admin Center in the Azure portal | absent | No matching tool-page signal is characterized. |
-| Component or tool log files on disk | absent | FullCloudUpgrade logs in `C:\CloudDeployment\Logs` are collected for escalation, but an exact diagnostic signature is not characterized here. |
-
 ## Cause
 
 The **Install software dependencies** step installs PowerShell **7.6.7**. This installation requires terminating the running PowerShell process, which interrupts the upgrade attempt and causes it to appear as **Cancelled**.
@@ -82,7 +71,7 @@ The screenshots show cancellation followed by recovery after resuming; they do n
 
 ### 1. Resume the existing deployment
 
-**[HIGH RISK]** Resuming continues the solution upgrade, whose later stages can restart nodes and affect workloads. Before proceeding, confirm that the existing attempt matches the symptoms above, shows **Cancelled**, and the approved upgrade maintenance window and workload protections remain in place. The operator needs permission to resume the affected Azure Local deployment. Stop if these conditions are not met or the resume action is unavailable; contact Microsoft support.
+**[LOW RISK]** Resuming continues the solution upgrade. Before proceeding, confirm that the existing attempt matches the symptoms above, shows **Cancelled**, and the approved upgrade maintenance window and workload protections remain in place. The operator needs permission to resume the affected Azure Local deployment. Stop if these conditions are not met or the resume action is unavailable; contact Microsoft support.
 
 Once the existing attempt shows **Cancelled**, open the affected **Azure Local** resource in the Azure portal, select **Deployments**, and select **Resume deployment**. No manual PowerShell installation is required.
 
