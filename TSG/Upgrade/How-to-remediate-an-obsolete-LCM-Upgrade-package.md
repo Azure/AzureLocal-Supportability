@@ -39,6 +39,5 @@ Note: If you hit a file locking issue of file ... cannot be deleted because it i
 
 4. Run the command ```Start-Service LCMController```
 
-## Wait until all nodes have finished running initialization
 5. Re-run environment validation from portal
 
