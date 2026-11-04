@@ -1,3 +1,23 @@
+<!-- tsg-metadata
+{
+  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "document_type": "troubleshoot",
+  "products": ["Azure Local"],
+  "detector": {
+    "type": "envchecker",
+    "signal": "AzureLocal_Network_Test_Node_ManagementIP_Not_Overlap_With_Storage_Subnet"
+  },
+  "validation": {
+    "fidelity_level": "L0",
+    "technical_grade": null,
+    "reproduction_substrate": "none",
+    "automation_status": "not-assessed",
+    "last_validated": null,
+    "spec_ref": ""
+  }
+}
+-->
+
 # AzureLocal_Network_Test_Node_ManagementIP_Not_Overlap_With_Storage_Subnet
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -7,325 +27,304 @@
   </tr>
   <tr>
     <th style="text-align:left; width: 180px;">Severity</th>
-    <td><strong>Informational</strong>: This validator provides diagnostic information.</td>
+    <td><strong>Informational</strong>: The validator result does not block the operation. The network requirement still applies.</td>
   </tr>
   <tr>
-    <th style="text-align:left;">Applicable Scenarios</th>
-    <td><strong>Deployment (Static IP only), Pre-Update (Static IP only)</strong></td>
+    <th style="text-align:left;">Applicable scenarios</th>
+    <td><strong>Validator execution: deployment and pre-update when static IP configuration is used. Network requirement: all Azure Local deployments with separate management and storage networks.</strong></td>
   </tr>
 </table>
 
+## Table of contents
+
+- [Overview](#overview)
+- [Requirements](#requirements)
+- [Recommended network subnet design](#recommended-network-subnet-design)
+- [Known validation limitation](#known-validation-limitation)
+- [Symptoms and impact](#symptoms-and-impact)
+- [Diagnosis](#diagnosis)
+- [Remediation](#remediation)
+- [Verification](#verification)
+- [Escalation and evidence package](#escalation-and-evidence-package)
+- [Related documentation](#related-documentation)
+
 ## Overview
 
-This validator checks that the management IP subnet does not overlap with any storage network subnet. Overlapping subnets can cause routing issues and prevent storage traffic from functioning correctly.
+This validator checks whether the management IPv4 subnet intersects any storage IPv4 subnet. Management and storage address ranges must be separate. Each storage subnet must also be unique and must not intersect another storage subnet.
+
+An overlap exists whenever two address ranges share one or more addresses. The prefixes don't need to be identical. For example, `198.51.100.0/24` overlaps `198.51.100.0/25` because the `/24` contains the entire `/25`.
+
+Separating traffic with VLANs doesn't make overlapping Layer 3 address ranges valid.
 
 ## Requirements
 
-For static IP deployments:
-1. The management IP subnet must be on a different subnet than all storage adapter subnets
-2. Each storage adapter subnet must be unique and isolated from management traffic
+The network plan must meet all the following requirements:
 
-## Troubleshooting Steps
+1. The management subnet doesn't intersect any storage subnet.
+2. Each storage subnet is unique and doesn't intersect another storage subnet.
+3. The selected prefixes are unallocated and valid for the customer network.
+4. The deployment inputs use the same approved prefixes across all nodes.
 
-### Review Environment Validator Output
+Examples:
 
-Review the Environment Validator output JSON. Check the `AdditionalData.Detail` field for information about subnet overlap.
+| Management subnet | Storage subnet | Result | Reason |
+| --- | --- | --- | --- |
+| `198.51.100.0/24` | `198.51.100.0/25` | Invalid | The management range contains the storage range. |
+| `198.51.100.0/25` | `198.51.100.0/24` | Invalid | The storage range contains the management range. |
+| `198.51.100.0/24` | `198.51.100.0/24` | Invalid | The ranges are identical. |
+| `198.51.100.0/24` | `203.0.113.0/24` | Valid | The ranges don't intersect. |
 
-```json
-{
-  "Name": "AzureLocal_Network_Test_Node_ManagementIP_Not_Overlap_With_Storage_Subnet",
-  "DisplayName": "Test machine management IP is not in the same subnet as any storage network",
-  "Title": "Test machine management IP is not in the same subnet as any storage network",
-  "Status": 1,
-  "Severity": 0,
-  "Description": "Test machine management IP is not in the same subnet as any storage network",
-  "Remediation": "https://learn.microsoft.com/azure-stack/hci/deploy/deployment-tool-checklist",
-  "TargetResourceID": "NODE1, MgmtIPNotOverlapStorageSubnet",
-  "TargetResourceName": "NODE1, MgmtIPNotOverlapStorageSubnet",
-  "TargetResourceType": "MgmtIPNotOverlapStorageSubnet",
-  "Timestamp": "<timestamp>",
-  "AdditionalData": {
-    "Source": "NODE1, MgmtIPNotOverlapStorageSubnet",
-    "Resource": "NODE1, MgmtIPNotOverlapStorageSubnet",
-    "Detail": "Management IP 10.71.1.10 on subnet 10.71.1.0/24 overlaps with storage subnet(s): 10.71.1.0/24, 10.71.2.0/24.",
-    "Status": "FAILURE",
-    "TimeStamp": "<timestamp>"
-  }
-}
-```
+The prefixes in this guide use the address blocks reserved for documentation. Don't copy them into a deployment.
 
----
+## Recommended network subnet design
 
-### Failure: Management IP Overlaps with Storage Subnet
+Choose address ranges through the customer network-planning and IP address management process. Don't use a fixed range only because it appears in an example.
 
-**Error Message:**
+A valid plan has these properties:
+
+- The management range is routable as required by the customer environment.
+- The management range doesn't contain, and isn't contained by, a storage range.
+- Each storage range is unique and doesn't contain, and isn't contained by, another storage range.
+- VLAN separation complements the IP plan but doesn't replace non-overlapping Layer 3 ranges.
+- Every node and deployment input uses the approved prefixes consistently.
+
+Example valid design:
+
 ```text
-Management IP 10.71.1.10 on subnet 10.71.1.0/24 overlaps with storage subnet(s): 10.71.1.0/24, 10.71.2.0/24.
+Management: 198.51.100.0/24
+Storage 1:  203.0.113.0/25
+Storage 2:  203.0.113.128/25
 ```
 
-**Root Cause:** The management IP is configured in the same subnet as one or more storage adapters. This creates a routing conflict where the system cannot determine whether traffic should go through the management adapter or storage adapters.
+Example invalid design:
 
-#### Why This is a Problem
+```text
+Management: 198.51.100.0/24
+Storage 1:  198.51.100.0/25   # Contained by the management range
+Storage 2:  203.0.113.0/24
+```
 
-1. **Routing conflicts**: OS cannot determine which adapter to use for traffic in the overlapping subnet
-2. **Storage performance**: Management traffic may interfere with storage performance
-3. **Network isolation**: Best practice is to separate management and storage traffic on different subnets
-4. **Troubleshooting complexity**: Overlap makes network issues harder to diagnose
+## Known validation limitation
 
-#### Remediation Steps
+Some Environment Checker versions can report success for a containment-style overlap when the prefixes have different prefix lengths. For example, the validator might not detect that management prefix `198.51.100.0/24` contains storage prefix `198.51.100.0/25`.
 
-##### 1. Identify Current Network Configuration
+The affected and corrected package-version boundaries aren't established in this guide. Independently compare the complete CIDR ranges regardless of the installed Environment Checker version.
 
-On the affected node, check current IP configuration:
+- Don't treat a successful result from this validator as proof that the network plan is valid.
+- Perform the independent CIDR range comparison in [Diagnosis](#diagnosis).
+- Treat an informational severity as reporting behavior, not as an exception to the network requirement.
+
+## Symptoms and impact
+
+The issue can appear in either of these forms:
+
+- The validator reports a failure and lists an overlapping management and storage subnet.
+- The validator reports success, but an independent range comparison finds an overlap.
+
+An overlapping configuration can cause ambiguous route and cluster-network selection. Depending on the operation and current network state, this can contribute to deployment, update, storage, live migration, or SDN failures. A cluster that is currently operating doesn't prove that the configuration is safe for future lifecycle operations.
+
+Example validator failure:
+
+```text
+Management IP <management IP> on subnet <management CIDR> overlaps with storage subnet(s): <storage CIDR>.
+```
+
+## Diagnosis
+
+### 1. Review the Environment Checker result
+
+**Action type:** [READ-ONLY]
+
+Review the result named `AzureLocal_Network_Test_Node_ManagementIP_Not_Overlap_With_Storage_Subnet`. If it failed, record the management prefix and every storage prefix in `AdditionalData.Detail`.
+
+If it passed, continue with the independent comparison because of the known validation limitation.
+
+### 2. Obtain the configured prefixes
+
+**Action type:** [READ-ONLY]
+
+For a system that isn't deployed, use the deployment inputs and approved network plan as the authoritative sources for the intended management and storage prefixes.
+
+For an existing system, compare both the intended inputs and the effective addresses and prefix lengths on every node. Run the following command locally on each node:
 
 ```powershell
-# View all IP addresses and their subnets
-Get-NetIPAddress -AddressFamily IPv4 |
-    Where-Object { $_.IPAddress -notlike "169.254.*" -and $_.IPAddress -ne "127.0.0.1" } |
-    ForEach-Object {
-        $ip = $_.IPAddress
-        $prefix = $_.PrefixLength
-        # Calculate subnet
-        $ipObj = [IPAddress]$ip
-        $mask = [IPAddress]([math]::pow(2, 32) - [math]::pow(2, (32 - $prefix)))
-        $subnet = ([IPAddress]($ipObj.Address -band $mask.Address)).IPAddressToString
+$ErrorActionPreference = 'Stop'
 
+Get-NetIPAddress -AddressFamily IPv4 |
+    Where-Object {
+        $_.IPAddress -notlike '169.254.*' -and
+        $_.IPAddress -ne '127.0.0.1'
+    } |
+    Sort-Object InterfaceAlias, IPAddress |
+    Select-Object InterfaceAlias, IPAddress, PrefixLength
+```
+
+**Expected result:** The collected output identifies the current management and storage adapter addresses and prefix lengths on every node.
+
+**Stop condition:** If adapter purpose, intended prefixes, or effective prefixes can't be identified, don't change the network. Collect the deployment inputs and engage Microsoft Support.
+
+### 3. Compare the complete CIDR ranges
+
+**Action type:** [READ-ONLY]
+
+Run this script from a PowerShell session on an administrative workstation or Azure Local node. Replace the example values with the intended prefixes, and then repeat the comparison for any different effective prefixes found on the nodes. The script compares numeric IPv4 ranges, including containment in either direction.
+
+```powershell
+$ErrorActionPreference = 'Stop'
+
+$managementCidr = '<management CIDR>'
+$storageCidrs = @(
+    '<storage CIDR 1>'
+    '<storage CIDR 2>'
+)
+
+function ConvertTo-IPv4Number {
+    param(
+        [Parameter(Mandatory)]
+        [System.Net.IPAddress]$Address
+    )
+
+    if ($Address.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) {
+        throw "'$Address' isn't an IPv4 address."
+    }
+
+    $bytes = $Address.GetAddressBytes()
+    [array]::Reverse($bytes)
+    return [BitConverter]::ToUInt32($bytes, 0)
+}
+
+function Get-IPv4CidrRange {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Cidr
+    )
+
+    $parts = $Cidr.Split('/')
+    if ($parts.Count -ne 2) {
+        throw "'$Cidr' isn't in IPv4 CIDR format."
+    }
+
+    try {
+        $address = [System.Net.IPAddress]$parts[0]
+        $prefixLength = [int]$parts[1]
+    }
+    catch {
+        throw "'$Cidr' isn't a valid IPv4 CIDR."
+    }
+
+    if ($prefixLength -lt 0 -or $prefixLength -gt 32) {
+        throw "Prefix length '$prefixLength' must be between 0 and 32."
+    }
+
+    $addressValue = [uint64](ConvertTo-IPv4Number -Address $address)
+    $rangeSize = [uint64][math]::Pow(2, 32 - $prefixLength)
+    $start = [uint64]([math]::Floor($addressValue / $rangeSize) * $rangeSize)
+
+    [PSCustomObject]@{
+        Cidr = $Cidr
+        Start = $start
+        End = $start + $rangeSize - 1
+    }
+}
+
+$managementRange = Get-IPv4CidrRange -Cidr $managementCidr
+$storageRanges = $storageCidrs | ForEach-Object {
+    Get-IPv4CidrRange -Cidr $_
+}
+
+$managementComparisons = foreach ($storageRange in $storageRanges) {
+    [PSCustomObject]@{
+        FirstPrefix = $managementRange.Cidr
+        SecondPrefix = $storageRange.Cidr
+        Overlaps = (
+            $managementRange.Start -le $storageRange.End -and
+            $storageRange.Start -le $managementRange.End
+        )
+    }
+}
+
+$storageComparisons = for ($first = 0; $first -lt $storageRanges.Count; $first++) {
+    for ($second = $first + 1; $second -lt $storageRanges.Count; $second++) {
         [PSCustomObject]@{
-            Adapter = $_.InterfaceAlias
-            IP = $ip
-            Prefix = $prefix
-            Subnet = "$subnet/$prefix"
-        }
-    } | Format-Table -AutoSize
-```
-
-Example output showing the problem:
-```
-Adapter                  IP           Prefix Subnet
--------                  --           ------ ------
-vManagement(...)         10.71.1.10   24     10.71.1.0/24    ← Management
-vSMB(...#Ethernet 2)     10.71.1.20   24     10.71.1.0/24    ← Storage (OVERLAP!)
-vSMB(...#Ethernet 3)     10.71.2.20   24     10.71.2.0/24    ← Storage
-```
-
-##### 2. Review Your Network Design
-
-Check your deployment configuration and network plan:
-
-**Storage Auto-IP (default):**
-- Storage subnets are automatically assigned as: 10.71.1.0/24, 10.71.2.0/24, 10.71.3.0/24, etc.
-- One subnet per VLAN or per adapter (depending on configuration)
-
-**Static Storage IP:**
-- Storage subnets are defined in the `storageNetworks` section of your deployment configuration
-
-##### 3. Option A: Change Management IP Subnet (Recommended)
-
-Move the management network to a different subnet:
-
-```powershell
-# Example: Change management from 10.71.1.x to 192.168.1.x
-
-# Step 1: Remove current management IP
-$mgmtAdapter = "vManagement(ManagementIntent)"  # Or physical adapter name
-Remove-NetIPAddress -InterfaceAlias $mgmtAdapter -Confirm:$false
-Remove-NetRoute -InterfaceAlias $mgmtAdapter -Confirm:$false
-
-# Step 2: Assign new management IP in different subnet
-New-NetIPAddress -InterfaceAlias $mgmtAdapter `
-    -IPAddress "192.168.1.10" `
-    -PrefixLength 24 `
-    -DefaultGateway "192.168.1.1"
-
-# Step 3: Update DNS servers
-Set-DnsClientServerAddress -InterfaceAlias $mgmtAdapter `
-    -ServerAddresses "192.168.1.100", "192.168.1.101"
-
-# Step 4: Verify no overlap
-Get-NetIPAddress -InterfaceAlias $mgmtAdapter
-```
-
-**Important:** If changing management subnet:
-- Update the change on ALL nodes in the cluster
-- Update your deployment configuration file
-- Update DNS records
-- Update any firewall rules or network policies
-- Ensure the new subnet is routable in your network infrastructure
-
-##### 4. Option B: Change Storage IP Subnets
-
-Alternatively, change the storage network subnets (less common):
-
-**For Auto-IP Storage:**
-- Storage subnets are hardcoded to 10.71.x.0/24
-- Cannot easily change without modifying deployment configuration
-- Usually easier to change management subnet instead
-
-**For Static Storage IP:**
-- Update the `storageNetworks` section in your deployment configuration
-- Choose different subnets that don't conflict with management
-
-```json
-{
-    "storageNetworks": [
-        {
-            "name": "Storage1_Network",
-            "networkAdapterName": "Ethernet 2",
-            "vlanId": 711,
-            "storageAdapterIPInfo": [
-                {
-                    "physicalNode": "NODE1",
-                    "ipv4Address": "172.16.1.10",      // Changed from 10.71.1.x
-                    "subnetMask": "255.255.255.0"
-                }
-            ]
-        }
-    ]
-}
-```
-
-##### 5. Verify the Fix
-
-After making changes, verify subnets are unique:
-
-```powershell
-# Check all adapter subnets
-$subnets = @{}
-Get-NetIPAddress -AddressFamily IPv4 |
-    Where-Object { $_.IPAddress -notlike "169.254.*" -and $_.IPAddress -ne "127.0.0.1" } |
-    ForEach-Object {
-        $ip = $_.IPAddress
-        $prefix = $_.PrefixLength
-        $ipObj = [IPAddress]$ip
-        $mask = [IPAddress]([math]::pow(2, 32) - [math]::pow(2, (32 - $prefix)))
-        $subnet = ([IPAddress]($ipObj.Address -band $mask.Address)).IPAddressToString + "/$prefix"
-
-        if ($subnets.ContainsKey($subnet)) {
-            $subnets[$subnet] += ", " + $_.InterfaceAlias
-        } else {
-            $subnets[$subnet] = $_.InterfaceAlias
+            FirstPrefix = $storageRanges[$first].Cidr
+            SecondPrefix = $storageRanges[$second].Cidr
+            Overlaps = (
+                $storageRanges[$first].Start -le $storageRanges[$second].End -and
+                $storageRanges[$second].Start -le $storageRanges[$first].End
+            )
         }
     }
-
-# Display results
-$subnets.GetEnumerator()
-```
-
----
-
-## Additional Information
-
-### Recommended Network Subnet Design
-
-Best practice is to use separate subnet ranges for different traffic types:
-
-| Traffic Type | Recommended Subnet Range | Example | Notes |
-|-------------|------------------------|---------|-------|
-| **Management** | 192.168.x.0/24 or 10.0.x.0/24 | 192.168.1.0/24 | Routable corporate network |
-| **Storage (Auto-IP)** | 10.71.x.0/24 (fixed) | 10.71.1.0/24, 10.71.2.0/24 | Automatically assigned |
-| **Storage (Static)** | 172.16.x.0/24 or 10.72-99.x.0/24 | 172.16.1.0/24, 172.16.2.0/24 | User-defined |
-| **VM/Compute** | As per datacenter design | 10.10.0.0/16 | Depends on workload |
-
-### Example: Good Network Design (No Overlap)
-
-```
-NODE1:
-  vManagement(ManagementIntent)      192.168.1.10/24  ← Management subnet
-  vSMB(StorageIntent#Ethernet 2)     10.71.1.10/24    ← Storage subnet 1
-  vSMB(StorageIntent#Ethernet 3)     10.71.2.10/24    ← Storage subnet 2
-
-NODE2:
-  vManagement(ManagementIntent)      192.168.1.11/24  ← Management subnet
-  vSMB(StorageIntent#Ethernet 2)     10.71.1.11/24    ← Storage subnet 1
-  vSMB(StorageIntent#Ethernet 3)     10.71.2.11/24    ← Storage subnet 2
-```
-
-All subnets are unique - no overlap!
-
-### Example: Bad Network Design (Overlap)
-
-```
-NODE1:
-  vManagement(ManagementIntent)      10.71.1.10/24    ← Management
-  vSMB(StorageIntent#Ethernet 2)     10.71.1.20/24    ← Storage (SAME SUBNET!)
-  vSMB(StorageIntent#Ethernet 3)     10.71.2.20/24    ← Storage
-```
-
-Management and Storage1 are in the same 10.71.1.0/24 subnet - this will cause problems!
-
-### Storage Auto-IP Subnet Assignment
-
-When using storage auto-IP (EnableStorageAutoIP = true):
-- The system automatically assigns storage subnets as 10.71.1.0/24, 10.71.2.0/24, etc.
-- Number of subnets = minimum of (number of storage VLANs, number of storage adapters)
-- IPs assigned within each subnet based on node position
-
-**Therefore:** When using auto-IP, ensure your management subnet is NOT in the 10.71.x.0/24 range.
-
-### Checking Deployment Configuration
-Below example are for reference only. Please double check [latest example](https://github.com/Azure/azure-quickstart-templates/blob/master/quickstarts/microsoft.azurestackhci/create-cluster-2-node-switched-custom-storageip/azuredeploy.parameters.json) to see if schema is changed.
-
-**For Auto-IP Storage:**
-```json
-{
-    "hostNetwork": {
-        "enableStorageAutoIP": true,  // Auto-IP enabled
-        "intents": [
-            {
-                "name": "ManagementIntent",
-                "adapter": ["Ethernet", "Ethernet 1"]
-            },
-            {
-                "name": "StorageIntent",
-                "adapter": ["Ethernet 2", "Ethernet 3"]
-            }
-        ],
-        "storageNetworks": [
-            { "name": "Storage1", "vlanId": 711 },  // Will get 10.71.1.0/24
-            { "name": "Storage2", "vlanId": 712 }   // Will get 10.71.2.0/24
-        ]
-    }
 }
+
+$managementComparisons
+$storageComparisons
 ```
 
-**For Static Storage:**
-```json
-{
-    "hostNetwork": {
-        "enableStorageAutoIP": false,  // Static IP
-        "storageNetworks": [
-            {
-                "name": "Storage1_Network",
-                "vlanId": 711,
-                "storageAdapterIPInfo": [
-                    {
-                        "physicalNode": "NODE1",
-                        "ipv4Address": "172.16.1.10",  // Explicitly defined
-                        "subnetMask": "255.255.255.0"
-                    }
-                ]
-            }
-        ]
-    }
-}
+Example affected output:
+
+```text
+FirstPrefix       SecondPrefix      Overlaps
+-----------       ------------      --------
+198.51.100.0/24   198.51.100.0/25       True
+198.51.100.0/24   203.0.113.0/24       False
+198.51.100.0/25   203.0.113.0/24       False
 ```
 
-### Routing and Network Behavior with Overlap
+**Expected healthy result:** Every `Overlaps` value is `False`.
 
-When subnets overlap, Windows networking behavior can be unpredictable:
+**Affected result:** Any `Overlaps` value is `True`.
 
-1. **Metric-based routing**: Windows uses route metrics to decide which adapter to use
-2. **Load balancing**: May attempt to balance traffic across adapters (not desired for storage)
-3. **Failover**: May switch adapters if one becomes unavailable
-4. **Performance impact**: Storage traffic may go through wrong adapter, reducing performance
+**Stop condition:** Don't continue deployment with an overlapping network plan. If another lifecycle operation is blocked, don't retry that operation until Microsoft Support has reviewed the overlap and the recovery plan. This informational validator doesn't itself block an operation.
 
-### Related Validators
+## Remediation
 
-This validator is part of a set of management IP configuration checks:
-- **AzureLocal_Network_Test_NodeManagementIPConnection** - Tests connectivity to management IP
-- **AzureLocal_Network_Test_Node_ManagementIP_On_Correct_Adapter** - Verifies IP on correct adapter
-- **AzureLocal_Network_Test_Node_ManagementIP_Not_Overlap_With_Storage_Subnet** (this validator) - Verifies no subnet overlap
+### Before deployment
 
-### Related Documentation
-- [Network reference patterns](https://learn.microsoft.com/azure-stack/hci/plan/network-patterns-overview)
+Update the approved network plan and deployment inputs so that:
+
+- The management range doesn't intersect a storage range.
+- Storage ranges don't intersect each other.
+- The replacement ranges are unallocated and valid in the customer network.
+- DNS, routing, VLAN, firewall, and switch configuration are aligned with the corrected plan.
+
+Run the independent CIDR comparison before deployment.
+
+### Existing deployed system
+
+Changing management or storage addressing on a deployed Azure Local system is a high-risk, cross-component operation. It can affect cluster communication, DNS, Arc connectivity, Network ATC, storage connectivity, SDN, and persisted deployment state.
+
+Don't use generic `Remove-NetIPAddress`, `New-NetIPAddress`, or direct Network ATC reconfiguration commands as an in-place repair based only on this TSG.
+
+Open a Microsoft Support case before changing addressing or redeploying an existing system. Microsoft Support must review the topology, current impact, workload protection, and recovery options. Resolution might require a planned redeployment with a corrected address plan. Don't start an in-place readdressing or redeployment until the support-approved plan, maintenance window, data protection, and rollback or recovery path are established.
+
+## Verification
+
+After correcting the configuration:
+
+1. Run the independent CIDR comparison again.
+2. Confirm every management-to-storage and storage-to-storage comparison returns `Overlaps = False`.
+3. Rerun the applicable Environment Checker workflow.
+4. Confirm the deployed adapter addresses and deployment inputs match the approved network plan on every node.
+5. Verify cluster, storage, management connectivity, and any enabled SDN functionality before returning the system to service.
+
+If the independent comparison passes but the validator still reports an overlap, preserve the Environment Checker output and escalate with the evidence package below.
+
+## Escalation and evidence package
+
+Provide the following information to Microsoft Support:
+
+- Azure Local solution version and Environment Checker package version.
+- Full result for `AzureLocal_Network_Test_Node_ManagementIP_Not_Overlap_With_Storage_Subnet`.
+- Approved management and storage CIDRs.
+- Output from the independent CIDR comparison.
+- Deployment input containing the host-network and storage-network configuration.
+- Read-only `Get-NetIPAddress` output from every node.
+- Whether the system is pre-deployment or already deployed.
+- Whether SDN is enabled and the current customer impact.
+
+For instructions, see [Create an Azure support request](https://learn.microsoft.com/en-us/azure/azure-portal/supportability/how-to-create-azure-support-request).
+
+## Related documentation
+
+- [Host network requirements for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements)
 - [Custom IPs for storage in Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/plan/cloud-deployment-network-considerations#custom-ips-for-storage)
