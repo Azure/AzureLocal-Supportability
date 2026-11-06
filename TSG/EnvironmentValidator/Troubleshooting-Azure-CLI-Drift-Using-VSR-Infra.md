@@ -8,11 +8,11 @@
     "signal": "Invoke-AzStackHciVSRDriftDetectionValidation"
   },
   "validation": {
-    "fidelity_level": "L0",
+    "fidelity_level": "L1",
     "technical_grade": null,
-    "reproduction_substrate": "none",
+    "reproduction_substrate": "hardware",
     "automation_status": "not-assessed",
-    "last_validated": null,
+    "last_validated": "2026-11-06",
     "spec_ref": ""
   }
 }
@@ -28,7 +28,7 @@
 | Applicability | Azure CLI core or extension drift; the remediation path requires `Remediate-AzCli` and access to the recipe's installation sources |
 | Severity | Warning for the core CLI check; informational for extension checks |
 | Execution surface | on-device |
-| Validation | CLI inventory diagnostic exercised read-only on an x64 lab node (OS build 26100). Validator detection, remediation, and health-fault clearing have not been exercised for this article. |
+| Validation | Diagnostic commands and module import exercised on a physical x64 lab node (OS build 26100, Windows PowerShell 5.1) on 2026-11-06. The full drift validator returned 20 successful checks, including CLI core and four extensions; CLI inventory selected the x64 path. Remediation, failure detection, the x86 fallback on a live installation, and health-fault clearing remain untested. |
 
 Do not infer applicability to disconnected, disaggregated, or multi-rack
 deployments. If required commands or installation sources are unavailable,

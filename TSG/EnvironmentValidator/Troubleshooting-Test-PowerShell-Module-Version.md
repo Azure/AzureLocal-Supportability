@@ -8,11 +8,11 @@
     "signal": "AzStackHci_ValidatedRecipe_PowerShellModule_Version"
   },
   "validation": {
-    "fidelity_level": "L0",
+    "fidelity_level": "L1",
     "technical_grade": null,
     "reproduction_substrate": "hardware",
     "automation_status": "not-assessed",
-    "last_validated": null,
+    "last_validated": "2026-11-06",
     "spec_ref": ""
   }
 }
@@ -28,7 +28,7 @@
 | Applicability | Pre-update validation; the automatic remediation path additionally requires `AzureLocalImageModule` and `Remediate-PSModules` |
 | Severity | Critical validator failure; update readiness may be affected |
 | Execution surface | on-device |
-| Validation | Module discovery/import and the PASS diagnostic path were exercised on a physical lab node using Windows PowerShell 5.1. Remediation and the full article were not live-validated in this revision. |
+| Validation | Diagnostic commands, detail expansion, installed-module inventory, module discovery/import, and helper availability were exercised on a physical lab node (OS build 26100, Windows PowerShell 5.1) on 2026-11-06. The module check returned PASS. Remediation, manual uninstall/install, failure detection, and health-fault clearing remain untested. |
 
 ## Table of contents
 
