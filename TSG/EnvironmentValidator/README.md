@@ -11,7 +11,8 @@ This folder contains the TSG's related to Environment Validators.
 * [Troubleshooting Secure Boot (Hardware Test Secure Boot)](./Troubleshooting-Hardware-Test-Secure-Boot.md)
 * [Troubleshooting Domain Membership (Software IsNotPartofDomain)](./Troubleshooting-Software-IsNotPartofDomain.md)
 * [Troubleshooting DNS Active Directory Domain Name Resolution](./Troubleshooting-DNS-ActiveDirectory-DomainName-Resolution.md)
-* [Troubleshooting TestPowerShell Module Version](./Troubleshooting-Test-PowerShell-Module-Version.md)
+* [Troubleshooting Test PowerShell Module Version](./Troubleshooting-Test-PowerShell-Module-Version.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator; Validation grade: not established (L1, diagnostics exercised 2026-11-06); Automation: not-assessed; Last fully validated: not established.
+* [Troubleshooting Azure CLI Drift Against the Validated Solution Recipe](./Troubleshooting-Azure-CLI-Drift-Using-VSR-Infra.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator; Validation grade: not established (L1, diagnostics exercised 2026-11-06); Automation: not-assessed; Last fully validated: not established.
 * [Troubleshooting Module Versions](Troubleshooting-Module-Versions.md)
 * [Troubleshooting MSI Does Not Have Access to Subscription](Troubleshooting-MSI-Does-Not-Have-Access-To-Subscription.md)
 * [Troubleshooting SBE Health: Installed SBE Environment Variables Consistency](./Troubleshooting-SBEHealth-Test-Installed-SBE-Env-Vars.md)
