@@ -28,7 +28,7 @@
 | Applicability | Azure CLI core or extension drift; the remediation path requires `Remediate-AzCli` and access to the recipe's installation sources |
 | Severity | Warning for the core CLI check; informational for extension checks |
 | Execution surface | on-device |
-| Validation | Static checks only for this draft. Detection, remediation, and health-fault clearing have not been exercised for this article. |
+| Validation | CLI inventory diagnostic exercised read-only on an x64 lab node (OS build 26100). Validator detection, remediation, and health-fault clearing have not been exercised for this article. |
 
 Do not infer applicability to disconnected, disaggregated, or multi-rack
 deployments. If required commands or installation sources are unavailable,
@@ -89,8 +89,11 @@ each extension has an independent problem.
 installed CLI or extensions. Run them on the affected node before remediation.
 
 ```powershell
-$results = Invoke-AzStackHciVSRDriftDetectionValidation -PassThru
-$results | Where-Object Status -eq 'FAILURE' | Select-Object Name, Status, Severity, Description, Remediation
+$results = @(Invoke-AzStackHciVSRDriftDetectionValidation -PassThru -ErrorAction Stop)
+if ($results.Count -eq 0) {
+    throw 'The validator returned no results; drift status is unknown.'
+}
+$results | Select-Object Name, Status, Severity, Description, Remediation
 ```
 
 Inspect all returned results to confirm that the core CLI and the expected
@@ -98,21 +101,35 @@ extension checks actually ran. Empty results or no matching checks are an
 unknown state, not a pass. Stop if the validator throws, returns an unexpected
 status, or produces no relevant results.
 
-Confirm the installed CLI version:
+Confirm the installed CLI version. Check the current x64 installation path first,
+then the legacy x86 path. If both exist, this diagnostic uses the x64 installation:
 
 ```powershell
-$azPath = 'C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin\az.cmd'
-if (Test-Path -LiteralPath $azPath) {
-    & $azPath version
-} else {
-    Write-Output "Azure CLI executable was not found at the expected path: $azPath"
+$azPaths = @(
+    'C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd'
+    'C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin\az.cmd'
+)
+$azPath = $azPaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+if (-not $azPath) {
+    throw "Azure CLI executable was not found at either expected path: $($azPaths -join ', ')"
 }
+Write-Output "Azure CLI executable: $azPath"
+Write-Output "AZURE_EXTENSION_DIR: $env:AZURE_EXTENSION_DIR"
+& $azPath version
 ```
+
+This diagnostic preserves the session's `AZURE_EXTENSION_DIR`; it does not
+override the composed image's extension configuration. Before interpreting
+extension versions, confirm that the displayed value points to the
+release-supported managed extension directory. If it is unset, points elsewhere,
+or the directory is missing, stop and investigate the image/session configuration.
+Do not treat the resulting extension inventory as verified recipe state.
 
 Compare the returned core and extension versions with the current node's recipe,
 not with the latest upstream release. The core package is
 `Microsoft.AzureStack.AzureCLI`. A missing executable means this installation
-path cannot be checked; it is not, by itself, a verified version mismatch.
+cannot be checked at either expected path; it is not, by itself, a verified
+version mismatch.
 
 ## Contributing factors
 
