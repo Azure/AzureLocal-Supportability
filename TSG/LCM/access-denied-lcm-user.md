@@ -259,7 +259,7 @@ Set-AzureStackLCMUserPassword -Identity $lcmUsername -NewPassword $pw -ErrorActi
 
 Retry the originally failed action plan using its normal retry workflow. The previously failing step should complete without the access-denied error.
 
-If the cmdlet succeeds but the original error persists, do not assume a password mismatch was confirmed or repeat synchronization indefinitely. Continue with the OU permissions and other applicable checks in this guide, or contact CSS. Provide the solution version, failed step, error text, and timestamps; never include passwords.
+If the cmdlet succeeds but the original error persists, do not assume a password mismatch was confirmed or repeat synchronization indefinitely. Continue with the OU permissions and other applicable checks in this guide, or contact CSS.
 
 Close the PowerShell session when finished to discard the credential variables.
 
