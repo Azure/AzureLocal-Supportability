@@ -242,29 +242,45 @@ condition, not permission to repeatedly uninstall modules.
 **[HIGH RISK]** Use this path only with Microsoft Support guidance and verified
 recipe values. The following `Az.Accounts` version is an example from the failure
 above, not a version to install on every release. Replace both variables with the
-module and required version from the current node's validated recipe.
+module and required version from the current node's validated recipe. The example
+uses `PSGallery` explicitly; use it only if it is the approved source for the
+required recipe package, otherwise obtain the approved repository name from
+Microsoft Support and replace `PSGallery`.
 
-On each node we should remove any versions of modules that the validator found to be wrong.
+On each affected node, install the required version only if it is missing, verify
+that it is installed, and only then remove the incorrect versions. PowerShell
+modules can be installed side by side during this replacement.
 
 ```powershell
 $RequiredModuleName = 'Az.Accounts'
 $RequiredModuleVersion = '4.0.2'
 
-# Get all versions of the 
-Get-InstalledModule -Name $RequiredModuleName -AllVersions
+$availableModules = @(Get-Module -Name $RequiredModuleName -ListAvailable -ErrorAction Stop)
+if (-not ($availableModules | Where-Object Version -eq $RequiredModuleVersion)) {
+    Install-Module -Name $RequiredModuleName -RequiredVersion $RequiredModuleVersion -Repository PSGallery -Scope AllUsers -Force -ErrorAction Stop
+}
 
-#Uninstall all but the required version
-Get-InstalledModule -Name $RequiredModuleName -AllVersions | Where-Object { $_.Version -ne $RequiredModuleVersion } | ForEach-Object { Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version -Force }
+$installedModules = @(Get-InstalledModule -Name $RequiredModuleName -AllVersions -ErrorAction Stop)
+if (-not ($installedModules | Where-Object Version -eq $RequiredModuleVersion)) {
+    throw "Required version $RequiredModuleVersion of $RequiredModuleName was not found. No versions will be removed."
+}
 
-# if the required version was not present in the first command's output, install it.
-Install-Module -Name $RequiredModuleName -RequiredVersion $RequiredModuleVersion -Force
+$installedModules | Where-Object Version -ne $RequiredModuleVersion | ForEach-Object {
+    Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version -Force -ErrorAction Stop
+}
 
-# Verify only the required version is installed
-Get-InstalledModule -Name $RequiredModuleName -AllVersions
-
+$remainingModules = @(Get-InstalledModule -Name $RequiredModuleName -AllVersions -ErrorAction Stop)
+if (-not ($remainingModules | Where-Object Version -eq $RequiredModuleVersion) -or
+    @($remainingModules | Where-Object Version -ne $RequiredModuleVersion).Count -gt 0) {
+    throw "Module replacement is incomplete. Stop and inspect the installed versions of $RequiredModuleName."
+}
+$remainingModules
 ```
 
-After the installation, run [Verify resolution](#verify-resolution).
+If installation or the pre-removal inventory fails, stop without uninstalling
+any version. If removal or final inventory fails, stop and retain the error for
+Microsoft Support. Do not continue to other modules after an error.
+After replacement, run [Verify resolution](#verify-resolution) in a new session.
 
 ## Rollback and escalation
 

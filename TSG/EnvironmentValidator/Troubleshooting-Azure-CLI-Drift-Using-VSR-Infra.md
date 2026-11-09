@@ -25,8 +25,8 @@
 | Component | Environment Validator / Validated Solution Recipe (VSR) |
 | Validator / test | `Invoke-AzStackHciVSRDriftDetectionValidation -PassThru` |
 | Applicable products | Azure Local nodes with the VSR drift validator and `AzureLocalImageModule` installed |
-| Applicability | Azure CLI core or extension drift; the remediation path requires `Remediate-AzCli` and access to the recipe's installation sources |
-| Severity | Warning for the core CLI check; informational for extension checks |
+| Applicability | Azure CLI core drift, with or without extension drift; the remediation path requires `Remediate-AzCli` and access to the recipe's installation sources. Extension-only drift does not use this remediation path. |
+| Severity | Inspect the severity returned by each check; severity can vary by release. |
 | Execution surface | on-device |
 | Validation | Diagnostic commands and module import exercised on a physical x64 lab node (OS build 26100, Windows PowerShell 5.1) on 2026-11-06. The full drift validator returned 20 successful checks, including CLI core and four extensions; CLI inventory selected the x64 path. Remediation, failure detection, the x86 fallback on a live installation, and health-fault clearing remain untested. |
 
@@ -54,9 +54,8 @@ solution rather than the latest versions available from a package repository.
 
 The Environment Validator drift check can report:
 
-- Core CLI: `Test Azure-Cli Module Version`, with Warning severity.
-- Extension: `Test Azure-Cli Extension <name> Version`, with Informational
-  severity, for extensions such as `arcappliance`, `customlocation`,
+- Core CLI: `Test Azure-Cli Module Version`.
+- Extension: `Test Azure-Cli Extension <name> Version`, for extensions such as `arcappliance`, `customlocation`,
   `k8s-extension`, or `stack-hci-vm`.
 
 Example core-CLI failure text:
@@ -131,6 +130,21 @@ not with the latest upstream release. The core package is
 cannot be checked at either expected path; it is not, by itself, a verified
 version mismatch.
 
+Choose the remediation path from the current validator results:
+
+| Core CLI check | Extension checks | Action |
+| --- | --- | --- |
+| `FAILURE` | Successful | Follow the core CLI remediation steps below. |
+| `FAILURE` | One or more failures | Follow the core CLI remediation steps, then recheck extensions separately. |
+| `SUCCESS` | One or more failures | Skip both remediation steps below. Do not reinstall the core CLI for extension-only drift. |
+
+`Remediate-AzCli` remediates only the core CLI, not CLI extensions. For
+extension-only drift or extension failures remaining after core remediation,
+retain the validator details and follow the extension's `Remediation` field,
+[Drift detection for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/manage/drift-detection),
+and Microsoft Support guidance. This guide does not provide extension
+installation or removal commands.
+
 ## Contributing factors
 
 The validator's expected and discovered versions identify the mismatch.
@@ -142,8 +156,9 @@ operation introduced it. Retain installation errors and recent-change records.
 
 Before changing the CLI installation:
 
-- Confirm an Azure CLI core or extension failure in the current node's validator
-  output and record the expected versions.
+- Confirm `FAILURE` for the core CLI check, `AzStackHci_AzureCli_Version`, in
+  the current node's validator output and record its expected version.
+  Extension failures alone do not satisfy this precondition.
 - Use a new, elevated Windows PowerShell session on each affected node.
 - Do not run remediation concurrently with deployment, an update, another
   installation, or automation that uses `az`.
@@ -153,6 +168,9 @@ Before changing the CLI installation:
   Replacing the CLI can interrupt management or automation operations using it.
 
 ## Mitigation details
+
+Run these steps only for confirmed core CLI drift, whether or not extension
+drift is also reported. For extension-only drift, skip both steps.
 
 ### Step 1: Import the Azure Local Image module
 
@@ -172,8 +190,8 @@ Closing the session discards its imports without changing installed software.
 
 **[HIGH RISK]** Run only after all preconditions are satisfied. The helper invokes
 the VSR Infra drift-detection client for the `AzCli` category and attempts to
-align the installed CLI with the recipe. This article does not provide an
-automatic rollback.
+align the core CLI with the recipe. It does not remediate CLI extensions.
+This article does not provide an automatic rollback.
 
 ```powershell
 $driftResult = Remediate-AzCli -Verbose
@@ -182,8 +200,9 @@ $driftResult
 
 Inspect the returned result for completion or errors, then run
 [Verify resolution](#verify-resolution). Stop if execution fails or the final
-validator still reports drift. Do not repeatedly reinstall or upgrade `az`
-without investigating the failure.
+validator still reports core CLI drift. Treat any remaining extension failures
+separately as described under [Issue validation](#issue-validation).
+Do not repeatedly reinstall or upgrade `az` without investigating the failure.
 
 ## Rollback and escalation
 
@@ -197,19 +216,28 @@ not an arbitrary CLI or extension version.
 ## Verify resolution
 
 **[READ-ONLY]** Repeat both commands under
-[Issue validation](#issue-validation) on every affected node. Require:
+[Issue validation](#issue-validation) on every affected node. To verify core
+CLI remediation, require:
 
-- The core CLI and extensions match the current recipe.
-- The validator returns the relevant checks with successful statuses.
-- No Azure CLI core or extension check reports `FAILURE`.
+- The core CLI version matches the current recipe.
+- The validator returns `AzStackHci_AzureCli_Version` with status `SUCCESS`.
 
-No failure rows are insufficient if relevant checks did not run. Any missing,
-unexpected, or failing result means resolution is not verified.
+No failure rows are insufficient if the core check did not run. A missing,
+unexpected, or failing core result means core resolution is not verified.
+
+Record extension results separately. Core CLI success does not establish that
+extension drift is resolved, and `Remediate-AzCli` is not a fix for a remaining
+extension failure. Follow the extension-specific guidance under
+[Issue validation](#issue-validation), rather than rerunning core remediation.
 
 If a drift health fault was also present, check `Get-HealthFault` after the next
 scheduled drift-detection run. The on-demand validator verifies the installed
 state; it does not prove that a previously raised fault has already cleared.
-Retry the update only after the matching checks succeed on all affected nodes.
+Before retrying an update, confirm core remediation on all affected nodes and
+follow the actual pre-update health results. Informational extension drift alone
+is not an update-blocking condition; do not make extension success a prerequisite
+for retry solely on that basis. Follow the emitted severity and release-specific
+guidance for other extension findings.
 
 ## Administrator detection surfaces
 
@@ -231,4 +259,5 @@ publication.
 ## Related documentation
 
 - [Azure Local documentation](https://learn.microsoft.com/en-us/azure/azure-local/)
+- [Drift detection for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/manage/drift-detection)
 - [PowerShell module-version validation](./Troubleshooting-Test-PowerShell-Module-Version.md)
