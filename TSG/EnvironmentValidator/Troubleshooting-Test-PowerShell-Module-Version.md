@@ -251,30 +251,31 @@ On each affected node, install the required version only if it is missing, verif
 that it is installed, and only then remove the incorrect versions. PowerShell
 modules can be installed side by side during this replacement.
 
+Run this block as a whole, for example saved as a `.ps1` file. When pasting into
+a console, keep `} else {` on one line and do not insert blank lines inside
+either `if` statement.
+
 ```powershell
 $RequiredModuleName = 'Az.Accounts'
 $RequiredModuleVersion = '4.0.2'
-
 $availableModules = @(Get-Module -Name $RequiredModuleName -ListAvailable -ErrorAction Stop)
 if (-not ($availableModules | Where-Object Version -eq $RequiredModuleVersion)) {
     Install-Module -Name $RequiredModuleName -RequiredVersion $RequiredModuleVersion -Repository PSGallery -Scope AllUsers -Force -ErrorAction Stop
 }
-
 $installedModules = @(Get-InstalledModule -Name $RequiredModuleName -AllVersions -ErrorAction Stop)
-if (-not ($installedModules | Where-Object Version -eq $RequiredModuleVersion)) {
+if ($installedModules | Where-Object Version -eq $RequiredModuleVersion) {
+    $installedModules | Where-Object Version -ne $RequiredModuleVersion | ForEach-Object {
+        Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version -Force -ErrorAction Stop
+    }
+    $remainingModules = @(Get-InstalledModule -Name $RequiredModuleName -AllVersions -ErrorAction Stop)
+    if (-not ($remainingModules | Where-Object Version -eq $RequiredModuleVersion) -or
+        @($remainingModules | Where-Object Version -ne $RequiredModuleVersion).Count -gt 0) {
+        throw "Module replacement is incomplete. Stop and inspect the installed versions of $RequiredModuleName."
+    }
+    $remainingModules
+} else {
     throw "Required version $RequiredModuleVersion of $RequiredModuleName was not found. No versions will be removed."
 }
-
-$installedModules | Where-Object Version -ne $RequiredModuleVersion | ForEach-Object {
-    Uninstall-Module -Name $RequiredModuleName -RequiredVersion $_.Version -Force -ErrorAction Stop
-}
-
-$remainingModules = @(Get-InstalledModule -Name $RequiredModuleName -AllVersions -ErrorAction Stop)
-if (-not ($remainingModules | Where-Object Version -eq $RequiredModuleVersion) -or
-    @($remainingModules | Where-Object Version -ne $RequiredModuleVersion).Count -gt 0) {
-    throw "Module replacement is incomplete. Stop and inspect the installed versions of $RequiredModuleName."
-}
-$remainingModules
 ```
 
 If installation or the pre-removal inventory fails, stop without uninstalling
