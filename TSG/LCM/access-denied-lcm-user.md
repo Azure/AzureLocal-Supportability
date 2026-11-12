@@ -1,4 +1,5 @@
-# Symptoms
+# Facing "Access Denied" for the LCM User
+## Symptoms
 During deployment, update, or add-node you may encounter 'Access Denied'. Some examples include:
 
 During deployment you might see the following error message(s)
@@ -22,15 +23,15 @@ During any action plan, if you see the following, go to "Known Causes" #6
 ```
 Connecting to remote server <ClusterName> failed with the following error message : An unknown security error occured
 ```
-# Known Causes
-1. The LCM (deployment user) credentials were not updated properly using the [Set-AzureStackLCMUserPassword](https://learn.microsoft.com/en-us/azure/azure-local/manage/manage-secrets-rotation?view=azloc-24112#run-set-azurestacklcmuserpassword-cmdlet) cmdlet. This cmdlet is responsible for updating the password in Active Directory as well as updating it in the ECE Store. Both of these should be in sync, otherwise there will be access denied issues.
+## Known Causes
+1. The password for the LCM (deployment) user in Active Directory (AD) may differ from the password stored in Enterprise Cloud Engine (ECE). Use [Set-AzureStackLCMUserPassword](https://learn.microsoft.com/en-us/azure/azure-local/manage/manage-secrets-rotation#powershell-cmdlet-and-properties) to set the LCM User Password.
 2. The LCM user does not have sufficient permissions on the Organization Unit (OU) in Active Directory (AD).
 3. The NTLM policy, configured via Group Policy, may be blocking remote operations such as Invoke-Command. This can occur if NTLM is restricted either at the OU level or on the individual nodes or the domain controller via applied Group Policy Objects (GPOs).
 4. The WinRM trusted hosts configuration is set up incorrectly.
 5. The LCM user is part of the "Protected Users" group (See Protected Users heading below).
 6. Cluster's SPN is misconfigured (See Unknown Security Error heading below)
 
-# Issue Validation
+## Issue Validation
 
 Before running the following steps, please log into a node with the LCM user credential to ensure the credential works. If you do not know your LCM username, please view the [Retrieving your LCM (user deployment) username section](#retrieving-your-lcm-deployment-user-username). If you do not know your LCM user credentials, then you will need to recreate the LCM user and follow this document to ensure the LCM user is set up properly.
 
@@ -124,8 +125,8 @@ If there are no issues running the previous script, then proceed to **Step 3**, 
 2. If Invoke-Command without CredSSP works, but CredSSP does not work, please review the [CredSsp-Authentication-Issues Doc](../Security/CredSsp-Authentication-Issues.md).
 3. If Invoke-Command with hostname works, but using the IP does not work, ensure the [WinRM Trusted Hosts configuration](#winrm-trusted-hosts-configuration) is set up properly to include all IPs of all nodes in your cluster and that a Group Policy Object (GPO) [is not blocking NTLM](#check-ntlm-is-not-blocked-by-gpo).
  
-### Step 3: Verify the LCM credential in AD matches ECE Store
-If Invoke-Command works, then validate the credential exists in ECE store by running the script in the [Validating LCM (user deployment) credentials match the ECE Store](#validating-lcm-user-deployment-credentials-match-the-ece-store) section. If this script returns that they do not match, run the mitigation script from the same section.
+### Step 3: Synchronize the LCM credential with ECE
+If the remote-command checks from Step 2 succeed but the original operation still fails with access denied, follow [Synchronize the LCM password with ECE](#synchronize-the-lcm-password-with-ece). This validates the supplied password against AD and writes it to ECE; it does **not** detect or prove an AD/ECE password mismatch. Retry the failed operation to verify recovery. If access denied persists, continue to **Step 4** and the other applicable diagnostic sections.
 
 ### Step 4: Check LCM user permissions on the OU
 Verify the Active Directory permissions are set properly for the LCM user. Log into the domain controller node using the LCM user credentials and run the following to get the Access Control List (ACL) for the user on the OU. Replace the LCM username in the script with your LCM username and the sample OU with your environment OU. You can get the OU by running `Get-ADOrganizationalUnit -Filter *` on the domain controller (DC) node. You should also check the permissions of any groups that the LCM user belongs to, since they are inherited by the LCM user.
@@ -166,7 +167,7 @@ The user should have the following permissions on the OU:
  
 If you do not see all of these ActiveDirectoryRights listed for this user, please follow [instructions to prepare active directory](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-prep-active-directory?view=azloc-2503), including running the `AsHciADArtifactsPreCreationTool` listed in the wiki to ensure all permissions are set appropriately for the user. Ensure these same permissions are applied to all OU objects and their descendents.
 
-### WinRM TrustedHosts Configuration
+### WinRM Trusted Hosts Configuration
 TrustedHosts should be checked on each node for correct configuration.
 ```Powershell
 Get-Item WSMan:\localhost\Client\TrustedHosts
@@ -188,190 +189,81 @@ Set-Item WSMan:\localhost\Client\TrustedHosts -Value "hostname1,hostname2,192.16
 Set-Item WSMan:\localhost\Client\TrustedHosts -Value "hostname1.contoso.local,hostname2.contoso.local" -Concatenate -Force
 ```
 
-# Scripts
-### Validating LCM (User Deployment) Credentials Match the ECE Store
+## Synchronize the LCM password with ECE
 
-NOTE: Please note that the LCM Username should be provided without domain and not contain any special characters. To Validate that the username provided is of the correct format, run:
+**Applies to:** Azure Local, release **2601 and later**. For releases earlier than 2601, instead contact Microsoft CSS.
 
-```Powershell
+Validation of the issue is difficult due to multiple changes across different releases, and different states the cluster may be in. So instead of validating the issue, we will simply fix the issue and retry. Fixing the issue involves setting the LCM user's password in ECE to match what is in AD. No changes to AD or AD password will be made. Once fix is applied, please retry the failed action plan.
 
-if ($credential.UserName -match '^[^\\]+(?=\\)|(?<=@).+$') {
-    throw "Please provide user name without domain."
-}
-```
-Proceed with credential validation:
+### Preconditions
 
-#### NOTE: Please run the below 'CredentialsHelper' from the seed node. 
-#### To find the seed node :
+- Confirm the remote-command checks in [Step 2](#step-2-check-the-lcm-user-credentials-work-on-all-nodes) succeed.
 
-```Powershell
-$owner_node = (Get-ClusterResource *Orc*).OwnerNode.Name
-$owner_node
-```
+### Step 1: Validate the current password against AD [READ-ONLY]
 
-```Powershell
+Run this block first. Replace `<lcm_username>` with your LCM username (without domain prefix). LCM password synchronization can be run from any node.
 
-function CredentialsHelper
-{
-[CmdletBinding(DefaultParameterSetName = 'VerifyCredential')]
-    param (
-        [Parameter(Mandatory, ParameterSetName = 'WithCredential')]
-        [pscredential]
-        $Credential,
-
-        [Parameter(Mandatory, ParameterSetName = 'FetchLCMUserName')]
-        [switch]
-        $FetchUsername
-    )
-
-    try
-        {
-        # Retrieve the latest ECEWinService NuGet Version
-        $eceWinService = Get-ChildItem "C:\Agents" -Directory |
-            Where-Object { $_.Name -match 'Microsoft\.AzureStack\.Solution\.ECEWinService\.(\d+\.\d+\.\d+\.\d+)' } |
-            ForEach-Object {
-                [PSCustomObject]@{
-                    Path = $_.FullName
-                    Version = [version]$matches[1]
-                }
-            } |
-            Sort-Object Version -Descending |
-            Select-Object -First 1
-
-        $eceWinServiceVersion = $eceWinService.Version.ToString()
-        $eceWinServicePath = $eceWinService.Path
-
-        # Load Assemblies
-        [System.Reflection.Assembly]::LoadFile("$eceWinServicePath\content\ECEWinService\CloudEngine.dll") | Out-Null
-        [System.Reflection.Assembly]::LoadFile("$eceWinServicePath\content\ECEWinService\Microsoft.AzureStack.Orchestration.Common.Packaging.Contract.dll") | Out-Null
-        [System.Reflection.Assembly]::LoadFile("$eceWinServicePath\content\ECEWinService\Microsoft.AzureStack.Orchestration.Common.Packaging.dll") | Out-Null
-        [System.Reflection.Assembly]::LoadFile("$eceWinServicePath\content\ECEWinService\Microsoft.Diagnostics.Tracing.EventSource.dll") | Out-Null
-
-        # Load MetricTelemetry.dll if it exists, otherwise fallback to Telemetry.dll
-        $metricTelemetryPath = "$eceWinServicePath\content\ECEWinService\Microsoft.AzureStack.Solution.MetricTelemetry.dll"
-        $telemetryPath = "$eceWinServicePath\content\ECEWinService\Microsoft.AzureStack.Solution.Telemetry.dll"
-
-        if (Test-Path $metricTelemetryPath) {
-            [System.Reflection.Assembly]::LoadFile($metricTelemetryPath) | Out-Null
-        } elseif (Test-Path $telemetryPath) {
-            [System.Reflection.Assembly]::LoadFile($telemetryPath) | Out-Null
-        } else {
-            Write-Warning "Neither MetricTelemetry.dll nor Telemetry.dll found in $eceWinServicePath"
-        }
-
-        #Retrieve LCM User Username
-        Import-Module ECEClient 3>$null 4>$null
-        $eceClient = Create-ECEClusterServiceClient
-        $cloudDefinitionAsXmlString = (Get-CloudDefinition -EceClient $eceClient).CloudDefinitionAsXmlString
-        $cloudDefElements = [System.Xml.Linq.XElement]::Parse($cloudDefinitionAsXmlString)
- 
-        $customerConfigurationObject = New-Object -TypeName 'CloudEngine.Configurations.CustomerConfiguration' -ArgumentList $cloudDefElements
-        $cloudRoleObject = [CloudEngine.Configurations.ConfigurationPathExtensions]::Find($customerConfigurationObject, 'Cloud')
-        [CloudEngine.Configurations.IInterface] $interface = $cloudRoleObject.Interface('Build')
-        $eceParams = $interface.GetInterfaceParameters()
- 
-        $securityInfo = $ECEParams.Roles["Cloud"].PublicConfiguration.PublicInfo.SecurityInfo
-        $DAdmin = $securityInfo.DomainUsers.User | Where Role -eq "DomainAdmin"
-
-        $DAAdminUserCredential = $ECEParams.GetCredential($DAdmin.Credential) 
-
-        if ($FetchUsername)
-        {
-            Write-AzsSecurityVerbose "Your LCM username is: $($DAAdminUserCredential.UserName)" -Verbose
-            return
-        }
-
-        $DAAdminUserPassword = $DAAdminUserCredential.GetNetworkCredential().password
-
-        $userProvidedPassword = $Credential.GetNetworkCredential().Password
-        $userProvidedUserName = $Credential.GetNetworkCredential().UserName
-
-        if ($DAAdminUserCredential.UserName -ne $userProvidedUserName)
-        {
-            Write-AzsSecurityWarning -Message "Provided LCM credential user name does not match the one in ECE." -Verbose
-        }
-
-        if ($DAAdminUserPassword -eq $userProvidedPassword)
-        {
-            Write-AzsSecurityVerbose -Message "Found matching credentials in ECE store." -Verbose
-        }
-        else
-        {
-            Write-AzsSecurityWarning -Message "Could not find matching credentials in ECE store. Please proceed with mitigation to update LCM user password in ECE." -Verbose
-        }
-        }
-        catch
-        {
-            Write-AzsSecurityWarning -Message "There was an issue verifying credentials. Error $_. Please reach out to Microsoft support for help" -Verbose
-        }
+```powershell
+$lcmUsername = '<lcm_username>'
+$adPasswordValidated = $false
+$ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($lcmUsername) -or $lcmUsername -match '[\\@<>]') {
+    throw 'Provide the configured LCM username without the domain prefix.'
 }
 
-$lcmCredentials = Get-Credential
-CredentialsHelper -Credential $lcmCredentials
-```
+Get-Command Set-AzureStackLCMUserPassword -ErrorAction Stop | Out-Null
+$pw = Read-Host 'Current LCM password in AD' -AsSecureString
 
-### Mitigation
-Please input your LCM user credentials when prompted. **DO NOT include the domain as part of the username in the credential**.
-
-```PowerShell
-# Prompt for credentials
-$credential = Get-Credential
-
-# Validate credentials
+Add-Type -AssemblyName System.DirectoryServices.AccountManagement
+$computer = Get-CimInstance Win32_ComputerSystem
+if (-not $computer.PartOfDomain) {
+    throw 'Run this procedure on a domain-joined Azure Local node. For AD-Less deployments contact CSS'
+}
+$domain = $computer.Domain
+$ctx = [System.DirectoryServices.AccountManagement.PrincipalContext]::new('Domain', $domain)
+$plain = $null
 try {
-    # Attempt to invoke a simple command (Get-Process) on the local machine to validate credentials
-    Invoke-Command -ScriptBlock { whoami } -Credential $credential -ErrorAction Stop -ComputerName localhost
-
-    Write-Host "Credential validation successful." -ForegroundColor Green
+    $plain = [pscredential]::new($lcmUsername, $pw).GetNetworkCredential().Password
+    if (-not $ctx.ValidateCredentials($lcmUsername, $plain)) {
+        throw "AD rejected the password for $domain\$lcmUsername. Stop; do not update ECE."
+    }
+    "AD accepted the password for $domain\$lcmUsername."
 }
-catch {
-    Write-Host "Credential validation failed. Please check the username and password." -ForegroundColor Red
-    return
+finally {
+    $plain = $null
+    $ctx.Dispose()
 }
-
-# Import the necessary module
-Import-Module "C:\Program Files\WindowsPowerShell\Modules\Microsoft.AS.Infra.Security.SecretRotation\PasswordUtilities.psm1" -DisableNameChecking
-
-# Print the User Name
-Write-Host "Username provided: $($credential.UserName)" -ForegroundColor Cyan
-
-# Validate that the username provided is of the correct format. Username should be provided without domain and not contain any special characters.
-if($credential.UserName -match '^[^\\]+(?=\\)|(?<=@).+$')
-{
-    throw "Please provide user name without domain."
-}
-
-# Check the status of the ECE cluster group
-$eceClusterGroup = Get-ClusterGroup | Where-Object { $_.Name -eq "Azure Stack HCI Orchestrator Service Cluster Group" }
-if ($eceClusterGroup.State -ne "Online") {
-    Write-AzsSecurityError -Message "ECE cluster group is not in an Online state. Cannot continue with password rotation." -ErrRecord $_
-}
-
-# Update ECE with the new password
-Write-AzsSecurityVerbose -Message "Updating password in ECE" -Verbose
-
-$ECEContainersToUpdate = @(
-    "DomainAdmin",
-    "DeploymentDomainAdmin",
-    "CloudAdmin"
-)
-
-foreach ($containerName in $ECEContainersToUpdate) {
-    Set-ECEServiceSecret -ContainerName $containerName -Credential $credential 3>$null 4>$null
-}
-
-Write-AzsSecurityVerbose -Message "Finished updating credentials in ECE." -Verbose
-```
-### Retrieving Your LCM (deployment user) Username
-Run the following script on your HCI node to retrieve the LCM username:
-
-NOTE: Please copy and run the 'CredentialsHelper' from the above "Validating LCM (User Deployment) Credentials Match the ECE Store" section.
-
-```Powershell
-CredentialsHelper -FetchUsername
+$adPasswordValidated = $true
 ```
 
-### Check NTLM is not Blocked by GPO
+**Expected result:** `AD accepted the password for <domain>\<lcm_username>.`
+
+**Stop condition:** If AD rejects the password, do not run Step 2. Have the AD administrator resolve the credential, account, or domain-connectivity issue first. For any other issues with the script reach out to CSS.
+
+### Step 2: Write the validated password to ECE
+
+Run this block in the **same session**, only after Step 1 succeeds and you confirm the displayed account is the configured deployment account.
+
+**Impact:** Updates the stored LCM credentials used by ECE lifecycle operations. No AD password change, node restart, or VM restart is requested.
+
+```powershell
+if ($adPasswordValidated -ne $true) {
+    throw 'Complete Step 1 successfully in this session before updating ECE.'
+}
+Set-AzureStackLCMUserPassword -Identity $lcmUsername -NewPassword $pw -ErrorAction Stop
+```
+
+**Expected result:** The cmdlet completes without errors.
+
+### Verify recovery
+
+Retry the originally failed action plan using its normal retry workflow. The previously failing step should complete without the access-denied error.
+
+If the cmdlet succeeds but the original error persists, do not assume a password mismatch was confirmed or repeat synchronization indefinitely. Continue with the OU permissions and other applicable checks in this guide, or contact CSS.
+
+Close the PowerShell session when finished to discard the credential variables.
+
+## Check NTLM is not Blocked by GPO
 Verify that you do not have policies in your domain controller that are restricting NTLM access. Please review [Network security: Restrict NTLM: NTLM authentication in this domain](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/security-policy-settings/network-security-restrict-ntlm-ntlm-authentication-in-this-domain).
 
 ## Access Denied because LCM is part of "Protected User" Group
