@@ -239,11 +239,11 @@ Invoke-Command -ComputerName $nodes -ArgumentList $GhostPathPattern -ScriptBlock
 | `ReferenceCount` above 0 on any node | Something is actively pointed at a ghost path. | [Step 1](#step-1-find-the-ghost-roots) |
 
 > [!NOTE]
-> `Get-VM` on a node lists only the VMs currently **resident on that node**. A
-> clustered VM owned by another node, or one that is powered off, can still hold a
-> ghost reference these per-node passes do not see. The cluster-wide check in
-> [Step 2C](#2c-cluster-resource-parameters-run-once-for-the-whole-cluster) is what
-> catches those, which is why the quick triage alone is never a clearance.
+> `Get-VM` includes powered-off VMs registered on the queried host, but not VMs
+> owned by another host. This fan-out queries only Up nodes, so missing nodes or
+> failed queries leave gaps. It also omits DVD media, parent chains, and cluster
+> resource parameters. Complete [Step 2](#step-2-prove-whether-anything-references-them);
+> quick triage alone is never a clearance.
 
 ## Symptoms
 
@@ -392,8 +392,9 @@ Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Filter 'ClusterStorage.*'
 > filter with `^ClusterStorage\.\d+$` for that reason. If you simplify the filter and
 > then feed the result into a delete command, you will target the live CSV root.
 
-`CreationTime` usually lines up with the update or restart that created the ghost
-root.
+Renaming a directory preserves its original `CreationTime`; this timestamp does
+not date the rename into a ghost root. Use the cluster-log procedure in
+[Step 2F](#2f-optional-establish-when-the-ghost-root-appeared) to establish that time.
 
 ### 1B. Confirm which mount points are the real ones
 
@@ -1215,6 +1216,12 @@ which moves disks, configuration, checkpoints, and the smart paging file.
   [Step 1B](#1b-confirm-which-mount-points-are-the-real-ones) output. Do not invent
   one.
 - A maintenance window, since this moves data.
+- The affected VM is already **Off**, following its normal guest shutdown procedure.
+  Keep it Off, with no failover, backup, checkpoint, attachment, or storage changes
+  during migration and recovery. Do not force-stop a workload to meet this condition.
+- A current workload backup. The recovery record below records paths, not a backup
+  of VM data. Keep the original ISO files and numbered roots until migration is
+  verified and the recovery window is closed.
 - The VM is a **customer workload** VM. If it is an ARB or platform VM, or its files
   are under `Infrastructure_1`, go to
   [Path C](#path-c-references-under-infrastructure_1-or-arb-engage-support).
@@ -1251,6 +1258,9 @@ which moves disks, configuration, checkpoints, and the smart paging file.
    if ($matchedVms.Count -ne 1) {
        throw "VMName '$VMName' matched $($matchedVms.Count) VM(s): $(($matchedVms.Name) -join ', '). Supply one exact VM name."
    }
+   if ($matchedVms[0].State -ne 'Off') {
+       throw "VM '$VMName' must already be Off for Path B. Schedule a normal guest shutdown first."
+   }
 
    # Path C content must never be repointed by the customer. The classification in Step 3
    # covers the ghost ROOT, but nothing here previously checked the VM ITSELF, so an ARB or
@@ -1265,6 +1275,9 @@ which moves disks, configuration, checkpoints, and the smart paging file.
    $infraHits += @($matchedVms[0] | Get-VMHardDiskDrive -ErrorAction Stop |
                    Where-Object { $_.Path -match '[\\/]Infrastructure(_\d+)?[\\/]' } |
                    Select-Object -ExpandProperty Path)
+   $infraHits += @($matchedVms[0] | Get-VMDvdDrive -ErrorAction Stop |
+                   Where-Object { $_.Path -match '[\\/]Infrastructure(_\d+)?[\\/]' } |
+                   Select-Object -ExpandProperty Path)
    $infraHits += @($matchedVms[0].ConfigurationLocation, $matchedVms[0].SnapshotFileLocation,
                    $matchedVms[0].SmartPagingFilePath) |
                  Where-Object { $_ -and ($_ -match '[\\/]Infrastructure(_\d+)?[\\/]') }
@@ -1275,12 +1288,36 @@ which moves disks, configuration, checkpoints, and the smart paging file.
    # A disk attached to MORE THAN ONE VM (a shared .vhdx or a VHD Set) must never be moved
    # here: Move-VMStorage relocates the file, and the peer VM's path would still point at the
    # old location, breaking a VM this guide was never asked to touch.
-   $myDiskPaths = @($matchedVms[0] | Get-VMHardDiskDrive -ErrorAction Stop |
-                    Select-Object -ExpandProperty Path)
+   $myDisks = @($matchedVms[0] | Get-VMHardDiskDrive -ErrorAction Stop)
+   foreach ($disk in $myDisks) {
+       if (-not $disk.Path -or $disk.Path -match '\.(vhds|vhdpmem)$' -or
+           $null -eq $disk.SupportPersistentReservations -or $disk.SupportPersistentReservations) {
+           throw "Shared-capable, pass-through, persistent-memory, or unclassified disk on '$VMName'. Path C: engage Microsoft Support."
+       }
+   }
+   $myDiskPaths = @($myDisks | Select-Object -ExpandProperty Path)
+   $members = @(Get-ClusterNode -ErrorAction Stop)
+   if (-not $members.Count -or @($members | Where-Object State -ne 'Up').Count) {
+       throw 'Every cluster member must be Up for the shared-disk check.'
+   }
+   $attachments = @(Invoke-Command -ComputerName $members.Name -ErrorAction Stop -ScriptBlock {
+       $disks = @(foreach ($v in (Get-VM -ErrorAction Stop)) {
+           foreach ($d in ($v | Get-VMHardDiskDrive -ErrorAction Stop)) {
+               [pscustomobject]@{ VMId="$($v.Id)"; VMName=$v.Name; Path=$d.Path }
+           }
+       })
+       [pscustomobject]@{ Node=$env:COMPUTERNAME; Disks=$disks }
+   })
+   foreach ($member in $members) {
+       $responses = @($attachments | Where-Object { ($_.Node -split '\.')[0] -eq ($member.Name -split '\.')[0] })
+       if ($responses.Count -ne 1) { throw "Incomplete attachment inventory for $($member.Name)." }
+   }
    $sharedWith = @()
-   foreach ($other in (Get-VM -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne $matchedVms[0].Name })) {
-       foreach ($od in ($other | Get-VMHardDiskDrive -ErrorAction Stop)) {
-           if ($od.Path -and ($myDiskPaths -contains $od.Path)) { $sharedWith += "$($other.Name) -> $($od.Path)" }
+   foreach ($node in $attachments) {
+       foreach ($od in $node.Disks) {
+           if ($od.VMId -ne "$($matchedVms[0].Id)" -and $od.Path -and ($myDiskPaths -contains $od.Path)) {
+               $sharedWith += "$($node.Node)/$($od.VMName) -> $($od.Path)"
+           }
        }
    }
    if ($sharedWith.Count) {
@@ -1321,23 +1358,34 @@ which moves disks, configuration, checkpoints, and the smart paging file.
    Write-Host "Destination validated: $Destination" -ForegroundColor Green
    ```
 
-2. **Record the current state of the affected VM.**
-   Keep this output. It is your rollback reference and your evidence of what changed.
+2. **Save a recovery record before changing anything.**
+   Run the steps in the same session on the owner node. Keep the printed record
+   path outside the VM's storage directories. Recovery uses the VM ID and controller
+   slots, not a VM name or disk filename alone.
 
    ```powershell
-   Get-VM -Name $VMName |
-       Select-Object Name, State, ConfigurationLocation, SnapshotFileLocation, SmartPagingFilePath |
-       Format-List
-   Get-VM -Name $VMName | Get-VMHardDiskDrive |
-       Select-Object VMName, ControllerType, ControllerNumber, ControllerLocation, Path |
-       Format-Table -AutoSize
+   $vm = Get-VM -Id $matchedVms[0].Id -ErrorAction Stop
+   $recordPath = "C:\Temp\GhostCsvMove-$($vm.Id)-$([guid]::NewGuid()).clixml"
+   New-Item -ItemType Directory -Path (Split-Path $recordPath) -Force -ErrorAction Stop | Out-Null
+   $beforeMove = [pscustomobject]@{
+       VMId="$($vm.Id)"; HostName=$env:COMPUTERNAME; Destination=$Destination
+       ConfigurationLocation=$vm.ConfigurationLocation
+       SnapshotFileLocation=$vm.SnapshotFileLocation
+       SmartPagingFilePath=$vm.SmartPagingFilePath
+       Disks=@($vm | Get-VMHardDiskDrive -ErrorAction Stop |
+           Select-Object ControllerType,ControllerNumber,ControllerLocation,Path)
+       Dvds=@($vm | Get-VMDvdDrive -ErrorAction Stop |
+           Select-Object ControllerNumber,ControllerLocation,Path)
+       VhdMoves=@(); DvdMoves=@()
+   }
+   $beforeMove | Export-Clixml -LiteralPath $recordPath -ErrorAction Stop
+   Write-Host "Recovery record: $recordPath"
    ```
 
 3. **Build the disk mapping and review it.**
 
    ```powershell
-   # Self-sufficient: re-defines the pattern if this block is pasted into a fresh session.
-   # Without it, -match against an unset variable matches EVERY path.
+   # Run after steps 1 and 2 in the same session.
    if ([string]::IsNullOrWhiteSpace($GhostPathPattern)) { $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)' }
    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
 
@@ -1354,7 +1402,7 @@ which moves disks, configuration, checkpoints, and the smart paging file.
    # per-disk subdirectory keeps the mapping one-to-one while preserving each filename.
    $diskIndex = 0
    $vhds = @(
-       Get-VM -Name $VMName | Get-VMHardDiskDrive |
+       Get-VM -Id $beforeMove.VMId -ErrorAction Stop | Get-VMHardDiskDrive -ErrorAction Stop |
            Where-Object { $_.Path -match $GhostPathPattern } |
            ForEach-Object {
                $diskIndex++
@@ -1374,21 +1422,37 @@ which moves disks, configuration, checkpoints, and the smart paging file.
    # differencing PARENT is not an attached disk, so it will NOT move here; Step 5 and
    # Path A will keep reporting it (correctly). Detect that case now so it is not a surprise.
    $ghostParents = @(
-       Get-VM -Name $VMName | Get-VMHardDiskDrive | ForEach-Object {
+       Get-VM -Id $beforeMove.VMId -ErrorAction Stop | Get-VMHardDiskDrive -ErrorAction Stop | ForEach-Object {
            $path = $_.Path; $depth = 0
            while ($path -and $depth -lt 50) {
-               $vhd = Get-VHD -Path $path -ErrorAction SilentlyContinue
-               if (-not $vhd) { break }
+               $vhd = Get-VHD -Path $path -ErrorAction Stop
+               if (-not $vhd) { throw "Unreadable disk chain: $path. Engage Support." }
                $path = $vhd.ParentPath; $depth++
                if ($path -and ($path -match $GhostPathPattern)) { $path }
            }
+           if ($path) { throw "Disk chain exceeds 50 links: $path. Engage Support." }
        }
    )
    if ($ghostParents.Count -gt 0) {
        Write-Warning "PARENT disk(s) on a ghost root that Move-VMStorage will NOT relocate:"
        $ghostParents | Sort-Object -Unique | ForEach-Object { Write-Warning "   $_" }
-       Write-Warning "Relocating an unattached differencing or checkpoint parent is not a hand procedure. Complete the attached-disk move if there is one, but this VM needs Path C (engage support) to clear the parent before Path A can remove the root."
+       throw 'Do not move this VM with Path B. Engage Support to handle its parent chain.'
    }
+   $dvdMoves = @(foreach ($dvd in ($vm | Get-VMDvdDrive -ErrorAction Stop)) {
+       if ($dvd.Path -and $dvd.Path -match $GhostPathPattern) {
+           $mediaDir = Join-Path $Destination ("Media{0}-{1}" -f $dvd.ControllerNumber,$dvd.ControllerLocation)
+           [pscustomobject]@{
+               ControllerNumber=$dvd.ControllerNumber; ControllerLocation=$dvd.ControllerLocation
+               SourceFilePath=$dvd.Path
+               DestinationFilePath=[string](Join-Path $mediaDir (Split-Path $dvd.Path -Leaf))
+               SHA256=(Get-FileHash -LiteralPath $dvd.Path -Algorithm SHA256 -ErrorAction Stop).Hash
+           }
+       }
+   })
+   $beforeMove.VhdMoves = $vhds
+   $beforeMove.DvdMoves = $dvdMoves
+   $beforeMove | Export-Clixml -LiteralPath $recordPath -ErrorAction Stop
+   $dvdMoves | Format-Table SourceFilePath,DestinationFilePath -AutoSize
    ```
 
    **Stop and read that mapping.** Every destination must be under the path you
@@ -1405,7 +1469,7 @@ which moves disks, configuration, checkpoints, and the smart paging file.
 
    ```powershell
    $moveParams = @{
-       Name                = $VMName
+       VM                  = $vm
        VirtualMachinePath  = $Destination
        SnapshotFilePath    = $Destination
        SmartPagingFilePath = $Destination
@@ -1413,13 +1477,30 @@ which moves disks, configuration, checkpoints, and the smart paging file.
    if ($vhds.Count -gt 0) { $moveParams['Vhds'] = $vhds }
 
    # Dry run: reports what would happen and changes nothing.
+   foreach ($media in $dvdMoves) {
+       Copy-Item -LiteralPath $media.SourceFilePath -Destination $media.DestinationFilePath -WhatIf
+       Set-VMDvdDrive -VMName $VMName -ControllerNumber $media.ControllerNumber `
+           -ControllerLocation $media.ControllerLocation -Path $media.DestinationFilePath -WhatIf
+   }
    Move-VMStorage @moveParams -WhatIf
    ```
 
    When the dry run looks correct, run the same parameter set without `-WhatIf`:
 
    ```powershell
-   Move-VMStorage @moveParams
+   if ((Get-VM -Id $beforeMove.VMId -ErrorAction Stop).State -ne 'Off') { throw 'Keep the VM Off.' }
+   foreach ($media in $dvdMoves) {
+       New-Item -ItemType Directory -Path (Split-Path $media.DestinationFilePath) -Force -ErrorAction Stop | Out-Null
+       if (-not (Test-Path -LiteralPath $media.DestinationFilePath)) {
+           Copy-Item -LiteralPath $media.SourceFilePath -Destination $media.DestinationFilePath -ErrorAction Stop
+       }
+       if ((Get-FileHash -LiteralPath $media.DestinationFilePath -Algorithm SHA256 -ErrorAction Stop).Hash -ne $media.SHA256) {
+           throw "ISO copy differs from the recovery record. Stop; do not overwrite $($media.DestinationFilePath)."
+       }
+       Set-VMDvdDrive -VMName $VMName -ControllerNumber $media.ControllerNumber `
+           -ControllerLocation $media.ControllerLocation -Path $media.DestinationFilePath -ErrorAction Stop
+   }
+   Move-VMStorage @moveParams -ErrorAction Stop
    ```
 
    > [!NOTE]
@@ -1433,14 +1514,17 @@ which moves disks, configuration, checkpoints, and the smart paging file.
    # Self-sufficient: re-defines the pattern if this block is pasted into a fresh session.
    # Without it, -match against an unset variable matches EVERY path.
    if ([string]::IsNullOrWhiteSpace($GhostPathPattern)) { $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)' }
-   $vm  = Get-VM -Name $VMName
+   $vm  = Get-VM -Name $VMName -ErrorAction Stop
    $bad = New-Object System.Collections.Generic.List[string]
 
    # Walk every attached disk's FULL parent chain, exactly as Step 2A does. Checking only
    # attached paths would report success while a checkpoint or differencing PARENT is still
    # on a ghost root, which Path A would then correctly refuse to delete, leaving a green
    # verdict and a blocked cleanup. An UNREADABLE link is treated as a reference.
-   foreach ($d in ($vm | Get-VMHardDiskDrive)) {
+   foreach ($dvd in ($vm | Get-VMDvdDrive -ErrorAction Stop)) {
+       if ($dvd.Path -and $dvd.Path -match $GhostPathPattern) { $bad.Add("DVD media: $($dvd.Path)") }
+   }
+   foreach ($d in ($vm | Get-VMHardDiskDrive -ErrorAction Stop)) {
        $path  = $d.Path
        $depth = 0
        while ($path -and $depth -lt 50) {
@@ -1450,6 +1534,7 @@ which moves disks, configuration, checkpoints, and the smart paging file.
            $path = $vhd.ParentPath
            $depth++
        }
+       if ($path -and $depth -ge 50) { $bad.Add("UNREADABLE (chain exceeds 50 links): $path") }
    }
    foreach ($p in @($vm.ConfigurationLocation, $vm.SnapshotFileLocation, $vm.SmartPagingFilePath)) {
        if ($p -and ($p -match $GhostPathPattern)) { $bad.Add("config/checkpoint/paging: $p") }
@@ -1460,7 +1545,7 @@ which moves disks, configuration, checkpoints, and the smart paging file.
        $bad
    }
    else {
-       Write-Host "$VMName no longer references any ghost path, including parent chains." -ForegroundColor Green
+       Write-Host "$VMName no longer references any ghost path, including DVD media and parent chains." -ForegroundColor Green
    }
    ```
 
@@ -1469,7 +1554,124 @@ which moves disks, configuration, checkpoints, and the smart paging file.
 
 7. **Only once every reference is cleared**, follow
    [Path A](#path-a-no-references-found-safe-to-clean-up) to remove the now-unused
-   ghost roots.
+   ghost roots, after the recovery window is closed.
+
+### Recovery if Path B fails or must be reversed
+
+**Stop at the first error. [MEDIUM RISK]** Leave the VM Off and retain both source
+and destination files, the recovery record, and the complete error output. Do not
+repeat the forward move, delete either tree, edit disk parent paths, or re-register
+the VM. Re-query its current paths before deciding what completed.
+
+The following builds a reverse move for disks found at either their recorded
+original location or their exact planned destination. It also handles a failure
+after only some DVD attachments were repointed. An unexpected controller, path,
+missing file, or conflicting original disk stops recovery: engage Microsoft
+Support with the record and both inventories. A record is not a data backup and
+cannot repair corruption or an unregistered VM.
+
+1. **Load the saved record, inspect current state, and preview recovery.**
+   Use the original owner node. Do not import an untrusted recovery record.
+
+   ```powershell
+   $recordPath = 'REPLACE-WITH-SAVED-CLIXML-PATH'
+   $saved = Import-Clixml -LiteralPath $recordPath -ErrorAction Stop
+   if ($saved.HostName -ne $env:COMPUTERNAME) { throw 'Use the original owner node; otherwise engage Support.' }
+   $vm = Get-VM -Id $saved.VMId -ErrorAction Stop
+   if ($vm.State -ne 'Off') { throw 'Keep the VM Off during recovery.' }
+   foreach ($prop in 'ConfigurationLocation','SnapshotFileLocation','SmartPagingFilePath') {
+       if ($vm.$prop.TrimEnd('\') -notin @($saved.$prop.TrimEnd('\'), $saved.Destination.TrimEnd('\'))) {
+           throw "Unexpected current path: $prop. Engage Support."
+       }
+   }
+   $currentDisks = @($vm | Get-VMHardDiskDrive -ErrorAction Stop)
+   $currentDvds = @($vm | Get-VMDvdDrive -ErrorAction Stop)
+   $vm | Select-Object Name,Id,State,ConfigurationLocation,SnapshotFileLocation,SmartPagingFilePath | Format-List
+   $currentDisks | Format-Table ControllerType,ControllerNumber,ControllerLocation,Path
+   $currentDvds | Format-Table ControllerNumber,ControllerLocation,Path
+   if ($currentDisks.Count -ne @($saved.Disks).Count -or $currentDvds.Count -ne @($saved.Dvds).Count) {
+       throw 'Attachments changed. Stop and engage Support.'
+   }
+   $reverseDisks = @(foreach ($disk in $saved.Disks) {
+       $now = @($currentDisks | Where-Object {
+           $_.ControllerType -eq $disk.ControllerType -and $_.ControllerNumber -eq $disk.ControllerNumber -and
+           $_.ControllerLocation -eq $disk.ControllerLocation
+       })
+       if ($now.Count -ne 1 -or -not (Test-Path -LiteralPath $now[0].Path -PathType Leaf)) { throw 'Disk state is incomplete. Engage Support.' }
+       if ($now[0].Path -ne $disk.Path) {
+           $plan = @($saved.VhdMoves | Where-Object { $_.SourceFilePath -eq $disk.Path -and $_.DestinationFilePath -eq $now[0].Path })
+           if ($plan.Count -ne 1 -or (Test-Path -LiteralPath $disk.Path)) { throw 'Unexpected disk path or conflicting original file. Engage Support.' }
+           @{ SourceFilePath=[string]$now[0].Path; DestinationFilePath=[string]$disk.Path }
+       }
+   })
+   foreach ($dvd in $saved.Dvds) {
+       $now = @($currentDvds | Where-Object {
+           $_.ControllerNumber -eq $dvd.ControllerNumber -and $_.ControllerLocation -eq $dvd.ControllerLocation
+       })
+       if ($now.Count -ne 1) { throw 'DVD controller changed. Engage Support.' }
+       $originalMedia = @($saved.DvdMoves | Where-Object { $_.SourceFilePath -eq $dvd.Path })
+       foreach ($media in $originalMedia) {
+           if ((Get-FileHash -LiteralPath $dvd.Path -Algorithm SHA256 -ErrorAction Stop).Hash -ne $media.SHA256) {
+               throw 'Original ISO changed. Engage Support.'
+           }
+       }
+       if ($now[0].Path -ne $dvd.Path) {
+           $plan = @($saved.DvdMoves | Where-Object { $_.SourceFilePath -eq $dvd.Path -and $_.DestinationFilePath -eq $now[0].Path })
+           if ($plan.Count -ne 1 -or
+               (Get-FileHash -LiteralPath $dvd.Path -Algorithm SHA256 -ErrorAction Stop).Hash -ne $plan[0].SHA256) {
+               throw 'Original ISO is missing, changed, or not in the plan. Engage Support.'
+           }
+       }
+   }
+   $restoreParams = @{ VM=$vm }
+   $restoreLocations = @{
+       ConfigurationLocation='VirtualMachinePath'
+       SnapshotFileLocation='SnapshotFilePath'
+       SmartPagingFilePath='SmartPagingFilePath'
+   }
+   foreach ($prop in $restoreLocations.Keys) {
+       if ($vm.$prop.TrimEnd('\') -ne $saved.$prop.TrimEnd('\')) {
+           $restoreParams[$restoreLocations[$prop]] = [string]$saved.$prop
+       }
+   }
+   if ($reverseDisks.Count) { $restoreParams['Vhds'] = $reverseDisks }
+   if ($restoreParams.Count -gt 1) { Move-VMStorage @restoreParams -WhatIf }
+   ```
+
+2. **After reviewing the preview, reverse the move and DVD attachments.**
+   Run immediately after the checks above, with the VM and its storage still quiescent.
+   Recovery deliberately restores the old references, including numbered paths.
+
+   ```powershell
+   if ((Get-VM -Id $saved.VMId -ErrorAction Stop).State -ne 'Off') { throw 'Keep the VM Off during recovery.' }
+   if ($restoreParams.Count -gt 1) { Move-VMStorage @restoreParams -ErrorAction Stop }
+   foreach ($dvd in $saved.Dvds) {
+       Get-VMDvdDrive -VMName $vm.Name -ControllerNumber $dvd.ControllerNumber `
+           -ControllerLocation $dvd.ControllerLocation -ErrorAction Stop |
+           Set-VMDvdDrive -Path $dvd.Path -ErrorAction Stop
+   }
+   $restored = Get-VM -Id $saved.VMId -ErrorAction Stop
+   foreach ($prop in 'ConfigurationLocation','SnapshotFileLocation','SmartPagingFilePath') {
+       if ($restored.$prop.TrimEnd('\') -ne $saved.$prop.TrimEnd('\')) { throw "Recovery mismatch: $prop. Engage Support." }
+   }
+   foreach ($kind in 'Disks','Dvds') {
+       $actual = if ($kind -eq 'Disks') { @($restored | Get-VMHardDiskDrive -ErrorAction Stop) }
+                 else { @($restored | Get-VMDvdDrive -ErrorAction Stop) }
+       foreach ($old in $saved.$kind) {
+           $match = @($actual | Where-Object {
+               $_.ControllerNumber -eq $old.ControllerNumber -and $_.ControllerLocation -eq $old.ControllerLocation -and
+               ($kind -eq 'Dvds' -or $_.ControllerType -eq $old.ControllerType) -and $_.Path -eq $old.Path
+           })
+           if ($match.Count -ne 1) { throw "Recovery mismatch: $kind. Engage Support." }
+       }
+   }
+   Write-Host 'Recorded storage paths restored. Keep all files and engage Support for the remaining ghost references.'
+   ```
+
+   Expected: all recorded paths and attachment slots match. Before normal workload
+   startup, complete the workload owner's integrity checks. Any recovery error or
+   mismatch is a stop condition, not permission to delete or retry. Recovery does
+   not clear the original ghost-path condition; do not run Path A afterwards.
 
 ## Path C: references under `Infrastructure_1` or ARB, engage support
 
