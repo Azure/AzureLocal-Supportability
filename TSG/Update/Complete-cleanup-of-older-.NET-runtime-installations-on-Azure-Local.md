@@ -4,7 +4,7 @@
 
 Older .NET runtime files can remain on Azure Local nodes when post-update cleanup is pending. Completing a restart might not be sufficient: an administrator sign-in may be required to trigger the pending cleanup action.
 
-The preferred resolution is to sign in interactively to each affected node using an administrator account. Remote RunOnce processing is an alternative if you have a large number of clusters or nodes.
+The preferred resolution is to sign in interactively to each affected node using an administrator account. Remote RunOnce processing is an alternative if you have a large number of clusters or nodes. A final option of last resort is to delete the files manually, or through script.
 
 ## Symptoms
 
