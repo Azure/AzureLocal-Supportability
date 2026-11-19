@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Azure/AzureLocal-Supportability/main/TSG/Templates/tsg-metadata.schema.json",
+  "title": "Azure Local Supportability TSG metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "document_type",
+    "products",
+    "detector",
+    "validation"
+  ],
+  "properties": {
+    "schema": {
+      "const": "azure-local-supportability/tsg-metadata/v1"
+    },
+    "document_type": {
+      "description": "Public article template type.",
+      "enum": [
+        "deep-dive",
+        "how-to",
+        "overview",
+        "reference",
+        "troubleshoot"
+      ]
+    },
+    "products": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "detector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "signal"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "none"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "signal": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "signal": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "type": {
+          "description": "Detector implementation used to observe the issue.",
+          "enum": [
+            "command",
+            "control-plane",
+            "envchecker",
+            "eventlog",
+            "feature",
+            "manual",
+            "none",
+            "portal",
+            "registry",
+            "service",
+            "telemetry"
+          ]
+        },
+        "signal": {
+          "description": "Exact check, command, event, query, or manual surface. Use null only when detector.type is none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fidelity_level",
+        "technical_grade",
+        "reproduction_substrate",
+        "automation_status",
+        "last_validated",
+        "spec_ref"
+      ],
+      "properties": {
+        "fidelity_level": {
+          "description": "Validation depth from static review (L0) to a full live loop (L4).",
+          "enum": [
+            "L0",
+            "L1",
+            "L2",
+            "L3",
+            "L4"
+          ]
+        },
+        "technical_grade": {
+          "description": "TSG-FORGE technical grade, or null until graded.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "A",
+                "B",
+                "C",
+                "F"
+              ]
+            }
+          ]
+        },
+        "reproduction_substrate": {
+          "description": "Lab substrate required to reproduce the validation.",
+          "enum": [
+            "either",
+            "hardware",
+            "none",
+            "vm"
+          ]
+        },
+        "automation_status": {
+          "description": "Lifecycle state of the validation automation.",
+          "enum": [
+            "blocked",
+            "manual",
+            "not-assessed",
+            "proven",
+            "ready",
+            "scaffold"
+          ]
+        },
+        "last_validated": {
+          "description": "ISO date of the latest qualifying validation, or null.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date"
+            }
+          ]
+        },
+        "spec_ref": {
+          "description": "Internal TSG-FORGE specification or report reference.",
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "automation_status": {
+                "const": "proven"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fidelity_level": {
+                "enum": [
+                  "L1",
+                  "L2",
+                  "L3",
+                  "L4"
+                ]
+              },
+              "technical_grade": {
+                "enum": [
+                  "A",
+                  "B",
+                  "C",
+                  "F"
+                ]
+              },
+              "reproduction_substrate": {
+                "enum": [
+                  "vm",
+                  "hardware",
+                  "either"
+                ]
+              },
+              "last_validated": {
+                "type": "string",
+                "format": "date"
+              },
+              "spec_ref": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

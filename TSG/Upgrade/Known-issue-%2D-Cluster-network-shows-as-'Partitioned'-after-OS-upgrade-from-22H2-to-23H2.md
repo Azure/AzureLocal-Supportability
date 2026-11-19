@@ -1,6 +1,10 @@
 # Symptoms
 After upgrading the Azure Local OS from 22H2 to 23H2, customers may notice a 'Partitioned' network in their environment.
 
+> :ledger: **NOTE**
+>
+> There are scenarios where networks may show as 'Partitioned' that do not match this scenario where this TSG does not apply and should not be used.  There are also scenarios where the issue described in this article is known to occur outside of the OS upgrade where the mitigation steps in this TSG can be used.  Please evaluate your scenario accordingly, and if you are unsure if these steps apply, please open a support request.  
+
 # Issue Validation
 Run `Get-ClusterNetwork` from one of the nodes and view the output.  You may see a network as 'Partitioned'.  
 
@@ -99,6 +103,9 @@ $REGDesc = (Get-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Services\Cluss
 $NDISDesc = (Get-NetAdapter | Where-Object{$_.InterfaceDescription -imatch "NDIS"}).InterfaceDescription
 New-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Services\Clussvc\Parameters -Name ExcludeAdaptersByDescription -Value $REGDesc","$NDISDesc -Force
 ```
+> :ledger: **NOTE**
+>
+> There is a second scenario where the legacy IMDS adapter "AZSHCI_HOST-IMDS_DO_NOT_MODIFY" may also cause a partitioned network to appear.  If this occurs, you can use the same script above to also add this adapter to the excluded list by modifying the `imatch` value from `"NDIS"` to `"AZSHCI_HOST-IMDS"` and running it again.  This script is written to append the additional values to the existing string, so if you are seeing both issues, you would run the script twice with the appropriate description to append both values.  You can run both scripts before performing the reboot to minimize downtime.
 
 ```
 #The command above will automatically provide an output confirming the new registry value.

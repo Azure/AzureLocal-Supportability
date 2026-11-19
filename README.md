@@ -13,13 +13,15 @@ Troubleshooting guides (TSGs) are grouped by categories and stored in relevantly
 * [LCM](./TSG/LCM/README.md) - Lifecycle Manager.
 * [Infra Lifecycle Operations](./TSG/Lifecycle/README.md) - Add Server, Repair Server.
 * [Arc VMs](./TSG/ArcVMs/README.md) - VM lifecycle management, licensing, extensions, networking and storage.
+* [Third-Party VM Appliances](./TSG/3rdPartyVMAppliances/README.md) - Interop guidance for third-party virtual appliances (e.g., F5 BIG-IP VE) hosted as Hyper-V guests on Azure Local.
 * [Security](./TSG/Security/README.md) - WDAC, BitLocker, Secret Rotation, Syslog, Defender for Cloud.
-* [Networking](./TSG/Networking/README.md) - Proxy and Arc Gateway.
+* [Networking](./TSG/Networking/README.md) - Arc Gateway, Outbound Connectivity, TOR Configuration.
 * [Monitoring](./TSG/Monitoring/README.md) - Insights, Metric and Alerts.
 * [Azure Virtual Desktop](./TSG/AVD/README.md) - Azure Virtual Desktop.
 * [Azure Kubernetes](./TSG/AKS/README.md) - Deployment, Networking, Update.
 * [Storage](./TSG/Storage/README.md) - Storage.
 * [Environment Validator](./TSG/EnvironmentValidator/README.md) - Environment Validation during deploy, update, scaleout, upgrade etc.
+* [Arc Registration](./TSG/ArcRegistration/README.md) - Arc Registration.
 
 ## Bug Reports
 
@@ -56,6 +58,8 @@ At a bare minimum, issues reported on this repository must:
   * This includes YAML files/deployments, scripts to reproduce, exact commands used, screenshots, etc.
 
 ## Contributing
+
+📝 For Contributing Guidelines, please refer to [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
 Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us

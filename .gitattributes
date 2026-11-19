@@ -1,0 +1,4 @@
+# Union-merge the Environment Validator TSG index. Many TSG PRs each add one entry
+# to this list in parallel; without a union driver they conflict on the same lines
+# even though the change is purely additive. `merge=union` keeps both sides' entries.
+TSG/EnvironmentValidator/README.md merge=union
