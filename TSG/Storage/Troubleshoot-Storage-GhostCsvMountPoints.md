@@ -12,7 +12,7 @@
     "technical_grade": null,
     "reproduction_substrate": "either",
     "automation_status": "ready",
-    "last_validated": "2026-08-18",
+    "last_validated": "2026-11-18",
     "spec_ref": "AzLocal_Storage_GhostCsvMountPoints"
   }
 }
@@ -81,8 +81,8 @@
   <tr>
     <th style="text-align:left;">Downtime / maintenance window</th>
     <td>All detection in this guide is <strong>read-only and online</strong>.
-    Repointing VM storage moves data and should be scheduled; depending on the VM
-    and the amount of data it may require the VM to be offline.</td>
+    Path B requires a normal guest shutdown; the VM stays Off for the move and any
+    recovery. Schedule workload downtime.</td>
   </tr>
 </table>
 
@@ -121,45 +121,54 @@ on depend on these words.
 - **PowerShell remoting working between nodes**, because the cluster-wide checks use
   `Invoke-Command`.
 
-Confirm all of that before going further:
+Confirm all of that before going further.
+
+> [!NOTE]
+> Blocks that check a condition before acting are wrapped in `. { ... }`. Paste or
+> run each such block whole, from `. {` to the closing `}`. The wrapper makes
+> PowerShell treat the block as one statement, so a failed check stops everything
+> after it even when your terminal delivers a paste line by line, and the variables
+> the block sets remain available to the next step.
 
 ```powershell
-# Every value below must be True before you continue. This block STOPS if any is False,
-# rather than printing a table a reader can walk past: a preflight that only prints is not
-# a gate, and every later step assumes all four already hold.
-$id = [Security.Principal.WindowsIdentity]::GetCurrent()
-$preflight = [ordered]@{
-    RunningAsAdmin        = ([Security.Principal.WindowsPrincipal]$id).IsInRole(
-                                [Security.Principal.WindowsBuiltInRole]::Administrator)
-    FailoverClustersAvail = [bool](Get-Module -ListAvailable FailoverClusters)
-    HyperVAvail           = [bool](Get-Module -ListAvailable Hyper-V)
-    ClusterReachable      = [bool](Get-Cluster -ErrorAction SilentlyContinue)
-}
+. {
+    # Every value below must be True before you continue. This block STOPS if any is False,
+    # rather than printing a table a reader can walk past: a preflight that only prints is not
+    # a gate, and every later step assumes all four already hold.
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $preflight = [ordered]@{
+        RunningAsAdmin        = ([Security.Principal.WindowsPrincipal]$id).IsInRole(
+                                    [Security.Principal.WindowsBuiltInRole]::Administrator)
+        FailoverClustersAvail = [bool](Get-Module -ListAvailable FailoverClusters)
+        HyperVAvail           = [bool](Get-Module -ListAvailable Hyper-V)
+        ClusterReachable      = [bool](Get-Cluster -ErrorAction SilentlyContinue)
+    }
 
-# Remoting is a stated prerequisite, so TEST it rather than assuming it. The cluster-wide
-# checks all use Invoke-Command, and a remoting failure part-way through Step 2 looks like
-# a clean result on the nodes that did not answer.
-$remotingOk = $true
-try {
-    $peers = @((Get-ClusterNode -ErrorAction Stop | Where-Object State -eq 'Up').Name)
-    if ($peers.Count) {
-        $reached = @(Invoke-Command -ComputerName $peers -ScriptBlock { $env:COMPUTERNAME } -ErrorAction SilentlyContinue)
-        $remotingOk = ($reached.Count -eq $peers.Count)
-        if (-not $remotingOk) {
-            Write-Warning ("Remoting reached {0} of {1} node(s). Unreachable: {2}" -f $reached.Count, $peers.Count,
-                (@($peers | Where-Object { ($_ -split '\.')[0] -notin @($reached | ForEach-Object { ($_ -split '\.')[0] }) }) -join ', '))
+    # Remoting is a stated prerequisite, so TEST it rather than assuming it. The cluster-wide
+    # checks all use Invoke-Command, and a remoting failure part-way through Step 2 looks like
+    # a clean result on the nodes that did not answer.
+    $remotingOk = $true
+    try {
+        $peers = @((Get-ClusterNode -ErrorAction Stop | Where-Object State -eq 'Up').Name)
+        if ($peers.Count) {
+            $reached = @(Invoke-Command -ComputerName $peers -ScriptBlock { $env:COMPUTERNAME } -ErrorAction SilentlyContinue)
+            $remotingOk = ($reached.Count -eq $peers.Count)
+            if (-not $remotingOk) {
+                Write-Warning ("Remoting reached {0} of {1} node(s). Unreachable: {2}" -f $reached.Count, $peers.Count,
+                    (@($peers | Where-Object { ($_ -split '\.')[0] -notin @($reached | ForEach-Object { ($_ -split '\.')[0] }) }) -join ', '))
+            }
         }
     }
-}
-catch { $remotingOk = $false; Write-Warning "Could not enumerate cluster nodes: $($_.Exception.Message)" }
-$preflight['RemotingToAllUpNodes'] = $remotingOk
+    catch { $remotingOk = $false; Write-Warning "Could not enumerate cluster nodes: $($_.Exception.Message)" }
+    $preflight['RemotingToAllUpNodes'] = $remotingOk
 
-[pscustomobject]$preflight | Format-List
-$failed = @($preflight.GetEnumerator() | Where-Object { -not $_.Value } | Select-Object -ExpandProperty Key)
-if ($failed.Count) {
-    throw "Preflight failed: $($failed -join ', '). Resolve these before running any step in this guide."
+    [pscustomobject]$preflight | Format-List
+    $failed = @($preflight.GetEnumerator() | Where-Object { -not $_.Value } | Select-Object -ExpandProperty Key)
+    if ($failed.Count) {
+        throw "Preflight failed: $($failed -join ', '). Resolve these before running any step in this guide."
+    }
+    'Preflight passed.'
 }
-'Preflight passed.'
 ```
 
 ### Safety rules
@@ -208,7 +217,7 @@ Invoke-Command -ComputerName $nodes -ArgumentList $GhostPathPattern -ScriptBlock
         Select-Object -ExpandProperty FullName
 
     foreach ($vm in (Get-VM -ErrorAction SilentlyContinue)) {
-        foreach ($d in ($vm | Get-VMHardDiskDrive -ErrorAction SilentlyContinue)) {
+        foreach ($d in ($vm | Get-VMHardDiskDrive -ErrorAction Stop)) {
             if ($d.Path -match $Pattern) { $findings.Add("VMHardDisk: $($vm.Name) -> $($d.Path)") }
         }
         foreach ($prop in 'ConfigurationLocation', 'SnapshotFileLocation', 'SmartPagingFilePath') {
@@ -239,11 +248,11 @@ Invoke-Command -ComputerName $nodes -ArgumentList $GhostPathPattern -ScriptBlock
 | `ReferenceCount` above 0 on any node | Something is actively pointed at a ghost path. | [Step 1](#step-1-find-the-ghost-roots) |
 
 > [!NOTE]
-> `Get-VM` on a node lists only the VMs currently **resident on that node**. A
-> clustered VM owned by another node, or one that is powered off, can still hold a
-> ghost reference these per-node passes do not see. The cluster-wide check in
-> [Step 2C](#2c-cluster-resource-parameters-run-once-for-the-whole-cluster) is what
-> catches those, which is why the quick triage alone is never a clearance.
+> `Get-VM` includes powered-off VMs registered on the queried host, but not VMs
+> owned by another host. This fan-out queries only Up nodes, so missing nodes or
+> failed queries leave gaps. It also omits DVD media, parent chains, and cluster
+> resource parameters. Complete [Step 2](#step-2-prove-whether-anything-references-them);
+> quick triage alone is never a clearance.
 
 ## Symptoms
 
@@ -392,8 +401,9 @@ Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Filter 'ClusterStorage.*'
 > filter with `^ClusterStorage\.\d+$` for that reason. If you simplify the filter and
 > then feed the result into a delete command, you will target the live CSV root.
 
-`CreationTime` usually lines up with the update or restart that created the ghost
-root.
+Renaming a directory preserves its original `CreationTime`; this timestamp does
+not date the rename into a ghost root. Use the cluster-log procedure in
+[Step 2F](#2f-optional-establish-when-the-ghost-root-appeared) to establish that time.
 
 ### 1B. Confirm which mount points are the real ones
 
@@ -635,11 +645,11 @@ Get-ClusterResource | ForEach-Object {
     $r = $_
     try {
         Get-ClusterParameter -InputObject $r -ErrorAction Stop | ForEach-Object {
-            # Match strings AND string arrays: a multi-valued parameter holding a ghost path
-            # was skipped entirely by a bare -is [string] test.
-            if (($_.Value -is [string] -or $_.Value -is [string[]]) -and
-                (@($_.Value) -match $GhostPathPattern)) {
-                [pscustomobject]@{ Resource = $r.Name; Parameter = $_.Name; Value = $_.Value }
+            $p = $_
+            foreach ($value in @($p.Value)) {
+                if (($value -is [string]) -and ($value -match $GhostPathPattern)) {
+                    [pscustomobject]@{ Resource = $r.Name; Parameter = $p.Name; Value = $value }
+                }
             }
         }
     }
@@ -848,6 +858,10 @@ satisfy more than one row, and the most severe match wins.
 - If the ghost roots contain any files at all, you have either copied them somewhere
   safe or confirmed with the data owner that they are disposable. An inventory export
   is a record, not a backup.
+- Every cluster member is Up and can be audited. Keep the affected paths quiescent:
+  no solution update, storage migration, configuration change, or application may
+  write to or start using a numbered root during cleanup. Repeat the manual local-handle
+  check from Step 2G immediately before deletion. The automated checks do not replace it.
 
 ### Steps
 
@@ -858,6 +872,44 @@ satisfy more than one row, and the most severe match wins.
    once into your elevated session.
 
    ```powershell
+   function Get-GhostCsvInventory {
+       [CmdletBinding()]
+       param()
+
+       $roots = @(Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Force `
+           -Filter 'ClusterStorage.*' -ErrorAction Stop |
+           Where-Object { $_.Name -match '^ClusterStorage\.\d+$' })
+       foreach ($root in $roots) {
+           $pending = New-Object 'System.Collections.Generic.Stack[string]'
+           $pending.Push($root.FullName)
+           while ($pending.Count) {
+               $item = Get-Item -LiteralPath $pending.Pop() -Force -ErrorAction Stop
+               if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                   throw "Reparse point found: $($item.FullName)"
+               }
+               $record = [pscustomobject]@{
+                   Root = $root.FullName
+                   FullName = $item.FullName
+                   IsRoot = ($item.FullName -eq $root.FullName)
+                   IsDirectory = $item.PSIsContainer
+                   Length = if ($item.PSIsContainer) { 0L } else { $item.Length }
+                   CreationTicks = $item.CreationTimeUtc.Ticks
+                   WriteTicks = $item.LastWriteTimeUtc.Ticks
+                   Attributes = [int]$item.Attributes
+                   SHA256 = if ($item.PSIsContainer) { $null } else {
+                       (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
+                   }
+               }
+               $record
+               if ($item.PSIsContainer) {
+                   foreach ($child in (Get-ChildItem -LiteralPath $item.FullName -Force -ErrorAction Stop)) {
+                       $pending.Push($child.FullName)
+                   }
+               }
+           }
+       }
+   }
+
    function Get-GhostCsvAudit {
        [CmdletBinding()]
        param()
@@ -885,8 +937,10 @@ satisfy more than one row, and the most severe match wins.
            foreach ($r in (Get-ClusterResource -ErrorAction Stop)) {
                try {
                    foreach ($p in (Get-ClusterParameter -InputObject $r -ErrorAction Stop)) {
-                       if (($p.Value -is [string]) -and ($p.Value -match $pattern)) {
-                           $blockers.Add("ClusterResource: $($r.Name).$($p.Name) -> $($p.Value)")
+                       foreach ($value in @($p.Value)) {
+                           if (($value -is [string]) -and ($value -match $pattern)) {
+                               $blockers.Add("ClusterResource: $($r.Name).$($p.Name) -> $value")
+                           }
                        }
                    }
                } catch {
@@ -897,13 +951,18 @@ satisfy more than one row, and the most severe match wins.
            $blockers.Add("QueryError: Get-ClusterResource failed -> $($_.Exception.Message)")
        }
 
-       # (3) Per-node checks across every running node. Cluster-node discovery MUST succeed:
+       # (3) Per-node checks across every member. Cluster-node discovery MUST succeed:
        # without the node list we cannot prove cluster-wide clearance, so a failure here is a
        # blocker, NOT a silent fall back to the local machine.
        $nodes = $null
        try {
-           $nodes = @(Get-ClusterNode -ErrorAction Stop | Where-Object State -eq 'Up' |
-                      Select-Object -ExpandProperty Name)
+           $members = @(Get-ClusterNode -ErrorAction Stop)
+           foreach ($member in $members) {
+               if ($member.State -ne 'Up') {
+                   $blockers.Add("[$($member.Name)] NodeNotUp: $($member.State); cluster-wide clearance is incomplete")
+               }
+           }
+           $nodes = @($members | Where-Object State -eq 'Up' | Select-Object -ExpandProperty Name)
        } catch {
            $blockers.Add("DiscoveryError: Get-ClusterNode failed; cannot confirm cluster-wide clearance -> $($_.Exception.Message)")
        }
@@ -926,7 +985,7 @@ satisfy more than one row, and the most severe match wins.
                        foreach ($dvd in ($vm | Get-VMDvdDrive -ErrorAction Stop)) {
                            if ($dvd.Path -match $pattern) { $hits.Add("VMDvdDrive: $($vm.Name) -> $($dvd.Path)") }
                        }
-                       foreach ($d in ($vm | Get-VMHardDiskDrive -ErrorAction SilentlyContinue)) {
+                       foreach ($d in ($vm | Get-VMHardDiskDrive -ErrorAction Stop)) {
                            if ($d.Path -match $Pattern) { $hits.Add("VMHardDisk: $($vm.Name) -> $($d.Path)") }
 
                            # Walk the parent chain. A checkpoint / differencing PARENT can still
@@ -974,16 +1033,21 @@ satisfy more than one row, and the most severe match wins.
                # check only immediate children. A read that cannot complete throws and is
                # recorded as a blocker below, so an unreadable root is never reported safe.
                try {
-                   foreach ($g in (Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Filter 'ClusterStorage.*' -ErrorAction Stop |
+                   foreach ($g in (Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Force -Filter 'ClusterStorage.*' -ErrorAction Stop |
                                    Where-Object { $_.Name -match '^ClusterStorage\.\d+$' })) {
                        # The ROOT ITSELF can be the mount point. Scanning only descendants let a
                        # numbered root that IS a volume mount point pass this gate entirely.
                        if ($g.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
                            $hits.Add("ReparsePointOnRoot: $($g.FullName)")
+                           continue
                        }
-                       foreach ($item in (Get-ChildItem -LiteralPath $g.FullName -Recurse -Force -ErrorAction Stop)) {
+                       $pending = New-Object 'System.Collections.Generic.Stack[string]'
+                       $pending.Push($g.FullName)
+                       while ($pending.Count) {
+                           $item = Get-Item -LiteralPath $pending.Pop() -Force -ErrorAction Stop
                            if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
                                $hits.Add("ReparsePoint: $($item.FullName)")
+                               continue
                            }
                            # Platform content is a Path C blocker regardless of references: a
                            # MocArb, ImageStore, or WorkingDirectory folder, or ANY virtual hard
@@ -993,6 +1057,11 @@ satisfy more than one row, and the most severe match wins.
                            # stays on Path A.
                            if ($item.Name -match '^(MocArb|ImageStore|WorkingDirectory)$|\.a?vhd(x|s|pmem)?$') {
                                $hits.Add("PlatformContent: $($item.FullName)")
+                           }
+                           if ($item.PSIsContainer) {
+                               foreach ($child in (Get-ChildItem -LiteralPath $item.FullName -Force -ErrorAction Stop)) {
+                                   $pending.Push($child.FullName)
+                               }
                            }
                        }
                    }
@@ -1064,91 +1133,80 @@ satisfy more than one row, and the most severe match wins.
    > [Path C](#path-c-references-under-infrastructure_1-or-arb-engage-support).
 
 4. **Remove the ghost roots, one node at a time. [HIGH RISK]**
-   This permanently deletes the numbered roots. The block re-runs the full audit,
-   refuses to touch anything that is a reparse
-   point, and requires you to type a confirmation. Run it on a single node, confirm
-   the cluster is healthy, then move to the next.
+   This permanently deletes the numbered roots. The block records paths, types,
+   attributes, timestamps, sizes, and file hashes before prompting. After confirmation,
+   and before each root, it repeats the full cluster audit and compares the remaining
+   local inventory with what was approved. Any query failure, blocker, or change
+   stops deletion. Run it on a single node, confirm the cluster is healthy, then
+   move to the next. Keep the paths quiescent throughout: these checks cannot make
+   the final check and recursive deletion atomic.
 
    ```powershell
-   $audit = Get-GhostCsvAudit
-   if (-not $audit.SafeToDelete) {
-       Write-Warning "Refusing to delete. Blockers:"
-       $audit.Blockers
-   }
-   else {
-       $targets = Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Filter 'ClusterStorage.*' -ErrorAction SilentlyContinue |
-           Where-Object { $_.Name -match '^ClusterStorage\.\d+$' }
-
-       # Never recurse into a reparse point: that can delete the target volume's data.
-       # This scan uses -ErrorAction Stop on purpose. Suppressing enumeration errors here
-       # would let an unreadable subtree hide the very reparse point this gate exists to
-       # find, so an enumeration failure is treated as unsafe rather than as "nothing found".
-       $unsafe    = @()
-       $scanError = $null
-       foreach ($t in $targets) {
-           try {
-               # The root itself first: deleting a root that IS a mount point deletes into live storage.
-               if ($t.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { $unsafe += $t }
-               $unsafe += Get-ChildItem -LiteralPath $t.FullName -Force -Recurse -ErrorAction Stop |
-                   Where-Object { $_.Attributes -band [System.IO.FileAttributes]::ReparsePoint }
-           }
-           catch {
-               $scanError = "Could not fully enumerate $($t.FullName): $($_.Exception.Message)"
-               break
-           }
-       }
-
-       if ($scanError) {
-           Write-Warning "Refusing to delete. The safety scan could not complete:"
-           Write-Warning $scanError
-       }
-       elseif ($unsafe) {
-           Write-Warning "Reparse points found inside ghost roots. Refusing to delete:"
-           $unsafe | Select-Object FullName
-       }
-       elseif (-not $targets) {
-           Write-Host "No ghost roots on $env:COMPUTERNAME."
+   . {
+       $audit = Get-GhostCsvAudit
+       if (-not $audit.SafeToDelete) {
+           Write-Warning "Refusing to delete. Blockers:"
+           $audit.Blockers
        }
        else {
-           Write-Host "About to permanently delete on $($env:COMPUTERNAME):" -ForegroundColor Yellow
-           $targets | ForEach-Object { Write-Host "   $($_.FullName)" -ForegroundColor Yellow }
-           Write-Host "Type DELETE (uppercase) to confirm. Anything else cancels." -ForegroundColor Yellow
-           $answer = Read-Host "Confirm"
-           if ($answer -ceq 'DELETE') {
+           try {
+               $approved = @(Get-GhostCsvInventory | Sort-Object FullName)
+               $targets = @($approved | Where-Object IsRoot)
+               if (-not $targets.Count) {
+                   Write-Host "No ghost roots on $env:COMPUTERNAME."
+               }
+               else {
+               Write-Host "About to permanently delete on $($env:COMPUTERNAME):" -ForegroundColor Yellow
                foreach ($t in $targets) {
-                   # Re-check this specific root immediately before removing it, so a reparse
-                   # point created between the scan above and this moment cannot be followed.
-                   $lateCheck = @(
-                       @($t | Where-Object { $_.Attributes -band [System.IO.FileAttributes]::ReparsePoint }) +
-                       @(Get-ChildItem -LiteralPath $t.FullName -Force -Recurse -ErrorAction Stop |
-                         Where-Object { $_.Attributes -band [System.IO.FileAttributes]::ReparsePoint })
-                   )
-                   if ($lateCheck.Count -gt 0) {
-                       Write-Warning "Skipping $($t.FullName): a reparse point appeared since the scan."
-                       continue
-                   }
-                   # [System.IO.Directory]::Delete removes a reparse point as a LINK rather
-                   # than following it into the target. It does NOT clear the read-only
-                   # attribute, so clear it first: otherwise the call throws part-way and
-                   # leaves the root partially deleted.
-                   try {
-                       Get-ChildItem -LiteralPath $t.FullName -Force -Recurse -ErrorAction Stop |
-                           Where-Object { $_.Attributes -band [System.IO.FileAttributes]::ReadOnly } |
-                           ForEach-Object { $_.Attributes = $_.Attributes -band (-bnot [System.IO.FileAttributes]::ReadOnly) }
-                       [System.IO.Directory]::Delete($t.FullName, $true)
-                       Write-Host "Removed $($t.FullName)"
-                   }
-                   catch {
-                       # Stop the whole batch on the first failure. Continuing would leave some
-                       # roots deleted and one half-deleted with no record of where it stopped.
-                       Write-Warning "FAILED to remove $($t.FullName): $($_.Exception.Message)"
-                       Write-Warning "Stopping. $($t.FullName) may be PARTIALLY deleted. Re-run Get-GhostCsvAudit before touching any remaining root."
-                       break
+                   $contents = @($approved | Where-Object { $_.Root -eq $t.Root -and -not $_.IsRoot })
+                   $bytes = ($contents | Measure-Object Length -Sum).Sum
+                   Write-Host ("   {0}: {1} items, {2} bytes" -f $t.Root, $contents.Count, $bytes) -ForegroundColor Yellow
+               }
+               $approved | Format-Table FullName, IsDirectory, Length, WriteTicks -AutoSize | Out-Host
+               Write-Host "Proceed only after all Path A prerequisites, owner approval, and the manual local-handle check in Step 2G. Keep these paths quiescent." -ForegroundColor Yellow
+               Write-Host "Type DELETE (uppercase) to confirm. Anything else cancels." -ForegroundColor Yellow
+               $answer = Read-Host "Confirm"
+               if ($answer -ceq 'DELETE') {
+                   foreach ($t in $targets) {
+                       $freshAudit = Get-GhostCsvAudit
+                       if (-not $freshAudit.SafeToDelete) {
+                           $freshAudit.Blockers | ForEach-Object { Write-Warning $_ }
+                           throw "The full audit is no longer clear. Nothing further will be deleted."
+                       }
+                       $current = @(Get-GhostCsvInventory | Sort-Object FullName)
+                       $expectedJson = ConvertTo-Json -InputObject @($approved) -Depth 3 -Compress
+                       $currentJson = ConvertTo-Json -InputObject @($current) -Depth 3 -Compress
+                       if ($expectedJson -cne $currentJson) {
+                           throw "Ghost roots or their contents changed since confirmation. Review a new inventory and rerun; nothing further will be deleted."
+                       }
+                       $deleting = $t.Root
+                       try {
+                           # Mutate only the approved paths, after every gate and confirmation.
+                           $current | Where-Object { $_.Root -eq $deleting } |
+                               Where-Object { $_.Attributes -band [System.IO.FileAttributes]::ReadOnly } |
+                               ForEach-Object {
+                                   $item = Get-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
+                                   if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                                       throw "Reparse point appeared: $($item.FullName)"
+                                   }
+                                   $item.Attributes = $item.Attributes -band (-bnot [System.IO.FileAttributes]::ReadOnly)
+                               }
+                           [System.IO.Directory]::Delete($deleting, $true)
+                       }
+                       catch {
+                           throw "FAILED to remove ${deleting}: $($_.Exception.Message). This root may be PARTIALLY deleted. Stop and re-run Get-GhostCsvAudit before touching any remaining root."
+                       }
+                       Write-Host "Removed $deleting"
+                       $approved = @($approved | Where-Object { $_.Root -ne $deleting })
                    }
                }
+               else {
+                   Write-Host "Cancelled. Nothing was deleted."
+               }
+               }
            }
-           else {
-               Write-Host "Cancelled. Nothing was deleted."
+           catch {
+               Write-Warning "Cleanup stopped: $($_.Exception.Message)"
            }
        }
    }
@@ -1169,6 +1227,12 @@ which moves disks, configuration, checkpoints, and the smart paging file.
   [Step 1B](#1b-confirm-which-mount-points-are-the-real-ones) output. Do not invent
   one.
 - A maintenance window, since this moves data.
+- The affected VM is already **Off**, following its normal guest shutdown procedure.
+  Keep it Off, with no failover, backup, checkpoint, attachment, or storage changes
+  during migration and recovery. Do not force-stop a workload to meet this condition.
+- A current workload backup. The recovery record below records paths, not a backup
+  of VM data. Keep the original ISO files and numbered roots until migration is
+  verified and the recovery window is closed.
 - The VM is a **customer workload** VM. If it is an ARB or platform VM, or its files
   are under `Infrastructure_1`, go to
   [Path C](#path-c-references-under-infrastructure_1-or-arb-engage-support).
@@ -1181,167 +1245,230 @@ which moves disks, configuration, checkpoints, and the smart paging file.
    moving VM storage onto the non-clustered system drive by accident.
 
    ```powershell
-   # ---- replace both of these ----
-   $VMName      = 'REPLACE-WITH-VM-NAME'
-   $CsvRootPath = 'REPLACE-WITH-CSV-PATH-FROM-STEP-1B'   # for example C:\ClusterStorage\UserStorage_1
-   # -------------------------------
+   . {
+       # ---- replace both of these ----
+       $VMName      = 'REPLACE-WITH-VM-NAME'
+       $CsvRootPath = 'REPLACE-WITH-CSV-PATH-FROM-STEP-1B'   # for example C:\ClusterStorage\UserStorage_1
+       # -------------------------------
 
-   $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)'
+       $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)'
 
-   if ($VMName -like 'REPLACE-*' -or $CsvRootPath -like 'REPLACE-*') {
-       throw "Set the VM name and CSV path variables before running this block."
-   }
-   if (-not (Get-VM -Name $VMName -ErrorAction SilentlyContinue)) {
-       throw "VM '$VMName' not found on $env:COMPUTERNAME. Get-VM and Move-VMStorage are node-local, so for a clustered VM you must run Path B from the node that currently owns it. Find the owner with 'Get-ClusterGroup | Where-Object GroupType -eq ''VirtualMachine''' (its OwnerNode column), move to that node, and re-run."
-   }
-
-   # Get-VM -Name accepts WILDCARDS, so a pasted value such as 'web*' or a partial name can
-   # match several VMs and silently feed all of them into the move. Require exactly one, and
-   # require the name to be literal.
-   if ($VMName -match '[\*\?\[\]]') {
-       throw "VMName '$VMName' contains a wildcard character. Supply one exact VM name; Path B moves storage and must never act on a set."
-   }
-   $matchedVms = @(Get-VM -Name $VMName -ErrorAction SilentlyContinue)
-   if ($matchedVms.Count -ne 1) {
-       throw "VMName '$VMName' matched $($matchedVms.Count) VM(s): $(($matchedVms.Name) -join ', '). Supply one exact VM name."
-   }
-
-   # Path C content must never be repointed by the customer. The classification in Step 3
-   # covers the ghost ROOT, but nothing here previously checked the VM ITSELF, so an ARB or
-   # platform VM name copied out of Step 2A would be moved onto a customer CSV.
-   $platformVmPattern = '^(AzureStackHCI|ARB-|arcbridge|.*-arcbridge|moc-|.*_MocArb.*|ClusterPerformanceHistory)'
-   if ($matchedVms[0].Name -match $platformVmPattern) {
-       throw "VM '$VMName' looks like an Azure Local platform or Arc Resource Bridge VM. That is Path C: stop and engage Microsoft Support rather than repointing it yourself."
-   }
-   # The infrastructure test must cover EVERY storage location, not just attached disks: a
-   # config, checkpoint, or paging path under Infrastructure_<n> is equally Path C.
-   $infraHits = @()
-   $infraHits += @($matchedVms[0] | Get-VMHardDiskDrive -ErrorAction SilentlyContinue |
-                   Where-Object { $_.Path -match '[\\/]Infrastructure(_\d+)?[\\/]' } |
-                   Select-Object -ExpandProperty Path)
-   $infraHits += @($matchedVms[0].ConfigurationLocation, $matchedVms[0].SnapshotFileLocation,
-                   $matchedVms[0].SmartPagingFilePath) |
-                 Where-Object { $_ -and ($_ -match '[\\/]Infrastructure(_\d+)?[\\/]') }
-   if ($infraHits.Count) {
-       throw "VM '$VMName' has storage on the reserved infrastructure volume ($($infraHits -join '; ')). That is Path C: stop and engage Microsoft Support."
-   }
-
-   # A disk attached to MORE THAN ONE VM (a shared .vhdx or a VHD Set) must never be moved
-   # here: Move-VMStorage relocates the file, and the peer VM's path would still point at the
-   # old location, breaking a VM this guide was never asked to touch.
-   $myDiskPaths = @($matchedVms[0] | Get-VMHardDiskDrive -ErrorAction SilentlyContinue |
-                    Select-Object -ExpandProperty Path)
-   $sharedWith = @()
-   foreach ($other in (Get-VM -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne $matchedVms[0].Name })) {
-       foreach ($od in ($other | Get-VMHardDiskDrive -ErrorAction SilentlyContinue)) {
-           if ($od.Path -and ($myDiskPaths -contains $od.Path)) { $sharedWith += "$($other.Name) -> $($od.Path)" }
+       if ($VMName -like 'REPLACE-*' -or $CsvRootPath -like 'REPLACE-*') {
+           throw "Set the VM name and CSV path variables before running this block."
        }
-   }
-   if ($sharedWith.Count) {
-       throw "One or more disks on '$VMName' are ALSO attached to another VM ($($sharedWith -join '; ')). Moving shared storage would break the other VM. That is Path C: stop and engage Microsoft Support."
-   }
+       if (-not (Get-VM -Name $VMName -ErrorAction SilentlyContinue)) {
+           throw "VM '$VMName' not found on $env:COMPUTERNAME. Get-VM and Move-VMStorage are node-local, so for a clustered VM you must run Path B from the node that currently owns it. Find the owner with 'Get-ClusterGroup | Where-Object GroupType -eq ''VirtualMachine''' (its OwnerNode column), move to that node, and re-run."
+       }
 
-   # The destination must be an ACTIVE CSV mount point from Step 1B, and it must be a
-   # CUSTOMER workload volume. Get-ClusterSharedVolume also returns the reserved
-   # infrastructure volume, so membership of that list is NOT on its own a safe test.
-   $InfraPathPattern = '[\\/]Infrastructure(_\d+)?([\\/]|$)'
+       # Get-VM -Name accepts WILDCARDS, so a pasted value such as 'web*' or a partial name can
+       # match several VMs and silently feed all of them into the move. Require exactly one, and
+       # require the name to be literal.
+       if ($VMName -match '[\*\?\[\]]') {
+           throw "VMName '$VMName' contains a wildcard character. Supply one exact VM name; Path B moves storage and must never act on a set."
+       }
+       $matchedVms = @(Get-VM -Name $VMName -ErrorAction SilentlyContinue)
+       if ($matchedVms.Count -ne 1) {
+           throw "VMName '$VMName' matched $($matchedVms.Count) VM(s): $(($matchedVms.Name) -join ', '). Supply one exact VM name."
+       }
+       if ($matchedVms[0].State -ne 'Off') {
+           throw "VM '$VMName' must already be Off for Path B. Schedule a normal guest shutdown first."
+       }
 
-   # Only ONLINE CSVs are valid destinations. An Offline CSV still appears in this
-   # list but cannot host VM storage, so it is excluded here as well.
-   $allCsv   = @(Get-ClusterSharedVolume | Where-Object { $_.State -eq 'Online' } |
-                     ForEach-Object { $_.SharedVolumeInfo.FriendlyVolumeName })
-   $validCsv = @($allCsv | Where-Object { $_ -notmatch $InfraPathPattern })
+       # Path C content must never be repointed by the customer. The classification in Step 3
+       # covers the ghost ROOT, but nothing here previously checked the VM ITSELF, so an ARB or
+       # platform VM name copied out of Step 2A would be moved onto a customer CSV.
+       $platformVmPattern = '^(AzureStackHCI|ARB-|arcbridge|.*-arcbridge|moc-|.*_MocArb.*|ClusterPerformanceHistory)'
+       if ($matchedVms[0].Name -match $platformVmPattern) {
+           throw "VM '$VMName' looks like an Azure Local platform or Arc Resource Bridge VM. That is Path C: stop and engage Microsoft Support rather than repointing it yourself."
+       }
+       # The infrastructure test must cover EVERY storage location, not just attached disks: a
+       # config, checkpoint, or paging path under Infrastructure_<n> is equally Path C.
+       $infraHits = @()
+       $infraHits += @($matchedVms[0] | Get-VMHardDiskDrive -ErrorAction Stop |
+                       Where-Object { $_.Path -match '[\\/]Infrastructure(_\d+)?[\\/]' } |
+                       Select-Object -ExpandProperty Path)
+       $infraHits += @($matchedVms[0] | Get-VMDvdDrive -ErrorAction Stop |
+                       Where-Object { $_.Path -match '[\\/]Infrastructure(_\d+)?[\\/]' } |
+                       Select-Object -ExpandProperty Path)
+       $infraHits += @($matchedVms[0].ConfigurationLocation, $matchedVms[0].SnapshotFileLocation,
+                       $matchedVms[0].SmartPagingFilePath) |
+                     Where-Object { $_ -and ($_ -match '[\\/]Infrastructure(_\d+)?[\\/]') }
+       if ($infraHits.Count) {
+           throw "VM '$VMName' has storage on the reserved infrastructure volume ($($infraHits -join '; ')). That is Path C: stop and engage Microsoft Support."
+       }
 
-   # Checked FIRST so the reserved volume produces its own specific error rather than
-   # a generic "not in the list" message.
-   if ($CsvRootPath -match $InfraPathPattern) {
-       throw "'$CsvRootPath' is the reserved Azure Local infrastructure volume. Customer workload storage must never be placed there. Pick a customer volume from Step 1B, or go to Path C."
-   }
-   if (-not $validCsv) {
-       throw "No customer CSV mount point is available on this cluster. Do not use the infrastructure volume. Go to Path C."
-   }
-   # Normalise before comparing: a pasted path with a trailing slash would not match the
-   # Get-ClusterSharedVolume value and would block a legitimate destination.
-   $CsvRootPath = $CsvRootPath.TrimEnd('\','/')
-   $validCsv    = @($validCsv | ForEach-Object { $_.TrimEnd('\','/') })
-   if ($CsvRootPath -notin $validCsv) {
-       throw "'$CsvRootPath' is not an active customer CSV mount point. Valid values: $($validCsv -join ', ')"
-   }
-   if ($CsvRootPath -match $GhostPathPattern) {
-       throw "'$CsvRootPath' is itself a ghost path. Pick a canonical CSV from Step 1B."
-   }
+       # A disk attached to MORE THAN ONE VM (a shared .vhdx or a VHD Set) must never be moved
+       # here: Move-VMStorage relocates the file, and the peer VM's path would still point at the
+       # old location, breaking a VM this guide was never asked to touch.
+       $myDisks = @($matchedVms[0] | Get-VMHardDiskDrive -ErrorAction Stop)
+       foreach ($disk in $myDisks) {
+           if (-not $disk.Path -or $disk.Path -match '\.(vhds|vhdpmem)$' -or
+               $null -eq $disk.SupportPersistentReservations -or $disk.SupportPersistentReservations) {
+               throw "Shared-capable, pass-through, persistent-memory, or unclassified disk on '$VMName'. Path C: engage Microsoft Support."
+           }
+       }
+       $myDiskPaths = @($myDisks | Select-Object -ExpandProperty Path)
+       $members = @(Get-ClusterNode -ErrorAction Stop)
+       if (-not $members.Count -or @($members | Where-Object State -ne 'Up').Count) {
+           throw 'Every cluster member must be Up for the shared-disk check.'
+       }
+       $attachments = @(Invoke-Command -ComputerName $members.Name -ErrorAction Stop -ScriptBlock {
+           $disks = @(foreach ($v in (Get-VM -ErrorAction Stop)) {
+               foreach ($d in ($v | Get-VMHardDiskDrive -ErrorAction Stop)) {
+                   [pscustomobject]@{ VMId="$($v.Id)"; VMName=$v.Name; Path=$d.Path }
+               }
+           })
+           [pscustomobject]@{ Node=$env:COMPUTERNAME; Disks=$disks }
+       })
+       foreach ($member in $members) {
+           $responses = @($attachments | Where-Object { ($_.Node -split '\.')[0] -eq ($member.Name -split '\.')[0] })
+           if ($responses.Count -ne 1) { throw "Incomplete attachment inventory for $($member.Name)." }
+       }
+       $sharedWith = @()
+       foreach ($node in $attachments) {
+           foreach ($od in $node.Disks) {
+               if ($od.VMId -ne "$($matchedVms[0].Id)" -and $od.Path -and ($myDiskPaths -contains $od.Path)) {
+                   $sharedWith += "$($node.Node)/$($od.VMName) -> $($od.Path)"
+               }
+           }
+       }
+       if ($sharedWith.Count) {
+           throw "One or more disks on '$VMName' are ALSO attached to another VM ($($sharedWith -join '; ')). Moving shared storage would break the other VM. That is Path C: stop and engage Microsoft Support."
+       }
 
-   $Destination = Join-Path $CsvRootPath $VMName
-   Write-Host "Destination validated: $Destination" -ForegroundColor Green
+       # The destination must be an ACTIVE CSV mount point from Step 1B, and it must be a
+       # CUSTOMER workload volume. Get-ClusterSharedVolume also returns the reserved
+       # infrastructure volume, so membership of that list is NOT on its own a safe test.
+       $InfraPathPattern = '[\\/]Infrastructure(_\d+)?([\\/]|$)'
+
+       # Only ONLINE CSVs are valid destinations. An Offline CSV still appears in this
+       # list but cannot host VM storage, so it is excluded here as well.
+       $allCsv   = @(Get-ClusterSharedVolume | Where-Object { $_.State -eq 'Online' } |
+                         ForEach-Object { $_.SharedVolumeInfo.FriendlyVolumeName })
+       $validCsv = @($allCsv | Where-Object { $_ -notmatch $InfraPathPattern })
+
+       # Checked FIRST so the reserved volume produces its own specific error rather than
+       # a generic "not in the list" message.
+       if ($CsvRootPath -match $InfraPathPattern) {
+           throw "'$CsvRootPath' is the reserved Azure Local infrastructure volume. Customer workload storage must never be placed there. Pick a customer volume from Step 1B, or go to Path C."
+       }
+       if (-not $validCsv) {
+           throw "No customer CSV mount point is available on this cluster. Do not use the infrastructure volume. Go to Path C."
+       }
+       # Normalise before comparing: a pasted path with a trailing slash would not match the
+       # Get-ClusterSharedVolume value and would block a legitimate destination.
+       $CsvRootPath = $CsvRootPath.TrimEnd('\','/')
+       $validCsv    = @($validCsv | ForEach-Object { $_.TrimEnd('\','/') })
+       if ($CsvRootPath -notin $validCsv) {
+           throw "'$CsvRootPath' is not an active customer CSV mount point. Valid values: $($validCsv -join ', ')"
+       }
+       if ($CsvRootPath -match $GhostPathPattern) {
+           throw "'$CsvRootPath' is itself a ghost path. Pick a canonical CSV from Step 1B."
+       }
+
+       $Destination = Join-Path $CsvRootPath $VMName
+       Write-Host "Destination validated: $Destination" -ForegroundColor Green
+   }
    ```
 
-2. **Record the current state of the affected VM.**
-   Keep this output. It is your rollback reference and your evidence of what changed.
+2. **Save a recovery record before changing anything.**
+   Run the steps in the same session on the owner node. Keep the printed record
+   path outside the VM's storage directories. Recovery uses the VM ID and controller
+   slots, not a VM name or disk filename alone.
 
    ```powershell
-   Get-VM -Name $VMName |
-       Select-Object Name, State, ConfigurationLocation, SnapshotFileLocation, SmartPagingFilePath |
-       Format-List
-   Get-VM -Name $VMName | Get-VMHardDiskDrive |
-       Select-Object VMName, ControllerType, ControllerNumber, ControllerLocation, Path |
-       Format-Table -AutoSize
+   . {
+       $vm = Get-VM -Id $matchedVms[0].Id -ErrorAction Stop
+       $recordPath = "C:\Temp\GhostCsvMove-$($vm.Id)-$([guid]::NewGuid()).clixml"
+       New-Item -ItemType Directory -Path (Split-Path $recordPath) -Force -ErrorAction Stop | Out-Null
+       $beforeMove = [pscustomobject]@{
+           VMId="$($vm.Id)"; HostName=$env:COMPUTERNAME; Destination=$Destination
+           ConfigurationLocation=$vm.ConfigurationLocation
+           SnapshotFileLocation=$vm.SnapshotFileLocation
+           SmartPagingFilePath=$vm.SmartPagingFilePath
+           Disks=@($vm | Get-VMHardDiskDrive -ErrorAction Stop |
+               Select-Object ControllerType,ControllerNumber,ControllerLocation,Path)
+           Dvds=@($vm | Get-VMDvdDrive -ErrorAction Stop |
+               Select-Object ControllerNumber,ControllerLocation,Path)
+           VhdMoves=@(); DvdMoves=@()
+       }
+       $beforeMove | Export-Clixml -LiteralPath $recordPath -ErrorAction Stop
+       Write-Host "Recovery record: $recordPath"
+   }
    ```
 
 3. **Build the disk mapping and review it.**
 
    ```powershell
-   # Self-sufficient: re-defines the pattern if this block is pasted into a fresh session.
-   # Without it, -match against an unset variable matches EVERY path.
-   if ([string]::IsNullOrWhiteSpace($GhostPathPattern)) { $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)' }
-   New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+   . {
+       # Run after steps 1 and 2 in the same session.
+       if ([string]::IsNullOrWhiteSpace($GhostPathPattern)) { $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)' }
+       New-Item -ItemType Directory -Path $Destination -Force | Out-Null
 
-   # The [string] casts are REQUIRED, and are the most common reason this step
-   # fails. Join-Path returns a PSObject-wrapped string, and Move-VMStorage
-   # rejects the wrapper with the misleading error
-   #   "Hash tables in the Vhds parameter must contain 'DestinationFilePath' key"
-   # even though the key IS present. The wrapper is invisible to normal checks:
-   # .GetType() reports String and -is [string] reports True.
+       # The [string] casts are REQUIRED, and are the most common reason this step
+       # fails. Join-Path returns a PSObject-wrapped string, and Move-VMStorage
+       # rejects the wrapper with the misleading error
+       #   "Hash tables in the Vhds parameter must contain 'DestinationFilePath' key"
+       # even though the key IS present. The wrapper is invisible to normal checks:
+       # .GetType() reports String and -is [string] reports True.
 
-   # Give each disk its OWN numbered subdirectory. Two disks can share a leaf filename
-   # (attached from different source folders); mapping both to $Destination\<leaf> would
-   # produce identical DestinationFilePath values and make Move-VMStorage fail. A unique
-   # per-disk subdirectory keeps the mapping one-to-one while preserving each filename.
-   $diskIndex = 0
-   $vhds = @(
-       Get-VM -Name $VMName | Get-VMHardDiskDrive |
-           Where-Object { $_.Path -match $GhostPathPattern } |
-           ForEach-Object {
-               $diskIndex++
-               $diskDir = Join-Path $Destination ('Disk{0:D2}' -f $diskIndex)
-               New-Item -ItemType Directory -Path $diskDir -Force | Out-Null
-               @{
-                   SourceFilePath      = [string]$_.Path
-                   DestinationFilePath = [string](Join-Path $diskDir (Split-Path $_.Path -Leaf))
+       # Give each disk its OWN numbered subdirectory. Two disks can share a leaf filename
+       # (attached from different source folders); mapping both to $Destination\<leaf> would
+       # produce identical DestinationFilePath values and make Move-VMStorage fail. A unique
+       # per-disk subdirectory keeps the mapping one-to-one while preserving each filename.
+       $diskIndex = 0
+       $vhds = @(
+           Get-VM -Id $beforeMove.VMId -ErrorAction Stop | Get-VMHardDiskDrive -ErrorAction Stop |
+               Where-Object { $_.Path -match $GhostPathPattern } |
+               ForEach-Object {
+                   $diskIndex++
+                   $diskDir = Join-Path $Destination ('Disk{0:D2}' -f $diskIndex)
+                   New-Item -ItemType Directory -Path $diskDir -Force | Out-Null
+                   @{
+                       SourceFilePath      = [string]$_.Path
+                       DestinationFilePath = [string](Join-Path $diskDir (Split-Path $_.Path -Leaf))
+                   }
+               }
+       )
+
+       if (-not $vhds) { Write-Host "No ghost-rooted disks on '$VMName'." }
+       $vhds | ForEach-Object { "{0}  ->  {1}" -f $_.SourceFilePath, $_.DestinationFilePath }
+
+       # Move-VMStorage -Vhds relocates ATTACHED disks only. A ghost-rooted checkpoint or
+       # differencing PARENT is not an attached disk, so it will NOT move here; Step 5 and
+       # Path A will keep reporting it (correctly). Detect that case now so it is not a surprise.
+       $ghostParents = @(
+           Get-VM -Id $beforeMove.VMId -ErrorAction Stop | Get-VMHardDiskDrive -ErrorAction Stop | ForEach-Object {
+               $path = $_.Path; $depth = 0
+               while ($path -and $depth -lt 50) {
+                   $vhd = Get-VHD -Path $path -ErrorAction Stop
+                   if (-not $vhd) { throw "Unreadable disk chain: $path. Engage Support." }
+                   $path = $vhd.ParentPath; $depth++
+                   if ($path -and ($path -match $GhostPathPattern)) { $path }
+               }
+               if ($path) { throw "Disk chain exceeds 50 links: $path. Engage Support." }
+           }
+       )
+       if ($ghostParents.Count -gt 0) {
+           Write-Warning "PARENT disk(s) on a ghost root that Move-VMStorage will NOT relocate:"
+           $ghostParents | Sort-Object -Unique | ForEach-Object { Write-Warning "   $_" }
+           throw 'Do not move this VM with Path B. Engage Support to handle its parent chain.'
+       }
+       $dvdMoves = @(foreach ($dvd in ($vm | Get-VMDvdDrive -ErrorAction Stop)) {
+           if ($dvd.Path -and $dvd.Path -match $GhostPathPattern) {
+               $mediaDir = Join-Path $Destination ("Media{0}-{1}" -f $dvd.ControllerNumber,$dvd.ControllerLocation)
+               [pscustomobject]@{
+                   ControllerNumber=$dvd.ControllerNumber; ControllerLocation=$dvd.ControllerLocation
+                   SourceFilePath=$dvd.Path
+                   DestinationFilePath=[string](Join-Path $mediaDir (Split-Path $dvd.Path -Leaf))
+                   SHA256=(Get-FileHash -LiteralPath $dvd.Path -Algorithm SHA256 -ErrorAction Stop).Hash
                }
            }
-   )
-
-   if (-not $vhds) { Write-Host "No ghost-rooted disks on '$VMName'." }
-   $vhds | ForEach-Object { "{0}  ->  {1}" -f $_.SourceFilePath, $_.DestinationFilePath }
-
-   # Move-VMStorage -Vhds relocates ATTACHED disks only. A ghost-rooted checkpoint or
-   # differencing PARENT is not an attached disk, so it will NOT move here; Step 5 and
-   # Path A will keep reporting it (correctly). Detect that case now so it is not a surprise.
-   $ghostParents = @(
-       Get-VM -Name $VMName | Get-VMHardDiskDrive | ForEach-Object {
-           $path = $_.Path; $depth = 0
-           while ($path -and $depth -lt 50) {
-               $vhd = Get-VHD -Path $path -ErrorAction SilentlyContinue
-               if (-not $vhd) { break }
-               $path = $vhd.ParentPath; $depth++
-               if ($path -and ($path -match $GhostPathPattern)) { $path }
-           }
-       }
-   )
-   if ($ghostParents.Count -gt 0) {
-       Write-Warning "PARENT disk(s) on a ghost root that Move-VMStorage will NOT relocate:"
-       $ghostParents | Sort-Object -Unique | ForEach-Object { Write-Warning "   $_" }
-       Write-Warning "Relocating an unattached differencing or checkpoint parent is not a hand procedure. Complete the attached-disk move if there is one, but this VM needs Path C (engage support) to clear the parent before Path A can remove the root."
+       })
+       $beforeMove.VhdMoves = $vhds
+       $beforeMove.DvdMoves = $dvdMoves
+       $beforeMove | Export-Clixml -LiteralPath $recordPath -ErrorAction Stop
+       $dvdMoves | Format-Table SourceFilePath,DestinationFilePath -AutoSize
    }
    ```
 
@@ -1358,22 +1485,45 @@ which moves disks, configuration, checkpoints, and the smart paging file.
    the step most likely to go wrong under time pressure.
 
    ```powershell
-   $moveParams = @{
-       Name                = $VMName
-       VirtualMachinePath  = $Destination
-       SnapshotFilePath    = $Destination
-       SmartPagingFilePath = $Destination
-   }
-   if ($vhds.Count -gt 0) { $moveParams['Vhds'] = $vhds }
+   . {
+       $moveParams = @{
+           VM                  = $vm
+           VirtualMachinePath  = $Destination
+           SnapshotFilePath    = $Destination
+           SmartPagingFilePath = $Destination
+       }
+       if ($vhds.Count -gt 0) { $moveParams['Vhds'] = $vhds }
 
-   # Dry run: reports what would happen and changes nothing.
-   Move-VMStorage @moveParams -WhatIf
+       # Dry run: reports what would happen and changes nothing.
+       foreach ($media in $dvdMoves) {
+           Copy-Item -LiteralPath $media.SourceFilePath -Destination $media.DestinationFilePath -WhatIf
+           Get-VM -Id $beforeMove.VMId -ErrorAction Stop |
+               Get-VMDvdDrive -ControllerNumber $media.ControllerNumber -ControllerLocation $media.ControllerLocation -ErrorAction Stop |
+               Set-VMDvdDrive -Path $media.DestinationFilePath -WhatIf
+       }
+       Move-VMStorage @moveParams -WhatIf
+   }
    ```
 
    When the dry run looks correct, run the same parameter set without `-WhatIf`:
 
    ```powershell
-   Move-VMStorage @moveParams
+   . {
+       if ((Get-VM -Id $beforeMove.VMId -ErrorAction Stop).State -ne 'Off') { throw 'Keep the VM Off.' }
+       foreach ($media in $dvdMoves) {
+           New-Item -ItemType Directory -Path (Split-Path $media.DestinationFilePath) -Force -ErrorAction Stop | Out-Null
+           if (-not (Test-Path -LiteralPath $media.DestinationFilePath)) {
+               Copy-Item -LiteralPath $media.SourceFilePath -Destination $media.DestinationFilePath -ErrorAction Stop
+           }
+           if ((Get-FileHash -LiteralPath $media.DestinationFilePath -Algorithm SHA256 -ErrorAction Stop).Hash -ne $media.SHA256) {
+               throw "ISO copy differs from the recovery record. Stop; do not overwrite $($media.DestinationFilePath)."
+           }
+           Get-VM -Id $beforeMove.VMId -ErrorAction Stop |
+               Get-VMDvdDrive -ControllerNumber $media.ControllerNumber -ControllerLocation $media.ControllerLocation -ErrorAction Stop |
+               Set-VMDvdDrive -Path $media.DestinationFilePath -ErrorAction Stop
+       }
+       Move-VMStorage @moveParams -ErrorAction Stop
+   }
    ```
 
    > [!NOTE]
@@ -1384,37 +1534,43 @@ which moves disks, configuration, checkpoints, and the smart paging file.
 5. **Confirm this VM is clean.**
 
    ```powershell
-   # Self-sufficient: re-defines the pattern if this block is pasted into a fresh session.
-   # Without it, -match against an unset variable matches EVERY path.
-   if ([string]::IsNullOrWhiteSpace($GhostPathPattern)) { $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)' }
-   $vm  = Get-VM -Name $VMName
-   $bad = New-Object System.Collections.Generic.List[string]
+   . {
+       # Self-sufficient: re-defines the pattern if this block is pasted into a fresh session.
+       # Without it, -match against an unset variable matches EVERY path.
+       if ([string]::IsNullOrWhiteSpace($GhostPathPattern)) { $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)' }
+       $vm  = Get-VM -Name $VMName -ErrorAction Stop
+       $bad = New-Object System.Collections.Generic.List[string]
 
-   # Walk every attached disk's FULL parent chain, exactly as Step 2A does. Checking only
-   # attached paths would report success while a checkpoint or differencing PARENT is still
-   # on a ghost root, which Path A would then correctly refuse to delete, leaving a green
-   # verdict and a blocked cleanup. An UNREADABLE link is treated as a reference.
-   foreach ($d in ($vm | Get-VMHardDiskDrive)) {
-       $path  = $d.Path
-       $depth = 0
-       while ($path -and $depth -lt 50) {
-           if ($path -match $GhostPathPattern) { $bad.Add("disk chain (depth $depth): $path") }
-           $vhd = Get-VHD -Path $path -ErrorAction SilentlyContinue
-           if (-not $vhd) { $bad.Add("UNREADABLE (chain not fully walked): $path"); break }
-           $path = $vhd.ParentPath
-           $depth++
+       # Walk every attached disk's FULL parent chain, exactly as Step 2A does. Checking only
+       # attached paths would report success while a checkpoint or differencing PARENT is still
+       # on a ghost root, which Path A would then correctly refuse to delete, leaving a green
+       # verdict and a blocked cleanup. An UNREADABLE link is treated as a reference.
+       foreach ($dvd in ($vm | Get-VMDvdDrive -ErrorAction Stop)) {
+           if ($dvd.Path -and $dvd.Path -match $GhostPathPattern) { $bad.Add("DVD media: $($dvd.Path)") }
        }
-   }
-   foreach ($p in @($vm.ConfigurationLocation, $vm.SnapshotFileLocation, $vm.SmartPagingFilePath)) {
-       if ($p -and ($p -match $GhostPathPattern)) { $bad.Add("config/checkpoint/paging: $p") }
-   }
+       foreach ($d in ($vm | Get-VMHardDiskDrive -ErrorAction Stop)) {
+           $path  = $d.Path
+           $depth = 0
+           while ($path -and $depth -lt 50) {
+               if ($path -match $GhostPathPattern) { $bad.Add("disk chain (depth $depth): $path") }
+               $vhd = Get-VHD -Path $path -ErrorAction SilentlyContinue
+               if (-not $vhd) { $bad.Add("UNREADABLE (chain not fully walked): $path"); break }
+               $path = $vhd.ParentPath
+               $depth++
+           }
+           if ($path -and $depth -ge 50) { $bad.Add("UNREADABLE (chain exceeds 50 links): $path") }
+       }
+       foreach ($p in @($vm.ConfigurationLocation, $vm.SnapshotFileLocation, $vm.SmartPagingFilePath)) {
+           if ($p -and ($p -match $GhostPathPattern)) { $bad.Add("config/checkpoint/paging: $p") }
+       }
 
-   if ($bad.Count -gt 0) {
-       Write-Warning "$VMName still references a ghost path (parent chains included):"
-       $bad
-   }
-   else {
-       Write-Host "$VMName no longer references any ghost path, including parent chains." -ForegroundColor Green
+       if ($bad.Count -gt 0) {
+           Write-Warning "$VMName still references a ghost path (parent chains included):"
+           $bad
+       }
+       else {
+           Write-Host "$VMName no longer references any ghost path, including DVD media and parent chains." -ForegroundColor Green
+       }
    }
    ```
 
@@ -1423,7 +1579,142 @@ which moves disks, configuration, checkpoints, and the smart paging file.
 
 7. **Only once every reference is cleared**, follow
    [Path A](#path-a-no-references-found-safe-to-clean-up) to remove the now-unused
-   ghost roots.
+   ghost roots, after the recovery window is closed.
+
+### Recovery if Path B fails or must be reversed
+
+**Stop at the first error. [MEDIUM RISK]** Leave the VM Off and retain both source
+and destination files, the recovery record, and the complete error output. Do not
+repeat the forward move, delete either tree, edit disk parent paths, or re-register
+the VM. Re-query its current paths before deciding what completed.
+
+The following builds a reverse move for disks found at either their recorded
+original location or their exact planned destination. It also handles a failure
+after only some DVD attachments were repointed. An unexpected controller, path,
+missing file, or conflicting original disk stops recovery: engage Microsoft
+Support with the record and both inventories. A record is not a data backup and
+cannot repair corruption or an unregistered VM.
+
+1. **Load the saved record, inspect current state, and preview recovery.**
+   Use the original owner node. Do not import an untrusted recovery record.
+
+   ```powershell
+   . {
+       $recordPath = 'REPLACE-WITH-SAVED-CLIXML-PATH'
+       $saved = Import-Clixml -LiteralPath $recordPath -ErrorAction Stop
+       if ($saved.HostName -ne $env:COMPUTERNAME) { throw 'Use the original owner node; otherwise engage Support.' }
+       $vm = Get-VM -Id $saved.VMId -ErrorAction Stop
+       if ($vm.State -ne 'Off') { throw 'Keep the VM Off during recovery.' }
+       foreach ($prop in 'ConfigurationLocation','SnapshotFileLocation','SmartPagingFilePath') {
+           if ($vm.$prop.TrimEnd('\') -notin @($saved.$prop.TrimEnd('\'), $saved.Destination.TrimEnd('\'))) {
+               throw "Unexpected current path: $prop. Engage Support."
+           }
+       }
+       $currentDisks = @($vm | Get-VMHardDiskDrive -ErrorAction Stop)
+       $currentDvds = @($vm | Get-VMDvdDrive -ErrorAction Stop)
+       $vm | Select-Object Name,Id,State,ConfigurationLocation,SnapshotFileLocation,SmartPagingFilePath | Format-List
+       $currentDisks | Format-Table ControllerType,ControllerNumber,ControllerLocation,Path
+       $currentDvds | Format-Table ControllerNumber,ControllerLocation,Path
+       if ($currentDisks.Count -ne @($saved.Disks).Count -or $currentDvds.Count -ne @($saved.Dvds).Count) {
+           throw 'Attachments changed. Stop and engage Support.'
+       }
+       $reverseDisks = @(foreach ($disk in $saved.Disks) {
+           $now = @($currentDisks | Where-Object {
+               $_.ControllerType -eq $disk.ControllerType -and $_.ControllerNumber -eq $disk.ControllerNumber -and
+               $_.ControllerLocation -eq $disk.ControllerLocation
+           })
+           if ($now.Count -ne 1 -or -not (Test-Path -LiteralPath $now[0].Path -PathType Leaf)) { throw 'Disk state is incomplete. Engage Support.' }
+           if ($now[0].Path -ne $disk.Path) {
+               $plan = @($saved.VhdMoves | Where-Object { $_.SourceFilePath -eq $disk.Path -and $_.DestinationFilePath -eq $now[0].Path })
+               if ($plan.Count -ne 1 -or (Test-Path -LiteralPath $disk.Path)) { throw 'Unexpected disk path or conflicting original file. Engage Support.' }
+               @{ SourceFilePath=[string]$now[0].Path; DestinationFilePath=[string]$disk.Path }
+           }
+       })
+       foreach ($dvd in $saved.Dvds) {
+           $now = @($currentDvds | Where-Object {
+               $_.ControllerNumber -eq $dvd.ControllerNumber -and $_.ControllerLocation -eq $dvd.ControllerLocation
+           })
+           if ($now.Count -ne 1) { throw 'DVD controller changed. Engage Support.' }
+           $originalMedia = @($saved.DvdMoves | Where-Object { $_.SourceFilePath -eq $dvd.Path })
+           foreach ($media in $originalMedia) {
+               if ((Get-FileHash -LiteralPath $dvd.Path -Algorithm SHA256 -ErrorAction Stop).Hash -ne $media.SHA256) {
+                   throw 'Original ISO changed. Engage Support.'
+               }
+           }
+           if ($now[0].Path -ne $dvd.Path) {
+               $plan = @($saved.DvdMoves | Where-Object { $_.SourceFilePath -eq $dvd.Path -and $_.DestinationFilePath -eq $now[0].Path })
+               if ($plan.Count -ne 1 -or
+                   (Get-FileHash -LiteralPath $dvd.Path -Algorithm SHA256 -ErrorAction Stop).Hash -ne $plan[0].SHA256) {
+                   throw 'Original ISO is missing, changed, or not in the plan. Engage Support.'
+               }
+           }
+       }
+       $restoreParams = @{ VM=$vm }
+       $restoreLocations = @{
+           ConfigurationLocation='VirtualMachinePath'
+           SnapshotFileLocation='SnapshotFilePath'
+           SmartPagingFilePath='SmartPagingFilePath'
+       }
+       foreach ($prop in $restoreLocations.Keys) {
+           if ($vm.$prop.TrimEnd('\') -ne $saved.$prop.TrimEnd('\')) {
+               $restoreParams[$restoreLocations[$prop]] = [string]$saved.$prop
+           }
+       }
+       if ($reverseDisks.Count) { $restoreParams['Vhds'] = $reverseDisks }
+       # Decide whether a storage move is needed BEFORE adding any switch, so a DVD-only
+       # recovery still skips Move-VMStorage. The recorded paths are on the node's system
+       # drive, which the cluster cannot verify, so a clustered VM needs -AllowUnverifiedPaths.
+       $needsMove = $restoreParams.Count -gt 1
+       if ($needsMove -and $vm.IsClustered) { $restoreParams['AllowUnverifiedPaths'] = $true }
+       if ($needsMove) { Move-VMStorage @restoreParams -WhatIf }
+   }
+   ```
+
+2. **After reviewing the preview, reverse the move and DVD attachments.**
+   Run immediately after the checks above, with the VM and its storage still quiescent.
+   Recovery deliberately restores the old references, including numbered paths.
+
+   ```powershell
+   . {
+       if ((Get-VM -Id $saved.VMId -ErrorAction Stop).State -ne 'Off') { throw 'Keep the VM Off during recovery.' }
+       if ($needsMove) { Move-VMStorage @restoreParams -ErrorAction Stop }
+       foreach ($dvd in $saved.Dvds) {
+           Get-VM -Id $saved.VMId -ErrorAction Stop |
+               Get-VMDvdDrive -ControllerNumber $dvd.ControllerNumber -ControllerLocation $dvd.ControllerLocation -ErrorAction Stop |
+               Set-VMDvdDrive -Path $dvd.Path -AllowUnverifiedPaths:$vm.IsClustered -ErrorAction Stop
+       }
+       $restored = Get-VM -Id $saved.VMId -ErrorAction Stop
+       foreach ($prop in 'ConfigurationLocation','SnapshotFileLocation','SmartPagingFilePath') {
+           if ($restored.$prop.TrimEnd('\') -ne $saved.$prop.TrimEnd('\')) { throw "Recovery mismatch: $prop. Engage Support." }
+       }
+       foreach ($kind in 'Disks','Dvds') {
+           $actual = if ($kind -eq 'Disks') { @($restored | Get-VMHardDiskDrive -ErrorAction Stop) }
+                     else { @($restored | Get-VMDvdDrive -ErrorAction Stop) }
+           foreach ($old in $saved.$kind) {
+               $match = @($actual | Where-Object {
+                   $_.ControllerNumber -eq $old.ControllerNumber -and $_.ControllerLocation -eq $old.ControllerLocation -and
+                   ($kind -eq 'Dvds' -or $_.ControllerType -eq $old.ControllerType) -and $_.Path -eq $old.Path
+               })
+               if ($match.Count -ne 1) { throw "Recovery mismatch: $kind. Engage Support." }
+           }
+       }
+       Write-Host 'Recorded storage paths restored. Keep all files and engage Support for the remaining ghost references.'
+   }
+   ```
+
+   For a clustered VM, `Move-VMStorage` can print `WARNING: There were issues updating
+   the virtual machine configuration that may prevent the virtual machine from
+   running.` because the restored paths are not cluster storage. If it appears, that
+   warning is expected here and is not the "first error"; the checks at the end of the block
+   decide whether recovery succeeded. For a clustered VM the block passes
+   `-AllowUnverifiedPaths`, which deliberately skips the cluster's path check to put
+   the VM back on non-cluster storage **[MEDIUM RISK]**. Keep the VM Off and engage
+   Support before starting it again.
+
+   Expected: all recorded paths and attachment slots match. Before normal workload
+   startup, complete the workload owner's integrity checks. Any recovery error or
+   mismatch is a stop condition, not permission to delete or retry. Recovery does
+   not clear the original ghost-path condition; do not run Path A afterwards.
 
 ## Path C: references under `Infrastructure_1` or ARB, engage support
 
@@ -1452,95 +1743,167 @@ that needs a rebuild to recover.
 **Collect this before contacting support**, so the case starts with evidence:
 
 ```powershell
-$out = "C:\Temp\GhostCsvEvidence-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-New-Item -ItemType Directory -Path $out -Force | Out-Null
-$GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)'
+. {
+    $out = "C:\Temp\GhostCsvEvidence-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    New-Item -ItemType Directory -Path $out -Force | Out-Null
+    $GhostPathPattern = '[\\/]ClusterStorage\.\d+([\\/]|$)'
+    # Every query failure is recorded here, so a partial package is never reported as complete.
+    $collectionErrors = New-Object System.Collections.Generic.List[string]
 
-Get-ClusterSharedVolume | ForEach-Object {
-    [pscustomobject]@{ CSVName = $_.Name; Path = $_.SharedVolumeInfo.FriendlyVolumeName; State = $_.State }
-} | Export-Csv "$out\csv-mountpoints.csv" -NoTypeInformation
-
-Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Filter 'ClusterStorage.*' -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -match '^ClusterStorage\.\d+$' } |
-    Select-Object FullName, CreationTime, LastWriteTime,
-        @{n='IsReparsePoint';e={[bool]($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint)}} |
-    Export-Csv "$out\ghost-roots.csv" -NoTypeInformation
-
-# The criteria that TRIGGER Path C are the reference and reparse findings, so export those
-# too. Sending only the CSV list and cluster parameters makes support re-run Steps 1 and 2
-# before they can start, which is the slowest possible opening to a case.
-$nodes = (Get-ClusterNode | Where-Object State -eq 'Up').Name
-Invoke-Command -ComputerName $nodes -ArgumentList $GhostPathPattern -ScriptBlock {
-    param($Pattern)
-    $refs = New-Object System.Collections.Generic.List[object]
-    foreach ($vm in (Get-VM -ErrorAction SilentlyContinue)) {
-        foreach ($d in ($vm | Get-VMHardDiskDrive -ErrorAction SilentlyContinue)) {
-            $path = $d.Path; $depth = 0
-            while ($path -and $depth -lt 50) {
-                if ($path -match $Pattern) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='VMDiskChain'; Object=$vm.Name; Value=$path; Depth=$depth }) }
-                if (-not (Test-Path -LiteralPath $path)) { break }
-                $vhd = Get-VHD -Path $path -ErrorAction SilentlyContinue
-                if (-not $vhd) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='UnreadableChain'; Object=$vm.Name; Value=$path; Depth=$depth }); break }
-                $path = $vhd.ParentPath; $depth++
-            }
-        }
-        foreach ($dvd in ($vm | Get-VMDvdDrive -ErrorAction SilentlyContinue)) {
-            if ($dvd.Path -and ($dvd.Path -match $Pattern)) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='VMDvdDrive'; Object=$vm.Name; Value=$dvd.Path; Depth=0 }) }
-        }
-        foreach ($prop in 'ConfigurationLocation','SnapshotFileLocation','SmartPagingFilePath') {
-            $v = $vm.$prop
-            if ($v -and ($v -match $Pattern)) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind="VMConfig:$prop"; Object=$vm.Name; Value=$v; Depth=0 }) }
-        }
-    }
-    foreach ($f in (Get-SmbOpenFile -ErrorAction SilentlyContinue)) {
-        if ($f.Path -match $Pattern) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='SmbOpenFile'; Object=$f.ClientComputerName; Value=$f.Path; Depth=0 }) }
-    }
-    # Root and descendant reparse points, plus platform content, per ghost root.
-    foreach ($g in (Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Filter 'ClusterStorage.*' -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name -match '^ClusterStorage\.\d+$' })) {
-        if ($g.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-            $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='ReparsePointOnRoot'; Object=$g.FullName; Value=$g.FullName; Depth=0 })
-        }
-        foreach ($item in (Get-ChildItem -LiteralPath $g.FullName -Force -Recurse -ErrorAction SilentlyContinue)) {
-            if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-                $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='ReparsePoint'; Object=$g.Name; Value=$item.FullName; Depth=0 })
-            }
-            if ($item.Name -match '^(MocArb|ImageStore|WorkingDirectory)$|\.a?vhd(x|s|pmem)?$') {
-                $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='PlatformContent'; Object=$g.Name; Value=$item.FullName; Depth=0 })
-            }
-        }
-    }
-    $refs
-} | Select-Object Node, Kind, Object, Value, Depth |
-    Export-Csv "$out\references-and-content.csv" -NoTypeInformation
-
-$paramErrors = New-Object System.Collections.Generic.List[string]
-Get-ClusterResource | ForEach-Object {
-    $r = $_
     try {
-        Get-ClusterParameter -InputObject $r -ErrorAction Stop | ForEach-Object {
-            # Match strings AND string arrays: a multi-valued parameter holding a ghost path
-            # was skipped entirely by a bare -is [string] test.
-            if (($_.Value -is [string] -or $_.Value -is [string[]]) -and
-                (@($_.Value) -match $GhostPathPattern)) {
-                [pscustomobject]@{ Resource = $r.Name; Parameter = $_.Name; Value = $_.Value }
+        Get-ClusterSharedVolume -ErrorAction Stop | ForEach-Object {
+            [pscustomobject]@{ CSVName = $_.Name; Path = $_.SharedVolumeInfo.FriendlyVolumeName; State = $_.State }
+        } | Export-Csv "$out\csv-mountpoints.csv" -NoTypeInformation
+    }
+    catch { $collectionErrors.Add("Get-ClusterSharedVolume: $($_.Exception.Message)") }
+
+    try {
+        Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Force -Filter 'ClusterStorage.*' -ErrorAction Stop |
+            Where-Object { $_.Name -match '^ClusterStorage\.\d+$' } |
+            Select-Object FullName, CreationTime, LastWriteTime,
+                @{n='IsReparsePoint';e={[bool]($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint)}} |
+            Export-Csv "$out\ghost-roots.csv" -NoTypeInformation
+    }
+    catch { $collectionErrors.Add("Ghost root listing: $($_.Exception.Message)") }
+
+    # The criteria that TRIGGER Path C are the reference and reparse findings, so export those
+    # too. Sending only the CSV list and cluster parameters makes support re-run Steps 1 and 2
+    # before they can start, which is the slowest possible opening to a case.
+    $clusterNodes = @()
+    try { $clusterNodes = @(Get-ClusterNode -ErrorAction Stop) }
+    catch { $collectionErrors.Add("Get-ClusterNode: $($_.Exception.Message)") }
+    $nodes = @($clusterNodes | Where-Object State -eq 'Up' | Select-Object -ExpandProperty Name)
+    $remotingErrors = @()
+    $nodeResults = @()
+    if ($nodes.Count) {
+        $nodeResults = @(Invoke-Command -ComputerName $nodes -ArgumentList $GhostPathPattern -ScriptBlock {
+            param($Pattern)
+            $refs = New-Object System.Collections.Generic.List[object]
+            $queryErrors = @()
+            try {
+                foreach ($vm in (Get-VM -ErrorAction Stop)) {
+                    foreach ($d in ($vm | Get-VMHardDiskDrive -ErrorAction Stop)) {
+                        $path = $d.Path; $depth = 0
+                        while ($path -and $depth -lt 50) {
+                            if ($path -match $Pattern) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='VMDiskChain'; Object=$vm.Name; Value=$path; Depth=$depth }) }
+                            if (-not (Test-Path -LiteralPath $path)) { break }
+                            $vhd = Get-VHD -Path $path -ErrorAction SilentlyContinue
+                            if (-not $vhd) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='UnreadableChain'; Object=$vm.Name; Value=$path; Depth=$depth }); break }
+                            $path = $vhd.ParentPath; $depth++
+                        }
+                    }
+                    foreach ($dvd in ($vm | Get-VMDvdDrive -ErrorAction Stop)) {
+                        if ($dvd.Path -and ($dvd.Path -match $Pattern)) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='VMDvdDrive'; Object=$vm.Name; Value=$dvd.Path; Depth=0 }) }
+                    }
+                    foreach ($prop in 'ConfigurationLocation','SnapshotFileLocation','SmartPagingFilePath') {
+                        $v = $vm.$prop
+                        if ($v -and ($v -match $Pattern)) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind="VMConfig:$prop"; Object=$vm.Name; Value=$v; Depth=0 }) }
+                    }
+                }
+                foreach ($f in (Get-SmbOpenFile -ErrorAction Stop)) {
+                    if ($f.Path -match $Pattern) { $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='SmbOpenFile'; Object=$f.ClientComputerName; Value=$f.Path; Depth=0 }) }
+                }
+                # Root and descendant reparse points, plus platform content, per ghost root.
+                foreach ($g in (Get-ChildItem -Path "$($env:SystemDrive)\" -Directory -Filter 'ClusterStorage.*' -ErrorAction Stop |
+                                Where-Object { $_.Name -match '^ClusterStorage\.\d+$' })) {
+                    if ($g.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                        # Record where the root redirects, then do NOT walk it: walking a junction
+                        # or mount point reports the TARGET's files as ghost-root content.
+                        $target = try {
+                            @(& fsutil.exe reparsepoint query $g.FullName 2>&1 |
+                                ForEach-Object { "$_".Trim() } | Where-Object { $_ -match 'Name:' }) -join '; '
+                        } catch { '' }
+                        if (-not $target) { $target = $g.FullName }
+                        $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='ReparsePointOnRoot'; Object=$g.FullName; Value=$target; Depth=0 })
+                        continue
+                    }
+                    foreach ($item in (Get-ChildItem -LiteralPath $g.FullName -Force -Recurse -ErrorAction Stop)) {
+                        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                            $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='ReparsePoint'; Object=$g.Name; Value=$item.FullName; Depth=0 })
+                        }
+                        if ($item.Name -match '^(MocArb|ImageStore|WorkingDirectory)$|\.a?vhd(x|s|pmem)?$') {
+                            $refs.Add([pscustomobject]@{ Node=$env:COMPUTERNAME; Kind='PlatformContent'; Object=$g.Name; Value=$item.FullName; Depth=0 })
+                        }
+                    }
+                }
+            }
+            catch {
+                $queryErrors += "$($_.InvocationInfo.MyCommand.Name): $($_.Exception.Message)"
+            }
+            [pscustomobject]@{
+                Node = $env:COMPUTERNAME
+                References = $refs.ToArray()
+                QueryErrors = $queryErrors
+                Completed = ($queryErrors.Count -eq 0)
+            }
+        } -ErrorAction Continue -ErrorVariable +remotingErrors)
+    }
+    $nodeResults | ForEach-Object { $_.References } |
+        Select-Object Node, Kind, Object, Value, Depth |
+        Export-Csv "$out\references-and-content.csv" -NoTypeInformation
+
+    $collectionStatus = @(foreach ($node in $clusterNodes) {
+        $short = ($node.Name -split '\.')[0]
+        $result = @($nodeResults | Where-Object { ($_.Node -split '\.')[0] -eq $short })
+        $completed = $result.Count -eq 1 -and $result[0].Completed
+        if (-not $completed) {
+            $collectionErrors.Add("$($node.Name): evidence incomplete (state: $($node.State)).")
+        }
+        foreach ($r in $result) {
+            foreach ($queryError in $r.QueryErrors) {
+                $collectionErrors.Add("$($node.Name): $queryError")
             }
         }
+        [pscustomobject]@{ Node=$node.Name; State=$node.State; Completed=$completed }
+    })
+    $collectionStatus | Export-Csv "$out\collection-status.csv" -NoTypeInformation
+    foreach ($remoteError in $remotingErrors) {
+        $collectionErrors.Add("Remoting: $remoteError")
     }
-    catch {
-        # Benign for resource types that expose no parameters; record the rest so the
-        # support case shows which resources could not be inspected.
-        $paramErrors.Add($r.Name)
-    }
-} | Export-Csv "$out\cluster-resource-refs.csv" -NoTypeInformation
+    if (-not $clusterNodes.Count) { $collectionErrors.Add('Cluster membership returned no nodes.') }
 
-if ($paramErrors.Count) {
-    $paramErrors | Set-Content "$out\cluster-resource-uninspected.txt"
-    Write-Host ("Note: {0} cluster resource(s) returned no parameters; listed in cluster-resource-uninspected.txt" -f $paramErrors.Count)
+    $paramErrors = New-Object System.Collections.Generic.List[string]
+    $resources = @()
+    try { $resources = @(Get-ClusterResource -ErrorAction Stop) }
+    catch { $collectionErrors.Add("Get-ClusterResource: $($_.Exception.Message)") }
+    $resources | ForEach-Object {
+        $r = $_
+        try {
+            Get-ClusterParameter -InputObject $r -ErrorAction Stop | ForEach-Object {
+                $p = $_
+                foreach ($value in @($p.Value)) {
+                    if (($value -is [string]) -and ($value -match $GhostPathPattern)) {
+                        [pscustomobject]@{ Resource = $r.Name; Parameter = $p.Name; Value = $value }
+                    }
+                }
+            }
+        }
+        catch {
+            # Record failed queries separately from successful queries with no parameters.
+            $paramErrors.Add($r.Name)
+        }
+    } | Export-Csv "$out\cluster-resource-refs.csv" -NoTypeInformation
+
+    if ($paramErrors.Count) {
+        $paramErrors | Set-Content "$out\cluster-resource-uninspected.txt"
+        $collectionErrors.Add(("{0} cluster resource(s) were not inspected; see cluster-resource-uninspected.txt." -f $paramErrors.Count))
+    }
+
+    if ($collectionErrors.Count) {
+        $collectionErrors | Set-Content "$out\collection-errors.txt"
+        $collectionErrors | ForEach-Object { Write-Warning $_ }
+        Write-Warning "Evidence collection INCOMPLETE in $out. Send the partial package and collection-errors.txt to support; resolve the recorded failures and repeat collection."
+    } else {
+        Write-Host "Evidence collected in $out"
+    }
 }
-
-Write-Host "Evidence collected in $out"
 ```
+
+Expected: every cluster member returns a completed collection and the final message is
+`Evidence collected`. An `INCOMPLETE` warning means the package is partial, even if its
+CSV files contain rows. `collection-status.csv` records coverage even for nodes with
+no references. Keep `collection-errors.txt` with the package; do not treat a
+missing node or failed query as evidence that no references exist.
 
 Also attach the output of
 [Troubleshooting Storage With Support Diagnostics Tool](./Troubleshooting-Storage-With-Support-Diagnostics-Tool.md).
@@ -1574,7 +1937,7 @@ $nodeResults = Invoke-Command -ComputerName $nodes -ArgumentList $GhostPathPatte
         foreach ($dvd in ($vm | Get-VMDvdDrive -ErrorAction SilentlyContinue)) {
             if ($dvd.Path -and ($dvd.Path -match $Pattern)) { $refs += $dvd.Path }
         }
-        foreach ($d in ($vm | Get-VMHardDiskDrive -ErrorAction SilentlyContinue)) {
+        foreach ($d in ($vm | Get-VMHardDiskDrive -ErrorAction Stop)) {
             # Walk the FULL parent chain, not just the attached path. Checking only the
             # attached disk lets a differencing/checkpoint PARENT sitting on a ghost root
             # pass verification, which is the exact data-loss case Step 2A warns about.
@@ -1656,11 +2019,11 @@ Get-ClusterResource | ForEach-Object {
     $r = $_
     try {
         Get-ClusterParameter -InputObject $r -ErrorAction Stop | ForEach-Object {
-            # Match strings AND string arrays: a multi-valued parameter holding a ghost path
-            # was skipped entirely by a bare -is [string] test.
-            if (($_.Value -is [string] -or $_.Value -is [string[]]) -and
-                (@($_.Value) -match $GhostPathPattern)) {
-                [pscustomobject]@{ Resource = $r.Name; Parameter = $_.Name; Value = $_.Value }
+            $p = $_
+            foreach ($value in @($p.Value)) {
+                if (($value -is [string]) -and ($value -match $GhostPathPattern)) {
+                    [pscustomobject]@{ Resource = $r.Name; Parameter = $p.Name; Value = $value }
+                }
             }
         }
     }
