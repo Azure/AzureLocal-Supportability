@@ -10,8 +10,11 @@ The preferred resolution is to sign in interactively to each affected node using
 
 - Older .NET runtime patch-version folders remain after an update and the required restart.
 - Multiple patch versions of the same runtime are present.
+- Security scanning tools might flag older installs.
 
-The presence of multiple versions alone does not establish that cleanup is required. Applications can require different .NET versions to be installed side by side.
+The presence of multiple versions alone does not establish that cleanup is required. Applications can require different .NET versions to be installed side by side. Older patch versions may be cleanup candidates, but their presence alone does not establish that they are unused or safe to remove.
+
+A security finding does not necessarily indicate leftover files or multiple installed versions. The installed runtime itself may require an update. Check the reported version and installation path, and confirm that the applicable Azure Local updates have been installed before choosing a cleanup method.
 
 ## Before you begin
 
@@ -22,6 +25,41 @@ The presence of multiple versions alone does not establish that cleanup is requi
 - For remote execution, use your organization's approved PowerShell remoting configuration and administrative access.
 
 > **Important:** Do not remove an older major version solely because a newer major version is installed. Applications and platform components may still require it.
+
+You can check if there are multiple installed versions using the following scripts,
+
+```powershell
+# Replace these with real names
+$servers = @("ServerA", "ServerB", "etc")
+
+# Default 64-bit paths
+[string[]]$folders = @(
+    "C:\Program Files\dotnet\shared\Microsoft.NETCore.App\",
+    "C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\",
+    "C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App\"
+)
+
+# This will print out the machine / folder / and versions
+Invoke-Command -ComputerName $servers -ScriptBlock {
+    param($folders)
+    $existing_folders = $folders | Where-Object { Test-Path $_ }
+    foreach ($folder in $existing_folders) {
+        $sub_folders = Get-ChildItem -Path $folder -Directory
+        if ($sub_folders.Count -gt 1) {
+            $as_versions = $sub_folders | Foreach-Object { try { [version]$_.Name } catch {} }
+            $grouped_versions = $as_versions | Group-Object -Property Major
+            $grouped_versions | ForEach-Object {
+                if ($_.Count -gt 1) {
+                    Write-Verbose "[$env:COMPUTERNAME] Found $($_.Count) runtime-version folders found for major version $($_.Name) under $folder" -Verbose
+                    $_.Group | ForEach-Object {
+                        Write-Verbose "`t`tVersion: $($_)" -Verbose
+                    }
+                }
+            }
+        }
+    }
+} -ArgumentList @(, $folders)
+```
 
 ## Option 1: Sign in as an administrator
 
@@ -35,7 +73,7 @@ Repeat these steps on each affected node. Signing in to one node does not proces
 
 ## Option 2: Process RunOnce remotely
 
-For environments with many nodes, interactive sign-in to every node may be impractical. The following procedure invokes the 64-bit RunOnce executable and, when present, the 32-bit executable through PowerShell remoting. This is equivalent to logging in as an administrator.
+For environments with many nodes, interactive sign-in to every node may be impractical. The following procedure invokes the 64-bit RunOnce executable and, when present, the 32-bit executable through PowerShell remoting. This invokes RunOnce processing remotely without performing a full interactive administrator sign-in.
 
 > **Caution:** RunOnce processing is not limited to .NET cleanup. Other eligible pending RunOnce actions may also execute. User-specific actions run in the remote session's account context, which may differ from an interactive sign-in.
 >
@@ -61,11 +99,11 @@ Invoke-Command -ComputerName $servers -ScriptBlock {
 
 Command completion alone does not establish that .NET cleanup succeeded. Verify the runtime inventory and remaining artifacts on every target node.
 
-## Option 3: Manually remove obsolete runtime folders (last resort)
+## Option 3: Delete .NET Folders (last resort)
 
 Use manual removal only after the exact obsolete versions have been reviewed and confirmed safe to remove. For installer-managed installations, deleting folders is not a general substitute for uninstalling .NET.
 
-The shared-runtime location is:
+The default 64-bit shared-runtime locations are:
 
 ```text
 C:\Program Files\dotnet\shared\Microsoft.NETCore.App\<Version>
@@ -73,32 +111,7 @@ C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\<Version>
 C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App\<Version>
 ```
 
-If you know the exact version that is impacting you then you can use this to find the machines that are impacted. In addition, there is a single line that you can uncomment if you want to have the script do the cleanup. I would first do this with the line commented out and once you feel confident then you can run it with the line uncommented. Please read the paragraph after the script to understand what you should do before you delete to ensure you do not delete the wrong thing.
-
-```powershell
-$version = "<Exact version you want to check. example: 10.0.15>" 
-# Replace these
-$servers = @("ServerA", "ServerB") 
-
-[string[]]$folders = @(
-    "C:\Program Files\dotnet\shared\Microsoft.NETCore.App\$($version)",
-    "C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\$($version)",
-    "C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App\$($version)"
-)
-
-Invoke-Command -ComputerName $servers -ScriptBlock {
-    param([string[]]$folders)
-        Write-Verbose "Checking folders on $($env:COMPUTERNAME) ; Folders to check: $($folders -join ', ')" -Verbose
-        foreach($folder in $folders) {
-            if (Test-Path $folder) {
-                Write-Verbose "$($env:COMPUTERNAME) is impacted found folder: $($folder)" -Verbose
-
-                # IF YOU ARE VERY CONFIDENT YOU CAN UNCOMMENT OUT THE FOLLOWING LINE TO DO THE CLEANUP
-                # Remove-Item $folder -Recurse -Force
-            }
-        }
-} -ArgumentList @(,$folders)
-```
+If you know the exact version that is impacting you then you can use this to find the machines that are impacted. In addition, there is a single line that you can uncomment if you want to have the script do the cleanup. I would first do this with the line commented out and once you feel confident then you can run it with the line uncommented.
 
 Before removing a version folder:
 
@@ -116,9 +129,39 @@ Do not:
 - Delete SDKs, host components, or unrelated .NET files.
 - Force deletion of files that remain in use.
 
-An automated deletion script is intentionally not provided. Removal requires environment-specific dependency checks; identifying an older version does not establish that it is safe to delete.
-
 If there is uncertainty about a version or its dependencies, contact Microsoft Support before removing it.
+
+The script does not determine whether removal is safe. Complete the dependency and maintenance checks before enabling deletion.
+
+```powershell
+$version = "<Exact version you want to check. example: 10.0.15>"
+
+if ($version -notmatch '^\d+\.\d+\.\d+$') {
+    throw 'Specify an exact stable runtime version, such as 10.0.14.'
+}
+
+# Replace these
+$servers = @("ServerA", "ServerB")
+
+[string[]]$folders = @(
+    "C:\Program Files\dotnet\shared\Microsoft.NETCore.App\$($version)",
+    "C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\$($version)",
+    "C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App\$($version)"
+)
+
+Invoke-Command -ComputerName $servers -ScriptBlock {
+    param([string[]]$folders)
+        Write-Verbose "Checking folders on $($env:COMPUTERNAME) ; Folders to check: $($folders -join ', ')" -Verbose
+        foreach($folder in $folders) {
+            if (Test-Path -LiteralPath $folder -PathType Container) {
+                Write-Verbose "$($env:COMPUTERNAME) contains the specified version folder: $($folder)" -Verbose
+
+                # IF YOU ARE VERY CONFIDENT YOU CAN UNCOMMENT OUT THE FOLLOWING LINE TO DO THE CLEANUP
+                # Remove-Item -LiteralPath $folder -Recurse -Force
+            }
+        }
+} -ArgumentList @(,$folders)
+```
 
 ## Verify installed runtimes
 
@@ -184,28 +227,15 @@ An older patch is a cleanup candidate only when a replacement patch is installed
 
 The following examples are illustrative, not a list of affected versions:
 
-| Versions in the same runtime family and architecture | Potential cleanup candidate, subject to dependency review | Retain |
-|---|---|---|
-| `10.0.14`, `10.0.15`, `8.0.32` | `10.0.14` | `10.0.15`, `8.0.32` |
-| `8.0.32`, `10.0.15` | None based on this comparison | Both |
-| `9.0.10`, `10.0.15` | None based on this comparison | Both |
+| Versions in the same runtime family and architecture | Potential cleanup candidate, subject to dependency review | Retain              |
+| ---------------------------------------------------- | --------------------------------------------------------- | ------------------- |
+| `10.0.14`, `10.0.15`, `8.0.32`                       | `10.0.14`                                                 | `10.0.15`, `8.0.32` |
+| `8.0.32`, `10.0.15`                                  | None based on this comparison                             | Both                |
+| `9.0.10`, `10.0.15`                                  | None based on this comparison                             | Both                |
 
 **Do not remove .NET 8 or .NET 9 solely because .NET 10 is installed.**
 
 Retaining a required major version does not remove the need to keep it on an appropriate supported and serviced release.
-
-## Manual removal
-
-If deferred cleanup does not complete, contact Microsoft Support before manually removing runtime folders.
-
-Do not:
-
-- Remove an entire runtime-family directory.
-- Remove a major version merely because a newer major version exists.
-- Delete SDKs, host components, or unrelated .NET files.
-- Force deletion of files that remain in use.
-
-For installer-managed installations, deleting folders is not a general substitute for the appropriate supported uninstall procedure.
 
 ## Verify cleanup
 
@@ -223,7 +253,7 @@ Collect the following for Microsoft Support:
 - Azure Local release and update version.
 - Affected node names.
 - Runtime inventories before and after the attempt.
-- Relevant remaining runtime-folder paths.
+- Relevant remaining 64-bit runtime-folder paths.
 - Whether the update and required restart completed.
 - Whether an interactive administrator sign-in occurred on each node.
 - Which cleanup method was attempted.
