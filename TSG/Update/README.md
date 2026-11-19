@@ -16,3 +16,4 @@
 * [2503 UpdatePrerequisites Failure: Remove older extensions (akshybrid, connectedmachine)](./UpdatePrerequisites-Failure-Remove-Older-Extensions.md) 
 * [Type 'UpdateArbAndExtensions' of Role 'MocArb' raised an exception: 'CredentialAdaptor' object has no attribute 'signed_session'](./Type-'UpdateArbAndExtensions'-of-Role-'MocArb'-raised-an-exception%253A-'CredentialAdaptor'-object-has-no-attribute-'signed_session'.md)
 * [Update Hangs after Secret Rotation](Update-Hangs-after-Secret-Rotation.md)
+* [Complete cleanup of older .NET runtime installations on Azure Local](Complete-cleanup-of-older-.NET-runtime-installations-on-Azure-Local.md)
