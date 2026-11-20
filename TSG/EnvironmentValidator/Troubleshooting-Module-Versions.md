@@ -71,4 +71,4 @@ Write-Host "Final installed module:"
 Write-Host ($FinalModule | Format-Table Name, Version, Path -AutoSize | Out-String)
 ```
 
-The output should contain a single module where the path is C:\Program Files\WindowsPowerShell\Modules\AzStackHci.Environment (without a version number leaf).
+The output should contain a single module whose path is `C:\Program Files\WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker\AzStackHci.EnvironmentChecker.psd1`, with no version-number folder in the path (for example, not `...\AzStackHci.EnvironmentChecker\10.2504.0.2040\AzStackHci.EnvironmentChecker.psd1`).
