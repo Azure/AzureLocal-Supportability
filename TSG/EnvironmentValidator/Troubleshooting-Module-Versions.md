@@ -1,3 +1,23 @@
+<!-- tsg-metadata
+{
+  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "document_type": "troubleshoot",
+  "products": ["Azure Local"],
+  "detector": {
+    "type": "command",
+    "signal": "Get-Module -Name AzStackHci.EnvironmentChecker -ListAvailable | Where-Object {$_.Path -like \"*$($_.Version)*\"}"
+  },
+  "validation": {
+    "fidelity_level": "L4",
+    "technical_grade": "A",
+    "reproduction_substrate": "hardware",
+    "automation_status": "proven",
+    "last_validated": "2026-11-20",
+    "spec_ref": "AzStackHci_EnvironmentChecker_ModuleVersions"
+  }
+}
+-->
+
 # Troubleshoot Environment Checker module versions
 
 ## Table of contents
@@ -22,7 +42,7 @@
 
 | Date | Summary |
 | --- | --- |
-| 2026-11-20 | Corrected the expected inbox module path and the Issue Validation command. Added the error that newer builds show, steps for module files that are still in use, commands for all machines, and guidance to verify, escalate, and prevent the problem. |
+| 2026-11-20 | Corrected the expected inbox module path and the Issue Validation command. Added the error that newer builds show, steps for module files that are still in use, commands for all machines, and guidance to verify, escalate, and prevent the problem. Added the metadata marker. Step 1 now lists the exact processes, including remote sessions, that hold the external copy's files. |
 
 ## At a glance
 
@@ -85,7 +105,7 @@ The system health check (`Invoke-SolutionUpdatePrecheck -SystemHealth`) does not
 ## Where you can see this problem
 
 - **PowerShell on each machine:** the check in [Issue Validation](#issue-validation) lists the external copy.
-- **Azure portal:** the failed step shows the error from [Symptoms](#symptoms), under **Deployments** for a deployment, or in the failure details under **Updates** for a solution update.
+- **Azure portal:** the failed step shows the error from [Symptoms](#symptoms), under **Deployments** for a deployment, or in the failure details under **Updates** for a solution update. This follows the documented behavior for failed steps; it was not reproduced during validation of this article.
 - **Log files on the machine:** the deployment log for the failed step in `C:\CloudDeployment\Logs`, for example `EnvironmentValidatorFull.<date>.log` during deployment, contains `Externally installed module(s) found for AzStackHci.EnvironmentChecker` and `Attempting to uninstall`, followed by the result or the error.
 - **Windows event logs:** the error does not appear in the Windows event logs.
 - **Cluster log:** the error does not appear in the cluster log (`Get-ClusterLog`), because no cluster resource changes state.
@@ -140,19 +160,35 @@ How to read the output for each machine:
 
 Run these steps on each affected machine. None of them affects running VMs or needs a maintenance window.
 
-### Step 1: Find PowerShell sessions that might hold the files
+### Step 1: Find the processes that hold the files
 
-[READ-ONLY] List the PowerShell processes on this machine, with their owner and start time:
+[READ-ONLY] List the processes on this machine that have files loaded from an external copy, with their owner and start time. Remote PowerShell sessions appear as `wsmprovhost`.
 
 ```powershell
-Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" |
-    Select-Object ProcessId, CreationDate, @{ Name = 'Owner'; Expression = { (Invoke-CimMethod -InputObject $_ -MethodName GetOwner).User } }, CommandLine |
-    Format-Table -AutoSize -Wrap
+$root = Join-Path $env:ProgramFiles "WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker"
+$folders = @(Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -as [version] })
+$holders = foreach ($folder in $folders) {
+    Get-Process | Where-Object { $_.Modules.FileName -like "$($folder.FullName)\*" } | ForEach-Object {
+        $cim = Get-CimInstance Win32_Process -Filter "ProcessId = $($_.Id)"
+        [pscustomobject]@{
+            Folder      = $folder.Name
+            ProcessId   = $_.Id
+            Name        = $_.ProcessName
+            Owner       = (Invoke-CimMethod -InputObject $cim -MethodName GetOwner).User
+            StartTime   = $_.StartTime
+            CommandLine = $cim.CommandLine
+        }
+    }
+}
+if ($holders) { $holders | Format-Table -AutoSize -Wrap } else { Write-Output "No process has files loaded from an external copy." }
 ```
+
+- **Processes listed:** continue with Step 2.
+- **No process listed:** the files are not in use. Go to Step 3.
 
 ### Step 2: Close those sessions
 
-[LOW RISK] Close the PowerShell windows and remote sessions that you or your team started on this machine, especially any used to run the Environment Checker. Do not stop processes you do not recognize; Azure Local services also run PowerShell. To end a session that you cannot close normally, use its `ProcessId` from Step 1:
+[LOW RISK] Close the PowerShell windows and remote sessions from Step 1 that you or your team started, especially any used to run the Environment Checker. For a `wsmprovhost` process, close the remote session from the machine where you opened it (or exit `Enter-PSSession` and run `Remove-PSSession`). Do not stop processes you do not recognize; Azure Local services also run PowerShell. To end a session that you cannot close normally, use its `ProcessId` from Step 1:
 
 ```powershell
 Stop-Process -Id 1234   # Replace 1234 with the ProcessId of a session you started.
