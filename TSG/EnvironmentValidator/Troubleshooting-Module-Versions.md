@@ -19,11 +19,18 @@ Type 'ValidateConnectivity' of Role 'EnvironmentValidator' raised an exception:
 }
 ```
 
+The example above is from an older build (10.2504). On newer builds (confirmed on 10.2510.0.2100), the automation removes an external copy by itself and fails only when it cannot delete the module files, usually because a process still has them loaded. The error then reads:
+
+```
+Unable to remove module files at C:\Program Files\WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker\<version>. Error: Access to the path '<file>' is denied.. Please follow https://aka.ms/envchkrversiontsg to remove the module manually before retrying lifecycle operation.
+```
+
 # Issue Validation
 
 If impacted, when the following PowerShell is run on a node, it returns modules which have been via Install-Module.
 
 ```
+$moduleName = "AzStackHci.EnvironmentChecker"
 Get-Module -Name $moduleName -ListAvailable | Where-Object {$_.Path -like "*$($_.Version)*"}
 ```
 
@@ -72,3 +79,5 @@ Write-Host ($FinalModule | Format-Table Name, Version, Path -AutoSize | Out-Stri
 ```
 
 The output should contain a single module whose path is `C:\Program Files\WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker\AzStackHci.EnvironmentChecker.psd1`, with no version-number folder in the path (for example, not `...\AzStackHci.EnvironmentChecker\10.2504.0.2040\AzStackHci.EnvironmentChecker.psd1`).
+
+If `Remove-Item` reports `Access to the path ... is denied` or `The directory is not empty`, a process on the node still has files from that folder loaded. Once the final output shows only the inbox module, you can retry the lifecycle operation. To remove the leftover version-number folder, close any PowerShell sessions on the node that imported the module (or drain and restart the node), then delete the folder.
