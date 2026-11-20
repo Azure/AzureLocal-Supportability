@@ -59,7 +59,7 @@
 | Customer impact | Deployment, update, or add node blocked. No impact on running virtual machines (VMs). |
 | Primary owner | Customer IT or the deployment engineer |
 | Execution surface | on-device |
-| Risk summary | Low. The cleanup removes only module copies in version-number folders. No drain, restart, or maintenance window is needed unless a file stays in use (see Step 4). |
+| Risk summary | Low. The cleanup removes only module copies in version-number folders. No drain, restart, or maintenance window is needed, except in the rare case described in [If the external copy is still listed after Step 3](#if-the-external-copy-is-still-listed-after-step-3). |
 
 ## Executive triage summary
 
@@ -70,7 +70,7 @@
 | Who should act? | The administrator who runs the deployment or update, with local administrator rights on every machine. |
 | Fastest safe next action | Run the read-only check in [Issue Validation](#issue-validation) on every machine. |
 | Estimated duration | About 10 minutes for the cluster, plus the time to retry the operation. |
-| Downtime or workload risk | None for Steps 1 to 3. Step 4 restarts a machine only if a file stays in use and the owning session cannot be found. |
+| Downtime or workload risk | None for Steps 1 to 5. A machine restart is needed only if the external copy is still listed after Step 3. |
 | Escalate immediately if | The inbox module is missing from the Issue Validation output, or the copy is still listed after Step 4. |
 
 ## Overview
@@ -186,8 +186,8 @@ Run the steps in order on every affected machine. Steps 1 to 3 do not affect run
 | --- | --- | --- | --- | --- |
 | 1 | [READ-ONLY] | List PowerShell processes that could have the module loaded. | A list of PowerShell processes with their owner and start time. | None. |
 | 2 | [LOW RISK] | Close the PowerShell windows and remote sessions that you or your team started on this machine, especially any used to run the Environment Checker. | Those processes are gone. | Do not stop processes you do not recognize. Azure Local services also run PowerShell. |
-| 3 | [LOW RISK] | Run the cleanup script. It unloads, uninstalls, and deletes only copies in version-number folders. | The final output lists only the inbox module. | `Remove-Item` reports `Access to the path ... is denied` or `The directory is not empty`. Go to Step 4. |
-| 4 | [LOW RISK], or [MEDIUM RISK] if a restart is needed | Delete leftover version-number folders. If the files are still in use and you cannot find the session, drain and restart the machine first. | No version-number folders remain. | The files are still in use after a restart. [Escalate](#escalation-and-evidence). |
+| 3 | [LOW RISK] | Run the cleanup script. It unloads, uninstalls, and deletes only copies in version-number folders. | The final output lists only the inbox module. | `Remove-Item` reports `Access to the path ... is denied` or `The directory is not empty`. If the final output lists only the inbox module, go to Step 4. If it still lists the external copy, see [If the external copy is still listed after Step 3](#if-the-external-copy-is-still-listed-after-step-3). |
+| 4 | [LOW RISK] | Delete leftover version-number folders. | No version-number folders remain. | The files are still in use. Leave the folder until the machine's next planned restart; it does not block the operation. |
 | 5 | [LOW RISK] | Retry the lifecycle operation. | The operation continues past the failed step. | The same error returns. Repeat Issue Validation, then escalate. |
 
 **Step 1** [READ-ONLY]: list PowerShell processes on this machine.
@@ -248,7 +248,7 @@ Write-Host ($FinalModule | Format-Table Name, Version, Path -AutoSize | Out-Stri
 
 The output should contain a single module whose path is `C:\Program Files\WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker\AzStackHci.EnvironmentChecker.psd1`, with no version-number folder in the path (for example, not `...\AzStackHci.EnvironmentChecker\10.2504.0.2040\AzStackHci.EnvironmentChecker.psd1`).
 
-If `Remove-Item` reports `Access to the path ... is denied` or `The directory is not empty`, a process still has files from that folder loaded. The script still removes the files it can, including the module manifest, so the copy usually no longer loads and the final output shows only the inbox module. Continue with Step 4 to delete the leftover folder.
+If `Remove-Item` reports `Access to the path ... is denied` or `The directory is not empty`, a process still has files from that folder loaded. The script still removes the files it can, including the module manifest, so the copy usually no longer loads and the final output shows only the inbox module. Continue with Step 4 to delete the leftover folder. If the final output still lists the external copy, see [If the external copy is still listed after Step 3](#if-the-external-copy-is-still-listed-after-step-3).
 
 To run the cleanup on every machine from one session, save the script above as `Remove-ExternalEnvChecker.ps1` and run:
 
@@ -267,20 +267,16 @@ Get-ChildItem -Path $root -Directory | Where-Object { $_.Name -as [version] } | 
 }
 ```
 
-If this still reports that files are in use, and you could not find the session in Steps 1 and 2, restart the machine to release them [MEDIUM RISK]. On a deployed cluster, drain it first so its VMs move to other nodes, then bring it back:
+If this still reports that files are in use and you could not find the session in Steps 1 and 2, leave the folder for now. Its module manifest is already gone, so it does not load and does not block the lifecycle operation. Delete it with the same command after the machine's next planned restart, rather than restarting the machine for this alone.
 
-```powershell
-Suspend-ClusterNode -Name $env:COMPUTERNAME -Drain -Wait
-Restart-Computer -Force
-```
+### If the external copy is still listed after Step 3
 
-After the machine is back online, sign in again and bring it back into the cluster:
+In rare cases the cleanup cannot delete the module manifest itself. Issue Validation then still lists the copy under `ExternalCopies`, and the lifecycle operation stays blocked. Close the session from Steps 1 and 2 if you can find it, then run Step 3 again. If you cannot find it, restart the machine to release the files [MEDIUM RISK]:
 
-```powershell
-Resume-ClusterNode -Name $env:COMPUTERNAME -Failback Immediate
-```
+- On a deployed cluster, follow the pause and drain procedure in [Suspend and resume Azure Local machines for planned maintenance](https://learn.microsoft.com/azure/azure-local/manage/suspend-resume-cluster-maintenance) so workloads move to other machines before the restart, and resume the machine afterward.
+- Before the cluster exists (during deployment), restart the machine normally.
 
-Before the cluster exists (during deployment), restart the machine without the drain. After the restart, run the Step 4 command again.
+After the restart, run Step 3 again, then Step 4.
 
 **Step 5** [LOW RISK]: retry the lifecycle operation.
 
@@ -297,7 +293,7 @@ Before the cluster exists (during deployment), restart the machine without the d
 | 1 | Not applicable. No state changes. |
 | 2 | Open a new PowerShell session if you still need one. |
 | 3 and 4 | Normally none. The removed copy was not part of Azure Local. If you need the standalone Environment Checker again, reinstall it with `Install-Module -Name AzStackHci.EnvironmentChecker` after the lifecycle operation completes, and remove it again before the next one. |
-| 4 (restart) | If you drained a node, run `Resume-ClusterNode -Name $env:COMPUTERNAME -Failback Immediate` on it after it is back online. |
+| Restart (rare case) | Resume the machine as described in the pause and drain procedure. |
 
 ## Verify the fix
 
@@ -317,7 +313,8 @@ Do not use the system health check to confirm this fix. It does not check for ex
 Open a support request with Microsoft if any of these is true:
 
 - The inbox module is missing from `AllAvailableModules`.
-- An external copy or leftover folder remains after Steps 1 to 4, including after a restart.
+- The external copy is still listed after you restarted the machine and ran Step 3 again.
+- A leftover version-number folder still cannot be deleted after the machine has restarted.
 - The same error returns after the retry while Issue Validation shows no external copy.
 
 Include this evidence:
@@ -360,3 +357,4 @@ Get-Module AzStackHci.EnvironmentChecker -ListAvailable | Where-Object {$_.Path 
 - [Troubleshoot solution updates for Azure Local](https://learn.microsoft.com/azure/azure-local/update/update-troubleshooting-23h2)
 - [Understand update phases for Azure Local](https://learn.microsoft.com/azure/azure-local/update/update-phases-23h2)
 - [Deploy Azure Local using the Azure portal](https://learn.microsoft.com/azure/azure-local/deploy/deploy-via-portal)
+- [Suspend and resume Azure Local machines for planned maintenance](https://learn.microsoft.com/azure/azure-local/manage/suspend-resume-cluster-maintenance)
