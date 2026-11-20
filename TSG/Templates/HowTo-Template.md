@@ -68,8 +68,8 @@ How-To Template
     <td>{Expected operator time and elapsed time. Include whether the task needs a maintenance window.}</td>
   </tr>
   <tr>
-    <th style="text-align:left; width: 220px;">Overall action type and risk</th>
-    <td>{Use [READ-ONLY] when the guide only gathers information and state that risk is not applicable because no state changes. For state-changing guides, choose one: [LOW RISK], [MEDIUM RISK], [HIGH RISK]. Explain the reason in one sentence.}</td>
+    <th style="text-align:left; width: 220px;">What this guide changes</th>
+    <td>{If the guide only gathers information, write "This guide changes nothing." Otherwise, state in one or two sentences what the guide changes, what it does not affect, and what to plan for, such as a drain or maintenance window.}</td>
   </tr>
   <tr>
     <th style="text-align:left; width: 220px;">Customer update cadence</th>
@@ -130,8 +130,8 @@ Document safe alternatives and rejected approaches so the reader knows what not 
 
 | Option | Status | Why it is safe, preferred, or rejected | Evidence or approval needed |
 | --- | --- | --- | --- |
-| {Preferred safe path} | {Use} | {Why this is the lowest-risk approved path.} | {Required evidence or approval.} |
-| {Alternative path} | {Use only when...} | {Tradeoff, added risk, or prerequisite.} | {Required evidence or approval.} |
+| {Preferred safe path} | {Use} | {Why this is the least disruptive approved path.} | {Required evidence or approval.} |
+| {Alternative path} | {Use only when...} | {Tradeoff, added impact, or prerequisite.} | {Required evidence or approval.} |
 | {Rejected approach} | {Do not use} | {Why this approach is unsafe, unsupported, untested, or outside the guide scope.} | {Who can approve or replace it, if anyone.} |
 
 ## Prerequisites
@@ -148,12 +148,12 @@ Complete these checks before starting. Do not proceed until every required item 
 
 ## Safety and impact
 
-Classify each action before it appears in this guide:
+Describe the impact of each action in plain words before it appears in this guide:
 
-- [READ-ONLY]: Diagnostics, checks, and information gathering that do not change state. Risk is not applicable because no state changes.
-- [LOW RISK]: State-changing actions with no expected customer workload impact and a documented rollback.
-- [MEDIUM RISK]: State-changing actions that can affect management operations, validation results, or a single node, but should not interrupt running workloads when prerequisites are met.
-- [HIGH RISK]: State-changing actions that can interrupt workloads, require node drain or reboot, alter security posture, modify firmware, delete resources, or require coordinated maintenance.
+- Read-only steps: diagnostics, checks, and information gathering that do not change state. Do not add a label. Optionally write "This step changes nothing."
+- State-changing steps: add a `**Changes:**` line that says what the step changes and what it does not affect, for example "**Changes:** removes the extra module folder. Running VMs are not affected."
+- Disruptive steps: steps that can affect management operations, a single node, or workload placement, or that need a restart, drain, or maintenance window. Also add a `**Plan for:**` line, for example "**Plan for:** drain the machine and schedule a maintenance window."
+- Steps that can't be undone, can interrupt running workloads, alter security posture, modify firmware, delete resources, or lose data: also add a `> [!WARNING]` callout that states the consequence, for example "This can't be undone." or "Running VMs stop if the machine is not drained first."
 
 Document the maintenance impact before any action that changes state:
 
@@ -222,12 +222,13 @@ Complete this contract before the procedure. It is the compact checklist for lit
 
 ### Action checklist
 
-Every generated action must complete each row. Use [READ-ONLY] for diagnostics and state that risk is not applicable because no state changes. Use risk labels only for state-changing actions.
+Every generated action must complete each row. Read-only diagnostics need no impact statement. Write `**Changes:**` and, when needed, `**Plan for:**` statements only for state-changing actions.
 
 | Required item | Author prompt |
 | --- | --- |
-| Action type | {Use [READ-ONLY] for diagnostics or information gathering. Use state-changing when the action modifies configuration, data, resources, firmware, or workload state.} |
-| Risk label for state-changing action | {Required only when action type is state-changing. Choose one: [LOW RISK], [MEDIUM RISK], or [HIGH RISK]. For [READ-ONLY], write "not applicable, no state changes."} |
+| Action type | {Use read-only for diagnostics or information gathering. Use state-changing when the action modifies configuration, data, resources, firmware, or workload state.} |
+| What changes | {Required only when action type is state-changing. Write a `**Changes:**` statement that says what changes and what is not affected. For read-only actions, write "This step changes nothing."} |
+| Plan for | {Required only for disruptive actions. State what to arrange first, such as a drain, maintenance window, or recovery keys. Add a `> [!WARNING]` callout when the action can't be undone, can interrupt running workloads, changes firmware or security posture, or can lose data.} |
 | Privilege required | {Least-privilege role, RBAC assignment, local right, or tool access required for this action.} |
 | Workload impact | {State whether the action affects VM uptime, app traffic, live migration, storage paths, networking, security posture, or update flow.} |
 | Drain or maintenance approval | {State whether VM drain, node pause, reboot, maintenance window, or customer approval is required.} |
@@ -256,13 +257,15 @@ Use this tracker when the procedure repeats across nodes, clusters, resource gro
 
 {Explain the scenario or configuration this procedure covers. State whether the actions are per node, per cluster, per resource group, per subscription, or per tenant.}
 
-Repeat the following action pattern for every generated step. Every action must include action type, pre-check, action, expected result or output, stop condition, rollback, and verification. Use [READ-ONLY] for diagnostics and state that rollback and risk are not applicable because no state changes. Use [LOW RISK], [MEDIUM RISK], or [HIGH RISK] only for state-changing actions.
+Repeat the following action pattern for every generated step. Every action must include action type, pre-check, action, expected result or output, stop condition, rollback, and verification. For read-only diagnostics, state that rollback is not applicable because no state changes, and add no label. Add `**Changes:**`, `**Plan for:**`, and warning callouts only for state-changing actions.
 
 ### Step 1: {Action description}
 
-**Action type:** {Use [READ-ONLY] for diagnostics or information gathering and state that risk is not applicable because no state changes. Use state-changing when the action modifies configuration, data, resources, firmware, or workload state.}
+**Action type:** {Use read-only for diagnostics or information gathering; you can add "This step changes nothing." Use state-changing when the action modifies configuration, data, resources, firmware, or workload state.}
 
-**Risk label for state-changing action:** {Required only for state-changing actions. Choose one: [LOW RISK], [MEDIUM RISK], [HIGH RISK]. For [READ-ONLY], write "not applicable, no state changes."}
+**Changes:** {Required only for state-changing actions. State concretely what this step changes and what it does not affect, for example "removes the extra module folder. Running VMs are not affected." Omit this line for read-only steps.}
+
+**Plan for:** {Required only for disruptive steps, such as a restart, drain, node or workload interruption, or management interruption. State what to arrange first, such as draining the machine, scheduling a maintenance window, or having recovery keys. If the step can't be undone, can interrupt running workloads, changes firmware or security posture, or can lose data, also add a `> [!WARNING]` callout that states the consequence in plain words.}
 
 **Privilege required:** {Least-privilege role, RBAC assignment, local right, or tool access required for this step.}
 
@@ -294,7 +297,7 @@ Repeat the following action pattern for every generated step. Every action must 
 {ExpectedOutput}
 ```
 
-**Stop condition:** {State the exact output, error, state, or risk signal that means the reader must stop before continuing.}
+**Stop condition:** {State the exact output, error, state, or impact signal that means the reader must stop before continuing.}
 
 **Rollback for this step:** {State how to undo this step if it fails or produces the wrong output. If no rollback exists, explain why and require approval before the action.}
 
@@ -308,9 +311,11 @@ Repeat the following action pattern for every generated step. Every action must 
 
 ### Step 2: {Next action description}
 
-**Action type:** {Use [READ-ONLY] for diagnostics or information gathering and state that risk is not applicable because no state changes. Use state-changing when the action modifies configuration, data, resources, firmware, or workload state.}
+**Action type:** {Use read-only for diagnostics or information gathering; you can add "This step changes nothing." Use state-changing when the action modifies configuration, data, resources, firmware, or workload state.}
 
-**Risk label for state-changing action:** {Required only for state-changing actions. Choose one: [LOW RISK], [MEDIUM RISK], [HIGH RISK]. For [READ-ONLY], write "not applicable, no state changes."}
+**Changes:** {Required only for state-changing actions. State concretely what this step changes and what it does not affect, for example "removes the extra module folder. Running VMs are not affected." Omit this line for read-only steps.}
+
+**Plan for:** {Required only for disruptive steps, such as a restart, drain, node or workload interruption, or management interruption. State what to arrange first, such as draining the machine, scheduling a maintenance window, or having recovery keys. If the step can't be undone, can interrupt running workloads, changes firmware or security posture, or can lose data, also add a `> [!WARNING]` callout that states the consequence in plain words.}
 
 **Privilege required:** {Least-privilege role, RBAC assignment, local right, or tool access required for this step.}
 
@@ -392,7 +397,7 @@ Unexpected: {Unexpected value, status, or message that triggers a stop condition
 
 **Likely cause:** {Most likely cause, with evidence.}
 
-**Action:** {Safe next step. If it is diagnostic, label it [READ-ONLY] and state risk is not applicable because no state changes. If it changes state, use the same action contract as the procedure: action type, risk label, privilege, workload or maintenance gate, pre-check, action, expected result or output, stop condition, rollback, expected rollback output, rollback verification, verification, and escalation.}
+**Action:** {Safe next step. If it is diagnostic, state that it changes nothing. If it changes state, use the same action contract as the procedure: action type, `**Changes:**` and `**Plan for:**` statements, privilege, workload or maintenance gate, pre-check, action, expected result or output, stop condition, rollback, expected rollback output, rollback verification, verification, and escalation.}
 
 **Escalate when:** {Condition that requires Microsoft CSS, product group, OEM, network team, partner SI, or customer IT escalation.}
 
@@ -402,7 +407,7 @@ Unexpected: {Unexpected value, status, or message that triggers a stop condition
 
 **Likely cause:** {Most likely cause, with evidence.}
 
-**Action:** {Safe next step. If it is diagnostic, label it [READ-ONLY] and state risk is not applicable because no state changes. If it changes state, use the same action contract as the procedure: action type, risk label, privilege, workload or maintenance gate, pre-check, action, expected result or output, stop condition, rollback, expected rollback output, rollback verification, verification, and escalation.}
+**Action:** {Safe next step. If it is diagnostic, state that it changes nothing. If it changes state, use the same action contract as the procedure: action type, `**Changes:**` and `**Plan for:**` statements, privilege, workload or maintenance gate, pre-check, action, expected result or output, stop condition, rollback, expected rollback output, rollback verification, verification, and escalation.}
 
 **Escalate when:** {Condition that requires escalation.}
 
@@ -461,7 +466,7 @@ After verification passes, state what happens next so the work is closed cleanly
 | Monitor | {Signals, logs, portal surfaces, or customer symptoms to watch after completion, and for how long.} |
 | Close or hand back | {Who accepts the result, what evidence they receive, and how the task is closed or returned to the owning team.} |
 | Follow-up work | {Any deferred cleanup, documentation, ticket update, support handoff, or future automation item.} |
-| Customer update | {Plain-language completion note, remaining risk, and next update cadence if monitoring continues.} |
+| Customer update | {Plain-language completion note, remaining open items, and next update cadence if monitoring continues.} |
 
 ## References
 

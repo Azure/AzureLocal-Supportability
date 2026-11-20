@@ -80,13 +80,14 @@ Reference [Markdown Snippets](./TSG/Templates/Markdown-Snippets.md) for helpful 
 All PowerShell/scripts **MUST be safe for production**
 
 - Use placeholders like `<hostname>` instead of real values
-- Label state-changing commands [LOW RISK], [MEDIUM RISK], or [HIGH RISK]
+- Describe what each state-changing command changes with a `**Changes:**` line, and what it does not affect
+- Add `**Plan for:**` for disruptive steps, and a `> [!WARNING]` callout for steps that can't be undone or can interrupt running workloads
 - Include a pre-check, expected output, stop condition, rollback, and verification
 - Add comments explaining what commands do
 - Test all examples before submitting
 
-For a read-only command, use [READ-ONLY] as the action type and record risk as not applicable.
-Do not label a non-mutating check [LOW RISK], because that blurs observation and state change.
+Read-only commands need no label. Optionally add one short sentence, such as "This step changes nothing."
+See [Describing step impact](.github/copilot-instructions.md#describing-step-impact) for examples.
 
 ```powershell
 # Good: Check state before changing
