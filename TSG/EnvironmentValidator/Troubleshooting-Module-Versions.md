@@ -42,7 +42,7 @@
 
 | Date | Summary |
 | --- | --- |
-| 2026-11-20 | Corrected the expected inbox module path and the Issue Validation command. Added the error that newer builds show, steps for module files that are still in use, commands for all machines, and guidance to verify, escalate, and prevent the problem. Added the metadata marker. Step 1 now lists the exact processes, including remote sessions, that hold the external copy's files. |
+| 2026-11-20 | Corrected the expected inbox module path and the Issue Validation command. Added the error that newer builds show, steps for module files that are still in use, commands for all machines, and guidance to verify, escalate, and prevent the problem. Added the metadata marker. Step 1 now lists every PowerShell session that could hold the external copy's files, including remote sessions, and the impact labels are replaced with plain statements of what each step changes. |
 
 ## At a glance
 
@@ -54,7 +54,7 @@
 | Is it a network, hardware, or OEM problem? | No. The older error mentions `ValidateConnectivity`, but no network, firmware, or driver change is needed. |
 | Who should act | An administrator with local administrator rights on every machine. |
 | Time to fix | About 10 minutes, plus the time to retry the operation. |
-| Risk | Low. The fix removes only the extra copy. No restart or maintenance window is needed, except in the rare case described in [If the external copy is still listed](#if-the-external-copy-is-still-listed). |
+| Impact | The fix removes only the extra copy. Running VMs are not affected. No restart or maintenance window is needed, except in the rare case described in [If the external copy is still listed](#if-the-external-copy-is-still-listed). |
 | First step | Run the check in [Issue Validation](#issue-validation). |
 
 ## Overview
@@ -121,7 +121,7 @@ The system health check (`Invoke-SolutionUpdatePrecheck -SystemHealth`) does not
 
 ## Issue Validation
 
-[READ-ONLY] Run this in an elevated PowerShell session on each machine. It lists external copies, meaning module copies whose path contains their version number.
+Run this in an elevated PowerShell session on each machine. It changes nothing; it lists external copies, meaning module copies whose path contains their version number.
 
 ```powershell
 $moduleName = "AzStackHci.EnvironmentChecker"
@@ -160,35 +160,31 @@ How to read the output for each machine:
 
 Run these steps on each affected machine. None of them affects running VMs or needs a maintenance window.
 
-### Step 1: Find the processes that hold the files
+### Step 1: Find the PowerShell sessions that could hold the files
 
-[READ-ONLY] List the processes on this machine that have files loaded from an external copy, with their owner and start time. Remote PowerShell sessions appear as `wsmprovhost`.
+List the PowerShell processes on this machine, with their owner, start time, and command line. This step changes nothing. Any of them could have loaded files from an external copy. Windows does not report which process loaded a PowerShell module's .NET files, so this step lists every candidate rather than an exact match. Remote PowerShell sessions appear as `wsmprovhost`.
 
 ```powershell
-$root = Join-Path $env:ProgramFiles "WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker"
-$folders = @(Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -as [version] })
-$holders = foreach ($folder in $folders) {
-    Get-Process | Where-Object { $_.Modules.FileName -like "$($folder.FullName)\*" } | ForEach-Object {
-        $cim = Get-CimInstance Win32_Process -Filter "ProcessId = $($_.Id)"
-        [pscustomobject]@{
-            Folder      = $folder.Name
-            ProcessId   = $_.Id
-            Name        = $_.ProcessName
-            Owner       = (Invoke-CimMethod -InputObject $cim -MethodName GetOwner).User
-            StartTime   = $_.StartTime
-            CommandLine = $cim.CommandLine
-        }
+$names = 'powershell', 'pwsh', 'wsmprovhost'
+$candidates = Get-CimInstance Win32_Process | Where-Object { $names -contains [IO.Path]::GetFileNameWithoutExtension($_.Name) -and $_.ProcessId -ne $PID }
+$rows = foreach ($p in $candidates) {
+    [pscustomobject]@{
+        ProcessId   = $p.ProcessId
+        Name        = $p.Name
+        Owner       = (Invoke-CimMethod -InputObject $p -MethodName GetOwner).User
+        StartTime   = $p.CreationDate
+        CommandLine = $p.CommandLine
     }
 }
-if ($holders) { $holders | Format-Table -AutoSize -Wrap } else { Write-Output "No process has files loaded from an external copy." }
+if ($rows) { $rows | Sort-Object StartTime | Format-Table -AutoSize -Wrap } else { Write-Output "No other PowerShell sessions are running on this machine." }
 ```
 
-- **Processes listed:** continue with Step 2.
-- **No process listed:** the files are not in use. Go to Step 3.
+- **Sessions listed:** continue with Step 2.
+- **No sessions listed:** go to Step 3.
 
 ### Step 2: Close those sessions
 
-[LOW RISK] Close the PowerShell windows and remote sessions from Step 1 that you or your team started, especially any used to run the Environment Checker. For a `wsmprovhost` process, close the remote session from the machine where you opened it (or exit `Enter-PSSession` and run `Remove-PSSession`). Do not stop processes you do not recognize; Azure Local services also run PowerShell. To end a session that you cannot close normally, use its `ProcessId` from Step 1:
+**Changes:** ends only the PowerShell sessions you close. Close the PowerShell windows and remote sessions from Step 1 that you or your team started, especially any that ran the Environment Checker or imported `AzStackHci.EnvironmentChecker`. For a `wsmprovhost` process, close the remote session from the machine where you opened it (or exit `Enter-PSSession` and run `Remove-PSSession`). Do not stop processes you do not recognize; Azure Local services also run PowerShell. To end a session that you cannot close normally, use its `ProcessId` from Step 1:
 
 ```powershell
 Stop-Process -Id 1234   # Replace 1234 with the ProcessId of a session you started.
@@ -196,7 +192,7 @@ Stop-Process -Id 1234   # Replace 1234 with the ProcessId of a session you start
 
 ### Step 3: Run the cleanup script
 
-[LOW RISK] Run this script only after Issue Validation listed an external copy. It unloads, uninstalls, and deletes only copies in version-number folders, so it never removes the inbox module.
+**Changes:** unloads, uninstalls, and deletes only copies in version-number folders. The inbox module and running VMs are not affected. Run this script only after Issue Validation listed an external copy.
 
 ```powershell
 $moduleName = "AzStackHci.EnvironmentChecker"
@@ -251,7 +247,9 @@ Invoke-Command -ComputerName $nodes -FilePath .\Remove-ExternalEnvChecker.ps1
 
 #### If the external copy is still listed
 
-In rare cases the script cannot delete the module manifest itself. Issue Validation then still lists the copy under `ExternalCopies`, and the operation stays blocked. Close the session from Steps 1 and 2 if you can find it, then run Step 3 again. If you cannot find it, restart the machine to release the files [MEDIUM RISK]:
+In rare cases the script cannot delete the module manifest itself. Issue Validation then still lists the copy under `ExternalCopies`, and the operation stays blocked. Close the session from Steps 1 and 2 if you can find it, then run Step 3 again. If you cannot find it, restart the machine to release the files.
+
+**Changes:** restarts this machine. On a deployed cluster, drain it first so its VMs move to other machines:
 
 - On a deployed cluster, follow the pause and drain procedure in [Suspend and resume Azure Local machines for planned maintenance](https://learn.microsoft.com/azure/azure-local/manage/suspend-resume-cluster-maintenance), so workloads move to other machines before the restart, and resume the machine afterward.
 - Before the cluster exists (during deployment), restart the machine normally.
@@ -260,7 +258,7 @@ After the restart, run Step 3 again, then Step 4.
 
 ### Step 4: Delete leftover folders
 
-[LOW RISK] Run this after Step 3 shows only the inbox module. It deletes subfolders whose name is a version number and never touches the inbox files, which are not in such a subfolder.
+**Changes:** deletes only subfolders whose name is a version number. The inbox files are not in such a subfolder and are not touched. Run this after Step 3 shows only the inbox module.
 
 ```powershell
 $root = Join-Path $env:ProgramFiles "WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker"
@@ -274,7 +272,7 @@ If this still reports that files are in use and you could not find the session i
 
 ### Step 5: Retry the operation
 
-[LOW RISK] Retry the operation that failed:
+**Changes:** resumes the operation you started. Retry the operation that failed:
 
 | Operation | How to retry |
 | --- | --- |
@@ -284,7 +282,7 @@ If this still reports that files are in use and you could not find the session i
 
 ## Verify the fix
 
-[READ-ONLY] Run the all-machines check in [Issue Validation](#issue-validation) again. On every machine, `ExternalCopies` and `VersionFolders` should be empty, and `AllAvailableModules` should show only `C:\Program Files\WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker\AzStackHci.EnvironmentChecker.psd1`. The operation you retried in Step 5 should continue past the step that failed.
+Run the all-machines check in [Issue Validation](#issue-validation) again. On every machine, `ExternalCopies` and `VersionFolders` should be empty, and `AllAvailableModules` should show only `C:\Program Files\WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker\AzStackHci.EnvironmentChecker.psd1`. The operation you retried in Step 5 should continue past the step that failed.
 
 Do not use the system health check to confirm this fix. It does not check for external copies.
 
@@ -311,7 +309,9 @@ Include this information:
 
 ## Prevention
 
-Azure Local already includes the Environment Checker. If you install it from the PowerShell Gallery to run readiness checks, close that PowerShell window when you finish, then remove the gallery copy from every machine before you start a deployment or update, as described in [Assess your environment with the Environment Checker](https://learn.microsoft.com/azure/azure-local/manage/use-environment-checker). This command removes only copies in version-number folders; it never removes the inbox module.
+Azure Local already includes the Environment Checker. If you install it from the PowerShell Gallery to run readiness checks, close that PowerShell window when you finish, then remove the gallery copy from every machine before you start a deployment or update, as described in [Assess your environment with the Environment Checker](https://learn.microsoft.com/azure/azure-local/manage/use-environment-checker).
+
+**Changes:** unloads the module from the current session and uninstalls only copies in version-number folders. The inbox module is not affected.
 
 ```powershell
 Remove-Module AzStackHci.EnvironmentChecker -Force
