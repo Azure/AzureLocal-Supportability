@@ -54,7 +54,7 @@
 | Is it a network, hardware, or OEM problem? | No. The older error mentions `ValidateConnectivity`, but no network, firmware, or driver change is needed. |
 | Who should act | An administrator with local administrator rights on every machine. |
 | Time to fix | About 10 minutes, plus the time to retry the operation. |
-| Impact | The fix removes only the extra copy. Running VMs are not affected. No restart or maintenance window is needed, except in the rare case described in [If the external copy is still listed](#if-the-external-copy-is-still-listed). |
+| Impact | The fix removes only the extra copy. Running VMs are not affected. No restart or maintenance window is needed, except in the rare case described in [If the external copy is still listed](#if-the-external-copy-is-still-listed). On a single-machine instance, that restart stops all VMs. |
 | First step | Run the check in [Issue Validation](#issue-validation). |
 
 ## Overview
@@ -84,7 +84,7 @@ Type 'ValidateConnectivity' of Role 'EnvironmentValidator' raised an exception:
 Unable to remove module files at C:\Program Files\WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker\1.0.0. Error: Access to the path 'Microsoft.AzureStack.Observability.Standalone.dll' is denied.. Please follow https://aka.ms/envchkrversiontsg to remove the module manually before retrying lifecycle operation.
 ```
 
-The system health check (`Invoke-SolutionUpdatePrecheck -SystemHealth`) does not run this cleanup. A passing health check does not mean that no extra copy is present, so use [Issue Validation](#issue-validation) instead.
+The system health check (`Invoke-SolutionUpdatePrecheck -SystemHealth`) runs the same cleanup on the machine where it runs. If the cleanup fails, the check can keep showing its previous result, so a passing health check does not prove that no extra copy is present. Use [Issue Validation](#issue-validation) instead.
 
 ## Cause
 
@@ -98,7 +98,7 @@ The system health check (`Invoke-SolutionUpdatePrecheck -SystemHealth`) does not
 | --- | --- |
 | Environment Checker | The `AzStackHci.EnvironmentChecker` PowerShell module that runs the Azure Local readiness checks. |
 | Inbox module | The copy that ships with Azure Local, in `C:\Program Files\WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker`. Its files sit directly in that folder, with no version-number subfolder. Never delete it. |
-| External copy | Any other copy, for example one installed with `Install-Module` from the PowerShell Gallery. It lives in a version-number subfolder such as `...\AzStackHci.EnvironmentChecker\10.2411.0.12`. |
+| External copy | Any other copy, for example one installed with `Install-Module` from the PowerShell Gallery. It lives in a version-number subfolder such as `...\AzStackHci.EnvironmentChecker\10.2411.0.12`. Deployment can also leave copies in version-number folders on some machines; they are removed the same way. A listed copy without the error in [Symptoms](#symptoms) is not by itself the cause of a failure. |
 | PowerShell Gallery | The public online repository that `Install-Module` downloads PowerShell modules from. |
 | In use | A process, usually a PowerShell window or remote session, still has files from the external copy loaded, so Windows does not allow them to be deleted. |
 
@@ -106,7 +106,7 @@ The system health check (`Invoke-SolutionUpdatePrecheck -SystemHealth`) does not
 
 - **PowerShell on each machine:** the check in [Issue Validation](#issue-validation) lists the external copy.
 - **Azure portal:** the failed step shows the error from [Symptoms](#symptoms), under **Deployments** for a deployment, or in the failure details under **Updates** for a solution update. This follows the documented behavior for failed steps; it was not reproduced during validation of this article.
-- **Log files on the machine:** the deployment log for the failed step in `C:\CloudDeployment\Logs`, for example `EnvironmentValidatorFull.<date>.log` during deployment, contains `Externally installed module(s) found for AzStackHci.EnvironmentChecker` and `Attempting to uninstall`, followed by the result or the error.
+- **Log files on the machine:** the deployment log for the failed step in `C:\CloudDeployment\Logs`, for example `EnvironmentValidatorFull.<date>.log` during deployment, contains `Externally installed module(s) found for AzStackHci.EnvironmentChecker` and `Attempting to uninstall` (older builds log `Uninstalling`), followed by the result or the error.
 - **Windows event logs:** the error does not appear in the Windows event logs.
 - **Cluster log:** the error does not appear in the cluster log (`Get-ClusterLog`), because no cluster resource changes state.
 - **Failover Cluster Manager:** the error does not appear in Failover Cluster Manager.
@@ -152,13 +152,13 @@ How to read the output for each machine:
 | Result | Meaning | Next step |
 | --- | --- | --- |
 | `ExternalCopies` lists a path | An external copy is present. | Follow Steps 1 to 5 in [Mitigation Details](#mitigation-details). |
-| `ExternalCopies` is empty but `VersionFolders` lists a folder | A leftover folder from a partly removed copy. It no longer loads. | [Step 4](#step-4-delete-leftover-folders). |
+| `ExternalCopies` is empty but `VersionFolders` lists a folder | A leftover folder from a partly removed copy. It no longer loads. | [Step 4](#step-4-delete-leftover-folders). If Step 4 already told you to leave it until the next planned restart, no further action is needed now. |
 | Both are empty and `AllAvailableModules` shows only the inbox path | This machine is not affected. | None. |
 | `AllAvailableModules` does not show the inbox path | The inbox module is missing. | Stop and [contact Microsoft support](#when-to-contact-microsoft-support). |
 
 ## Mitigation Details
 
-Run these steps on each affected machine. None of them affects running VMs or needs a maintenance window.
+Run these steps on each affected machine. None of them affects running VMs or needs a maintenance window, except the restart in [If the external copy is still listed](#if-the-external-copy-is-still-listed) on a single-machine instance.
 
 ### Step 1: Find the PowerShell sessions that could hold the files
 
@@ -249,10 +249,14 @@ Invoke-Command -ComputerName $nodes -FilePath .\Remove-ExternalEnvChecker.ps1
 
 In rare cases the script cannot delete the module manifest itself. Issue Validation then still lists the copy under `ExternalCopies`, and the operation stays blocked. Close the session from Steps 1 and 2 if you can find it, then run Step 3 again. If you cannot find it, restart the machine to release the files.
 
-**Changes:** restarts this machine. On a deployed cluster, drain it first so its VMs move to other machines:
+**Changes:** restarts this machine. On a deployed cluster with more than one machine, drain it first so its VMs move to other machines:
 
-- On a deployed cluster, follow the pause and drain procedure in [Suspend and resume Azure Local machines for planned maintenance](https://learn.microsoft.com/azure/azure-local/manage/suspend-resume-cluster-maintenance), so workloads move to other machines before the restart, and resume the machine afterward.
+- On a deployed cluster with more than one machine, follow the pause and drain procedure in [Suspend and resume Azure Local machines for planned maintenance](https://learn.microsoft.com/azure/azure-local/manage/suspend-resume-cluster-maintenance), so workloads move to other machines before the restart, and resume the machine afterward.
+- On a single-machine instance, there is no other machine to drain to, so the pause and drain procedure does not apply. Plan a maintenance window, and shut down or save the VMs before the restart.
 - Before the cluster exists (during deployment), restart the machine normally.
+
+> [!WARNING]
+> On a single-machine instance, this restart stops all running VMs.
 
 After the restart, run Step 3 again, then Step 4.
 
@@ -277,18 +281,18 @@ If this still reports that files are in use and you could not find the session i
 | Operation | How to retry |
 | --- | --- |
 | Deployment | In the Azure portal, open your Azure Local instance, go to **Deployments**, and select **Resume deployment**. |
-| Solution update | Resume it from the Azure portal, or run `Get-SolutionUpdate \| Where-Object State -eq "InstallationFailed" \| Start-SolutionUpdate`. |
+| Solution update | In the Azure portal, select **Try again** on the failed update. Or run `Get-SolutionUpdate \| Where-Object Version -eq "<version>" \| Start-SolutionUpdate`, replacing `<version>` with the version of the update that failed. This works whether the update failed in the readiness check or during installation. |
 | Upgrade, add node, or repair node | Retry the operation the same way you started it. |
 
 ## Verify the fix
 
-Run the all-machines check in [Issue Validation](#issue-validation) again. On every machine, `ExternalCopies` and `VersionFolders` should be empty, and `AllAvailableModules` should show only `C:\Program Files\WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker\AzStackHci.EnvironmentChecker.psd1`. The operation you retried in Step 5 should continue past the step that failed.
+Run the all-machines check in [Issue Validation](#issue-validation) again. On every machine, `ExternalCopies` should be empty, and `AllAvailableModules` should show only `C:\Program Files\WindowsPowerShell\Modules\AzStackHci.EnvironmentChecker\AzStackHci.EnvironmentChecker.psd1`. `VersionFolders` should also be empty, except for a folder that you deliberately left in place under [Step 4](#step-4-delete-leftover-folders) until the next planned restart. The operation you retried in Step 5 should continue past the step that failed.
 
-Do not use the system health check to confirm this fix. It does not check for external copies.
+Do not use the system health check to confirm this fix. It can keep showing a previous result, and it runs the cleanup only on the machine where it runs.
 
 ## Rollback
 
-Normally there is nothing to roll back. The removed copy was not part of Azure Local. If you need the standalone Environment Checker again, reinstall it with `Install-Module -Name AzStackHci.EnvironmentChecker` after the operation completes, and remove it again before the next one. If you paused and drained a machine, resume it as described in the pause and drain procedure.
+Normally there is nothing to roll back. A copy installed from the PowerShell Gallery was not part of Azure Local, and a copy left behind by deployment is removed by Azure Local itself before each operation. If you need the standalone Environment Checker from the PowerShell Gallery again, reinstall it with `Install-Module -Name AzStackHci.EnvironmentChecker` after the operation completes, and remove it again before the next one. If you paused and drained a machine, resume it as described in the pause and drain procedure.
 
 ## When to contact Microsoft support
 
