@@ -5,10 +5,10 @@
   "products": ["Azure Local"],
   "detector": {"type": "manual", "signal": "Bootstrap Arc registration error 42"},
   "validation": {
-    "fidelity_level": "L2",
-    "technical_grade": "C",
+    "fidelity_level": "L3",
+    "technical_grade": "B",
     "reproduction_substrate": "vm",
-    "automation_status": "ready",
+    "automation_status": "proven",
     "last_validated": "2026-11-23",
     "spec_ref": "AzLocal_ArcRegistration_Error42"
   }
@@ -322,10 +322,13 @@ instead of repeating module downgrades.
 
 ### Issue Validation
 
-In `azcmagent.log`, the `AZCM0042` line for the failed attempt is followed by a
-status code other than 401, for example `status code 403`. The token was
-accepted, so the module and token steps in sections 1 to 3 do not apply; do not
-change modules or request a new token for this pattern.
+In `azcmagent.log` and the console output, the failed `AZCM0042` attempt reports
+an HTTP status other than 401. For example, an Azure Policy assignment that denies
+the machine resource produces a line ending in
+`Code: RequestDisallowedByPolicy httpStatusCode:403`, and the agent also logs
+`Please verify that the login credentials or token used has access to create resources in resource group '<resource-group>'`.
+The token was accepted, so the module and token steps in sections 1 to 3 do not
+apply; do not change modules or request a new token for this pattern.
 
 ### Resolution
 
@@ -371,19 +374,44 @@ with Microsoft support. Also include:
 
 ## Validation status of this article
 
-Validated in a lab on solution 12.2701.1004.15 with Windows PowerShell 5.1:
+Validated in a lab on 2026-11-23 with Windows PowerShell 5.1 and Azure Connected
+Machine agent 1.70.03595.3521. These runs used a disposable Windows Server 2022
+test machine, not an Azure Local image, and throwaway resource groups. The
+article's blocks ran unchanged except for their placeholders. The agent's connect
+command was run directly in place of the initialization command that wraps it;
+the full bootstrap was not run.
 
-- **Token fix (section 3, option 2), real node:** on a disposable test node with
-  Az.Accounts 5.5.3, the unconverted token reproduced exit code 42 with
-  `status code 401`, and the converted token from the token block connected the
-  machine. The agent's connect command was run directly; the full bootstrap was
-  not run on an unregistered node.
-- **Recipe gate, real node:** on a node whose recipe requires Az.Accounts 5.5.3,
-  the section 1 block printed `KEEP-MODULES` and changed no modules.
-- **4.0.2 module path, stand-in only:** no image that requires 4.0.2 was
-  available, so the install-and-remove branch ran against a recorded stand-in,
-  not a real node. The current version of that branch, including the
-  `Get-Module -ListAvailable` inventory and the string-to-version comparison
-  fix, has been exercised only with mocked cmdlets in PowerShell 7, not on
-  Windows PowerShell 5.1 or a real node.
-- **Not validated:** device code sign-in (option 1) and the section 4 checks.
+- **Token cause (sections 2 and 3, option 2):** with Az.Accounts 5.5.3, the
+  unconverted token reproduced exit code 42 with `AZCM0042` and
+  `status code 401` (`InvalidAuthenticationToken`), and no machine was created.
+  The section 3 token block produced a plain-text token, and the same connect
+  succeeded (machine `Connected`, provisioning `Succeeded`). `Disconnect-AzAccount`
+  then removed the saved sign-in. With Az.Accounts 4.0.2, the same block used the
+  plain-text token as is, and the connect succeeded.
+- **Token block stop conditions:** against stubbed token responses, the block
+  stopped on a token with 10 minutes or less remaining, an expired token, a
+  missing expiry, a tenant mismatch, an unexpected token type, and the text
+  `System.Security.SecureString`, and left `$token` empty each time. It also
+  stopped when `<tenant-id>` was not replaced.
+- **Module block (section 1):** with no image recipe, the block printed
+  `UNKNOWN-STOP` and changed nothing. With a staged recipe file that requires
+  4.0.2 in the older format without a package type, it installed 4.0.2, printed
+  `ARC42-REMOVING` for 5.5.3, removed it, and printed `REQUIRES-4.0.2`; a rerun
+  changed nothing. This passed with PowerShellGet 1.0.0.1 and 2.2.5. A loaded newer
+  version, a newer version copied in by hand, a recipe requiring 4.0.3, and a
+  package type other than `PowerShellModule` each stopped without changing modules.
+  A recipe requiring 5.5.3 printed `KEEP-MODULES`. The rollback command restored
+  5.5.3. Earlier, on a deployed node of solution 12.2701.1004.15 whose real recipe
+  requires 5.5.3, the block printed `KEEP-MODULES` and changed no modules.
+- **Cause 4:** an Azure Policy assignment that denies Azure Arc machine resources
+  in the target resource group reproduced exit code 42 with `AZCM0042` and
+  `httpStatusCode:403` (`RequestDisallowedByPolicy`). The section 4 checks found
+  the provider registered, the required roles present, and the policy assignment.
+  After the assignment was removed, the retry connected.
+- **Not validated:** device code sign-in (option 1, and the
+  `Connect-AzAccount -UseDeviceAuthentication` sign-in in option 2), which needs a
+  person; a token that Azure rejects because it expired (expiry was tested only
+  against stubbed responses); the missing-role and quota variants of cause 4; a
+  real image whose recipe requires 4.0.2 (none was available, so a staged recipe
+  file stood in); and the full bootstrap command on an unregistered Azure Local
+  machine.
