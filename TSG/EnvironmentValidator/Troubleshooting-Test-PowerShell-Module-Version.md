@@ -9,7 +9,7 @@
   },
   "validation": {
     "fidelity_level": "L4",
-    "technical_grade": "A",
+    "technical_grade": "B",
     "reproduction_substrate": "either",
     "automation_status": "proven",
     "last_validated": "2026-11-23",
@@ -28,7 +28,7 @@
 | Applicability | Pre-update validation; the automatic remediation path additionally requires `AzureLocalImageModule` and `Remediate-PSModules` |
 | Severity | Critical validator failure; update readiness may be affected |
 | Execution surface | on-device |
-| Validation | Diagnostic commands, detail expansion, installed-module inventory, module discovery/import, and helper availability were exercised on a physical lab node (OS build 26100, Windows PowerShell 5.1) on 2026-11-06. The module check returned PASS. Remediation, manual uninstall/install, failure detection, and health-fault clearing remain untested. |
+| Validation | On 2026-11-23, on a lab cluster (solution 12.2701.1004.15, validator 10.2701.0.2017, Windows PowerShell 5.1), the full loop ran with the recipe-aware helper path: baseline PASS; an injected missing module and, separately, a newer gallery module beside the recipe version each produced FAILURE; the image-module import and helper blocks remediated; and the check returned PASS. The refusal paths of the previous revision of the manual alternative ran live with no module changes. The current manual block, including its install and removal path and its version-comparison, failure-match, and dependent-module guards, was exercised only with mocked cmdlets under PowerShell 7. Health-fault clearing was not tested. |
 
 ## Table of contents
 
@@ -86,8 +86,8 @@ This result means the validation found PowerShell Modules it was not expecting b
 
 ### Read-only PASS/FAIL check
 
-**[READ-ONLY]** Run this check on each affected node. Risk is not applicable because
-it does not change the installed modules. `PASS` means every returned matching check
+Run this check on each affected node. It does not change the installed modules.
+`PASS` means every returned matching check
 succeeded; `FAIL` includes drift details. Missing results, unexpected statuses, and
 validator errors stop the script instead of reporting a false pass.
 
@@ -209,9 +209,9 @@ Before changing installed modules:
 
 ### Discover and import the Azure Local Image module
 
-**[LOW RISK]** This changes only the current PowerShell session. It discovers the
-highest installed module version, imports its actual path, and checks for the
-helper without executing remediation.
+**Changes:** imports a module into the current PowerShell session only. Installed
+modules are not changed. The block discovers the highest installed module version,
+imports its actual path, and checks for the helper without executing remediation.
 
 ```powershell
 $imageModule = Get-Module -ListAvailable -Name AzureLocalImageModule |
@@ -235,10 +235,16 @@ Closing this session discards its module imports; no installation was changed.
 
 ### Remediate using the recipe-aware helper
 
-**[HIGH RISK]** Run only after the preconditions above are satisfied. This helper
-checks the PowerShell module category against the VSR and attempts to replace
-incorrect versions with recipe versions. It can affect more than the first module
-named in the validator result. This article does not provide an automatic rollback.
+**[HIGH RISK]** Run only after the preconditions above are satisfied.
+
+**Changes:** checks the PowerShell module category against the VSR and uninstalls
+and reinstalls modules whose versions differ from the recipe. It can affect more
+than the first module named in the validator result.
+
+> [!WARNING]
+> There is no automatic rollback for this helper. Replacing a module that a
+> management operation is using can interrupt that operation, so run it only in
+> the maintenance window agreed with Microsoft Support.
 
 ```powershell
 if (-not (Get-Command -Name Remediate-PSModules -Module AzureLocalImageModule -ErrorAction SilentlyContinue)) {
@@ -258,8 +264,8 @@ Use this path only when the recipe-aware helper is unavailable,
 with Microsoft Support guidance and the recovery plan agreed above. Set only the
 module name from the current failure and the approved repository name. The block
 derives the exact target from `Get-ValidatedRecipe.RequiredVersion`. If that
-product authority is unavailable, empty, ambiguous, or invalid, the unresolved
-version guard throws before any install or removal. Do not replace that guard
+product authority is unavailable, empty, ambiguous, or invalid, the recipe-version
+guard throws before any install or removal. Do not replace that guard
 with the historical `4.0.2` example or interpret a validator upper bound as an
 exact pin.
 
@@ -270,7 +276,12 @@ Do not use it to replace `PowerShellGet`, `PackageManagement`, or the modules
 providing the validator and recipe commands; those require Support-led recovery.
 Install the recipe version side by side if missing, verify the exact installed
 path, and only then remove versions above the recipe upper bound. Preserve older
-versions; this validator message alone does not justify removing them.
+versions; this validator message alone does not justify removing them. If the
+module is not installed at all, the block stops; use the recipe-aware helper or
+contact Microsoft Support. The block also stops, before any change, if another
+installed module requires a version newer than the recipe version, because
+`Uninstall-Module -Force` skips the dependency check and removing that version
+would break the dependent module.
 
 Close other module-dependent PowerShell and remote sessions before starting.
 `Remove-Module` does not guarantee that loaded .NET assemblies release file locks.
@@ -278,9 +289,15 @@ If installation or removal reports files in use, stop and arrange release of the
 owning session with its operator. Do not force-stop management processes, reboot
 the node, or delete module folders as a workaround.
 
+**[HIGH RISK]**
+
 **Changes:** For the one module you name, installs the recipe version if it is
-missing and uninstalls only versions newer than that recipe version. Other
-modules and older versions are not changed.
+missing and uninstalls only versions newer than that recipe version. Older
+versions are not changed. When it installs the recipe version, `Install-Module`
+may also install modules that the publisher declares as dependencies of that
+version, as described in
+[Install-Module](https://learn.microsoft.com/powershell/module/powershellget/install-module).
+No other modules are uninstalled.
 
 > [!WARNING]
 > There is no automatic rollback for this block. Removing a version that a
@@ -293,9 +310,9 @@ required in the same session.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSEdition -ne 'Desktop') { throw 'Run this block in Windows PowerShell 5.1. No changes were made.' }
 $RequiredModuleName = '<module-from-current-failure>'
 $ApprovedRepository = '<approved-repository>'
-$RequiredModuleVersion = '<unresolved-exact-recipe-version>'
 
 if ($RequiredModuleName -notmatch '^[A-Za-z][A-Za-z0-9.]{0,99}$' -or
     $ApprovedRepository -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$') {
@@ -311,11 +328,19 @@ if (Get-Command -Name Remediate-PSModules -ErrorAction SilentlyContinue) {
     throw 'Use the recipe-aware helper instead of the manual alternative.'
 }
 $checkName = 'AzStackHci_ValidatedRecipe_PowerShellModule_Version'
+$escapedName = [regex]::Escape($RequiredModuleName)
+$failurePattern = "Checking version of PS module '$escapedName' on host '[^']*'\. " +
+    "Got '[^']*' but expected less-than or equal to '[^']*' so it is invalid\."
+$missingPattern = "Failed to parse installed version of PS module '$escapedName' on host '[^']*'\."
 $checks = @(Invoke-AzStackHciValidatedRecipeValidation -PassThru -Include Test-PSModules -ErrorAction Stop |
     Where-Object Name -eq $checkName)
+if (@($checks | Where-Object { "$($_.Status)" -eq 'FAILURE' -and
+        ([string]$_.AdditionalData.Detail) -match $missingPattern }).Count -gt 0) {
+    throw "$RequiredModuleName is missing or its version is unreadable. Use the recipe-aware helper or contact Microsoft Support. No changes were made."
+}
 if ($checks.Count -eq 0 -or @($checks | Where-Object { "$($_.Status)" -notin @('SUCCESS', 'FAILURE') }).Count -gt 0 -or
     @($checks | Where-Object { "$($_.Status)" -eq 'FAILURE' -and
-        ([string]$_.AdditionalData.Detail).Contains("'$RequiredModuleName'") }).Count -eq 0) {
+        ([string]$_.AdditionalData.Detail) -match $failurePattern }).Count -eq 0) {
     throw 'No confirmed validator failure for this module. No changes were made.'
 }
 $artifactPath = Get-ASArtifactPath -NugetName Microsoft.AzureStack.VersionControl.Operations -ErrorAction Stop
@@ -334,14 +359,20 @@ if ($RequiredModuleName -in $protectedModules -or (Get-Module -Name $RequiredMod
 }
 $moduleRoot = Join-Path $env:ProgramFiles "WindowsPowerShell\Modules\$RequiredModuleName"
 function Get-ScopedModuleInventory {
-    $installed = @(Get-InstalledModule -Name $RequiredModuleName -AllVersions -ErrorAction Stop)
+    $installed = @(Get-InstalledModule -Name $RequiredModuleName -AllVersions -ErrorAction SilentlyContinue)
     $available = @(Get-Module -Name $RequiredModuleName -ListAvailable -ErrorAction Stop)
-    if ($installed.Count -eq 0 -or $installed.Count -ne $available.Count) {
-        throw 'The installed and available inventories are empty or disagree. Stop.'
+    if ($installed.Count -eq 0 -and $available.Count -eq 0) {
+        throw "$RequiredModuleName is not installed. Use the recipe-aware helper or contact Microsoft Support."
+    }
+    if ($installed.Count -ne $available.Count) {
+        throw 'The installed and available inventories disagree. Stop.'
     }
     foreach ($module in $installed) {
+        if ($null -eq ([string]$module.Version -as [version])) {
+            throw 'An installed version is not a numeric version. Stop for Support-led recovery.'
+        }
         $expectedPath = Join-Path $moduleRoot ([string]$module.Version)
-        $pathMatches = @($available | Where-Object { $_.Version -eq $module.Version -and $_.ModuleBase -eq $expectedPath })
+        $pathMatches = @($available | Where-Object { [version]$_.Version -eq [version]$module.Version -and $_.ModuleBase -eq $expectedPath })
         if ($module.Name -ne $RequiredModuleName -or $module.InstalledLocation -ne $expectedPath -or $pathMatches.Count -ne 1) {
             throw 'A module path is ambiguous or outside the scoped AllUsers inventory. Stop.'
         }
@@ -350,7 +381,17 @@ function Get-ScopedModuleInventory {
 }
 $before = @(Get-ScopedModuleInventory)
 $before | Select-Object Name, Version, InstalledLocation
-if (@($before | Where-Object Version -eq $targetVersion).Count -eq 0) {
+$toRemove = @($before | Where-Object { [version]$_.Version -gt $targetVersion })
+if ($toRemove.Count -gt 0) {
+    $dependents = @(Get-Module -ListAvailable | Where-Object {
+        $_.Name -ne $RequiredModuleName -and @($_.RequiredModules | Where-Object {
+            $_.Name -eq $RequiredModuleName -and $_.Version -and [version]$_.Version -gt $targetVersion }).Count -gt 0 })
+    if ($dependents.Count -gt 0) {
+        $dependents | Select-Object Name, Version, ModuleBase
+        throw "The modules listed above require a newer $RequiredModuleName than $RequiredModuleVersion. Contact Microsoft Support. No changes were made."
+    }
+}
+if (@($before | Where-Object { [version]$_.Version -eq $targetVersion }).Count -eq 0) {
     Get-PSRepository -Name $ApprovedRepository -ErrorAction Stop | Out-Null
     $package = @(Find-Module -Name $RequiredModuleName -RequiredVersion $RequiredModuleVersion -Repository $ApprovedRepository -ErrorAction Stop)
     if ($package.Count -ne 1 -or $package[0].Name -ne $RequiredModuleName -or [version]$package[0].Version -ne $targetVersion) {
@@ -359,24 +400,24 @@ if (@($before | Where-Object Version -eq $targetVersion).Count -eq 0) {
     Install-Module -Name $RequiredModuleName -RequiredVersion $RequiredModuleVersion -Repository $ApprovedRepository -Scope AllUsers -Force -ErrorAction Stop
 }
 $installed = @(Get-ScopedModuleInventory)
-if (@($installed | Where-Object Version -eq $targetVersion).Count -ne 1) {
+if (@($installed | Where-Object { [version]$_.Version -eq $targetVersion }).Count -ne 1) {
     throw 'The exact recipe version was not verified. No versions will be removed.'
 }
 if (Get-Module -Name $RequiredModuleName) { throw 'The module became loaded. No versions will be removed.' }
-foreach ($module in @($before | Where-Object Version -gt $targetVersion)) {
-    $current = @(Get-ScopedModuleInventory | Where-Object Version -eq $module.Version)
+foreach ($module in $toRemove) {
+    $current = @(Get-ScopedModuleInventory | Where-Object { [version]$_.Version -eq [version]$module.Version })
     if ($current.Count -ne 1 -or $current[0].InstalledLocation -ne $module.InstalledLocation) {
         throw 'Inventory changed before removal. Stop.'
     }
     Uninstall-Module -Name $RequiredModuleName -RequiredVersion $module.Version -Force -ErrorAction Stop
 }
 $remaining = @(Get-ScopedModuleInventory)
-if (@($remaining | Where-Object Version -eq $targetVersion).Count -ne 1 -or
-    @($remaining | Where-Object Version -gt $targetVersion).Count -gt 0) {
+if (@($remaining | Where-Object { [version]$_.Version -eq $targetVersion }).Count -ne 1 -or
+    @($remaining | Where-Object { [version]$_.Version -gt $targetVersion }).Count -gt 0) {
     throw 'Module replacement is incomplete. Stop and retain the inventories and error.'
 }
-foreach ($module in @($before | Where-Object Version -le $targetVersion)) {
-    $preserved = @($remaining | Where-Object { $_.Version -eq $module.Version -and
+foreach ($module in @($before | Where-Object { [version]$_.Version -le $targetVersion })) {
+    $preserved = @($remaining | Where-Object { [version]$_.Version -eq [version]$module.Version -and
         $_.InstalledLocation -eq $module.InstalledLocation })
     if ($preserved.Count -ne 1) {
         throw 'A previously accepted version or path changed. Stop for Support-led recovery.'
@@ -401,7 +442,7 @@ remediation; do not restore an arbitrary module version or apply a CLI upgrade.
 
 ## Verify resolution
 
-**[READ-ONLY]** Repeat the PASS/FAIL script under
+Repeat the read-only PASS/FAIL script under
 [Issue validation](#issue-validation) on each affected node. Require `Result = PASS`
 on every affected node before retrying the update. `FAIL` or an error means
 resolution is not verified.
@@ -424,5 +465,5 @@ prove that a previously raised health fault has already cleared.
 | Component / tool log files | shown | The validator writes `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log` and `AzStackHciEnvironmentReport.json`; retain them for support. |
 
 `absent` denotes an uncharacterized surface, not proof that no signal exists.
-These gaps and the untested remediation paths require maintainer validation
-before publication.
+These six surfaces, a live run of the manual alternative's install and removal
+path, and health-fault clearing remain unvalidated.
