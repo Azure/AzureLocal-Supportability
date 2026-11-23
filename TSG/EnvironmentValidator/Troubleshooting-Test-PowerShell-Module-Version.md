@@ -28,7 +28,7 @@
 | Applicability | Pre-update validation; the automatic remediation path additionally requires `AzureLocalImageModule` and `Remediate-PSModules` |
 | Severity | Critical validator failure; update readiness may be affected |
 | Execution surface | on-device |
-| Validation | On 2026-11-23, on a lab cluster (solution 12.2701.1004.15, validator 10.2701.0.2017, Windows PowerShell 5.1), the full loop ran with the recipe-aware helper path: baseline PASS; an injected missing module and, separately, a newer gallery module beside the recipe version each produced FAILURE; the image-module import and helper blocks remediated; and the check returned PASS. The refusal paths of the previous revision of the manual alternative ran live with no module changes. The current manual block, including its install and removal path and its version-comparison, failure-match, and dependent-module guards, was exercised only with mocked cmdlets under PowerShell 7. Health-fault clearing was not tested. |
+| Validation | On 2026-11-23, on a lab cluster (solution 12.2701.1004.15, validator 10.2701.0.2017, Windows PowerShell 5.1), the full loop ran with the recipe-aware helper path: baseline PASS; an injected missing module and, separately, a newer gallery module beside the recipe version each produced FAILURE; the image-module import and helper blocks remediated; and the check returned PASS. The manual alternative ran verbatim on the same build with the helper module temporarily moved out of the module path. With `Az.Accounts` 5.5.5 installed and the recipe version 5.5.3 missing, it installed 5.5.3, removed 5.5.5, kept the older 5.5.1, and the check returned PASS. The live run also showed that current Az modules declare their `Az.Accounts` minimum under `ModuleList`, not `RequiredModules`: the previous dependent-module guard removed `Az.Accounts` 5.5.5 while `Az.Storage` 9.8.0 still needed it, after which importing `Az.Storage` failed with `This module requires Az.Accounts version 5.5.5`. The guard now reads both lists and stopped before any change when `Az.KeyVault` 6.6.2 needed `Az.Accounts` 5.5.4. Health-fault clearing was not tested. |
 
 ## Table of contents
 
@@ -239,7 +239,9 @@ Closing this session discards its module imports; no installation was changed.
 
 **Changes:** checks the PowerShell module category against the VSR and uninstalls
 and reinstalls modules whose versions differ from the recipe. It can affect more
-than the first module named in the validator result.
+than the first module named in the validator result. In the 2026-11-23 lab run,
+repairing a missing `ArcHci` also reinstalled its dependency modules and removed an
+older side-by-side `Az.Accounts` version that was not in the recipe.
 
 > [!WARNING]
 > There is no automatic rollback for this helper. Replacing a module that a
@@ -281,7 +283,9 @@ module is not installed at all, the block stops; use the recipe-aware helper or
 contact Microsoft Support. The block also stops, before any change, if another
 installed module requires a version newer than the recipe version, because
 `Uninstall-Module -Force` skips the dependency check and removing that version
-would break the dependent module.
+would break the dependent module. The check reads both `RequiredModules` and
+`ModuleList`, because current Az modules declare their `Az.Accounts` minimum
+under `ModuleList`.
 
 Close other module-dependent PowerShell and remote sessions before starting.
 `Remove-Module` does not guarantee that loaded .NET assemblies release file locks.
@@ -384,7 +388,7 @@ $before | Select-Object Name, Version, InstalledLocation
 $toRemove = @($before | Where-Object { [version]$_.Version -gt $targetVersion })
 if ($toRemove.Count -gt 0) {
     $dependents = @(Get-Module -ListAvailable | Where-Object {
-        $_.Name -ne $RequiredModuleName -and @($_.RequiredModules | Where-Object {
+        $_.Name -ne $RequiredModuleName -and @(@($_.RequiredModules) + @($_.ModuleList) | Where-Object {
             $_.Name -eq $RequiredModuleName -and $_.Version -and [version]$_.Version -gt $targetVersion }).Count -gt 0 })
     if ($dependents.Count -gt 0) {
         $dependents | Select-Object Name, Version, ModuleBase
@@ -465,5 +469,4 @@ prove that a previously raised health fault has already cleared.
 | Component / tool log files | shown | The validator writes `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log` and `AzStackHciEnvironmentReport.json`; retain them for support. |
 
 `absent` denotes an uncharacterized surface, not proof that no signal exists.
-These six surfaces, a live run of the manual alternative's install and removal
-path, and health-fault clearing remain unvalidated.
+These six surfaces and health-fault clearing remain unvalidated.
