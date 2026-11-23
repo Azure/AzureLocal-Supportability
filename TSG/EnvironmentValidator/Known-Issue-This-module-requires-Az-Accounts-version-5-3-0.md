@@ -8,12 +8,12 @@
     "signal": "ValidateClusterWitness: This module requires Az.Accounts version 5.3.0. An earlier version of Az.Accounts is imported in the current PowerShell session."
   },
   "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
+    "fidelity_level": "L4",
+    "technical_grade": "B",
     "reproduction_substrate": "either",
-    "automation_status": "not-assessed",
-    "last_validated": null,
-    "spec_ref": ""
+    "automation_status": "scaffold",
+    "last_validated": "2026-11-23",
+    "spec_ref": "KnownIssue_AzAccounts_ValidatedRecipeMismatch"
   }
 }
 -->
@@ -41,6 +41,7 @@
 | Date | Summary |
 | --- | --- |
 | 2026-11-23 | Removed the fixed module versions (Az.Accounts 4.0.2, Az.Resources 7.8.0, Az.Storage 8.1.0, Az.StackHCI 2.5.0) and the commands that uninstalled every other version. On builds whose validated recipe requires Az.Accounts 5.x, those commands downgraded the product's own modules. The check and the fix now read the exact versions from the machine's validated recipe, install a missing recipe version, and remove only the versions that cause this error. They stop before changing anything when the recipe cannot be read, when another installed module still needs a version that would be removed, or when Azure PowerShell modules are already loaded in the session. |
+| 2026-11-23 | Validated on an Azure Local lab machine in Windows PowerShell 5.1, which found and fixed two defects in the earlier 2026-11-23 revision. The checks now read each module's `Az.Accounts` requirement from `ModuleList` as well as `RequiredModules`, because current Az module manifests declare it there; before this fix the check reported `NOT AFFECTED` on an affected machine. Step 2 now lists installed versions one module name at a time, because `Get-InstalledModule -AllVersions` rejects several or wildcard names; before this fix Step 2 stopped with that error before making any change. |
 
 ## At a glance
 
@@ -71,7 +72,7 @@ Other steps that load Azure PowerShell modules can show the same message with a 
 
 ## Cause
 
-Every Azure PowerShell module (for example `Az.Storage` or `Az.Resources`) declares the lowest `Az.Accounts` version it works with. When the module is imported, it checks the `Az.Accounts` version that is already loaded in the PowerShell session. If that version is lower, the import stops with this message. The number in the message is the version that the imported module declares, not a version that Azure Local requires.
+Every Azure PowerShell module (for example `Az.Storage` or `Az.Resources`) declares the lowest `Az.Accounts` version it works with. Current versions declare it in the `ModuleList` entry of the module manifest and leave `RequiredModules` empty. When the module is imported, it checks the `Az.Accounts` version that is already loaded in the PowerShell session. If that version is lower, the import stops with this message. The number in the message is the version that the imported module declares, not a version that Azure Local requires.
 
 The cluster witness check imports `Az.Storage` and `Az.Accounts` by name, without a version, so PowerShell loads the highest version installed on the machine. The message therefore means that the machine has an Azure PowerShell module version that needs a newer `Az.Accounts` than the one the session uses. It usually happens in one of these two ways:
 
@@ -128,7 +129,7 @@ Run this block in a new elevated Windows PowerShell 5.1 session on each machine.
     $loaded = @(Get-Module -Name 'Az', 'Az.*')
     $accountsTarget = $recipe['Az.Accounts']
     $inventory = foreach ($m in @(Get-Module -Name 'Az', 'Az.*' -ListAvailable)) {
-        $needs = @($m.RequiredModules | Where-Object { $_.Name -eq 'Az.Accounts' -and [version]$_.Version -gt [version]'0.0' } |
+        $needs = @(@($m.RequiredModules) + @($m.ModuleList) | Where-Object { $_.Name -eq 'Az.Accounts' -and [version]$_.Version -gt [version]'0.0' } |
             ForEach-Object { [version]$_.Version } | Sort-Object -Descending) | Select-Object -First 1
         $recipeVersion = $null
         if ($recipe.ContainsKey($m.Name)) { $recipeVersion = $recipe[$m.Name] }
@@ -285,10 +286,12 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
     $allUsersRoot = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'
     function Get-AzInventory {
         # PowerShellGet 2.2.5 returns Version as a string, so every comparison casts to [version].
-        $managed = @(Get-InstalledModule -Name $azNames -AllVersions -ErrorAction SilentlyContinue)
+        # -AllVersions accepts only one name without wildcards, so query each installed name separately.
+        $managed = @(Get-InstalledModule -Name $azNames -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name -Unique |
+            ForEach-Object { Get-InstalledModule -Name $_ -AllVersions -ErrorAction SilentlyContinue })
         foreach ($m in @(Get-Module -Name $azNames -ListAvailable)) {
             $expected = Join-Path (Join-Path $allUsersRoot $m.Name) ([string]$m.Version)
-            $needs = @($m.RequiredModules | Where-Object { $_.Name -eq 'Az.Accounts' -and [version]$_.Version -gt [version]'0.0' } |
+            $needs = @(@($m.RequiredModules) + @($m.ModuleList) | Where-Object { $_.Name -eq 'Az.Accounts' -and [version]$_.Version -gt [version]'0.0' } |
                 ForEach-Object { [version]$_.Version } | Sort-Object -Descending) | Select-Object -First 1
             [pscustomobject]@{
                 Name            = $m.Name
@@ -344,7 +347,7 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
         $highestKept = $kept | Sort-Object -Descending | Select-Object -First 1
         $dependents = @($allModules | Where-Object {
             $_.Name -ne $r.Name -and $removalKeys -notcontains "$($_.Name)|$([version]$_.Version)" -and
-            @($_.RequiredModules | Where-Object { $_.Name -eq $r.Name -and (-not $highestKept -or [version]$_.Version -gt $highestKept) }).Count -gt 0 })
+            @(@($_.RequiredModules) + @($_.ModuleList) | Where-Object { $_.Name -eq $r.Name -and (-not $highestKept -or [version]$_.Version -gt $highestKept) }).Count -gt 0 })
         if ($dependents.Count -gt 0) {
             $dependents | Format-Table Name, Version, ModuleBase -AutoSize | Out-String -Width 300 | Write-Output
             throw "The modules listed above need a version of $($r.Name) that this fix would remove. Decide whether they are still needed, or contact Microsoft support. No changes were made."
@@ -442,7 +445,12 @@ Include this information:
 
 ## Validation status of this article
 
-The 2026-11-23 revision was not yet validated on an Azure Local machine. Every PowerShell block was parsed, and the Issue Validation and Step 2 blocks were run under PowerShell 7 with mocked module, recipe, and PowerShellGet commands (versions returned as strings, as PowerShellGet 2.2.5 does). The mocked cases covered: a recipe that requires `Az.Accounts` 5.3.0 with only 4.0.2 installed (installs 5.3.0, removes nothing); a recipe that requires 5.3.0 with 5.3.0 and 10.0.0 installed (removes 10.0.0 only when nothing needs it); a recipe that requires 4.0.2 with and without a newer `Az.Storage`; another module that needs a version that would be removed; copies outside the all-users folder or not installed with `Install-Module`; a recipe that cannot be read; a version missing from the repository; and an older `Az.Accounts` already loaded in the session. Every stop case changed nothing. Windows PowerShell 5.1, the real recipe commands, and the portal retry were not exercised.
+On 2026-11-23 this revision was validated on an Azure Local lab machine (solution 12.2701.1004.15, validated recipe `Az.Accounts` 5.5.3) in fresh elevated Windows PowerShell 5.1 sessions. On each of three machines, Issue Validation read the validated recipe and reported `RESULT: NOT AFFECTED`. Two full cycles then ran on one machine, each confirmed by importing `Az.Accounts` and then `Az.Storage` in a new session, as the cluster witness check does:
+
+- A newer `Az.Storage` 9.8.0 without the `Az.Accounts` 5.5.5 that it needs: the import failed with `This module requires Az.Accounts version 5.5.5`. Issue Validation reported `RESULT: AFFECTED - Az.Storage 9.8.0 needs Az.Accounts 5.5.5 but the recipe version is 5.5.3`. Step 2 printed `REMOVING: Az.Storage 9.8.0` and `RESULT: CHANGED`. In a new session the import succeeded and Issue Validation reported `RESULT: NOT AFFECTED`.
+- The recipe `Az.Accounts` 5.5.3 removed, leaving 5.5.1: the import failed with `This module requires Az.Accounts version 5.5.2`. Issue Validation reported that the recipe version was not installed. Step 2 printed `INSTALLING: Az.Accounts 5.5.3` and `RESULT: CHANGED`. In a new session the import succeeded and Issue Validation reported `RESULT: NOT AFFECTED`.
+
+With `Az.KeyVault` 6.6.2, which is not in the recipe and needs `Az.Accounts` 5.5.4, installed beside `Az.Accounts` 5.5.5, Step 2 stopped with `No changes were made` and listed `Az.KeyVault`. The module inventory was unchanged. The rollback command and the portal retry in Step 3 were not exercised, and the log, event, cluster-log, Failover Cluster Manager, and Windows Admin Center surfaces were not characterized.
 
 ## Related documentation
 
