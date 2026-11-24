@@ -28,6 +28,7 @@
 - [4. Permissions, policy, or quota (HTTP 403 or another non-401 status)](#4-permissions-policy-or-quota-http-403-or-another-non-401-status)
 - [When to contact Microsoft support](#when-to-contact-microsoft-support)
 - [Validation status of this article](#validation-status-of-this-article)
+- [Revision history](#revision-history)
 
 ## Symptoms
 Registering an Azure Local machine with Azure Arc (`Invoke-AzStackHciArcInitialization`) fails with exit code 42.
@@ -139,7 +140,8 @@ removal of newer versions; older versions and 4.0.2 are preserved. If the recipe
 is missing, ambiguous, or different, it stops without changing any modules.
 When a newer version is present, the 4.0.2 path also stops, before it installs or
 removes anything, if any other available module declares in `RequiredModules` or
-`ModuleList` that it needs an Az.Accounts version newer than 4.0.2.
+`ModuleList` that it needs an Az.Accounts version newer than 4.0.2, or if a newer
+copy was not installed with `Install-Module`.
 `Uninstall-Module -Force` skips PowerShellGet's dependency check, and current Az
 modules declare their Az.Accounts minimum under `ModuleList`, so both lists are
 read.
@@ -199,6 +201,15 @@ if ($required -ge [version]'5.0.0') {
             throw 'The modules listed above require Az.Accounts newer than 4.0.2. No changes were made.'
         }
     }
+    # PowerShellGet 2.x returns Version as a string, so cast before comparing.
+    $galleryVersions = @(Get-InstalledModule -Name Az.Accounts -AllVersions -ErrorAction SilentlyContinue |
+        ForEach-Object { [version]$_.Version })
+    $newer = @($available | Where-Object { $_.Version -gt [version]'4.0.2' } | Sort-Object Version)
+    $unmanaged = @($newer | Where-Object { $galleryVersions -notcontains $_.Version })
+    if ($unmanaged.Count) {
+        throw ('Uninstall-Module cannot remove these newer Az.Accounts copies. No changes were made: ' +
+            (($unmanaged | ForEach-Object { "$($_.Version) at $($_.ModuleBase)" }) -join '; '))
+    }
     if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) {
         Install-Module -Name Az.Accounts -RequiredVersion 4.0.2 -Scope AllUsers `
             -Repository PSGallery -Force -ErrorAction Stop | Out-Null
@@ -206,15 +217,6 @@ if ($required -ge [version]'5.0.0') {
     }
     if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) {
         throw 'Required version 4.0.2 was not installed; nothing will be removed.'
-    }
-    # PowerShellGet 2.x returns Version as a string, so cast before comparing.
-    $galleryVersions = @(Get-InstalledModule -Name Az.Accounts -AllVersions -ErrorAction SilentlyContinue |
-        ForEach-Object { [version]$_.Version })
-    $newer = @($available | Where-Object { $_.Version -gt [version]'4.0.2' } | Sort-Object Version)
-    $unmanaged = @($newer | Where-Object { $galleryVersions -notcontains $_.Version })
-    if ($unmanaged.Count) {
-        throw ('Uninstall-Module cannot remove these newer Az.Accounts copies; nothing was removed: ' +
-            (($unmanaged | ForEach-Object { "$($_.Version) at $($_.ModuleBase)" }) -join '; '))
     }
     foreach ($module in $newer) {
         Write-Output "ARC42-REMOVING: Az.Accounts $($module.Version) at $($module.ModuleBase)"
@@ -243,7 +245,7 @@ version and module inventory; installed versions alone cannot prove the requirem
 
 If the block stops because a newer copy was not installed with `Install-Module`
 (for example, a copy placed in a module folder by hand or by another tool), it
-names the version and folder and removes nothing. Do not delete that folder to
+names the version and folder and makes no changes. Do not delete that folder to
 force the workaround; contact Microsoft support with the message. If a hand-placed
 copy has the same version as a copy installed with `Install-Module`, the block
 treats that version as removable: it prints both copies as `ARC42-REMOVING`,
@@ -541,27 +543,43 @@ Check the subscription and resource group against
 
 - The required resource providers, including `Microsoft.HybridCompute`, are
   registered in the subscription.
-- The account that signs in is the resource group owner or holds the
+- The identity that minted the registration token, or that signed in with device
+  code, is the resource group owner or holds the
   **Azure Connected Machine Onboarding** and **Azure Connected Machine Resource
   Administrator** roles on the resource group.
 - No Azure Policy assignment denies creation of Azure Arc machine resources in
   that resource group, and the subscription has not reached a resource quota.
 
 These are read-only checks; any role, provider, or policy change is made by the
-subscription owner using the linked article. To run the provider, role, and
-policy checks with the Azure CLI (for example, in Azure Cloud Shell), sign in to
-the same tenant as the account that registers the node.
-`az ad signed-in-user show --query id -o tsv` prints that account's object ID.
-Replace the placeholders with the subscription, the resource group, and that
-object ID, and run:
+subscription owner using the linked article. Check the roles of the principal
+that minted the registration token, not of the account that runs these checks.
+They are often different: for example, the subscription owner runs the checks in
+Azure Cloud Shell, while a service principal or another machine's managed
+identity minted the token. Get the minting principal's object ID:
+
+- **Managed identity of another registered machine:** the `az resource show`
+  command in [section 3, step 1](#3-arm-access-token-is-passed-incorrectly)
+  prints it.
+- **Service principal:** `az ad sp show --id '<application-id>' --query id -o tsv`.
+- **User account:** `az ad signed-in-user show --query id -o tsv`, run while
+  signed in as that user. Run by anyone else, it prints their own ID, and it does
+  not work for a service principal signed in with `az login --service-principal`.
+
+To run the provider, role, and policy checks with the Azure CLI (for example, in
+Azure Cloud Shell), sign in to the same tenant with an account that can read the
+subscription's role assignments. Replace the placeholders with the subscription,
+the resource group, and the minting principal's object ID, and run:
 
 ```azurecli
 az provider show --namespace Microsoft.HybridCompute --subscription '<subscription-id>' --query registrationState -o tsv
-az role assignment list --assignee-object-id '<object-id>' --resource-group '<resource-group>' --subscription '<subscription-id>' --include-inherited --include-groups --query "[].roleDefinitionName" -o tsv
+az role assignment list --assignee-object-id '<minting-principal-object-id>' --resource-group '<resource-group>' --subscription '<subscription-id>' --include-inherited --include-groups --query "[].roleDefinitionName" -o tsv
 az rest --method get --url '/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.Authorization/policyAssignments' --url-parameters 'api-version=2023-04-01' '$filter=atScope()' --query "value[].{name:properties.displayName, scope:properties.scope, enforcement:properties.enforcementMode}" -o table
 ```
 
-Expect `Registered`, then `Owner` or both Azure Connected Machine roles. The last
+Expect `Registered`, then `Owner` or both Azure Connected Machine roles for the
+minting principal. A managed identity set up as in section 3 lists only
+**Azure Connected Machine Onboarding**; if its retry still returns 403, follow
+the stop instruction in section 3 instead of granting more roles. The last
 command lists every policy assignment that applies to the resource group,
 including those inherited from the subscription and management groups. Keep
 `'$filter=atScope()'` in single quotes so the shell does not expand it. Do not
@@ -650,6 +668,20 @@ the full bootstrap was not run.
   With mocked module inventories in PowerShell 7.5, the guard also stopped for a
   `RequiredModules` entry, a required version, and an unreadable version, and
   continued for a maximum-only or lower requirement.
+- **Module block stop order (section 1), 2026-11-24:** the check for newer copies
+  not installed with `Install-Module` now runs before 4.0.2 is installed. With
+  mocked module cmdlets in PowerShell 7.5, the block stopped with
+  `No changes were made` and no install or uninstall call for a hand-placed newer
+  copy while 4.0.2 was missing (the earlier order installed 4.0.2 first), for a
+  loaded newer version, and for another module that pins an exact newer
+  Az.Accounts version under `ModuleList` or `RequiredModules`. It continued for a
+  lower minimum, a maximum-only entry, and the normal path, and printed
+  `KEEP-MODULES` without changes for a 5.x recipe. In Windows PowerShell 5.1 and
+  PowerShell 7.5, an exact `ModuleList` pin is read with an empty `Version` and the
+  pinned `RequiredVersion`, which the guard reads first. On the registered Azure
+  Local node described below, whose recipe requires 5.5.3, the revised block printed
+  `KEEP-MODULES` and the module inventory was unchanged. The 4.0.2 path was not
+  rerun live after this change.
 - **Cause 4:** an Azure Policy assignment that denies Azure Arc machine resources
   in the target resource group reproduced exit code 42 with `AZCM0042` and
   `httpStatusCode:403` (`RequestDisallowedByPolicy`). After the assignment was
@@ -701,4 +733,12 @@ the full bootstrap was not run.
   in); and the full bootstrap command on an unregistered Azure Local machine,
   including whether it needs roles beyond **Azure Connected Machine Onboarding**
   when the token comes from a managed identity. No unregistered Azure Local machine
-  was available for that run.
+  was available for that run. The section 4 object ID lookups for a service
+  principal (`az ad sp show`) and a user (`az ad signed-in-user show`) were not run;
+  the managed identity lookup (`az resource show`) and the role list command were.
+
+## Revision history
+
+| Date | Summary |
+| --- | --- |
+| 2026-11-24 | The section 1 module block now checks for newer Az.Accounts copies that were not installed with `Install-Module` before it installs 4.0.2, so that stop, like the other precondition stops, happens before any module changes. The section 4 role check now uses the object ID of the identity that minted the registration token, with a lookup for each identity type, instead of the account that runs the checks. |
