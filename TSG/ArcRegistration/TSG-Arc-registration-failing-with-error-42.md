@@ -6,7 +6,7 @@
   "detector": {"type": "manual", "signal": "Bootstrap Arc registration error 42"},
   "validation": {
     "fidelity_level": "L3",
-    "technical_grade": "B",
+    "technical_grade": "A",
     "reproduction_substrate": "vm",
     "automation_status": "proven",
     "last_validated": "2026-11-23",
@@ -250,16 +250,17 @@ Install-Module -Name Az.Accounts -RequiredVersion '<removed-version>' -Scope All
 
 ### Issue Validation
 
-Check the response's `ExpiresOn`, not a fixed one-hour age assumption.
+Check the token's expiry (`ExpiresOn` from Azure PowerShell, `expires_on` from
+the Azure CLI), not a fixed one-hour age assumption.
 The [agent does not renew a supplied access token](https://learn.microsoft.com/en-us/azure/azure-arc/servers/azcmagent-authentication).
-The token block in section 3 stops unless at least 10 minutes remain.
+The token blocks in section 3 stop unless at least 10 minutes remain.
 
 ### Resolution
 
-Rerun your original initialization command without `-ArmAccessToken` (option 1
-in section 3), or create a fresh ARM access token using the complete block in
-section 3 (option 2) and retry your original initialization command in the same
-session.
+Mint a fresh ARM access token from the same identity with the token block in
+section 3 (option 1, step 2) and retry your original initialization command with
+it. If an operator is present, you can instead rerun the initialization command
+without `-ArmAccessToken` and complete device code sign-in (option 2 in section 3).
 
 ## 3. ARM access token is passed incorrectly
 
@@ -270,34 +271,63 @@ default, so selecting the property alone is not sufficient.
 
 ### Resolution
 
-**Option 1 (simplest): let the registration command sign in.** The
-`-ArmAccessToken` parameter is optional. If you omit it, the script prompts for
-device code authentication
-([script parameters](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-without-azure-arc-gateway#step-1-review-script-parameters)).
-Rerun your original initialization command without `-ArmAccessToken`, keep its
-other parameters unchanged, and complete the sign-in with the code it displays.
-No token conversion or module change is needed.
+Registration needs an Azure sign-in by an identity that holds the roles in
+[Assign required permissions for Azure Local deployment](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-arc-register-server-permissions).
+The initialization command accepts that sign-in in one of two ways
+([script parameters](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-without-azure-arc-gateway#step-1-review-script-parameters)):
 
-**Changes:** Retrying initialization can create Azure resources, change the
-node's registration configuration, and, when an update is required, install it
-and restart the node.
+| Option | Who supplies the sign-in | Use it for |
+| --- | --- | --- |
+| 1. Pass `-ArmAccessToken` | Automation signed in as a pre-provisioned identity, such as a service principal, or an operator who signs in | Scripted and unattended registration. This is the only option that automation can complete. |
+| 2. Device code | A person at a keyboard who completes the sign-in in a browser | Interactive registration only. Unattended or on-box automation cannot complete it. |
 
-**Option 2: pass a converted token.** Use this when you must supply
-`-ArmAccessToken`, for example from automation. If this PowerShell session has
-no Azure sign-in, sign in first, replacing `<tenant-id>` with the resource
-tenant ID from the deployment plan:
+**Automation boundary.** A script or an on-box assistant can classify the failed attempt from `azcmagent.log`
+(401 here, 403 or another status in [cause 4](#4-permissions-policy-or-quota-http-403-or-another-non-401-status)),
+run the module block in section 1, check the lifetime and tenant of a token and
+convert it to plain text, retry initialization with a token it was given, and
+verify the result. It cannot perform the sign-in or create the credential, and it
+does not make the role, provider, or policy changes in cause 4. The token must
+come from an identity that already holds the required roles, through automation
+that holds that identity's credential or through an operator who signs in.
+
+**Why the node's managed identity cannot be used.** An Azure Arc-enabled server
+gets its managed identity, and the local endpoint that issues its tokens, only
+after it is connected to Azure Arc
+([managed identity on Arc-enabled servers](https://learn.microsoft.com/en-us/azure/azure-arc/servers/managed-identity-authentication)).
+A node that fails with exit code 42 has no Azure Arc resource yet, so
+`az login --identity` or `Connect-AzAccount -Identity` on that node cannot
+authenticate its registration. Even a previously registered machine's identity
+is not given the roles that create Azure Arc machine resources.
+
+**Option 1 (automation and scripted runs): pass a plain-text ARM token.**
+
+*Step 1: sign in as the identity that will mint the token.* Use an identity that
+holds the required roles, on the machine where its credential is kept. For
+automation this is normally off the node, on the automation host, so that no
+service principal credential is placed on the node. For example, for a service
+principal whose certificate is in that machine's certificate store, replace the
+placeholders and run:
+
+```powershell
+Connect-AzAccount -ServicePrincipal -ApplicationId '<application-id>' -CertificateThumbprint '<certificate-thumbprint>' -Tenant '<tenant-id>'
+```
+
+An operator who mints the token instead signs in with device code, which needs a
+person to complete it in a browser:
 
 ```powershell
 Connect-AzAccount -Tenant '<tenant-id>' -UseDeviceAuthentication
 ```
 
-**Changes:** signs you in to Azure PowerShell. By default the sign-in context is
-saved in your user profile; run `Disconnect-AzAccount` after registration to
+**Changes:** signs in to Azure PowerShell. By default the sign-in context is
+saved in the user profile; run `Disconnect-AzAccount` after registration to
 remove it. It does not change the node or Azure resources.
 
-Replace `<tenant-id>` in the block below with the same tenant ID, then run the
-complete block. It requests an ARM token and converts only its `Token` property;
-it does not sign in, switch context, or display the token.
+*Step 2: mint and convert the token.* In the same session, replace `<tenant-id>`
+in the block below with the resource tenant ID from the deployment plan, then
+run the complete block. It requests an ARM token and converts only its `Token`
+property; it does not sign in, switch context, or display the token. The
+conversion is compatible with Windows PowerShell 5.1.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -311,7 +341,7 @@ if (-not [guid]::TryParse($TenantId, [ref]$parsedTenant) -or $parsedTenant -eq [
 try {
     $t = Get-AzAccessToken -ResourceTypeName Arm -TenantId $TenantId -ErrorAction Stop
     if (-not $t.ExpiresOn -or [DateTimeOffset]$t.ExpiresOn -le [DateTimeOffset]::UtcNow.AddMinutes(10)) {
-        throw 'Token expires within 10 minutes; sign in again with Connect-AzAccount and rerun this block, or use option 1.'
+        throw 'Token expires within 10 minutes; sign in again and rerun this block.'
     }
     if ([guid]$t.TenantId -ne $parsedTenant) { throw 'Token tenant does not match the deployment plan.' }
     if ($t.Token -is [System.Security.SecureString]) {
@@ -332,16 +362,66 @@ try {
 }
 ```
 
-The conversion is compatible with Windows PowerShell 5.1. In this **same session**,
-pass `-ArmAccessToken $token` to the
-[initialization command for your deployment](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-without-azure-arc-gateway),
-keeping its other parameters unchanged. If delayed, repeat the complete token
-block. Do not print, export, transcribe, or include the token in a ticket; clear
-`$token = $null` after the initialization attempt.
+If the automation host uses the Azure CLI instead of Azure PowerShell, sign in
+as the service principal with `az login --service-principal --username '<application-id>' --certificate '<path-to-certificate.pem>' --tenant '<tenant-id>'`
+(this saves the sign-in in the Azure CLI profile; run `az logout` after
+registration), then run this block in PowerShell on that host. It applies the
+same lifetime and tenant checks and does not display the token.
 
-**Changes:** The token block only sets session variables. Retrying initialization
+```powershell
+$ErrorActionPreference = 'Stop'
+$token = $null
+$r = $null
+$TenantId = '<tenant-id>'
+$parsedTenant = [guid]::Empty
+if (-not [guid]::TryParse($TenantId, [ref]$parsedTenant) -or $parsedTenant -eq [guid]::Empty) {
+    throw 'Replace <tenant-id> with the resource tenant ID before requesting a token.'
+}
+try {
+    $r = (az account get-access-token --resource https://management.azure.com --tenant $TenantId -o json | Out-String)
+    if ($LASTEXITCODE -ne 0) { throw 'az account get-access-token failed; sign in with az login and rerun this block.' }
+    $r = $r | ConvertFrom-Json
+    if (-not $r.expires_on) { throw 'The response has no expires_on value; update the Azure CLI or use the Azure PowerShell block.' }
+    if ([DateTimeOffset]::FromUnixTimeSeconds([long]$r.expires_on) -le [DateTimeOffset]::UtcNow.AddMinutes(10)) {
+        throw 'Token expires within 10 minutes; sign in again and rerun this block.'
+    }
+    if ([guid]$r.tenant -ne $parsedTenant) { throw 'Token tenant does not match the deployment plan.' }
+    $token = [string]$r.accessToken
+    if ([string]::IsNullOrWhiteSpace($token)) { throw 'Token is empty; stop.' }
+} catch {
+    $token = $null
+    throw
+} finally {
+    $r = $null
+}
+```
+
+*Step 3: pass the token to the initialization command.* On the node, pass the
+string as `-ArmAccessToken $token`, or as `$params.ArmAccessToken = $token` when
+you build parameters as in the
+[initialization command for your deployment](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-without-azure-arc-gateway),
+keeping its other parameters unchanged. When the token was minted off the node,
+deliver it through the channel your automation already uses to run commands on
+the node, and start the initialization while at least 10 minutes remain; if
+delayed, repeat step 2. Do not write the token to a file, print, export, or
+transcribe it, or include it in a ticket; clear `$token = $null` after the
+initialization attempt and sign out as described in step 1.
+
+**Changes:** The token blocks only set session variables. Retrying initialization
 can create Azure resources and change the node's registration configuration and,
 when an update is required, install it and restart the node.
+
+**Option 2 (interactive only): let the registration command sign in with device
+code.** The `-ArmAccessToken` parameter is optional. If you omit it, the script
+prompts for device code authentication. A person must open the displayed address
+in a browser and complete the sign-in, so unattended or on-box automation cannot
+use this option. Rerun your original initialization command without
+`-ArmAccessToken`, keep its other parameters unchanged, and complete the sign-in
+with the code it displays. No token conversion or module change is needed.
+
+**Changes:** Retrying initialization can create Azure resources, change the
+node's registration configuration, and, when an update is required, install it
+and restart the node.
 
 Verify resolution using the original bootstrap status and the node's Azure Arc
 registration state. If registration still fails, retain the complete sanitized
@@ -427,24 +507,31 @@ with Microsoft support. Also include:
 ## Validation status of this article
 
 Validated in a lab on 2026-11-23 with Windows PowerShell 5.1 and Azure Connected
-Machine agent 1.70.03595.3521. These runs used a disposable Windows Server 2022
-test machine, not an Azure Local image, and throwaway resource groups. The
+Machine agent 1.70.03595.3521. These runs used disposable Windows Server 2022
+test machines, not an Azure Local image, and throwaway resource groups. The
 article's blocks ran unchanged except for their placeholders. The agent's connect
 command was run directly in place of the initialization command that wraps it;
 the full bootstrap was not run.
 
-- **Token cause (sections 2 and 3, option 2):** with Az.Accounts 5.5.3, the
+- **Token cause (sections 2 and 3, option 1):** with Az.Accounts 5.5.3, the
   unconverted token reproduced exit code 42 with `AZCM0042` and
   `status code 401` (`InvalidAuthenticationToken`), and no machine was created.
-  The section 3 token block produced a plain-text token, and the same connect
-  succeeded (machine `Connected`, provisioning `Succeeded`). `Disconnect-AzAccount`
-  then removed the saved sign-in. With Az.Accounts 4.0.2, the same block used the
-  plain-text token as is, and the connect succeeded.
-- **Token block stop conditions:** against stubbed token responses, the block
-  stopped on a token with 10 minutes or less remaining, an expired token, a
-  missing expiry, a tenant mismatch, an unexpected token type, and the text
-  `System.Security.SecureString`, and left `$token` empty each time. It also
-  stopped when `<tenant-id>` was not replaced.
+  The section 3 Azure PowerShell token block produced a plain-text token, and the
+  same connect succeeded (machine `Connected`, provisioning `Succeeded`).
+  `Disconnect-AzAccount` then removed the saved sign-in. With Az.Accounts 4.0.2,
+  the same block used the plain-text token as is, and the connect succeeded. In a
+  second run, the 401 was reproduced again, then the section 3 Azure CLI block
+  minted the token off the node (PowerShell 7.5 with Azure CLI 2.85.0 on a separate
+  workstation, signed in as an existing operator account), the token was passed to
+  the node through the remote execution channel, and the connect succeeded
+  (machine `Connected`, provisioning `Succeeded`).
+- **Token block stop conditions:** against stubbed token responses in Windows
+  PowerShell 5.1, the Azure PowerShell block stopped on a token with 10 minutes or
+  less remaining, an expired token, a missing expiry, a tenant mismatch, an
+  unexpected token type, and the text `System.Security.SecureString`, and left
+  `$token` empty each time. The Azure CLI block stopped on 10 minutes or less
+  remaining, an expired token, a missing `expires_on`, a tenant mismatch, an empty
+  token, and a failed `az` call. Both stopped when `<tenant-id>` was not replaced.
 - **Module block (section 1):** with no image recipe, the block printed
   `UNKNOWN-STOP` and changed nothing. With a staged recipe file that requires
   4.0.2 in the older format without a package type, it installed 4.0.2, printed
@@ -455,16 +542,18 @@ the full bootstrap was not run.
   A recipe requiring 5.5.3 printed `KEEP-MODULES`. The rollback command restored
   5.5.3. Earlier, on a deployed node of solution 12.2701.1004.15 whose real recipe
   requires 5.5.3, the block printed `KEEP-MODULES` and changed no modules.
-- **Dependent-module guard (section 1):** added after the lab runs above and
-  tested with mocked module inventories in PowerShell 7.5, not on the lab
-  machine. It stopped with `No changes were made`, before any install or removal,
-  when another module declared Az.Accounts 5.3.0 under `ModuleList` or
-  `RequiredModules`, as a minimum or a required version, or declared an
-  unreadable version. It continued for a maximum-only or lower requirement. With
-  only 4.0.2, with 5.3.0 or 10.0.0 beside 4.0.2, and with a newer copy not
-  installed by `Install-Module`, the block behaved exactly as before. The lab
-  machine had no other Az modules, so the guard would not have changed the runs
-  above.
+- **Dependent-module guard (section 1):** on Windows PowerShell 5.1 with
+  PowerShellGet 1.0.0.1 and the staged 4.0.2 recipe, `Az.Storage` 9.6.1 was
+  installed from the PowerShell Gallery; its manifest declares Az.Accounts 5.4.0
+  under `ModuleList`, and installing it added Az.Accounts 5.5.5 beside 5.5.3. The
+  block printed `ARC42-DEPENDENT` for `Az.Storage` and stopped with
+  `No changes were made`; the module inventory was identical before and after.
+  After `Az.Storage` was uninstalled, the block printed `ARC42-REMOVING` for 5.5.3
+  and 5.5.5, installed 4.0.2, and printed `REQUIRES-4.0.2`, leaving only 4.0.2.
+  The rollback command, run for each printed version, restored 5.5.3 and 5.5.5.
+  With mocked module inventories in PowerShell 7.5, the guard also stopped for a
+  `RequiredModules` entry, a required version, and an unreadable version, and
+  continued for a maximum-only or lower requirement.
 - **Cause 4:** an Azure Policy assignment that denies Azure Arc machine resources
   in the target resource group reproduced exit code 42 with `AZCM0042` and
   `httpStatusCode:403` (`RequestDisallowedByPolicy`). After the assignment was
@@ -477,12 +566,18 @@ the full bootstrap was not run.
   `--disable-scope-strict-match`, returned only the resource group's own
   assignment.
 - **Automation status:** remains `proven` because the documented token fix
-  (section 3, option 2) and policy fix (remove the denying assignment, then
-  retry) each connected the machine live.
-- **Not validated:** device code sign-in (option 1, and the
-  `Connect-AzAccount -UseDeviceAuthentication` sign-in in option 2), which needs a
-  person; a token that Azure rejects because it expired (expiry was tested only
-  against stubbed responses); the missing-role and quota variants of cause 4; a
-  real image whose recipe requires 4.0.2 (none was available, so a staged recipe
-  file stood in); and the full bootstrap command on an unregistered Azure Local
-  machine.
+  (section 3, option 1) and policy fix (remove the denying assignment, then
+  retry) each connected the machine live, including with a token minted off the
+  node. The sign-in that produces the token is supplied by an operator or by
+  automation that holds a pre-provisioned identity; see the automation boundary in
+  section 3.
+- **Not validated:** device code sign-in (option 2, and the operator's
+  `Connect-AzAccount -UseDeviceAuthentication` sign-in in option 1), which needs a
+  person; service principal sign-in (`Connect-AzAccount -ServicePrincipal` and
+  `az login --service-principal`), because no service principal was created for
+  the test (an existing operator account minted the token instead, and the
+  `Connect-AzAccount` certificate parameter set was confirmed present in
+  Az.Accounts 5.5.3); a token that Azure rejects because it expired (expiry was tested only against
+  stubbed responses); the missing-role and quota variants of cause 4; a real
+  image whose recipe requires 4.0.2 (none was available, so a staged recipe file
+  stood in); and the full bootstrap command on an unregistered Azure Local machine.
