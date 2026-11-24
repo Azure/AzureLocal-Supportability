@@ -365,26 +365,35 @@ subscription and resource group, then run:
 
 ```azurecli
 az resource show --subscription '<machine-subscription-id>' --resource-group '<machine-resource-group>' --name '<machine-name>' --resource-type Microsoft.HybridCompute/machines --query identity.principalId -o tsv
-az role assignment create --assignee-object-id '<principal-id>' --assignee-principal-type ServicePrincipal --role 'Azure Connected Machine Onboarding' --scope '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>'
+az role assignment list --assignee-object-id '<principal-id>' --role 'Azure Connected Machine Onboarding' --scope '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>' --query "[].id" -o tsv
 ```
 
 The first command prints the identity's principal ID, which you use as
 `<principal-id>`. If it prints nothing, the machine has no system-assigned
-identity; stop and use another identity.
+identity; stop and use another identity. The second command is read-only. If it
+prints an assignment ID, the identity already holds the role on that resource
+group, for example for other onboarding automation: do not create another
+assignment, and do not delete that one after registration. If it prints nothing,
+create the assignment and record the ID that it prints as `<assignment-id>`:
 
-**Changes:** the second command adds one role assignment; until it is removed,
-anyone who can mint a token on that machine can register machines into that
-resource group. Remove it after registration with
-`az role assignment delete --assignee '<principal-id>' --role 'Azure Connected Machine Onboarding' --scope '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>'`.
+```azurecli
+az role assignment create --assignee-object-id '<principal-id>' --assignee-principal-type ServicePrincipal --role 'Azure Connected Machine Onboarding' --scope '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>' --query id -o tsv
+```
+
+**Changes:** adds one role assignment; until it is removed, anyone who can mint a
+token on that machine can register machines into that resource group. Remove it
+after registration with `az role assignment delete --ids '<assignment-id>'`,
+which deletes only the assignment that this command created. Run that delete
+command only for an ID that this create command printed.
 A new assignment can take several minutes to apply; in validation it took about
 20 minutes, and retries before then still failed with 403.
 
 In validation, this role alone let the token register a machine with the agent's
 connect command. The initialization command was not validated with this identity.
 If its retry reports a 403, stop: do not grant this identity any other role or a
-broader scope. Remove the assignment with the command above, then mint the token
-from a service principal or operator account that already holds the roles in the
-permissions article, or use device code (option 2).
+broader scope. If you created an assignment, remove it with the delete command
+above, then mint the token from a service principal or operator account that
+already holds the roles in the permissions article, or use device code (option 2).
 
 Then, in an elevated Windows PowerShell 5.1 session on the registered machine,
 sign in as its managed identity, and continue with step 2 in the same session:
@@ -499,9 +508,10 @@ script: Azure Local nodes can have PowerShell script block logging turned on
 (it was on in validation), which records the text of every script that runs.
 Do not write the token to a file, print, export, or transcribe it, or include it
 in a ticket; clear `$token = $null` after the initialization attempt and sign out
-as described in step 1. If the token came from a managed identity, have the
-subscription owner remove its **Azure Connected Machine Onboarding** assignment
-with the `az role assignment delete` command in step 1.
+as described in step 1. If the token came from a managed identity and step 1
+created its **Azure Connected Machine Onboarding** assignment, have the
+subscription owner remove that assignment with the `az role assignment delete --ids`
+command in step 1. Do not remove an assignment that existed before step 1.
 
 **Changes:** The token blocks only set session variables. Retrying initialization
 can create Azure resources and change the node's registration configuration and,
@@ -573,16 +583,31 @@ the resource group, and the minting principal's object ID, and run:
 ```azurecli
 az provider show --namespace Microsoft.HybridCompute --subscription '<subscription-id>' --query registrationState -o tsv
 az role assignment list --assignee-object-id '<minting-principal-object-id>' --resource-group '<resource-group>' --subscription '<subscription-id>' --include-inherited --include-groups --query "[].roleDefinitionName" -o tsv
-az rest --method get --url '/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.Authorization/policyAssignments' --url-parameters 'api-version=2023-04-01' '$filter=atScope()' --query "value[].{name:properties.displayName, scope:properties.scope, enforcement:properties.enforcementMode}" -o table
+```
+
+Then list the policy assignments that apply to the resource group. `az rest`
+returns one page of results and does not follow the `nextLink` that Azure
+Resource Manager includes when more results exist, so this Bash loop (for
+example, Azure Cloud Shell in Bash) requests each following page until no
+`nextLink` remains:
+
+```bash
+url='/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.Authorization/policyAssignments?api-version=2023-04-01&$filter=atScope()'
+while [ -n "$url" ]; do
+  az rest --method get --url "$url" --query "value[].[properties.displayName, properties.scope, properties.enforcementMode]" -o tsv || break
+  url=$(az rest --method get --url "$url" --query nextLink -o tsv) || break
+done
 ```
 
 Expect `Registered`, then `Owner` or both Azure Connected Machine roles for the
 minting principal. A managed identity set up as in section 3 lists only
 **Azure Connected Machine Onboarding**; if its retry still returns 403, follow
-the stop instruction in section 3 instead of granting more roles. The last
-command lists every policy assignment that applies to the resource group,
-including those inherited from the subscription and management groups. Keep
-`'$filter=atScope()'` in single quotes so the shell does not expand it. Do not
+the stop instruction in section 3 instead of granting more roles. The loop prints
+one line for each policy assignment that applies to the resource group (name,
+scope, and enforcement), including those inherited from the subscription and
+management groups. If an `az rest` call fails, the loop stops; treat the list as
+incomplete and run it again. Keep the first `url` value in single quotes so the
+shell does not expand `$filter`. Do not
 substitute `az policy assignment list --resource-group`: in validation it listed
 only assignments made directly on the resource group, even with
 `--disable-scope-strict-match`. Compare the listed names with the
@@ -686,7 +711,8 @@ the full bootstrap was not run.
   in the target resource group reproduced exit code 42 with `AZCM0042` and
   `httpStatusCode:403` (`RequestDisallowedByPolicy`). After the assignment was
   removed, the retry connected. Separately, against a throwaway resource group
-  with the same deny assignment, the section 4 commands ran unchanged except for
+  with the same deny assignment, the section 4 commands, in their form before the
+  policy listing was changed to follow `nextLink`, ran unchanged except for
   their placeholders, in bash and in PowerShell with Azure CLI 2.85.0. They
   returned `Registered`, the required roles, and the deny assignment together with
   assignments inherited from the subscription and a management group.
@@ -711,8 +737,9 @@ the full bootstrap was not run.
   connected, the managed identity sign-in failed (no endpoint, then
   `service_unavailable`), which confirms that the failing node cannot use its own
   identity. The section 3 `az resource show`, `az role assignment create`, and
-  `az role assignment delete` commands ran unchanged except for their placeholders
-  against a throwaway resource group, and the assignment list was empty afterward.
+  `az role assignment delete` commands, in their form before the existing-assignment
+  check was added, ran unchanged except for their placeholders against a throwaway
+  resource group, and the assignment list was empty afterward.
 - **Automation status:** remains `proven` because the documented token fix
   (section 3, option 1) and policy fix (remove the denying assignment, then
   retry) each connected the machine live, including with a token minted off the
@@ -736,9 +763,25 @@ the full bootstrap was not run.
   was available for that run. The section 4 object ID lookups for a service
   principal (`az ad sp show`) and a user (`az ad signed-in-user show`) were not run;
   the managed identity lookup (`az resource show`) and the role list command were.
+- **Role grant and policy listing, revised 2026-11-24:** with Azure CLI 2.85.0
+  against a throwaway resource group and two throwaway user-assigned identities,
+  the section 3 role commands ran unchanged except for their placeholders. For an
+  identity without the role, the `az role assignment list` check printed nothing,
+  `az role assignment create` printed the new assignment ID, the check then printed
+  that same ID, and `az role assignment delete --ids` removed it. For an identity
+  whose assignment was created beforehand to stand in for other automation, the
+  check printed that assignment's ID, so the procedure created and deleted nothing,
+  and that assignment remained. The section 4 policy loop listed the three
+  assignments that apply to the resource group in one page. To confirm that it
+  follows `nextLink`, it was also run with a test-only `$top=1` added to the first
+  URL: a single `az rest` call then returned one assignment and a `nextLink`, and
+  the loop followed the links and listed the same three assignments. The resource
+  group, identities, and assignments were deleted afterward. These were not rerun
+  with a managed identity of a registered machine.
 
 ## Revision history
 
 | Date | Summary |
 | --- | --- |
 | 2026-11-24 | The section 1 module block now checks for newer Az.Accounts copies that were not installed with `Install-Module` before it installs 4.0.2, so that stop, like the other precondition stops, happens before any module changes. The section 4 role check now uses the object ID of the identity that minted the registration token, with a lookup for each identity type, instead of the account that runs the checks. |
+| 2026-11-24 | Section 3 now checks whether the managed identity already holds **Azure Connected Machine Onboarding** on the resource group before granting it. If it does, no assignment is created and none is deleted afterward; otherwise the cleanup deletes only the assignment that the procedure created, by its ID. The section 4 policy listing now follows `nextLink`, so assignments on later result pages are not missed. |
