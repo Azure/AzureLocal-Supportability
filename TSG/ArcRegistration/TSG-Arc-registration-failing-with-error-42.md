@@ -171,103 +171,109 @@ path during deployment or solution servicing.
 > declaring it. The removal is undone only by reinstalling each printed version
 > with the rollback command below, which needs access to the PowerShell Gallery.
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit
+so that a failed check stops everything after it, and its
+`$ErrorActionPreference` setting does not carry over into the session.
+
 ```powershell
-$ErrorActionPreference = 'Stop'
-try {
-    $recipePath = Join-Path $env:SystemRoot 'System32\AzureLocalImage\OSImageRecipe.xml'
-    [xml]$recipe = Get-Content -LiteralPath $recipePath -Raw -ErrorAction Stop
-    $accounts = @($recipe.SelectNodes('/BuildInfo/Packages/Package[Name="Az.Accounts"]'))
-    $packageType = [string]$accounts[0].PackageType
-    if ($accounts.Count -ne 1 -or ($packageType -and $packageType -ne 'PowerShellModule')) {
-        throw 'The image recipe does not identify exactly one Az.Accounts module.'
-    }
-    $required = [version]([string]$accounts[0].Version)
-    if ($required -lt [version]'5.0.0' -and $required -ne [version]'4.0.2') {
-        throw 'This recipe is not eligible for the 4.0.2 workaround.'
-    }
-} catch {
-    Write-Output 'ARC42-MODULE-GATE: UNKNOWN-STOP'
-    throw
-}
-if ($required -ge [version]'5.0.0') {
-    Write-Output 'ARC42-MODULE-GATE: KEEP-MODULES'
-} else {
-    if (@(Get-Module -Name Az.Accounts | Where-Object { $_.Version -gt [version]'4.0.2' }).Count) {
-        throw 'A newer Az.Accounts version is loaded. Start a fresh PowerShell session.'
-    }
-    $available = @(Get-Module -ListAvailable -Name Az.Accounts)
-    if (@($available | Where-Object { $_.Version -gt [version]'4.0.2' }).Count) {
-        $dependents = @(Get-Module -ListAvailable | Where-Object { $_.Name -ne 'Az.Accounts' } | Where-Object {
-            @(@($_.RequiredModules) + @($_.ModuleList) | Where-Object {
-                $name = if ($_ -is [string]) { $_ } elseif ($_.Name) { [string]$_.Name } else { [string]$_.ModuleName }
-                $need = @($_.RequiredVersion, $_.Version, $_.ModuleVersion | Where-Object { $_ })
-                $name -eq 'Az.Accounts' -and $need.Count -and
-                    (-not ([string]$need[0] -as [version]) -or [version][string]$need[0] -gt [version]'4.0.2')
-            }).Count })
-        if ($dependents.Count) {
-            $dependents | ForEach-Object { Write-Output "ARC42-DEPENDENT: $($_.Name) $($_.Version) at $($_.ModuleBase)" }
-            throw 'The modules listed above require Az.Accounts newer than 4.0.2. No changes were made.'
-        }
-    }
-    # Uninstall-Module removes only the copy that Install-Module recorded, so every newer copy
-    # must be that recorded copy, in the all-users module folder. PowerShellGet 2.x returns
-    # Version as a string, so cast before comparing.
-    $galleryCopies = @(Get-InstalledModule -Name Az.Accounts -AllVersions -ErrorAction SilentlyContinue)
-    $allUsersPath = "$env:ProgramFiles\WindowsPowerShell\Modules\"
-    $newer = @($available | Where-Object { $_.Version -gt [version]'4.0.2' } | Sort-Object Version)
-    $unmanaged = @($newer | Where-Object {
-        $base = ([string]$_.ModuleBase).TrimEnd('\')
-        $version = $_.Version
-        -not $base.StartsWith($allUsersPath, [StringComparison]::OrdinalIgnoreCase) -or
-        -not @($galleryCopies | Where-Object {
-            [version][string]$_.Version -eq $version -and ([string]$_.InstalledLocation).TrimEnd('\') -eq $base
-        }).Count })
-    if ($unmanaged.Count) {
-        throw ('Uninstall-Module cannot remove these newer Az.Accounts copies. No changes were made: ' +
-            (($unmanaged | ForEach-Object { "$($_.Version) at $($_.ModuleBase)" }) -join '; '))
-    }
-    # Every check above runs before any change. The checks below verify the changes.
-    $installed = $false
-    if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) {
-        Install-Module -Name Az.Accounts -RequiredVersion 4.0.2 -Scope AllUsers `
-            -Repository PSGallery -Force -ErrorAction Stop | Out-Null
-        $installed = $true
-        Write-Output 'ARC42-INSTALLED: Az.Accounts 4.0.2'
-        $available = @(Get-Module -ListAvailable -Name Az.Accounts)
-    }
-    if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) {
-        throw 'Required version 4.0.2 is not available after installation; nothing was removed.'
-    }
-    foreach ($module in $newer) {
-        Write-Output "ARC42-REMOVING: Az.Accounts $($module.Version) at $($module.ModuleBase)"
-    }
-    $removed = [System.Collections.Generic.List[string]]::new()
-    $problem = $null
+& {
+    $ErrorActionPreference = 'Stop'
     try {
-        foreach ($version in @($newer | ForEach-Object { $_.Version } | Sort-Object -Unique)) {
-            Uninstall-Module -Name Az.Accounts -RequiredVersion $version.ToString() -Force -ErrorAction Stop
-            $removed.Add($version.ToString())
+        $recipePath = Join-Path $env:SystemRoot 'System32\AzureLocalImage\OSImageRecipe.xml'
+        [xml]$recipe = Get-Content -LiteralPath $recipePath -Raw -ErrorAction Stop
+        $accounts = @($recipe.SelectNodes('/BuildInfo/Packages/Package[Name="Az.Accounts"]'))
+        $packageType = [string]$accounts[0].PackageType
+        if ($accounts.Count -ne 1 -or ($packageType -and $packageType -ne 'PowerShellModule')) {
+            throw 'The image recipe does not identify exactly one Az.Accounts module.'
         }
-        $remaining = @(Get-Module -ListAvailable -Name Az.Accounts)
-        $left = @($remaining | Where-Object { $_.Version -gt [version]'4.0.2' })
-        if ($left.Count) {
-            $problem = 'Newer Az.Accounts copies remain: ' +
-                (($left | ForEach-Object { "$($_.Version) at $($_.ModuleBase)" }) -join '; ') + '.'
-        } elseif (-not ($remaining | Where-Object { $_.Version -eq [version]'4.0.2' })) {
-            $problem = 'Az.Accounts 4.0.2 is no longer available.'
+        $required = [version]([string]$accounts[0].Version)
+        if ($required -lt [version]'5.0.0' -and $required -ne [version]'4.0.2') {
+            throw 'This recipe is not eligible for the 4.0.2 workaround.'
         }
     } catch {
-        $problem = "Uninstall-Module failed ($($_.Exception.Message))."
+        Write-Output 'ARC42-MODULE-GATE: UNKNOWN-STOP'
+        throw
     }
-    if ($problem) {
-        $undo = if ($installed) { ', then Uninstall-Module -Name Az.Accounts -RequiredVersion 4.0.2' } else { '' }
-        throw ("Post-change verification failed; do not retry registration. $problem Changes made: " +
-            $(if ($installed) { 'installed Az.Accounts 4.0.2' } else { 'nothing installed' }) +
-            '; Uninstall-Module completed for ' +
-            $(if ($removed.Count) { 'Az.Accounts ' + ($removed -join ', ') } else { 'no version' }) +
-            ". To roll back, run the section 1 rollback command for each of those versions$undo.")
+    if ($required -ge [version]'5.0.0') {
+        Write-Output 'ARC42-MODULE-GATE: KEEP-MODULES'
+    } else {
+        if (@(Get-Module -Name Az.Accounts | Where-Object { $_.Version -gt [version]'4.0.2' }).Count) {
+            throw 'A newer Az.Accounts version is loaded. Start a fresh PowerShell session.'
+        }
+        $available = @(Get-Module -ListAvailable -Name Az.Accounts)
+        if (@($available | Where-Object { $_.Version -gt [version]'4.0.2' }).Count) {
+            $dependents = @(Get-Module -ListAvailable | Where-Object { $_.Name -ne 'Az.Accounts' } | Where-Object {
+                @(@($_.RequiredModules) + @($_.ModuleList) | Where-Object {
+                    $name = if ($_ -is [string]) { $_ } elseif ($_.Name) { [string]$_.Name } else { [string]$_.ModuleName }
+                    $need = @($_.RequiredVersion, $_.Version, $_.ModuleVersion | Where-Object { $_ })
+                    $name -eq 'Az.Accounts' -and $need.Count -and
+                        (-not ([string]$need[0] -as [version]) -or [version][string]$need[0] -gt [version]'4.0.2')
+                }).Count })
+            if ($dependents.Count) {
+                $dependents | ForEach-Object { Write-Output "ARC42-DEPENDENT: $($_.Name) $($_.Version) at $($_.ModuleBase)" }
+                throw 'The modules listed above require Az.Accounts newer than 4.0.2. No changes were made.'
+            }
+        }
+        # Uninstall-Module removes only the copy that Install-Module recorded, so every newer copy
+        # must be that recorded copy, in the all-users module folder. PowerShellGet 2.x returns
+        # Version as a string, so cast before comparing.
+        $galleryCopies = @(Get-InstalledModule -Name Az.Accounts -AllVersions -ErrorAction SilentlyContinue)
+        $allUsersPath = "$env:ProgramFiles\WindowsPowerShell\Modules\"
+        $newer = @($available | Where-Object { $_.Version -gt [version]'4.0.2' } | Sort-Object Version)
+        $unmanaged = @($newer | Where-Object {
+            $base = ([string]$_.ModuleBase).TrimEnd('\')
+            $version = $_.Version
+            -not $base.StartsWith($allUsersPath, [StringComparison]::OrdinalIgnoreCase) -or
+            -not @($galleryCopies | Where-Object {
+                [version][string]$_.Version -eq $version -and ([string]$_.InstalledLocation).TrimEnd('\') -eq $base
+            }).Count })
+        if ($unmanaged.Count) {
+            throw ('Uninstall-Module cannot remove these newer Az.Accounts copies. No changes were made: ' +
+                (($unmanaged | ForEach-Object { "$($_.Version) at $($_.ModuleBase)" }) -join '; '))
+        }
+        # Every check above runs before any change. The checks below verify the changes.
+        $installed = $false
+        if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) {
+            Install-Module -Name Az.Accounts -RequiredVersion 4.0.2 -Scope AllUsers `
+                -Repository PSGallery -Force -ErrorAction Stop | Out-Null
+            $installed = $true
+            Write-Output 'ARC42-INSTALLED: Az.Accounts 4.0.2'
+            $available = @(Get-Module -ListAvailable -Name Az.Accounts)
+        }
+        if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) {
+            throw 'Required version 4.0.2 is not available after installation; nothing was removed.'
+        }
+        foreach ($module in $newer) {
+            Write-Output "ARC42-REMOVING: Az.Accounts $($module.Version) at $($module.ModuleBase)"
+        }
+        $removed = [System.Collections.Generic.List[string]]::new()
+        $problem = $null
+        try {
+            foreach ($version in @($newer | ForEach-Object { $_.Version } | Sort-Object -Unique)) {
+                Uninstall-Module -Name Az.Accounts -RequiredVersion $version.ToString() -Force -ErrorAction Stop
+                $removed.Add($version.ToString())
+            }
+            $remaining = @(Get-Module -ListAvailable -Name Az.Accounts)
+            $left = @($remaining | Where-Object { $_.Version -gt [version]'4.0.2' })
+            if ($left.Count) {
+                $problem = 'Newer Az.Accounts copies remain: ' +
+                    (($left | ForEach-Object { "$($_.Version) at $($_.ModuleBase)" }) -join '; ') + '.'
+            } elseif (-not ($remaining | Where-Object { $_.Version -eq [version]'4.0.2' })) {
+                $problem = 'Az.Accounts 4.0.2 is no longer available.'
+            }
+        } catch {
+            $problem = "Uninstall-Module failed ($($_.Exception.Message))."
+        }
+        if ($problem) {
+            $undo = if ($installed) { ', then Uninstall-Module -Name Az.Accounts -RequiredVersion 4.0.2' } else { '' }
+            throw ("Post-change verification failed; do not retry registration. $problem Changes made: " +
+                $(if ($installed) { 'installed Az.Accounts 4.0.2' } else { 'nothing installed' }) +
+                '; Uninstall-Module completed for ' +
+                $(if ($removed.Count) { 'Az.Accounts ' + ($removed -join ', ') } else { 'no version' }) +
+                ". To roll back, run the section 1 rollback command for each of those versions$undo.")
+        }
+        Write-Output 'ARC42-MODULE-GATE: REQUIRES-4.0.2'
     }
-    Write-Output 'ARC42-MODULE-GATE: REQUIRES-4.0.2'
 }
 ```
 
@@ -489,36 +495,45 @@ account or service principal, sign in again with `-Tenant '<tenant-id>'` (or
 `--tenant` with the Azure CLI) as in step 1; a managed identity works only when
 its machine is registered in the same tenant as the failing node.
 
+**Paste or run each token block whole, not line by line.** Each block runs as
+one unit, so a failed check stops everything after it and leaves `$token` empty.
+Each block starts with `. {` so that `$token` remains in the session for step 3,
+and it restores the session's `$ErrorActionPreference` when it finishes.
+
 ```powershell
-$ErrorActionPreference = 'Stop'
-$token = $null
-$t = $null
-$TenantId = '<tenant-id>'
-$parsedTenant = [guid]::Empty
-if (-not [guid]::TryParse($TenantId, [ref]$parsedTenant) -or $parsedTenant -eq [guid]::Empty) {
-    throw 'Replace <tenant-id> with the resource tenant ID before requesting a token.'
-}
-try {
-    $t = Get-AzAccessToken -ResourceTypeName Arm -ErrorAction Stop
-    if (-not $t.ExpiresOn -or [DateTimeOffset]$t.ExpiresOn -le [DateTimeOffset]::UtcNow.AddMinutes(10)) {
-        throw 'Token expires within 10 minutes; sign in again and rerun this block.'
-    }
-    if ([guid]$t.TenantId -ne $parsedTenant) { throw 'Token tenant does not match the deployment plan.' }
-    if ($t.Token -is [System.Security.SecureString]) {
-        $token = [System.Net.NetworkCredential]::new('', $t.Token).Password
-    } elseif ($t.Token -is [string]) {
-        $token = $t.Token
-    } else {
-        throw 'Unexpected token property type; stop.'
-    }
-    if ([string]::IsNullOrWhiteSpace($token) -or $token -eq 'System.Security.SecureString') {
-        throw 'Token is empty or incorrectly converted; stop.'
-    }
-} catch {
+. {
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = 'Stop'
     $token = $null
-    throw
-} finally {
     $t = $null
+    $TenantId = '<tenant-id>'
+    $parsedTenant = [guid]::Empty
+    try {
+        if (-not [guid]::TryParse($TenantId, [ref]$parsedTenant) -or $parsedTenant -eq [guid]::Empty) {
+            throw 'Replace <tenant-id> with the resource tenant ID before requesting a token.'
+        }
+        $t = Get-AzAccessToken -ResourceTypeName Arm -ErrorAction Stop
+        if (-not $t.ExpiresOn -or [DateTimeOffset]$t.ExpiresOn -le [DateTimeOffset]::UtcNow.AddMinutes(10)) {
+            throw 'Token expires within 10 minutes; sign in again and rerun this block.'
+        }
+        if ([guid]$t.TenantId -ne $parsedTenant) { throw 'Token tenant does not match the deployment plan.' }
+        if ($t.Token -is [System.Security.SecureString]) {
+            $token = [System.Net.NetworkCredential]::new('', $t.Token).Password
+        } elseif ($t.Token -is [string]) {
+            $token = $t.Token
+        } else {
+            throw 'Unexpected token property type; stop.'
+        }
+        if ([string]::IsNullOrWhiteSpace($token) -or $token -eq 'System.Security.SecureString') {
+            throw 'Token is empty or incorrectly converted; stop.'
+        }
+    } catch {
+        $token = $null
+        throw
+    } finally {
+        $t = $null
+        $ErrorActionPreference = $previousErrorAction
+    }
 }
 ```
 
@@ -533,30 +548,34 @@ support for a managed identity
 so the same block works after `az login --identity --allow-no-subscriptions`.
 
 ```powershell
-$ErrorActionPreference = 'Stop'
-$token = $null
-$r = $null
-$TenantId = '<tenant-id>'
-$parsedTenant = [guid]::Empty
-if (-not [guid]::TryParse($TenantId, [ref]$parsedTenant) -or $parsedTenant -eq [guid]::Empty) {
-    throw 'Replace <tenant-id> with the resource tenant ID before requesting a token.'
-}
-try {
-    $r = (az account get-access-token --resource https://management.azure.com -o json | Out-String)
-    if ($LASTEXITCODE -ne 0) { throw 'az account get-access-token failed; sign in with az login and rerun this block.' }
-    $r = $r | ConvertFrom-Json
-    if (-not $r.expires_on) { throw 'The response has no expires_on value; update the Azure CLI or use the Azure PowerShell block.' }
-    if ([DateTimeOffset]::FromUnixTimeSeconds([long]$r.expires_on) -le [DateTimeOffset]::UtcNow.AddMinutes(10)) {
-        throw 'Token expires within 10 minutes; sign in again and rerun this block.'
-    }
-    if ([guid]$r.tenant -ne $parsedTenant) { throw 'Token tenant does not match the deployment plan.' }
-    $token = [string]$r.accessToken
-    if ([string]::IsNullOrWhiteSpace($token)) { throw 'Token is empty; stop.' }
-} catch {
+. {
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = 'Stop'
     $token = $null
-    throw
-} finally {
     $r = $null
+    $TenantId = '<tenant-id>'
+    $parsedTenant = [guid]::Empty
+    try {
+        if (-not [guid]::TryParse($TenantId, [ref]$parsedTenant) -or $parsedTenant -eq [guid]::Empty) {
+            throw 'Replace <tenant-id> with the resource tenant ID before requesting a token.'
+        }
+        $r = (az account get-access-token --resource https://management.azure.com -o json | Out-String)
+        if ($LASTEXITCODE -ne 0) { throw 'az account get-access-token failed; sign in with az login and rerun this block.' }
+        $r = $r | ConvertFrom-Json
+        if (-not $r.expires_on) { throw 'The response has no expires_on value; update the Azure CLI or use the Azure PowerShell block.' }
+        if ([DateTimeOffset]::FromUnixTimeSeconds([long]$r.expires_on) -le [DateTimeOffset]::UtcNow.AddMinutes(10)) {
+            throw 'Token expires within 10 minutes; sign in again and rerun this block.'
+        }
+        if ([guid]$r.tenant -ne $parsedTenant) { throw 'Token tenant does not match the deployment plan.' }
+        $token = [string]$r.accessToken
+        if ([string]::IsNullOrWhiteSpace($token)) { throw 'Token is empty; stop.' }
+    } catch {
+        $token = $null
+        throw
+    } finally {
+        $r = $null
+        $ErrorActionPreference = $previousErrorAction
+    }
 }
 ```
 
@@ -934,6 +953,34 @@ the full bootstrap was not run.
   unchanged. The instruction to remove the role assignment on every exit after it is
   created is procedural; the delete command itself was validated in the role grant
   run below.
+- **Blocks pasted line by line (sections 1 and 3), 2026-11-24:** when PSReadLine
+  reads a paste as keystrokes, PowerShell runs each top-level statement as soon as
+  it is complete, and a `throw` ends only that statement. To reproduce this, each
+  block was split into its top-level statements, which were run one at a time in
+  the same session, continuing after each error. In the earlier form of the
+  section 1 block, the recipe check was separate from the statement that changes
+  modules. With mocked module cmdlets in PowerShell 7.5, a run with no recipe, or
+  with a recipe requiring 3.0.5, printed `UNKNOWN-STOP`, then installed 4.0.2,
+  removed 5.5.3, and printed `REQUIRES-4.0.2`. The section 1 block is now a single
+  statement. Run that way, it printed only `UNKNOWN-STOP`, made no install or
+  uninstall call, and left the session's `$ErrorActionPreference` unchanged.
+  Recipes requiring 4.0.2 and 5.5.3 still printed `REQUIRES-4.0.2` and
+  `KEEP-MODULES`, run whole or line by line, and the 15 mocked cases above gave the
+  same results as before. On the registered Azure Local node described above
+  (Windows PowerShell 5.1, PSReadLine 2.0.0, recipe requiring 5.5.3), the revised
+  block, run as one input, printed `KEEP-MODULES` and left the module inventory
+  unchanged. Run line by line on that node, with `Install-Module` and
+  `Uninstall-Module` replaced by functions that only recorded calls, and with the
+  recipe read redirected to a missing file or to a recipe requiring 3.0.5, the
+  earlier block printed `UNKNOWN-STOP` and then went on to the 4.0.2 checks: it
+  printed `ARC42-DEPENDENT` for the node's other Az modules and stopped there. The
+  revised block printed only `UNKNOWN-STOP`. Neither made a module call, and the
+  inventory was unchanged. The earlier section 3 token blocks, run line by line
+  with `<tenant-id>` not replaced, still requested a token after the placeholder
+  stop. Each token block is now a single dot-sourced statement. Against stubbed
+  token responses, the revised blocks requested no token in that case. With a
+  matching tenant they left `$token` set in the session, cleared `$t` or `$r`, and
+  restored the session's `$ErrorActionPreference`, run whole or line by line.
 - **Automation status:** remains `proven` because the documented token fix
   (section 3, option 1) and policy fix (remove the denying assignment, then
   retry) each connected the machine live, including with a token minted off the
@@ -978,6 +1025,7 @@ the full bootstrap was not run.
 
 | Date | Summary |
 | --- | --- |
+| 2026-11-24 | The section 1 module block now runs as a single statement (`& { ... }`), so a failed recipe check stops the module changes even when the block is pasted line by line, and its `$ErrorActionPreference` setting no longer carries over into the session. The section 3 token blocks are now single dot-sourced statements (`. { ... }`): a failed check stops the token request, `$token` stays in the session for step 3, and the session's `$ErrorActionPreference` is restored. Sections 1 and 3 now say to paste or run each block whole. |
 | 2026-11-24 | The section 1 module block now checks for newer Az.Accounts copies that were not installed with `Install-Module` before it installs 4.0.2, so that stop, like the other precondition stops, happens before any module changes. The section 4 role check now uses the object ID of the identity that minted the registration token, with a lookup for each identity type, instead of the account that runs the checks. |
 | 2026-11-24 | Section 3 now checks whether the managed identity already holds **Azure Connected Machine Onboarding** on the resource group before granting it. If it does, no assignment is created and none is deleted afterward; otherwise the cleanup deletes only the assignment that the procedure created, by its ID. The section 4 policy listing now follows `nextLink`, so assignments on later result pages are not missed. |
 | 2026-11-24 | The section 1 module block now stops before any change for every Az.Accounts copy that `Install-Module` cannot remove, including a copy with the same version as an installed one. Its final check, which runs after the changes, now reports what it installed and uninstalled and how to roll back. Section 3 now describes what removing the role assignment means for a token already minted. The section 4 policy listing now prints each assignment's ID and policy definition ID, and explains how to match them to the denying assignment named in the error. |
