@@ -43,6 +43,7 @@
 | 2026-11-23 | Removed the fixed module versions (Az.Accounts 4.0.2, Az.Resources 7.8.0, Az.Storage 8.1.0, Az.StackHCI 2.5.0) and the commands that uninstalled every other version. On builds whose validated recipe requires Az.Accounts 5.x, those commands downgraded the product's own modules. The check and the fix now read the exact versions from the machine's validated recipe, install a missing recipe version, and remove only the versions that cause this error. They stop before changing anything when the recipe cannot be read, when another installed module still needs a version that would be removed, or when Azure PowerShell modules are already loaded in the session. |
 | 2026-11-23 | Validated on an Azure Local lab machine in Windows PowerShell 5.1, which found and fixed two defects in the earlier 2026-11-23 revision. The checks now read each module's `Az.Accounts` requirement from `ModuleList` as well as `RequiredModules`, because current Az module manifests declare it there; before this fix the check reported `NOT AFFECTED` on an affected machine. Step 2 now lists installed versions one module name at a time, because `Get-InstalledModule -AllVersions` rejects several or wildcard names; before this fix Step 2 stopped with that error before making any change. |
 | 2026-11-24 | Added the administrator surfaces observed in a lab run, the `RESULT` lines for each cause, the repository endpoint, and a prevention note. Validated the first cause again as an automated loop. Stated which steps automation can run and that resuming a deployment from the Azure portal needs a person. |
+| 2026-11-24 | Step 2 now keeps every version that another installed module requires as an exact version (`RequiredVersion`), not only as a minimum or maximum version. It installs the recipe version of a module for all users when the only copy of that version is in a user's `Documents` folder, before it removes the newer version. After installing, it reads the installed modules again and plans the removals from that list, so that a newer `Az.Accounts` that `Install-Module` adds as a dependency is also removed, and it prints `RESULT: CHANGED` only after it confirms that no newer `Az.Accounts` remains. |
 
 ## At a glance
 
@@ -259,7 +260,7 @@ Run these steps on each machine where Issue Validation reported `RESULT: AFFECTE
 
 **[HIGH RISK]**
 
-**Changes:** installs the recipe version of `Az.Accounts`, and of any recipe module whose newer version is removed, if that version is missing. It then uninstalls, for recipe modules only, the versions that are newer than the recipe and need a newer `Az.Accounts` than the recipe lists. Last, it uninstalls `Az.Accounts` versions newer than the recipe version, so that the recipe version is the one that loads. Older versions and modules that are not in the recipe are not changed. `Install-Module` can also install the dependencies that the publisher declares for a module, as described in [Install-Module](https://learn.microsoft.com/powershell/module/powershellget/install-module). Each removed version is printed as a `REMOVING:` line, which you need for [Rollback](#rollback).
+**Changes:** installs the recipe version of `Az.Accounts`, and of any recipe module whose newer version is removed, if that version is missing from `C:\Program Files\WindowsPowerShell\Modules`. A copy only in a user's `Documents` folder does not count, because other users and services cannot load it. It then uninstalls, for recipe modules only, the versions that are newer than the recipe and need a newer `Az.Accounts` than the recipe lists. Last, it uninstalls `Az.Accounts` versions newer than the recipe version, including one that `Install-Module` added as a dependency, so that the recipe version is the one that loads. Older versions and modules that are not in the recipe are not changed. `Install-Module` can also install the dependencies that the publisher declares for a module, as described in [Install-Module](https://learn.microsoft.com/powershell/module/powershellget/install-module). Each removed version is printed as a `REMOVING:` line, which you need for [Rollback](#rollback).
 
 > [!WARNING]
 > Uninstalling a module version cannot be undone, except by installing that version again. If a running process, such as a deployment or update step, is using the version, the operation that uses it can be interrupted. Run this only while no deployment or update step is running.
@@ -269,8 +270,10 @@ The block stops before changing anything, and prints `No changes were made`, whe
 - It is not running in an elevated Windows PowerShell 5.1 session, or an Azure PowerShell module is already loaded in the session.
 - The validated recipe cannot be read, does not list `Az.Accounts`, or lists an invalid or duplicated version.
 - A copy of `Az.Accounts`, or a copy that would be removed, is outside `C:\Program Files\WindowsPowerShell\Modules` or was not installed with `Install-Module`.
-- Another installed module, including modules that are not in the recipe such as the `Az` rollup module, needs a version that would be removed. This check reads each module's manifest (`RequiredModules` and `ModuleList`); a module that enforces a minimum version only inside its own script is not detected. `Uninstall-Module` is run with `-Force` because without it PowerShellGet refuses to remove any version that another module names as a dependency, whatever version that module needs; this check replaces that refusal with an exact version check.
+- Another installed module, including modules that are not in the recipe such as the `Az` rollup module, needs a version that would be removed: an exact version (`RequiredVersion`) that would be removed, or a minimum (`ModuleVersion`) or maximum (`MaximumVersion`) version that no remaining version meets. The message names the module. This check reads each module's manifest file (`RequiredModules` and `ModuleList`); a module that enforces a version only inside its own script is not detected. `Uninstall-Module` is run with `-Force` because without it PowerShellGet refuses to remove any version that another module names as a dependency, whatever version that module needs; this check replaces that refusal with an exact version check.
 - A version that needs to be installed is not available in the repository.
+
+After it installs a version, the block reads the installed modules again and builds the plan again with the same checks, because `Install-Module` can also install a newer `Az.Accounts` as a dependency. That newer version is then removed as well. If a check fails at that point, the block stops with `The installed versions were kept and no versions were removed`. It prints `RESULT: CHANGED` only after it confirms that the recipe version of `Az.Accounts` is installed for all users and that no newer `Az.Accounts` remains.
 
 Leave `$Repository` set to `'PSGallery'` unless your organization requires an approved internal repository. With the PowerShell Gallery, the machine needs HTTPS access to `www.powershellgallery.com` and to the Gallery's download endpoints listed in [Network access to the PowerShell Gallery](https://learn.microsoft.com/powershell/gallery/getting-started#network-access-to-the-powershell-gallery). If a download endpoint is blocked, `Install-Module` fails before any version is removed.
 
@@ -350,51 +353,88 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
             '. That copy can load first. Contact Microsoft support. No changes were made.')
     }
 
-    # Build the full plan before changing anything.
-    $installs = @()
-    if (-not @($inventory | Where-Object { $_.Name -eq 'Az.Accounts' -and $_.Version -eq $accountsTarget })) {
-        $installs += [pscustomobject]@{ Name = 'Az.Accounts'; Version = $accountsTarget }
+    function Get-UnmetDependent {
+        # Lists installed modules whose manifest needs a version of $ModuleName that is not kept: RequiredVersion
+        # is an exact version, ModuleVersion a minimum, and MaximumVersion a maximum. The manifest file is read
+        # because Get-Module reports an exact RequiredModules version as a minimum.
+        param([string]$ModuleName, [version[]]$KeptVersion, [object[]]$Modules, [string[]]$ExcludeKey = @())
+        foreach ($d in $Modules) {
+            if ($d.Name -eq $ModuleName -or $ExcludeKey -contains "$($d.Name)|$([version]$d.Version)") { continue }
+            if (-not @(@($d.RequiredModules) + @($d.ModuleList) | Where-Object { $_ -and $_.Name -eq $ModuleName })) { continue }
+            try {
+                $data = Import-PowerShellDataFile -LiteralPath $d.Path -ErrorAction Stop
+                foreach ($entry in @(@($data.RequiredModules) + @($data.ModuleList) | Where-Object { $_ })) {
+                    $s = [Microsoft.PowerShell.Commands.ModuleSpecification]::new($entry)
+                    if ($s.Name -ne $ModuleName) { continue }
+                    if ($s.RequiredVersion) {
+                        $ok = $KeptVersion -contains $s.RequiredVersion
+                        $needs = "exactly $($s.RequiredVersion)"
+                    } elseif ($s.Version -or $s.MaximumVersion) {
+                        $max = $null
+                        if ($s.MaximumVersion) { $max = [version]($s.MaximumVersion -replace '\*', '999999999') }
+                        $ok = @($KeptVersion | Where-Object { (-not $s.Version -or $_ -ge $s.Version) -and (-not $max -or $_ -le $max) }).Count -gt 0
+                        $range = @()
+                        if ($s.Version) { $range += "$($s.Version) or later" }
+                        if ($s.MaximumVersion) { $range += "at most $($s.MaximumVersion)" }
+                        $needs = $range -join ' and '
+                    } else { continue }
+                    if (-not $ok) { [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Needs = "$ModuleName $needs" } }
+                }
+            } catch {
+                [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Needs = "a $ModuleName version that could not be read from $($d.Path)" }
+            }
+        }
     }
-    $removals = @()
-    foreach ($m in @($inventory | Where-Object { $_.Name -ne 'Az.Accounts' -and $_.NeedsAzAccounts -and $_.NeedsAzAccounts -gt $accountsTarget })) {
-        if (-not $recipe.ContainsKey($m.Name)) {
-            Write-Warning "$($m.Name) $($m.Version) is not in the validated recipe and needs Az.Accounts $($m.NeedsAzAccounts). It is not changed."
-            continue
+    # Build the plan and check it against every installed module. The plan is built again after installation,
+    # because Install-Module can also install dependencies, such as a newer Az.Accounts.
+    function Get-AzPlan {
+        param([object[]]$Inventory, [string]$Outcome)
+        $installs = @()
+        if (-not @($Inventory | Where-Object { $_.Name -eq 'Az.Accounts' -and $_.Version -eq $accountsTarget -and $_.AllUsers })) {
+            $installs += [pscustomobject]@{ Name = 'Az.Accounts'; Version = $accountsTarget }
         }
-        if ($m.Version -le $recipe[$m.Name]) {
-            throw "The recipe version of $($m.Name) needs a newer Az.Accounts than the recipe lists. Contact Microsoft support. No changes were made."
+        $removals = @()
+        foreach ($m in @($Inventory | Where-Object { $_.Name -ne 'Az.Accounts' -and $_.NeedsAzAccounts -and $_.NeedsAzAccounts -gt $accountsTarget })) {
+            if (-not $recipe.ContainsKey($m.Name)) {
+                Write-Warning "$($m.Name) $($m.Version) is not in the validated recipe and needs Az.Accounts $($m.NeedsAzAccounts). It is not changed."
+                continue
+            }
+            if ($m.Version -le $recipe[$m.Name]) {
+                throw "The recipe version of $($m.Name) needs a newer Az.Accounts than the recipe lists. Contact Microsoft support. $Outcome"
+            }
+            $removals += $m
+            # Only an all-users copy of the recipe version replaces the removed version for every user.
+            if (-not @($Inventory | Where-Object { $_.Name -eq $m.Name -and $_.Version -eq $recipe[$m.Name] -and $_.AllUsers }) -and
+                -not @($installs | Where-Object { $_.Name -eq $m.Name })) {
+                $installs += [pscustomobject]@{ Name = $m.Name; Version = $recipe[$m.Name] }
+            }
         }
-        $removals += $m
-        if (-not @($inventory | Where-Object { $_.Name -eq $m.Name -and $_.Version -eq $recipe[$m.Name] }) -and
-            -not @($installs | Where-Object { $_.Name -eq $m.Name })) {
-            $installs += [pscustomobject]@{ Name = $m.Name; Version = $recipe[$m.Name] }
-        }
-    }
-    $removals += @($inventory | Where-Object { $_.Name -eq 'Az.Accounts' -and $_.Version -gt $accountsTarget })
+        $removals += @($Inventory | Where-Object { $_.Name -eq 'Az.Accounts' -and $_.Version -gt $accountsTarget })
 
-    $removalKeys = @($removals | ForEach-Object { "$($_.Name)|$($_.Version)" })
-    $allModules = @(Get-Module -ListAvailable)
-    foreach ($r in $removals) {
-        if (-not $r.AllUsers -or -not $r.Managed) {
-            throw "$($r.Name) $($r.Version) at $($r.ModuleBase) was not installed with Install-Module in the all-users folder. Contact Microsoft support. No changes were made."
+        $removalKeys = @($removals | ForEach-Object { "$($_.Name)|$($_.Version)" })
+        $allModules = @(Get-Module -ListAvailable)
+        foreach ($r in $removals) {
+            if (-not $r.AllUsers -or -not $r.Managed) {
+                throw "$($r.Name) $($r.Version) at $($r.ModuleBase) was not installed with Install-Module in the all-users folder. Contact Microsoft support. $Outcome"
+            }
+            $kept = @(@($Inventory | Where-Object { $_.Name -eq $r.Name -and $removalKeys -notcontains "$($_.Name)|$($_.Version)" } | ForEach-Object { $_.Version }) +
+                @($installs | Where-Object { $_.Name -eq $r.Name } | ForEach-Object { $_.Version }))
+            $dependents = @(Get-UnmetDependent -ModuleName $r.Name -KeptVersion $kept -Modules $allModules -ExcludeKey $removalKeys)
+            if ($dependents.Count -gt 0) {
+                throw ("These installed modules need a version of $($r.Name) that this fix would remove: " +
+                    (($dependents | ForEach-Object { "$($_.Name) $($_.Version) needs $($_.Needs)" }) -join '; ') +
+                    ". Decide whether they are still needed, or contact Microsoft support. $Outcome")
+            }
         }
-        $kept = @($inventory | Where-Object { $_.Name -eq $r.Name -and $removalKeys -notcontains "$($_.Name)|$($_.Version)" } | ForEach-Object { $_.Version }) +
-            @($installs | Where-Object { $_.Name -eq $r.Name } | ForEach-Object { $_.Version })
-        $highestKept = $kept | Sort-Object -Descending | Select-Object -First 1
-        $dependents = @($allModules | Where-Object {
-            $_.Name -ne $r.Name -and $removalKeys -notcontains "$($_.Name)|$([version]$_.Version)" -and
-            @(@($_.RequiredModules) + @($_.ModuleList) | Where-Object { $_.Name -eq $r.Name -and (-not $highestKept -or [version]$_.Version -gt $highestKept) }).Count -gt 0 })
-        if ($dependents.Count -gt 0) {
-            $dependents | Format-Table Name, Version, ModuleBase -AutoSize | Out-String -Width 300 | Write-Output
-            throw "The modules listed above need a version of $($r.Name) that this fix would remove. Decide whether they are still needed, or contact Microsoft support. No changes were made."
-        }
+        [pscustomobject]@{ Installs = $installs; Removals = $removals }
     }
+    $plan = Get-AzPlan -Inventory $inventory -Outcome 'No changes were made.'
 
-    if ($installs.Count -eq 0 -and $removals.Count -eq 0) {
+    if ($plan.Installs.Count -eq 0 -and $plan.Removals.Count -eq 0) {
         Write-Output 'RESULT: NO CHANGE NEEDED - the modules on this machine do not cause this error. If the error persists, contact Microsoft support.'
         return
     }
-    foreach ($i in $installs) {
+    foreach ($i in $plan.Installs) {
         Get-PSRepository -Name $Repository | Out-Null
         $found = @()
         try { $found = @(Find-Module -Name $i.Name -RequiredVersion ([string]$i.Version) -Repository $Repository) } catch { $found = @() }
@@ -403,18 +443,24 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
         }
     }
 
-    foreach ($i in $installs) {
+    foreach ($i in $plan.Installs) {
         Write-Output "INSTALLING: $($i.Name) $($i.Version)"
         Install-Module -Name $i.Name -RequiredVersion ([string]$i.Version) -Repository $Repository -Scope AllUsers -Force
     }
-    $inventory = @(Get-AzInventory)
-    foreach ($i in $installs) {
-        if (-not @($inventory | Where-Object { $_.Name -eq $i.Name -and $_.Version -eq $i.Version -and $_.AllUsers -and $_.Managed })) {
-            throw "$($i.Name) $($i.Version) could not be verified after installation. No versions were removed."
+    if ($plan.Installs.Count -gt 0) {
+        $inventory = @(Get-AzInventory)
+        foreach ($i in $plan.Installs) {
+            if (-not @($inventory | Where-Object { $_.Name -eq $i.Name -and $_.Version -eq $i.Version -and $_.AllUsers -and $_.Managed })) {
+                throw "$($i.Name) $($i.Version) could not be verified after installation. No versions were removed."
+            }
+        }
+        $plan = Get-AzPlan -Inventory $inventory -Outcome 'The installed versions were kept and no versions were removed.' 3>$null
+        if ($plan.Installs.Count -gt 0) {
+            throw 'The installation did not leave the expected modules. The installed versions were kept and no versions were removed. Keep this output and contact Microsoft support.'
         }
     }
 
-    $ordered = @($removals | Where-Object { $_.Name -ne 'Az.Accounts' }) + @($removals | Where-Object { $_.Name -eq 'Az.Accounts' })
+    $ordered = @($plan.Removals | Where-Object { $_.Name -ne 'Az.Accounts' }) + @($plan.Removals | Where-Object { $_.Name -eq 'Az.Accounts' })
     foreach ($r in $ordered) {
         if (@(Get-Module -Name $azNames).Count -gt 0) { throw 'An Azure PowerShell module became loaded. Stop; open a new session and run this check again.' }
         $current = @(Get-AzInventory | Where-Object { $_.Name -eq $r.Name -and $_.Version -eq $r.Version -and $_.ModuleBase -eq $r.ModuleBase -and $_.Managed })
@@ -426,7 +472,8 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
     $final = @(Get-AzInventory)
     $final | Sort-Object Name, Version | Format-Table Name, Version, NeedsAzAccounts, ModuleBase -AutoSize | Out-String -Width 300 | Write-Output
     $left = @($ordered | Where-Object { $r = $_; @($final | Where-Object { $_.Name -eq $r.Name -and $_.Version -eq $r.Version }).Count -gt 0 })
-    if ($left.Count -gt 0 -or -not @($final | Where-Object { $_.Name -eq 'Az.Accounts' -and $_.Version -eq $accountsTarget })) {
+    if ($left.Count -gt 0 -or -not @($final | Where-Object { $_.Name -eq 'Az.Accounts' -and $_.Version -eq $accountsTarget -and $_.AllUsers }) -or
+        @($final | Where-Object { $_.Name -eq 'Az.Accounts' -and $_.Version -gt $accountsTarget }).Count -gt 0) {
         throw 'The module changes are incomplete. Keep this output and contact Microsoft support.'
     }
     Write-Output "RESULT: CHANGED - Az.Accounts $accountsTarget is the highest version installed. Close this window; the change takes effect only in new PowerShell sessions."
@@ -492,7 +539,9 @@ With `Az.KeyVault` 6.6.2, which is not in the recipe and needs `Az.Accounts` 5.5
 
 On 2026-11-24 the first cause ran as an automated loop on the same build. The loop installed `Az.Storage` 9.8.0 without `Az.Accounts` 5.5.5, confirmed the import failure in a new session, ran Step 2 from this article unchanged (`REMOVING: Az.Storage 9.8.0`, `RESULT: CHANGED`), confirmed that the import succeeded in a new session, and verified that every Azure PowerShell module folder matched its state before the test. While the state was present, the system health check and the administrator surfaces were checked; see [Where you can see this problem](#where-you-can-see-this-problem).
 
-Not exercised: the second cause inside the automated loop (it was exercised only in the discrete runs on 2026-11-23), the rollback command, the portal **Resume deployment** retry in Step 3, and the Windows Admin Center surfaces (the standalone row is inferred, not viewed).
+Later on 2026-11-24 Step 2 was revised as described in [Revision history](#revision-history). With simulated module folders, not on a cluster, the revised Step 2 stopped with `No changes were made` when another module required exactly a version that would be removed (declared in `ModuleList` or in `RequiredModules`), or a minimum and maximum version that no remaining version met. It installed an all-users copy of `Az.Storage` 9.7.2 when the only copy was in a user's folder, and then removed 9.8.0. When installing `Az.Storage` 9.7.2 also installed a newer `Az.Accounts`, it removed that version as well before it printed `RESULT: CHANGED`, or stopped with `The installed versions were kept and no versions were removed` when another newly installed module required that version. On a lab machine in Windows PowerShell 5.1, the revised dependency check read the installed Az module manifests without reporting any of them and reported a scratch module that required exactly `Az.Accounts` 5.5.5. The automated loop for the first cause then ran again with the revised Step 2 unchanged and passed (`REMOVING: Az.Storage 9.8.0`, `RESULT: CHANGED`), and every Azure PowerShell module folder matched its state before the test.
+
+Not exercised: the second cause inside the automated loop (it was exercised only in the discrete runs on 2026-11-23), the user-folder and dependency-installation cases of Step 2 on a cluster, the rollback command, the portal **Resume deployment** retry in Step 3, and the Windows Admin Center surfaces (the standalone row is inferred, not viewed).
 
 ## Related documentation
 
