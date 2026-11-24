@@ -30,7 +30,7 @@
 | Time and impact | In the lab, the full check, helper repair, and recheck on one node took under 10 minutes; plan for 30 minutes per affected node plus the update retry. Neither remediation path restarts the node or moves virtual machines. Module replacement can interrupt a management operation that is using the module, so remediate in a maintenance window. |
 | Who acts | A local administrator on each affected node. The manual alternative runs only with Microsoft Support guidance. |
 | Execution surface | on-device |
-| Validation | On 2026-11-23, on a lab cluster (solution 12.2701.1004.15, validator 10.2701.0.2017, Windows PowerShell 5.1), the full loop ran with the recipe-aware helper path: baseline PASS; an injected missing module and, separately, a newer gallery module beside the recipe version each produced FAILURE; the image-module import and helper blocks remediated; and the check returned PASS. The manual alternative ran verbatim on the same build with the helper module temporarily moved out of the module path. With `Az.Accounts` 5.5.5 installed and the recipe version 5.5.3 missing, it installed 5.5.3, removed 5.5.5, kept the older 5.5.1, and the check returned PASS. The live run also showed that current Az modules declare their `Az.Accounts` minimum under `ModuleList`, not `RequiredModules`: the previous dependent-module guard removed `Az.Accounts` 5.5.5 while `Az.Storage` 9.8.0 still needed it, after which importing `Az.Storage` failed with `This module requires Az.Accounts version 5.5.5`. The guard now reads both lists and stopped before any change when `Az.KeyVault` 6.6.2 needed `Az.Accounts` 5.5.4. Health-fault clearing was not tested. On 2026-11-24, on the same build, the loop ran again with the system health check started while the module was missing, and each administrator surface was checked; see [Administrator detection surfaces](#administrator-detection-surfaces). Later on 2026-11-24 the dependent-module check in the manual alternative was revised (see [Revision history](#revision-history)). With simulated module folders, not on a cluster, the revised block stopped before any change when another module required an exact `Az.Accounts` version that would be removed, or a minimum or maximum version that no remaining version met, and it continued when every requirement was still met. On a lab node in Windows PowerShell 5.1, the revised check read the installed Az module manifests without reporting any of them, and it reported a scratch module that required exactly `Az.Accounts` 5.5.5. The complete manual block was not run again on a cluster after this revision. The recipe-aware helper loop ran again on the revised article and returned PASS. A further revision added the repository check and the wider dependency check (see [Revision history](#revision-history)). With simulated module folders, not on a cluster, the manual block stopped before any change when a version it would remove was not in the repository, when a dependent module's manifest could not be read or named the module by a file path, and when a dependent module was in another user's `Documents` folder, and it used the repository name in `$ApprovedRepository` for every repository command. In Windows PowerShell 5.1 on a lab node and in PowerShell 7, the dependency check agreed with `Import-Module` in all 54 combinations of exact, minimum, maximum, and wildcard maximum requirements that were tried, and on the lab node it parsed and read the installed Az module manifests without reporting any of them. The complete manual block was not run on a cluster after these revisions. A later 2026-11-24 revision made the manual block one statement and extended its checks (see [Revision history](#revision-history)). With simulated module folders, not on a cluster, it stopped before any change when a dependent module named `Az.Accounts` by a file path beside an ordinary requirement, when a requirement's module GUID matched only a version it would remove, and when a requirement was met only by recipe version `5.5.3.0`, which equals the installed `5.5.3` and is therefore not installed again; it stopped without removing anything when the version that installation actually added did not meet a dependent module's requirement. When installing `Az.Storage` 9.7.2 also installed `Az.Accounts` 5.5.5, it finished `Az.Storage` and then stopped with an error that named `Az.Accounts` 5.5.5; a second run for `Az.Accounts` removed it. Run one statement at a time, as a console can run pasted text, the previous block still reached `Uninstall-Module` after its dependency check had failed twice; the new block is one statement and stopped at the first failed check. On a lab node in Windows PowerShell 5.1, the new block parsed as one statement and stopped at its first check (`Use the recipe-aware helper instead of the manual alternative.`) without changing any module, and the dependency check agreed with `Import-Module` in the 54 earlier combinations and in 5 combinations of requirements with a module GUID. The complete manual block was still not run through an install and removal on a cluster. |
+| Validation | On 2026-11-23, on a lab cluster (solution 12.2701.1004.15, validator 10.2701.0.2017, Windows PowerShell 5.1), the full loop ran with the recipe-aware helper path: baseline PASS; an injected missing module and, separately, a newer gallery module beside the recipe version each produced FAILURE; the image-module import and helper blocks remediated; and the check returned PASS. The manual alternative ran verbatim on the same build with the helper module temporarily moved out of the module path. With `Az.Accounts` 5.5.5 installed and the recipe version 5.5.3 missing, it installed 5.5.3, removed 5.5.5, kept the older 5.5.1, and the check returned PASS. The live run also showed that current Az modules declare their `Az.Accounts` minimum under `ModuleList`, not `RequiredModules`: the previous dependent-module guard removed `Az.Accounts` 5.5.5 while `Az.Storage` 9.8.0 still needed it, after which importing `Az.Storage` failed with `This module requires Az.Accounts version 5.5.5`. The guard now reads both lists and stopped before any change when `Az.KeyVault` 6.6.2 needed `Az.Accounts` 5.5.4. Health-fault clearing was not tested. On 2026-11-24, on the same build, the loop ran again with the system health check started while the module was missing, and each administrator surface was checked; see [Administrator detection surfaces](#administrator-detection-surfaces). Later on 2026-11-24 the dependent-module check in the manual alternative was revised (see [Revision history](#revision-history)). With simulated module folders, not on a cluster, the revised block stopped before any change when another module required an exact `Az.Accounts` version that would be removed, or a minimum or maximum version that no remaining version met, and it continued when every requirement was still met. On a lab node in Windows PowerShell 5.1, the revised check read the installed Az module manifests without reporting any of them, and it reported a scratch module that required exactly `Az.Accounts` 5.5.5. The complete manual block was not run again on a cluster after this revision. The recipe-aware helper loop ran again on the revised article and returned PASS. A further revision added the repository check and the wider dependency check (see [Revision history](#revision-history)). With simulated module folders, not on a cluster, the manual block stopped before any change when a version it would remove was not in the repository, when a dependent module's manifest could not be read or named the module by a file path, and when a dependent module was in another user's `Documents` folder, and it used the repository name in `$ApprovedRepository` for every repository command. In Windows PowerShell 5.1 on a lab node and in PowerShell 7, the dependency check agreed with `Import-Module` in all 54 combinations of exact, minimum, maximum, and wildcard maximum requirements that were tried, and on the lab node it parsed and read the installed Az module manifests without reporting any of them. The complete manual block was not run on a cluster after these revisions. A later 2026-11-24 revision made the manual block one statement and extended its checks (see [Revision history](#revision-history)). With simulated module folders, not on a cluster, it stopped before any change when a dependent module named `Az.Accounts` by a file path beside an ordinary requirement, when a requirement's module GUID matched only a version it would remove, and when a requirement was met only by recipe version `5.5.3.0`, which equals the installed `5.5.3` and is therefore not installed again; it stopped without removing anything when the version that installation actually added did not meet a dependent module's requirement. When installing `Az.Storage` 9.7.2 also installed `Az.Accounts` 5.5.5, it finished `Az.Storage` and then stopped with an error that named `Az.Accounts` 5.5.5; a second run for `Az.Accounts` removed it. Run one statement at a time, as a console can run pasted text, the previous block still reached `Uninstall-Module` after its dependency check had failed twice; the new block is one statement and stopped at the first failed check. On a lab node in Windows PowerShell 5.1, the new block parsed as one statement and stopped at its first check (`Use the recipe-aware helper instead of the manual alternative.`) without changing any module, and the dependency check agreed with `Import-Module` in the 54 earlier combinations and in 5 combinations of requirements with a module GUID. The complete manual block was still not run through an install and removal on a cluster. A further 2026-11-24 revision changed how the dependency check finds each user's module folder and reads requirements given as a path or with a module GUID (see [Revision history](#revision-history)). With simulated module folders, not on a cluster, the manual block stopped before any change when a dependent module named `Az.Accounts` only by a path to its manifest under `ModuleList`, when a requirement's module GUID matched only a copy in another user's `Documents` folder or a version that was not installed yet, when a signed-in user's `Documents` folder was redirected to another folder or to OneDrive and a module there needed `Az.Accounts` 5.5.4, and when a user's `Documents` folder could not be found or read. It continued when a path entry named a different module, when the module GUID matched the kept all-users copy, and when a service profile had no `Documents` folder, and the earlier simulated cases still passed. On a lab node with 19 user profiles, the check read every user's module folder without stopping, and in Windows PowerShell 5.1 it reported a module that named a scratch module only by a path under `ModuleList`. The complete manual block was still not run through an install and removal on a cluster. |
 
 ## Table of contents
 
@@ -52,6 +52,7 @@
 | 2026-11-24 | The manual alternative now confirms, before any change, that every version it would remove is available in `$ApprovedRepository`, so that the version can be restored from there, and stops if one is not. Its dependency check now also covers modules in every user's `Documents` folder, and treats a requirement that it cannot read, such as one given as a file path, as unmet, so that it stops instead of removing a version that might be needed. It compares versions the way PowerShell does when it loads a module, and treats `5.5.3` and `5.5.3.0` as the same version when it compares installed versions with the recipe or the repository. |
 | 2026-11-24 | Named the PowerShell Gallery download hosts (`cdn.powershellgallery.com`, `cdn.oneget.org`) in Preconditions and noted that the `Find-Module` restore check does not show that downloads work. The recipe-aware helper's **Changes** line now states that it removes versions that are not in the recipe, including older ones and `Az.Accounts` versions that are not in the recipe, without checking dependent modules, and that it uninstalls before it reinstalls; checks to run with Microsoft Support first were added. The manual alternative is now one statement, wrapped in `& { }`, so a failed check ends the whole block even when it is pasted into a console. Its dependency check now treats a requirement given as a file path as unmet even when another entry names the module, accepts a requirement that names a module GUID only from a kept version with that GUID, and, after an installation, counts only the versions that are actually installed. When `Install-Module` also installs a dependency version newer than the recipe, such as `Az.Accounts`, the block finishes the named module and then stops with an error that names that version and tells you to run the block again for it. |
 | 2026-11-24 | The recipe-aware helper block now runs as one statement (`& { ... }`), so if the helper is unavailable its check stops the block before `Remediate-PSModules` runs, even when the block is pasted line by line. |
+| 2026-11-24 | The manual alternative's dependency check now finds a user's modules in a redirected `Documents` folder, such as one in OneDrive, when that user is signed in, and stops with `No changes were made` when a user's `Documents` folder cannot be found or read, instead of treating a missing folder as having no modules. It also stops when a module names the target module only by a path to its folder or manifest, and it accepts a requirement that names a module GUID only from a kept all-users copy with that GUID, not from a copy in a user's folder. |
 
 ## Overview
 
@@ -319,7 +320,8 @@ Before you run the helper, check these with Microsoft Support:
    version of a module named in the failure details other than its recipe version,
    and any `Az.Accounts` version other than the recipe version. Look in the module
    manifests (`.psd1` files) in the session's module path and in each user's
-   `Documents\WindowsPowerShell\Modules` folder for `RequiredModules` or `ModuleList`
+   `Documents\WindowsPowerShell\Modules` folder, including a redirected `Documents`
+   folder such as one in OneDrive, for `RequiredModules` or `ModuleList`
    entries that name one of those modules. Current Az modules declare their
    `Az.Accounts` requirement under `ModuleList`. A requirement matters if only a
    version that would be removed meets it: an exact `RequiredVersion`, a minimum
@@ -379,11 +381,24 @@ so removing that version would break the dependent module. The check reads both
 `RequiredModules` and `ModuleList` from each manifest file, because current Az
 modules declare their `Az.Accounts` requirement under `ModuleList`. It checks the
 modules in the session's module path and in every user's
-`Documents\WindowsPowerShell\Modules` folder. The check fails closed: when it
+`Documents\WindowsPowerShell\Modules` folder. For a signed-in user, it uses the
+`Documents` folder that Windows records for that user, which can be redirected,
+for example to OneDrive. For a user who is not signed in, Windows does not show
+where that folder is redirected, so the check uses the `Documents` folder in the
+user's profile folder. Service profiles, such as the system profile, are not
+checked. If a user's `Documents` folder cannot be found or read, the block stops
+with `No changes were made` and names the profile by its security identifier
+(SID); `Get-CimInstance -ClassName Win32_UserProfile | Where-Object SID -eq '<SID>' | Select-Object LocalPath, Loaded`
+shows its folder. If that user is not signed in, have the user sign in once so
+that a redirected folder can be found, and run the block again; otherwise contact
+Microsoft Support. The check fails closed: when it
 cannot show that a requirement is still met, for example because a manifest
-cannot be read or names any module by a file path, it treats the requirement as
+cannot be read or names any module by a file path, including an entry that is
+only a path to the module's folder or manifest, it treats the requirement as
 unmet and stops with `No changes were made`. A requirement that also names a
-module GUID is met only by a kept version whose manifest has that GUID. It
+module GUID is met only by a kept version whose all-users copy has that GUID; a
+copy in a user's `Documents` folder, or a version that the block has not
+installed yet, does not count. It
 compares versions the way PowerShell does when it loads a module, so a
 requirement of exactly `5.5.5.0` is not met by version `5.5.5`. The block also stops before any change if a version
 that it would remove is not available in `$ApprovedRepository`, because that
@@ -512,10 +527,31 @@ preceding guards and inventories are required in the same run.
     }
     function Get-DependentCandidate {
         # Modules in this session's module path and in every user's Documents folder, because a module that
-        # another user installed can also need a version that would be removed.
-        $userPaths = @(Get-CimInstance -ClassName Win32_UserProfile | Where-Object { -not $_.Special } |
-            ForEach-Object { Join-Path $_.LocalPath 'Documents\WindowsPowerShell\Modules' } | Where-Object { Test-Path -LiteralPath $_ })
-        $userModules = @(foreach ($p in $userPaths) { Get-ChildItem -LiteralPath $p -Directory | ForEach-Object { Get-Module -Name $_.FullName -ListAvailable } })
+        # another user installed can also need a version that would be removed. A user's Documents folder can be
+        # redirected. When that user's registry is loaded, the folder is read from it; otherwise the default
+        # folder under the profile is used. A folder that cannot be found or read stops the check.
+        param([string]$Outcome)
+        $userPaths = @(foreach ($p in @(Get-CimInstance -ClassName Win32_UserProfile | Where-Object { -not $_.Special })) {
+            $documents = Join-Path $p.LocalPath 'Documents'
+            $hive = "Registry::HKEY_USERS\$($p.SID)"
+            try {
+                if (Test-Path -LiteralPath $hive) {
+                    $personal = (Get-Item -LiteralPath "$hive\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders").GetValue('Personal', $null, 'DoNotExpandEnvironmentNames')
+                    # %USERPROFILE% means that user's profile folder, not the profile of the account running this block.
+                    if ($personal -like '%USERPROFILE%*') { $documents = $p.LocalPath + $personal.Substring(13) } elseif ($personal) { $documents = $personal }
+                }
+                $found = ($documents -notmatch '%') -and (Test-Path -LiteralPath $documents)
+            } catch { $found = $false }
+            if (-not $found) {
+                throw ("The Documents folder of user profile $($p.SID) could not be found or read, so the modules of that user cannot be checked. " +
+                    "If that user is not signed in, sign in as that user once so that a redirected folder can be found, and run the block again; otherwise contact Microsoft Support. $Outcome")
+            }
+            Join-Path $documents 'WindowsPowerShell\Modules'
+        })
+        $userModules = @(foreach ($m in @($userPaths | Where-Object { Test-Path -LiteralPath $_ })) {
+            try { Get-ChildItem -LiteralPath $m -Directory | ForEach-Object { Get-Module -Name $_.FullName -ListAvailable } }
+            catch { throw "The module folder $m could not be read: $($_.Exception.Message) Contact Microsoft Support. $Outcome" }
+        })
         @(@(Get-Module -ListAvailable) + $userModules | Sort-Object Path -Unique)
     }
     function Get-UnmetDependent {
@@ -527,7 +563,10 @@ preceding guards and inventories are required in the same run.
         param([string]$ModuleName, [version[]]$KeptVersion, [object[]]$Modules, [string[]]$ExcludePath = @())
         foreach ($d in $Modules) {
             if ($d.Name -eq $ModuleName -or $ExcludePath -contains $d.ModuleBase) { continue }
-            if (-not @(@($d.RequiredModules) + @($d.ModuleList) | Where-Object { $_ -and $_.Name -eq $ModuleName })) { continue }
+            # An entry given as a path names the module by its folder or file name; it is read too, so that the path check stops on it.
+            $pathPattern = "(^|[\\/])$([regex]::Escape($ModuleName))([\\/]|\.(psd1|psm1|dll)$|$)"
+            if (-not @(@($d.RequiredModules) + @($d.ModuleList) | Where-Object { $_ -and ($_.Name -eq $ModuleName -or
+                    ($_.Name -match '[\\/]|\.(psd1|psm1|dll)$' -and $_.Name -match $pathPattern)) })) { continue }
             try {
                 $data = Import-PowerShellDataFile -LiteralPath $d.Path -ErrorAction Stop
                 $named = $false
@@ -537,10 +576,13 @@ preceding guards and inventories are required in the same run.
                     if ($s.Name -match '[\\/]|\.(psd1|psm1|dll)$') { throw "A module is required by a file path: $($s.Name)" }
                     if ($s.Name -ne $ModuleName) { continue }
                     $named = $true
-                    # A GUID in the requirement is met only by a kept version whose manifest has that GUID.
+                    # A GUID in the requirement is met only by a kept version whose remaining all-users copy has that GUID.
+                    # A copy in a user's folder, or a version that is not installed yet, does not show the GUID of that copy.
                     $candidates = $KeptVersion
                     if ($s.Guid) {
-                        $guidVersions = @(Get-Module -Name $ModuleName -ListAvailable | Where-Object { $_.Guid -eq $s.Guid } | ForEach-Object { $_.Version })
+                        $sharedRoot = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'
+                        $guidVersions = @($Modules | Where-Object { $_.Name -eq $ModuleName -and $_.Guid -eq $s.Guid -and $ExcludePath -notcontains $_.ModuleBase -and
+                                (Split-Path -Parent (Split-Path -Parent $_.ModuleBase)) -eq $sharedRoot } | ForEach-Object { $_.Version })
                         $candidates = @($KeptVersion | Where-Object { $guidVersions -contains $_ })
                     }
                     if ($s.RequiredVersion) {
@@ -578,7 +620,7 @@ preceding guards and inventories are required in the same run.
     if (@($before | Where-Object { (ConvertTo-FullVersion $_.Version) -eq $targetFull }).Count -eq 0) { $keptVersions += $targetVersion }
     $toRemove = @($before | Where-Object { (ConvertTo-FullVersion $_.Version) -gt $targetFull })
     if ($toRemove.Count -gt 0) {
-        $dependents = @(Get-UnmetDependent -ModuleName $RequiredModuleName -KeptVersion $keptVersions -Modules @(Get-DependentCandidate))
+        $dependents = @(Get-UnmetDependent -ModuleName $RequiredModuleName -KeptVersion $keptVersions -Modules @(Get-DependentCandidate -Outcome 'No changes were made.'))
         if ($dependents.Count -gt 0) {
             throw ("These installed modules need a version of $RequiredModuleName that this block would remove: " +
                 (($dependents | ForEach-Object { "$($_.Name) $($_.Version) needs $($_.Needs)" }) -join '; ') + '. Contact Microsoft Support. No changes were made.')
@@ -611,7 +653,7 @@ preceding guards and inventories are required in the same run.
     $toRemove = @($installed | Where-Object { (ConvertTo-FullVersion $_.Version) -gt $targetFull })
     $keptVersions = @($installed | Where-Object { (ConvertTo-FullVersion $_.Version) -le $targetFull } | ForEach-Object { [version]$_.Version })
     if ($toRemove.Count -gt 0) {
-        $dependents = @(Get-UnmetDependent -ModuleName $RequiredModuleName -KeptVersion $keptVersions -Modules @(Get-DependentCandidate))
+        $dependents = @(Get-UnmetDependent -ModuleName $RequiredModuleName -KeptVersion $keptVersions -Modules @(Get-DependentCandidate -Outcome 'No versions were removed.'))
         if ($dependents.Count -gt 0) {
             throw ("These installed modules need a version of $RequiredModuleName that this block would remove: " +
                 (($dependents | ForEach-Object { "$($_.Name) $($_.Version) needs $($_.Needs)" }) -join '; ') + '. No versions were removed. Contact Microsoft Support.')
