@@ -879,7 +879,11 @@ this one while you wait.
    - Azure CLI (service principal or `az login --identity`): run this block in the
      same session. It signs out and deletes the procedure's profile folder only
      when `AZURE_CONFIG_DIR` names a folder that step 1 created; otherwise it
-     changes nothing.
+     changes nothing. If the folder cannot be deleted completely, for example
+     because a file is in use, it stops with an error and keeps
+     `AZURE_CONFIG_DIR`, so you can close the process using the folder and run
+     the block again; it prints `Procedure Azure CLI profile removed` only after
+     the folder is gone.
 
      ```powershell
      & {
@@ -888,7 +892,14 @@ this one while you wait.
              # Without this, the Azure CLI telemetry upload that follows az logout can recreate the folder.
              $env:AZURE_CORE_COLLECT_TELEMETRY = 'false'
              az logout 2>$null
-             Remove-Item -LiteralPath $dir -Recurse -Force
+             try {
+                 Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction Stop
+             } catch {
+                 throw "Could not delete $dir ($($_.Exception.Message)). AZURE_CONFIG_DIR was kept; close any process using that folder and run this block again."
+             }
+             if (Test-Path -LiteralPath $dir) {
+                 throw "$dir still exists. AZURE_CONFIG_DIR was kept; run this block again."
+             }
              Remove-Item -Path Env:\AZURE_CORE_COLLECT_TELEMETRY
              Remove-Item -Path Env:\AZURE_CONFIG_DIR
              'Procedure Azure CLI profile removed'
@@ -1416,3 +1427,4 @@ the full bootstrap was not run.
 | 2026-11-24 | Section 3 now explains that Azure checks role assignments on each request: once the removal of the managed identity's role assignment takes effect, no token of that identity can register machines through that assignment, including one minted before the removal, although the token remains a valid credential until it expires. The section 3 token blocks no longer pass `-TenantId` or `--tenant`, which the Azure CLI does not support for a managed identity; they request the token for the current sign-in and still stop if its tenant does not match the deployment plan. |
 | 2026-11-24 | Section 3 now states that once the managed identity's **Azure Connected Machine Onboarding** assignment is created, every stop or abandoned attempt must remove it, and the token block stops, the 403 stop, the section 4 stop, and the support section point to that removal. A new section 3, step 4 clears the token on every machine and session where it existed: it removes the variables and any remote session, signs out of the sign-ins this procedure made, and explains that clearing local copies does not revoke the token. |
 | 2026-11-24 | The 429 and 5xx rows now say that a retry with a token is a new attempt: repeat section 3, option 1, steps 1 to 3 after waiting, to get a fresh token and, if needed, the temporary role assignment again, then clean up again. |
+| 2026-11-24 | The Azure CLI cleanup block now stops with an error and keeps `AZURE_CONFIG_DIR` when the procedure's profile folder cannot be deleted completely, so it reports success only after the folder is gone and the cleanup can be run again. |
