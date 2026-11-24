@@ -30,7 +30,7 @@
 | Time and impact | In the lab, the full check, helper repair, and recheck on one node took under 10 minutes; plan for 30 minutes per affected node plus the update retry. Neither remediation path restarts the node or moves virtual machines. Module replacement can interrupt a management operation that is using the module, so remediate in a maintenance window. |
 | Who acts | A local administrator on each affected node. The manual alternative runs only with Microsoft Support guidance. |
 | Execution surface | on-device |
-| Validation | On 2026-11-23, on a lab cluster (solution 12.2701.1004.15, validator 10.2701.0.2017, Windows PowerShell 5.1), the full loop ran with the recipe-aware helper path: baseline PASS; an injected missing module and, separately, a newer gallery module beside the recipe version each produced FAILURE; the image-module import and helper blocks remediated; and the check returned PASS. The manual alternative ran verbatim on the same build with the helper module temporarily moved out of the module path. With `Az.Accounts` 5.5.5 installed and the recipe version 5.5.3 missing, it installed 5.5.3, removed 5.5.5, kept the older 5.5.1, and the check returned PASS. The live run also showed that current Az modules declare their `Az.Accounts` minimum under `ModuleList`, not `RequiredModules`: the previous dependent-module guard removed `Az.Accounts` 5.5.5 while `Az.Storage` 9.8.0 still needed it, after which importing `Az.Storage` failed with `This module requires Az.Accounts version 5.5.5`. The guard now reads both lists and stopped before any change when `Az.KeyVault` 6.6.2 needed `Az.Accounts` 5.5.4. Health-fault clearing was not tested. On 2026-11-24, on the same build, the loop ran again with the system health check started while the module was missing, and each administrator surface was checked; see [Administrator detection surfaces](#administrator-detection-surfaces). Later on 2026-11-24 the dependent-module check in the manual alternative was revised (see [Revision history](#revision-history)). With simulated module folders, not on a cluster, the revised block stopped before any change when another module required an exact `Az.Accounts` version that would be removed, or a minimum or maximum version that no remaining version met, and it continued when every requirement was still met. On a lab node in Windows PowerShell 5.1, the revised check read the installed Az module manifests without reporting any of them, and it reported a scratch module that required exactly `Az.Accounts` 5.5.5. The complete manual block was not run again on a cluster after this revision. The recipe-aware helper loop ran again on the revised article and returned PASS. A further revision added the repository check and the wider dependency check (see [Revision history](#revision-history)). With simulated module folders, not on a cluster, the manual block stopped before any change when a version it would remove was not in the repository, when a dependent module's manifest could not be read or named the module by a file path, and when a dependent module was in another user's `Documents` folder, and it used the repository name in `$ApprovedRepository` for every repository command. In Windows PowerShell 5.1 on a lab node and in PowerShell 7, the dependency check agreed with `Import-Module` in all 54 combinations of exact, minimum, maximum, and wildcard maximum requirements that were tried, and on the lab node it parsed and read the installed Az module manifests without reporting any of them. The complete manual block was not run on a cluster after these revisions. |
+| Validation | On 2026-11-23, on a lab cluster (solution 12.2701.1004.15, validator 10.2701.0.2017, Windows PowerShell 5.1), the full loop ran with the recipe-aware helper path: baseline PASS; an injected missing module and, separately, a newer gallery module beside the recipe version each produced FAILURE; the image-module import and helper blocks remediated; and the check returned PASS. The manual alternative ran verbatim on the same build with the helper module temporarily moved out of the module path. With `Az.Accounts` 5.5.5 installed and the recipe version 5.5.3 missing, it installed 5.5.3, removed 5.5.5, kept the older 5.5.1, and the check returned PASS. The live run also showed that current Az modules declare their `Az.Accounts` minimum under `ModuleList`, not `RequiredModules`: the previous dependent-module guard removed `Az.Accounts` 5.5.5 while `Az.Storage` 9.8.0 still needed it, after which importing `Az.Storage` failed with `This module requires Az.Accounts version 5.5.5`. The guard now reads both lists and stopped before any change when `Az.KeyVault` 6.6.2 needed `Az.Accounts` 5.5.4. Health-fault clearing was not tested. On 2026-11-24, on the same build, the loop ran again with the system health check started while the module was missing, and each administrator surface was checked; see [Administrator detection surfaces](#administrator-detection-surfaces). Later on 2026-11-24 the dependent-module check in the manual alternative was revised (see [Revision history](#revision-history)). With simulated module folders, not on a cluster, the revised block stopped before any change when another module required an exact `Az.Accounts` version that would be removed, or a minimum or maximum version that no remaining version met, and it continued when every requirement was still met. On a lab node in Windows PowerShell 5.1, the revised check read the installed Az module manifests without reporting any of them, and it reported a scratch module that required exactly `Az.Accounts` 5.5.5. The complete manual block was not run again on a cluster after this revision. The recipe-aware helper loop ran again on the revised article and returned PASS. A further revision added the repository check and the wider dependency check (see [Revision history](#revision-history)). With simulated module folders, not on a cluster, the manual block stopped before any change when a version it would remove was not in the repository, when a dependent module's manifest could not be read or named the module by a file path, and when a dependent module was in another user's `Documents` folder, and it used the repository name in `$ApprovedRepository` for every repository command. In Windows PowerShell 5.1 on a lab node and in PowerShell 7, the dependency check agreed with `Import-Module` in all 54 combinations of exact, minimum, maximum, and wildcard maximum requirements that were tried, and on the lab node it parsed and read the installed Az module manifests without reporting any of them. The complete manual block was not run on a cluster after these revisions. A later 2026-11-24 revision made the manual block one statement and extended its checks (see [Revision history](#revision-history)). With simulated module folders, not on a cluster, it stopped before any change when a dependent module named `Az.Accounts` by a file path beside an ordinary requirement, when a requirement's module GUID matched only a version it would remove, and when a requirement was met only by recipe version `5.5.3.0`, which equals the installed `5.5.3` and is therefore not installed again; it stopped without removing anything when the version that installation actually added did not meet a dependent module's requirement. When installing `Az.Storage` 9.7.2 also installed `Az.Accounts` 5.5.5, it finished `Az.Storage` and then stopped with an error that named `Az.Accounts` 5.5.5; a second run for `Az.Accounts` removed it. Run one statement at a time, as a console can run pasted text, the previous block still reached `Uninstall-Module` after its dependency check had failed twice; the new block is one statement and stopped at the first failed check. On a lab node in Windows PowerShell 5.1, the new block parsed as one statement and stopped at its first check (`Use the recipe-aware helper instead of the manual alternative.`) without changing any module, and the dependency check agreed with `Import-Module` in the 54 earlier combinations and in 5 combinations of requirements with a module GUID. The complete manual block was still not run through an install and removal on a cluster. |
 
 ## Table of contents
 
@@ -50,6 +50,7 @@
 | --- | --- |
 | 2026-11-24 | The manual alternative now keeps every version of the module that another installed module requires, as declared in that module's manifest file: an exact version (`RequiredVersion`), a minimum version, or a maximum version. Before this change it checked only minimum versions, so a module that required an exact newer version could lose that version. The block names the module and stops before any change. It also repeats the check after it installs the recipe version and before it removes anything. |
 | 2026-11-24 | The manual alternative now confirms, before any change, that every version it would remove is available in `$ApprovedRepository`, so that the version can be restored from there, and stops if one is not. Its dependency check now also covers modules in every user's `Documents` folder, and treats a requirement that it cannot read, such as one given as a file path, as unmet, so that it stops instead of removing a version that might be needed. It compares versions the way PowerShell does when it loads a module, and treats `5.5.3` and `5.5.3.0` as the same version when it compares installed versions with the recipe or the repository. |
+| 2026-11-24 | Named the PowerShell Gallery download hosts (`cdn.powershellgallery.com`, `cdn.oneget.org`) in Preconditions and noted that the `Find-Module` restore check does not show that downloads work. The recipe-aware helper's **Changes** line now states that it removes versions that are not in the recipe, including older ones and `Az.Accounts` versions that are not in the recipe, without checking dependent modules, and that it uninstalls before it reinstalls; checks to run with Microsoft Support first were added. The manual alternative is now one statement, wrapped in `& { }`, so a failed check ends the whole block even when it is pasted into a console. Its dependency check now treats a requirement given as a file path as unmet even when another entry names the module, accepts a requirement that names a module GUID only from a kept version with that GUID, and, after an installation, counts only the versions that are actually installed. When `Install-Module` also installs a dependency version newer than the recipe, such as `Az.Accounts`, the block finishes the named module and then stops with an error that names that version and tells you to run the block again for it. |
 
 ## Overview
 
@@ -374,15 +375,17 @@ modules declare their `Az.Accounts` requirement under `ModuleList`. It checks th
 modules in the session's module path and in every user's
 `Documents\WindowsPowerShell\Modules` folder. The check fails closed: when it
 cannot show that a requirement is still met, for example because a manifest
-cannot be read or names the module by a file path, it treats the requirement as
-unmet and stops with `No changes were made`. It compares versions the way
-PowerShell does when it loads a module, so a requirement of exactly `5.5.5.0` is
-not met by version `5.5.5`. The block also stops before any change if a version
+cannot be read or names any module by a file path, it treats the requirement as
+unmet and stops with `No changes were made`. A requirement that also names a
+module GUID is met only by a kept version whose manifest has that GUID. It
+compares versions the way PowerShell does when it loads a module, so a
+requirement of exactly `5.5.5.0` is not met by version `5.5.5`. The block also stops before any change if a version
 that it would remove is not available in `$ApprovedRepository`, because that
 repository is where the version would be restored from; use a repository that has
 those versions, or contact Microsoft Support. After an installation, the block
 reads the inventory again and repeats these checks before it removes anything,
-because `Install-Module` can also install dependency modules.
+because `Install-Module` can also install dependency modules. In that repeated
+check, only versions that are now installed count as kept.
 
 Close other module-dependent PowerShell and remote sessions before starting.
 `Remove-Module` does not guarantee that loaded .NET assemblies release file locks.
@@ -399,9 +402,17 @@ would remove is available in `$ApprovedRepository`. That check uses `Find-Module
 does not show that the download hosts in [Preconditions](#preconditions) are reachable;
 the block installs before it removes, so a failed download stops it before any removal.
 When it installs the recipe version, `Install-Module`
-may also install modules that the publisher declares as dependencies of that
+also installs the modules that the publisher declares as dependencies of that
 version, as described in
 [Install-Module](https://learn.microsoft.com/powershell/module/powershellget/install-module).
+With `-Force`, it installs the newest version of each dependency that the
+repository has, even when a compatible version is already installed. For an Az
+module other than `Az.Accounts`, that usually adds an `Az.Accounts` version newer
+than the recipe. The block does not remove that version. After it finishes the
+named module, it stops with an error that names each added version that is newer
+than the recipe; then run this block again, in a new session, with
+`$RequiredModuleName` set to that module (for example `Az.Accounts`), because
+[Verify resolution](#verify-resolution) fails until you do.
 No other modules are uninstalled.
 
 > [!WARNING]
@@ -409,208 +420,244 @@ No other modules are uninstalled.
 > management operation is using can interrupt that operation, so run it only in
 > the maintenance window agreed with Microsoft Support.
 
-Run this block as a whole, for example saved as a `.ps1` file. Do not execute
-only the install or removal lines; the preceding guards and inventories are
-required in the same session.
+Edit the two names on the lines near the top, then paste the whole block at once
+or save it as a `.ps1` file and run that file. The block is one statement,
+wrapped in `& { }`: the console reads it up to the closing brace before running
+any of it, and a failed check (`throw`) ends the whole block, so no install or
+removal line runs after a check fails. Do not run individual lines from it; the
+preceding guards and inventories are required in the same run.
 
 ```powershell
-$ErrorActionPreference = 'Stop'
-if ($PSVersionTable.PSEdition -ne 'Desktop') { throw 'Run this block in Windows PowerShell 5.1. No changes were made.' }
-$RequiredModuleName = '<module-from-current-failure>'
-$ApprovedRepository = '<approved-repository>'
+& {
+    $ErrorActionPreference = 'Stop'
+    if ($PSVersionTable.PSEdition -ne 'Desktop') { throw 'Run this block in Windows PowerShell 5.1. No changes were made.' }
+    $RequiredModuleName = '<module-from-current-failure>'
+    $ApprovedRepository = '<approved-repository>'
 
-if ($RequiredModuleName -notmatch '^[A-Za-z][A-Za-z0-9.]{0,99}$' -or
-    $ApprovedRepository -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$') {
-    throw 'Set the affected module and approved repository names. No changes were made.'
-}
+    if ($RequiredModuleName -notmatch '^[A-Za-z][A-Za-z0-9.]{0,99}$' -or
+        $ApprovedRepository -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$') {
+        throw 'Set the affected module and approved repository names. No changes were made.'
+    }
 
-$imageModule = Get-Module -ListAvailable -Name AzureLocalImageModule |
-    Sort-Object Version -Descending | Select-Object -First 1
-if ($imageModule) {
-    Import-Module -Name $imageModule.Path -Force -ErrorAction Stop
-}
-if (Get-Command -Name Remediate-PSModules -ErrorAction SilentlyContinue) {
-    throw 'Use the recipe-aware helper instead of the manual alternative.'
-}
-$checkName = 'AzStackHci_ValidatedRecipe_PowerShellModule_Version'
-$escapedName = [regex]::Escape($RequiredModuleName)
-$failurePattern = "Checking version of PS module '$escapedName' on host '[^']*'\. " +
-    "Got '[^']*' but expected less-than or equal to '[^']*' so it is invalid\."
-$missingPattern = "Failed to parse installed version of PS module '$escapedName' on host '[^']*'\."
-$checks = @(Invoke-AzStackHciValidatedRecipeValidation -PassThru -Include Test-PSModules -ErrorAction Stop |
-    Where-Object Name -eq $checkName)
-if (@($checks | Where-Object { "$($_.Status)" -eq 'FAILURE' -and
-        ([string]$_.AdditionalData.Detail) -match $missingPattern }).Count -gt 0) {
-    throw "$RequiredModuleName is missing or its version is unreadable. Use the recipe-aware helper or contact Microsoft Support. No changes were made."
-}
-if ($checks.Count -eq 0 -or @($checks | Where-Object { "$($_.Status)" -notin @('SUCCESS', 'FAILURE') }).Count -gt 0 -or
-    @($checks | Where-Object { "$($_.Status)" -eq 'FAILURE' -and
-        ([string]$_.AdditionalData.Detail) -match $failurePattern }).Count -eq 0) {
-    throw 'No confirmed validator failure for this module. No changes were made.'
-}
-$artifactPath = Get-ASArtifactPath -NugetName Microsoft.AzureStack.VersionControl.Operations -ErrorAction Stop
-Import-Module (Join-Path $artifactPath 'content\Scripts\VersionControlHelpers.psm1') -Force -DisableNameChecking -ErrorAction Stop
-$recipeRows = @(Get-ValidatedRecipe -TypesToInclude @('PowerShell') -TagsToInclude @('Azure') -ErrorAction Stop |
-    Where-Object Name -eq $RequiredModuleName)
-if ($recipeRows.Count -ne 1) { throw 'The exact recipe target is unresolved or ambiguous. No changes were made.' }
-$RequiredModuleVersion = [string]$recipeRows[0].RequiredVersion
-if ($RequiredModuleVersion -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') { throw 'Invalid recipe version. No changes were made.' }
-$targetVersion = [version]$RequiredModuleVersion
-$protectedModules = @('PowerShellGet', 'PackageManagement', 'AzureLocalImageModule') +
-    @(Get-Command Get-ValidatedRecipe, Get-ASArtifactPath, Invoke-AzStackHciValidatedRecipeValidation -ErrorAction Stop |
-        Select-Object -ExpandProperty ModuleName)
-if ($RequiredModuleName -in $protectedModules -or (Get-Module -Name $RequiredModuleName)) {
-    throw 'The target is a tooling dependency or is loaded. Stop for Support-led recovery.'
-}
-$moduleRoot = Join-Path $env:ProgramFiles "WindowsPowerShell\Modules\$RequiredModuleName"
-function Get-ScopedModuleInventory {
-    $installed = @(Get-InstalledModule -Name $RequiredModuleName -AllVersions -ErrorAction SilentlyContinue)
-    $available = @(Get-Module -Name $RequiredModuleName -ListAvailable -ErrorAction Stop)
-    if ($installed.Count -eq 0 -and $available.Count -eq 0) {
-        throw "$RequiredModuleName is not installed. Use the recipe-aware helper or contact Microsoft Support."
+    $imageModule = Get-Module -ListAvailable -Name AzureLocalImageModule |
+        Sort-Object Version -Descending | Select-Object -First 1
+    if ($imageModule) {
+        Import-Module -Name $imageModule.Path -Force -ErrorAction Stop
     }
-    if ($installed.Count -ne $available.Count) {
-        throw 'The installed and available inventories disagree. Stop.'
+    if (Get-Command -Name Remediate-PSModules -ErrorAction SilentlyContinue) {
+        throw 'Use the recipe-aware helper instead of the manual alternative.'
     }
-    foreach ($module in $installed) {
-        if ($null -eq ([string]$module.Version -as [version])) {
-            throw 'An installed version is not a numeric version. Stop for Support-led recovery.'
+    $checkName = 'AzStackHci_ValidatedRecipe_PowerShellModule_Version'
+    $escapedName = [regex]::Escape($RequiredModuleName)
+    $failurePattern = "Checking version of PS module '$escapedName' on host '[^']*'\. " +
+        "Got '[^']*' but expected less-than or equal to '[^']*' so it is invalid\."
+    $missingPattern = "Failed to parse installed version of PS module '$escapedName' on host '[^']*'\."
+    $checks = @(Invoke-AzStackHciValidatedRecipeValidation -PassThru -Include Test-PSModules -ErrorAction Stop |
+        Where-Object Name -eq $checkName)
+    if (@($checks | Where-Object { "$($_.Status)" -eq 'FAILURE' -and
+            ([string]$_.AdditionalData.Detail) -match $missingPattern }).Count -gt 0) {
+        throw "$RequiredModuleName is missing or its version is unreadable. Use the recipe-aware helper or contact Microsoft Support. No changes were made."
+    }
+    if ($checks.Count -eq 0 -or @($checks | Where-Object { "$($_.Status)" -notin @('SUCCESS', 'FAILURE') }).Count -gt 0 -or
+        @($checks | Where-Object { "$($_.Status)" -eq 'FAILURE' -and
+            ([string]$_.AdditionalData.Detail) -match $failurePattern }).Count -eq 0) {
+        throw 'No confirmed validator failure for this module. No changes were made.'
+    }
+    $artifactPath = Get-ASArtifactPath -NugetName Microsoft.AzureStack.VersionControl.Operations -ErrorAction Stop
+    Import-Module (Join-Path $artifactPath 'content\Scripts\VersionControlHelpers.psm1') -Force -DisableNameChecking -ErrorAction Stop
+    $recipeAll = @(Get-ValidatedRecipe -TypesToInclude @('PowerShell') -TagsToInclude @('Azure') -ErrorAction Stop)
+    $recipeRows = @($recipeAll | Where-Object Name -eq $RequiredModuleName)
+    if ($recipeRows.Count -ne 1) { throw 'The exact recipe target is unresolved or ambiguous. No changes were made.' }
+    $RequiredModuleVersion = [string]$recipeRows[0].RequiredVersion
+    if ($RequiredModuleVersion -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') { throw 'Invalid recipe version. No changes were made.' }
+    $targetVersion = [version]$RequiredModuleVersion
+    $protectedModules = @('PowerShellGet', 'PackageManagement', 'AzureLocalImageModule') +
+        @(Get-Command Get-ValidatedRecipe, Get-ASArtifactPath, Invoke-AzStackHciValidatedRecipeValidation -ErrorAction Stop |
+            Select-Object -ExpandProperty ModuleName)
+    if ($RequiredModuleName -in $protectedModules -or (Get-Module -Name $RequiredModuleName)) {
+        throw 'The target is a tooling dependency or is loaded. Stop for Support-led recovery.'
+    }
+    $moduleRoot = Join-Path $env:ProgramFiles "WindowsPowerShell\Modules\$RequiredModuleName"
+    function Get-ScopedModuleInventory {
+        $installed = @(Get-InstalledModule -Name $RequiredModuleName -AllVersions -ErrorAction SilentlyContinue)
+        $available = @(Get-Module -Name $RequiredModuleName -ListAvailable -ErrorAction Stop)
+        if ($installed.Count -eq 0 -and $available.Count -eq 0) {
+            throw "$RequiredModuleName is not installed. Use the recipe-aware helper or contact Microsoft Support."
         }
-        $expectedPath = Join-Path $moduleRoot ([string]$module.Version)
-        $pathMatches = @($available | Where-Object { (ConvertTo-FullVersion $_.Version) -eq (ConvertTo-FullVersion ([string]$module.Version)) -and $_.ModuleBase -eq $expectedPath })
-        if ($module.Name -ne $RequiredModuleName -or $module.InstalledLocation -ne $expectedPath -or $pathMatches.Count -ne 1) {
-            throw 'A module path is ambiguous or outside the scoped AllUsers inventory. Stop.'
+        if ($installed.Count -ne $available.Count) {
+            throw 'The installed and available inventories disagree. Stop.'
         }
-    }
-    return $installed
-}
-function ConvertTo-FullVersion {
-    # Missing build and revision numbers count as 0, so 5.5.3 and 5.5.3.0 name the same installed version.
-    param([version]$Version)
-    [version]::new($Version.Major, $Version.Minor, [math]::Max($Version.Build, 0), [math]::Max($Version.Revision, 0))
-}
-function Get-DependentCandidate {
-    # Modules in this session's module path and in every user's Documents folder, because a module that
-    # another user installed can also need a version that would be removed.
-    $userPaths = @(Get-CimInstance -ClassName Win32_UserProfile | Where-Object { -not $_.Special } |
-        ForEach-Object { Join-Path $_.LocalPath 'Documents\WindowsPowerShell\Modules' } | Where-Object { Test-Path -LiteralPath $_ })
-    $userModules = @(foreach ($p in $userPaths) { Get-ChildItem -LiteralPath $p -Directory | ForEach-Object { Get-Module -Name $_.FullName -ListAvailable } })
-    @(@(Get-Module -ListAvailable) + $userModules | Sort-Object Path -Unique)
-}
-function Get-UnmetDependent {
-    # Lists installed modules whose manifest needs a version of $ModuleName that is not kept: RequiredVersion
-    # is an exact version, ModuleVersion a minimum, and MaximumVersion a maximum. The manifest file is read
-    # because Get-Module reports an exact RequiredModules version as a minimum. Versions are compared as
-    # PowerShell compares them when it loads a module. A requirement that cannot be read is reported as unmet.
-    param([string]$ModuleName, [version[]]$KeptVersion, [object[]]$Modules, [string[]]$ExcludeKey = @())
-    foreach ($d in $Modules) {
-        if ($d.Name -eq $ModuleName -or $ExcludeKey -contains "$($d.Name)|$([version]$d.Version)") { continue }
-        if (-not @(@($d.RequiredModules) + @($d.ModuleList) | Where-Object { $_ -and $_.Name -eq $ModuleName })) { continue }
-        try {
-            $data = Import-PowerShellDataFile -LiteralPath $d.Path -ErrorAction Stop
-            $named = $false
-            foreach ($entry in @(@($data.RequiredModules) + @($data.ModuleList) | Where-Object { $_ })) {
-                $s = [Microsoft.PowerShell.Commands.ModuleSpecification]::new($entry)
-                if ($s.Name -ne $ModuleName) { continue }
-                $named = $true
-                if ($s.RequiredVersion) {
-                    $ok = $KeptVersion -contains $s.RequiredVersion
-                    $needs = "exactly $($s.RequiredVersion)"
-                } elseif ($s.Version -or $s.MaximumVersion) {
-                    $max = $null
-                    if ($s.MaximumVersion) { $max = [version]($s.MaximumVersion -replace '\*', '999999999') }
-                    $ok = @($KeptVersion | Where-Object { (-not $s.Version -or $_ -ge $s.Version) -and (-not $max -or $_ -le $max) }).Count -gt 0
-                    $range = @()
-                    if ($s.Version) { $range += "$($s.Version) or later" }
-                    if ($s.MaximumVersion) { $range += "at most $($s.MaximumVersion)" }
-                    $needs = $range -join ' and '
-                } else { continue }
-                if (-not $ok) { [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Needs = "$ModuleName $needs" } }
+        foreach ($module in $installed) {
+            if ($null -eq ([string]$module.Version -as [version])) {
+                throw 'An installed version is not a numeric version. Stop for Support-led recovery.'
             }
-            # For example, a requirement given as a path to a manifest file pins a version that is not checked here.
-            if (-not $named) { throw "$ModuleName is required in a form that this check does not read." }
-        } catch {
-            [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Needs = "a $ModuleName version that could not be read from $($d.Path)" }
+            $expectedPath = Join-Path $moduleRoot ([string]$module.Version)
+            $pathMatches = @($available | Where-Object { (ConvertTo-FullVersion $_.Version) -eq (ConvertTo-FullVersion ([string]$module.Version)) -and $_.ModuleBase -eq $expectedPath })
+            if ($module.Name -ne $RequiredModuleName -or $module.InstalledLocation -ne $expectedPath -or $pathMatches.Count -ne 1) {
+                throw 'A module path is ambiguous or outside the scoped AllUsers inventory. Stop.'
+            }
+        }
+        return $installed
+    }
+    function ConvertTo-FullVersion {
+        # Missing build and revision numbers count as 0, so 5.5.3 and 5.5.3.0 name the same installed version.
+        param([version]$Version)
+        [version]::new($Version.Major, $Version.Minor, [math]::Max($Version.Build, 0), [math]::Max($Version.Revision, 0))
+    }
+    function Get-DependentCandidate {
+        # Modules in this session's module path and in every user's Documents folder, because a module that
+        # another user installed can also need a version that would be removed.
+        $userPaths = @(Get-CimInstance -ClassName Win32_UserProfile | Where-Object { -not $_.Special } |
+            ForEach-Object { Join-Path $_.LocalPath 'Documents\WindowsPowerShell\Modules' } | Where-Object { Test-Path -LiteralPath $_ })
+        $userModules = @(foreach ($p in $userPaths) { Get-ChildItem -LiteralPath $p -Directory | ForEach-Object { Get-Module -Name $_.FullName -ListAvailable } })
+        @(@(Get-Module -ListAvailable) + $userModules | Sort-Object Path -Unique)
+    }
+    function Get-UnmetDependent {
+        # Lists installed modules whose manifest needs a version of $ModuleName that is not kept: RequiredVersion
+        # is an exact version, ModuleVersion a minimum, and MaximumVersion a maximum. The manifest file is read
+        # because Get-Module reports an exact RequiredModules version as a minimum. Versions are compared as
+        # PowerShell compares them when it loads a module. A requirement that cannot be read is reported as unmet.
+        # ExcludePath lists the module folders that are removed in the same change, so they need nothing.
+        param([string]$ModuleName, [version[]]$KeptVersion, [object[]]$Modules, [string[]]$ExcludePath = @())
+        foreach ($d in $Modules) {
+            if ($d.Name -eq $ModuleName -or $ExcludePath -contains $d.ModuleBase) { continue }
+            if (-not @(@($d.RequiredModules) + @($d.ModuleList) | Where-Object { $_ -and $_.Name -eq $ModuleName })) { continue }
+            try {
+                $data = Import-PowerShellDataFile -LiteralPath $d.Path -ErrorAction Stop
+                $named = $false
+                foreach ($entry in @(@($data.RequiredModules) + @($data.ModuleList) | Where-Object { $_ })) {
+                    $s = [Microsoft.PowerShell.Commands.ModuleSpecification]::new($entry)
+                    # A requirement given as a path to a module file or folder can pin any version, so it is not checked here.
+                    if ($s.Name -match '[\\/]|\.(psd1|psm1|dll)$') { throw "A module is required by a file path: $($s.Name)" }
+                    if ($s.Name -ne $ModuleName) { continue }
+                    $named = $true
+                    # A GUID in the requirement is met only by a kept version whose manifest has that GUID.
+                    $candidates = $KeptVersion
+                    if ($s.Guid) {
+                        $guidVersions = @(Get-Module -Name $ModuleName -ListAvailable | Where-Object { $_.Guid -eq $s.Guid } | ForEach-Object { $_.Version })
+                        $candidates = @($KeptVersion | Where-Object { $guidVersions -contains $_ })
+                    }
+                    if ($s.RequiredVersion) {
+                        $ok = $candidates -contains $s.RequiredVersion
+                        $needs = "exactly $($s.RequiredVersion)"
+                    } elseif ($s.Version -or $s.MaximumVersion) {
+                        $max = $null
+                        if ($s.MaximumVersion) { $max = [version]($s.MaximumVersion -replace '\*', '999999999') }
+                        $ok = @($candidates | Where-Object { (-not $s.Version -or $_ -ge $s.Version) -and (-not $max -or $_ -le $max) }).Count -gt 0
+                        $range = @()
+                        if ($s.Version) { $range += "$($s.Version) or later" }
+                        if ($s.MaximumVersion) { $range += "at most $($s.MaximumVersion)" }
+                        $needs = $range -join ' and '
+                    } else { continue }
+                    if ($s.Guid) { $needs += " with GUID $($s.Guid)" }
+                    if (-not $ok) { [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Needs = "$ModuleName $needs" } }
+                }
+                if (-not $named) { throw "$ModuleName is required in a form that this check does not read." }
+            } catch {
+                [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Needs = "a $ModuleName version that could not be read from $($d.Path)" }
+            }
         }
     }
-}
-function Test-RepositoryVersion {
-    # True when the repository has exactly this version, so it can be installed, or restored after removal, from there.
-    param([string]$Name, [version]$Version, [string]$Repository)
-    $found = @()
-    try { $found = @(Find-Module -Name $Name -RequiredVersion ([string]$Version) -Repository $Repository) } catch { $found = @() }
-    ($found.Count -eq 1) -and ((ConvertTo-FullVersion ([string]$found[0].Version)) -eq (ConvertTo-FullVersion $Version))
-}
-$targetFull = ConvertTo-FullVersion $targetVersion
-$before = @(Get-ScopedModuleInventory)
-$before | Select-Object Name, Version, InstalledLocation
-$keptVersions = @(@($before | Where-Object { (ConvertTo-FullVersion $_.Version) -le $targetFull } | ForEach-Object { [version]$_.Version }) + $targetVersion | Sort-Object -Unique)
-$toRemove = @($before | Where-Object { (ConvertTo-FullVersion $_.Version) -gt $targetFull })
-if ($toRemove.Count -gt 0) {
-    $dependents = @(Get-UnmetDependent -ModuleName $RequiredModuleName -KeptVersion $keptVersions -Modules @(Get-DependentCandidate))
-    if ($dependents.Count -gt 0) {
-        throw ("These installed modules need a version of $RequiredModuleName that this block would remove: " +
-            (($dependents | ForEach-Object { "$($_.Name) $($_.Version) needs $($_.Needs)" }) -join '; ') + '. Contact Microsoft Support. No changes were made.')
+    function Test-RepositoryVersion {
+        # True when the repository has exactly this version, so it can be installed, or restored after removal, from there.
+        param([string]$Name, [version]$Version, [string]$Repository)
+        $found = @()
+        try { $found = @(Find-Module -Name $Name -RequiredVersion ([string]$Version) -Repository $Repository) } catch { $found = @() }
+        ($found.Count -eq 1) -and ((ConvertTo-FullVersion ([string]$found[0].Version)) -eq (ConvertTo-FullVersion $Version))
     }
-    # A removed version can be restored only from a repository that has it.
-    Get-PSRepository -Name $ApprovedRepository -ErrorAction Stop | Out-Null
-    $missing = @($toRemove | Where-Object { -not (Test-RepositoryVersion -Name $RequiredModuleName -Version $_.Version -Repository $ApprovedRepository) })
-    if ($missing.Count -gt 0) {
-        throw ("These versions would be removed, but $ApprovedRepository does not have them, so they could not be restored: " +
-            (($missing | ForEach-Object { "$RequiredModuleName $($_.Version)" }) -join ', ') + '. Use a repository that has them, or contact Microsoft Support. No changes were made.')
+    $targetFull = ConvertTo-FullVersion $targetVersion
+    $before = @(Get-ScopedModuleInventory)
+    $before | Select-Object Name, Version, InstalledLocation
+    $keptVersions = @($before | Where-Object { (ConvertTo-FullVersion $_.Version) -le $targetFull } | ForEach-Object { [version]$_.Version })
+    if (@($before | Where-Object { (ConvertTo-FullVersion $_.Version) -eq $targetFull }).Count -eq 0) { $keptVersions += $targetVersion }
+    $toRemove = @($before | Where-Object { (ConvertTo-FullVersion $_.Version) -gt $targetFull })
+    if ($toRemove.Count -gt 0) {
+        $dependents = @(Get-UnmetDependent -ModuleName $RequiredModuleName -KeptVersion $keptVersions -Modules @(Get-DependentCandidate))
+        if ($dependents.Count -gt 0) {
+            throw ("These installed modules need a version of $RequiredModuleName that this block would remove: " +
+                (($dependents | ForEach-Object { "$($_.Name) $($_.Version) needs $($_.Needs)" }) -join '; ') + '. Contact Microsoft Support. No changes were made.')
+        }
+        # A removed version can be restored only from a repository that has it.
+        Get-PSRepository -Name $ApprovedRepository -ErrorAction Stop | Out-Null
+        $missing = @($toRemove | Where-Object { -not (Test-RepositoryVersion -Name $RequiredModuleName -Version $_.Version -Repository $ApprovedRepository) })
+        if ($missing.Count -gt 0) {
+            throw ("These versions would be removed, but $ApprovedRepository does not have them, so they could not be restored: " +
+                (($missing | ForEach-Object { "$RequiredModuleName $($_.Version)" }) -join ', ') + '. Use a repository that has them, or contact Microsoft Support. No changes were made.')
+        }
+    }
+    # Install-Module -Force also installs the newest version of each dependency that the repository has, such as Az.Accounts.
+    $otherNames = @($recipeAll | ForEach-Object { [string]$_.Name } | Where-Object { $_ -ne $RequiredModuleName })
+    $otherBefore = @()
+    if ($otherNames.Count -gt 0) { $otherBefore = @(Get-Module -Name $otherNames -ListAvailable | ForEach-Object { $_.ModuleBase }) }
+    if (@($before | Where-Object { (ConvertTo-FullVersion $_.Version) -eq $targetFull }).Count -eq 0) {
+        Get-PSRepository -Name $ApprovedRepository -ErrorAction Stop | Out-Null
+        if (-not (Test-RepositoryVersion -Name $RequiredModuleName -Version $targetVersion -Repository $ApprovedRepository)) {
+            throw 'The exact recipe package is unavailable. No changes were made.'
+        }
+        Install-Module -Name $RequiredModuleName -RequiredVersion $RequiredModuleVersion -Repository $ApprovedRepository -Scope AllUsers -Force -ErrorAction Stop
+    }
+    $installed = @(Get-ScopedModuleInventory)
+    if (@($installed | Where-Object { (ConvertTo-FullVersion $_.Version) -eq $targetFull }).Count -ne 1) {
+        throw 'The exact recipe version was not verified. No versions will be removed.'
+    }
+    # Install-Module can add modules, so plan the removals again from the refreshed inventory, and count only the
+    # versions that are now installed as kept.
+    $toRemove = @($installed | Where-Object { (ConvertTo-FullVersion $_.Version) -gt $targetFull })
+    $keptVersions = @($installed | Where-Object { (ConvertTo-FullVersion $_.Version) -le $targetFull } | ForEach-Object { [version]$_.Version })
+    if ($toRemove.Count -gt 0) {
+        $dependents = @(Get-UnmetDependent -ModuleName $RequiredModuleName -KeptVersion $keptVersions -Modules @(Get-DependentCandidate))
+        if ($dependents.Count -gt 0) {
+            throw ("These installed modules need a version of $RequiredModuleName that this block would remove: " +
+                (($dependents | ForEach-Object { "$($_.Name) $($_.Version) needs $($_.Needs)" }) -join '; ') + '. No versions were removed. Contact Microsoft Support.')
+        }
+        $missing = @($toRemove | Where-Object { -not (Test-RepositoryVersion -Name $RequiredModuleName -Version $_.Version -Repository $ApprovedRepository) })
+        if ($missing.Count -gt 0) {
+            throw ("These versions would be removed, but $ApprovedRepository does not have them, so they could not be restored: " +
+                (($missing | ForEach-Object { "$RequiredModuleName $($_.Version)" }) -join ', ') + '. No versions were removed. Contact Microsoft Support.')
+        }
+    }
+    if (Get-Module -Name $RequiredModuleName) { throw 'The module became loaded. No versions will be removed.' }
+    foreach ($module in $toRemove) {
+        $current = @(Get-ScopedModuleInventory | Where-Object { [version]$_.Version -eq [version]$module.Version })
+        if ($current.Count -ne 1 -or $current[0].InstalledLocation -ne $module.InstalledLocation) {
+            throw 'Inventory changed before removal. Stop.'
+        }
+        Uninstall-Module -Name $RequiredModuleName -RequiredVersion $module.Version -Force -ErrorAction Stop
+    }
+    $remaining = @(Get-ScopedModuleInventory)
+    if (@($remaining | Where-Object { (ConvertTo-FullVersion $_.Version) -eq $targetFull }).Count -ne 1 -or
+        @($remaining | Where-Object { (ConvertTo-FullVersion $_.Version) -gt $targetFull }).Count -gt 0) {
+        throw 'Module replacement is incomplete. Stop and retain the inventories and error.'
+    }
+    foreach ($module in @($before | Where-Object { [version]$_.Version -le $targetVersion })) {
+        $preserved = @($remaining | Where-Object { [version]$_.Version -eq [version]$module.Version -and
+            $_.InstalledLocation -eq $module.InstalledLocation })
+        if ($preserved.Count -ne 1) {
+            throw 'A previously accepted version or path changed. Stop for Support-led recovery.'
+        }
+    }
+    $remaining | Select-Object Name, Version, InstalledLocation
+    $added = @()
+    if ($otherNames.Count -gt 0) { $added = @(Get-Module -Name $otherNames -ListAvailable | Where-Object { $otherBefore -notcontains $_.ModuleBase }) }
+    $newer = @(foreach ($m in $added) {
+        $row = @($recipeAll | Where-Object Name -eq $m.Name)
+        if ($row.Count -ne 1 -or -not (([string]$row[0].RequiredVersion) -as [version]) -or
+            (ConvertTo-FullVersion $m.Version) -gt (ConvertTo-FullVersion ([string]$row[0].RequiredVersion))) { "$($m.Name) $($m.Version)" }
+    })
+    if ($newer.Count -gt 0) {
+        throw ("$RequiredModuleName now matches the recipe, but Install-Module also installed " + ($newer -join ', ') +
+            ', newer than the recipe. Run this block again in a new session for each of those modules, for example with $RequiredModuleName = ''' +
+            (($newer[0] -split ' ')[0]) + "'. Do not continue to other modules until then.")
     }
 }
-if (@($before | Where-Object { (ConvertTo-FullVersion $_.Version) -eq $targetFull }).Count -eq 0) {
-    Get-PSRepository -Name $ApprovedRepository -ErrorAction Stop | Out-Null
-    if (-not (Test-RepositoryVersion -Name $RequiredModuleName -Version $targetVersion -Repository $ApprovedRepository)) {
-        throw 'The exact recipe package is unavailable. No changes were made.'
-    }
-    Install-Module -Name $RequiredModuleName -RequiredVersion $RequiredModuleVersion -Repository $ApprovedRepository -Scope AllUsers -Force -ErrorAction Stop
-}
-$installed = @(Get-ScopedModuleInventory)
-if (@($installed | Where-Object { (ConvertTo-FullVersion $_.Version) -eq $targetFull }).Count -ne 1) {
-    throw 'The exact recipe version was not verified. No versions will be removed.'
-}
-# Install-Module can add modules, so plan the removals again from the refreshed inventory.
-$toRemove = @($installed | Where-Object { (ConvertTo-FullVersion $_.Version) -gt $targetFull })
-if ($toRemove.Count -gt 0) {
-    $dependents = @(Get-UnmetDependent -ModuleName $RequiredModuleName -KeptVersion $keptVersions -Modules @(Get-DependentCandidate))
-    if ($dependents.Count -gt 0) {
-        throw ("These installed modules need a version of $RequiredModuleName that this block would remove: " +
-            (($dependents | ForEach-Object { "$($_.Name) $($_.Version) needs $($_.Needs)" }) -join '; ') + '. No versions were removed. Contact Microsoft Support.')
-    }
-    $missing = @($toRemove | Where-Object { -not (Test-RepositoryVersion -Name $RequiredModuleName -Version $_.Version -Repository $ApprovedRepository) })
-    if ($missing.Count -gt 0) {
-        throw ("These versions would be removed, but $ApprovedRepository does not have them, so they could not be restored: " +
-            (($missing | ForEach-Object { "$RequiredModuleName $($_.Version)" }) -join ', ') + '. No versions were removed. Contact Microsoft Support.')
-    }
-}
-if (Get-Module -Name $RequiredModuleName) { throw 'The module became loaded. No versions will be removed.' }
-foreach ($module in $toRemove) {
-    $current = @(Get-ScopedModuleInventory | Where-Object { [version]$_.Version -eq [version]$module.Version })
-    if ($current.Count -ne 1 -or $current[0].InstalledLocation -ne $module.InstalledLocation) {
-        throw 'Inventory changed before removal. Stop.'
-    }
-    Uninstall-Module -Name $RequiredModuleName -RequiredVersion $module.Version -Force -ErrorAction Stop
-}
-$remaining = @(Get-ScopedModuleInventory)
-if (@($remaining | Where-Object { (ConvertTo-FullVersion $_.Version) -eq $targetFull }).Count -ne 1 -or
-    @($remaining | Where-Object { (ConvertTo-FullVersion $_.Version) -gt $targetFull }).Count -gt 0) {
-    throw 'Module replacement is incomplete. Stop and retain the inventories and error.'
-}
-foreach ($module in @($before | Where-Object { [version]$_.Version -le $targetVersion })) {
-    $preserved = @($remaining | Where-Object { [version]$_.Version -eq [version]$module.Version -and
-        $_.InstalledLocation -eq $module.InstalledLocation })
-    if ($preserved.Count -ne 1) {
-        throw 'A previously accepted version or path changed. Stop for Support-led recovery.'
-    }
-}
-$remaining | Select-Object Name, Version, InstalledLocation
 ```
 
 If installation or the pre-removal inventory fails, stop without uninstalling
 any version. If removal or final inventory fails, stop and retain the error for
-Microsoft Support. Do not continue to other modules after an error.
+Microsoft Support. Do not continue to other modules after an error. The one
+exception is the error that says `Install-Module also installed` a version newer
+than the recipe: the named module is already done, so run this block again for
+each module it names, as the error says.
 After replacement, run [Verify resolution](#verify-resolution) in a new session.
 
 ## Rollback and escalation
