@@ -138,10 +138,17 @@ registration. Rerun this block after any reboot that registration triggers. It k
 recipe requires 5.x or later. Only a recipe explicitly requiring 4.0.2 permits
 removal of newer versions; older versions and 4.0.2 are preserved. If the recipe
 is missing, ambiguous, or different, it stops without changing any modules.
-When a newer version is present, the 4.0.2 path also stops, before it installs or
-removes anything, if any other available module declares in `RequiredModules` or
-`ModuleList` that it needs an Az.Accounts version newer than 4.0.2, or if a newer
-copy was not installed with `Install-Module`.
+On the 4.0.2 path, every check that can be made in advance runs before the block
+installs or removes anything. It stops with `No changes were made` if a newer
+Az.Accounts version is loaded in the session, if any other available module
+declares in `RequiredModules` or `ModuleList` that it needs an Az.Accounts version
+newer than 4.0.2, or if any newer Az.Accounts copy is not the copy that
+`Install-Module` recorded in the all-users module folder
+(`%ProgramFiles%\WindowsPowerShell\Modules`). That last check applies even when a
+copy has the same version as one installed with `Install-Module`. Only after these
+checks pass does the block install 4.0.2 and remove newer versions. It then
+verifies the result; that final verification runs after the changes, so if it
+fails, its message lists what was installed and uninstalled and how to roll back.
 `Uninstall-Module -Force` skips PowerShellGet's dependency check, and current Az
 modules declare their Az.Accounts minimum under `ModuleList`, so both lists are
 read.
@@ -149,8 +156,9 @@ read.
 **[HIGH RISK]**
 
 **Changes:** On the 4.0.2 path only, this installs 4.0.2 first if missing and
-uninstalls newer Az.Accounts versions, printing each version and path as
-`ARC42-REMOVING` before it removes it. It does not uninstall other modules or
+uninstalls newer Az.Accounts versions, printing `ARC42-INSTALLED` after it
+installs 4.0.2 and each version and path as `ARC42-REMOVING` before it removes
+it. It does not uninstall other modules or
 register the node, but other modules that need a removed version stop loading.
 Installing 4.0.2 needs access to the PowerShell Gallery. Do not run this legacy
 path during deployment or solution servicing.
@@ -201,37 +209,63 @@ if ($required -ge [version]'5.0.0') {
             throw 'The modules listed above require Az.Accounts newer than 4.0.2. No changes were made.'
         }
     }
-    # PowerShellGet 2.x returns Version as a string, so cast before comparing.
-    $galleryVersions = @(Get-InstalledModule -Name Az.Accounts -AllVersions -ErrorAction SilentlyContinue |
-        ForEach-Object { [version]$_.Version })
+    # Uninstall-Module removes only the copy that Install-Module recorded, so every newer copy
+    # must be that recorded copy, in the all-users module folder. PowerShellGet 2.x returns
+    # Version as a string, so cast before comparing.
+    $galleryCopies = @(Get-InstalledModule -Name Az.Accounts -AllVersions -ErrorAction SilentlyContinue)
+    $allUsersPath = "$env:ProgramFiles\WindowsPowerShell\Modules\"
     $newer = @($available | Where-Object { $_.Version -gt [version]'4.0.2' } | Sort-Object Version)
-    $unmanaged = @($newer | Where-Object { $galleryVersions -notcontains $_.Version })
+    $unmanaged = @($newer | Where-Object {
+        $base = ([string]$_.ModuleBase).TrimEnd('\')
+        $version = $_.Version
+        -not $base.StartsWith($allUsersPath, [StringComparison]::OrdinalIgnoreCase) -or
+        -not @($galleryCopies | Where-Object {
+            [version][string]$_.Version -eq $version -and ([string]$_.InstalledLocation).TrimEnd('\') -eq $base
+        }).Count })
     if ($unmanaged.Count) {
         throw ('Uninstall-Module cannot remove these newer Az.Accounts copies. No changes were made: ' +
             (($unmanaged | ForEach-Object { "$($_.Version) at $($_.ModuleBase)" }) -join '; '))
     }
+    # Every check above runs before any change. The checks below verify the changes.
+    $installed = $false
     if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) {
         Install-Module -Name Az.Accounts -RequiredVersion 4.0.2 -Scope AllUsers `
             -Repository PSGallery -Force -ErrorAction Stop | Out-Null
+        $installed = $true
+        Write-Output 'ARC42-INSTALLED: Az.Accounts 4.0.2'
         $available = @(Get-Module -ListAvailable -Name Az.Accounts)
     }
     if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) {
-        throw 'Required version 4.0.2 was not installed; nothing will be removed.'
+        throw 'Required version 4.0.2 is not available after installation; nothing was removed.'
     }
     foreach ($module in $newer) {
         Write-Output "ARC42-REMOVING: Az.Accounts $($module.Version) at $($module.ModuleBase)"
     }
-    foreach ($version in @($newer | ForEach-Object { $_.Version } | Sort-Object -Unique)) {
-        Uninstall-Module -Name Az.Accounts -RequiredVersion $version.ToString() -Force -ErrorAction Stop
+    $removed = [System.Collections.Generic.List[string]]::new()
+    $problem = $null
+    try {
+        foreach ($version in @($newer | ForEach-Object { $_.Version } | Sort-Object -Unique)) {
+            Uninstall-Module -Name Az.Accounts -RequiredVersion $version.ToString() -Force -ErrorAction Stop
+            $removed.Add($version.ToString())
+        }
+        $remaining = @(Get-Module -ListAvailable -Name Az.Accounts)
+        $left = @($remaining | Where-Object { $_.Version -gt [version]'4.0.2' })
+        if ($left.Count) {
+            $problem = 'Newer Az.Accounts copies remain: ' +
+                (($left | ForEach-Object { "$($_.Version) at $($_.ModuleBase)" }) -join '; ') + '.'
+        } elseif (-not ($remaining | Where-Object { $_.Version -eq [version]'4.0.2' })) {
+            $problem = 'Az.Accounts 4.0.2 is no longer available.'
+        }
+    } catch {
+        $problem = "Uninstall-Module failed ($($_.Exception.Message))."
     }
-    $remaining = @(Get-Module -ListAvailable -Name Az.Accounts)
-    $left = @($remaining | Where-Object { $_.Version -gt [version]'4.0.2' })
-    if ($left.Count) {
-        throw ('Newer Az.Accounts copies remain; stop before retrying registration: ' +
-            (($left | ForEach-Object { "$($_.Version) at $($_.ModuleBase)" }) -join '; '))
-    }
-    if (-not ($remaining | Where-Object { $_.Version -eq [version]'4.0.2' })) {
-        throw 'Module verification failed; stop before retrying registration.'
+    if ($problem) {
+        $undo = if ($installed) { ', then Uninstall-Module -Name Az.Accounts -RequiredVersion 4.0.2' } else { '' }
+        throw ("Post-change verification failed; do not retry registration. $problem Changes made: " +
+            $(if ($installed) { 'installed Az.Accounts 4.0.2' } else { 'nothing installed' }) +
+            '; Uninstall-Module completed for ' +
+            $(if ($removed.Count) { 'Az.Accounts ' + ($removed -join ', ') } else { 'no version' }) +
+            ". To roll back, run the section 1 rollback command for each of those versions$undo.")
     }
     Write-Output 'ARC42-MODULE-GATE: REQUIRES-4.0.2'
 }
@@ -244,18 +278,23 @@ If the image recipe is unavailable, contact Microsoft support with the image
 version and module inventory; installed versions alone cannot prove the requirement.
 
 If the block stops because a newer copy was not installed with `Install-Module`
-(for example, a copy placed in a module folder by hand or by another tool), it
-names the version and folder and makes no changes. Do not delete that folder to
-force the workaround; contact Microsoft support with the message. If a hand-placed
-copy has the same version as a copy installed with `Install-Module`, the block
-treats that version as removable: it prints both copies as `ARC42-REMOVING`,
-uninstalls the installed copy, and then stops at its final check, naming the copy
-that remains. Use the rollback command below for the printed version and contact
-Microsoft support.
+(for example, a copy placed in a module folder by hand or by another tool, or a
+copy outside the all-users module folder), it names the version and folder and
+makes no changes. Do not delete that folder to force the workaround; contact
+Microsoft support with the message.
+
+If the block stops with `Post-change verification failed`, it has already changed
+modules: the message names whether it installed 4.0.2 and the versions for which
+`Uninstall-Module` completed. Do not retry registration. Restore each version
+that the message lists with the rollback command below. If the message says that 4.0.2 was installed, you can
+then uninstall that version with the `Uninstall-Module` command that the message
+names, to return to the previous module set. Contact Microsoft support with the message.
 
 **Rollback:** Keep the `ARC42-REMOVING` lines the block printed. To restore a
 removed version, for example after registration completes, run this for each
-printed version (requires access to the PowerShell Gallery).
+printed version, or, after a `Post-change verification failed` stop, for each
+version that the message lists (requires access to the PowerShell
+Gallery).
 
 **Changes:** installs the named Az.Accounts version for all users. It does not
 remove 4.0.2 or change other modules. A newer version installed again before
@@ -380,11 +419,13 @@ create the assignment and record the ID that it prints as `<assignment-id>`:
 az role assignment create --assignee-object-id '<principal-id>' --assignee-principal-type ServicePrincipal --role 'Azure Connected Machine Onboarding' --scope '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>' --query id -o tsv
 ```
 
-**Changes:** adds one role assignment; until it is removed, anyone who can mint a
+**Changes:** adds one role assignment; while it applies, anyone who can mint a
 token on that machine can register machines into that resource group. Remove it
-after registration with `az role assignment delete --ids '<assignment-id>'`,
+right after registration with `az role assignment delete --ids '<assignment-id>'`,
 which deletes only the assignment that this command created. Run that delete
-command only for an ID that this create command printed.
+command only for an ID that this create command printed. Removing it stops
+tokens minted afterward from registering machines once the change applies; it
+does not revoke a token minted before, which stays usable until it expires.
 A new assignment can take several minutes to apply; in validation it took about
 20 minutes, and retries before then still failed with 403.
 
@@ -414,10 +455,11 @@ until `az logout`.
 > Any local administrator of the minting machine, and any member of its
 > **Hybrid Agent Extension Applications** group, can mint this identity's token.
 > The token is valid for up to about 24 hours and cannot be revoked. Removing the
-> role assignment is the only way to stop an issued token from registering
-> machines, and it takes effect only after the role change applies. The machine
-> caches the token, so it can have much less than 24 hours left; step 2 checks the
-> remaining time.
+> role assignment stops tokens minted afterward from carrying the permission to
+> register machines, but a token minted before the removal stays usable until it
+> expires. Mint the token just before you start the initialization, and remove the
+> assignment right after it finishes. The machine caches the token, so it can
+> have much less than 24 hours left; step 2 checks the remaining time.
 
 *Step 2: mint and convert the token.* In the same session, replace `<tenant-id>`
 in the block below with the resource tenant ID from the deployment plan (in the
@@ -511,7 +553,10 @@ in a ticket; clear `$token = $null` after the initialization attempt and sign ou
 as described in step 1. If the token came from a managed identity and step 1
 created its **Azure Connected Machine Onboarding** assignment, have the
 subscription owner remove that assignment with the `az role assignment delete --ids`
-command in step 1. Do not remove an assignment that existed before step 1.
+command in step 1 right after the initialization attempt. The removal does not
+revoke the token you already minted; clearing `$token` and limiting where it was
+sent is what protects it until it expires. Do not remove an assignment that
+existed before step 1.
 
 **Changes:** The token blocks only set session variables. Retrying initialization
 can create Azure resources and change the node's registration configuration and,
@@ -594,7 +639,7 @@ example, Azure Cloud Shell in Bash) requests each following page until no
 ```bash
 url='/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.Authorization/policyAssignments?api-version=2023-04-01&$filter=atScope()'
 while [ -n "$url" ]; do
-  az rest --method get --url "$url" --query "value[].[properties.displayName, properties.scope, properties.enforcementMode]" -o tsv || break
+  az rest --method get --url "$url" --query "value[].[id, properties.displayName, properties.enforcementMode, properties.policyDefinitionId]" -o tsv || break
   url=$(az rest --method get --url "$url" --query nextLink -o tsv) || break
 done
 ```
@@ -603,16 +648,23 @@ Expect `Registered`, then `Owner` or both Azure Connected Machine roles for the
 minting principal. A managed identity set up as in section 3 lists only
 **Azure Connected Machine Onboarding**; if its retry still returns 403, follow
 the stop instruction in section 3 instead of granting more roles. The loop prints
-one line for each policy assignment that applies to the resource group (name,
-scope, and enforcement), including those inherited from the subscription and
-management groups. If an `az rest` call fails, the loop stops; treat the list as
+one tab-separated line for each policy assignment that applies to the resource
+group, including those inherited from the subscription and management groups:
+the assignment ID (its scope followed by `/providers/Microsoft.Authorization/policyAssignments/`
+and the assignment name), the display name, the enforcement mode, and the policy
+definition or initiative ID. If an `az rest` call fails, the loop stops; treat the list as
 incomplete and run it again. Keep the first `url` value in single quotes so the
 shell does not expand `$filter`. Do not
 substitute `az policy assignment list --resource-group`: in validation it listed
 only assignments made directly on the resource group, even with
-`--disable-scope-strict-match`. Compare the listed names with the
-`policyAssignment` name in the `RequestDisallowedByPolicy` message, and review
-each assignment whose enforcement is `Default` for a deny on
+`--disable-scope-strict-match`. To find the denying assignment, match the
+`policyAssignment` `id` in the `RequestDisallowedByPolicy` message in
+`azcmagent.log` against the first column. The last column matches the message's
+`policyDefinition` `id`, or its `policySetDefinition` `id` when the assignment is
+for an initiative. Do not match on display names: the `name` shown under
+`policyAssignment` in that message is the display name, which can be empty or
+shared by several assignments. If the message is not available, review each
+assignment whose enforcement is `Default` for a deny on
 `Microsoft.HybridCompute/machines` or on the resource group's location. Then
 retry your original initialization command.
 
@@ -707,6 +759,30 @@ the full bootstrap was not run.
   Local node described below, whose recipe requires 5.5.3, the revised block printed
   `KEEP-MODULES` and the module inventory was unchanged. The 4.0.2 path was not
   rerun live after this change.
+- **Module block copy check and post-change message (section 1), revised
+  2026-11-24:** the check for newer copies now compares each newer copy's folder
+  with the location that `Install-Module` recorded, so a copy with the same version
+  as an installed one, or a copy outside the all-users module folder, also stops
+  the block before any change. With mocked module cmdlets in PowerShell 7.5, the
+  block stopped with `No changes were made` and no install or uninstall call for a
+  hand-placed copy with the same version as an installed one (with and without
+  4.0.2 already present) and for a copy installed for the current user only; the
+  earlier cases above still stopped or continued as before. When an uninstall
+  failed or a newer copy remained after removal, the block stopped with
+  `Post-change verification failed` and named whether it installed 4.0.2 and the
+  versions it had uninstalled. On the registered Azure Local node described below
+  (Windows PowerShell 5.1, recipe requiring 5.5.3), the revised block printed
+  `KEEP-MODULES`, the module inventory was unchanged, and, read without changes,
+  the location recorded by `Install-Module` matched the folder of each installed
+  Az.Accounts copy. The 4.0.2 path was not rerun live after this change.
+- **Policy listing columns (section 4), revised 2026-11-24:** with Azure CLI
+  2.85.0, the revised loop ran read-only against an existing resource group and
+  printed one line per assignment with four columns: the assignment ID, display
+  name, enforcement mode, and policy definition or initiative ID. The last segment
+  of each ID matched the assignment name. With a test-only `$top=1`, the loop
+  followed `nextLink` and printed the same lines. The `RequestDisallowedByPolicy`
+  message recorded in the cause 4 run lists the assignment's display name under
+  `name` and its full ID under `id`.
 - **Cause 4:** an Azure Policy assignment that denies Azure Arc machine resources
   in the target resource group reproduced exit code 42 with `AZCM0042` and
   `httpStatusCode:403` (`RequestDisallowedByPolicy`). After the assignment was
@@ -771,8 +847,9 @@ the full bootstrap was not run.
   that same ID, and `az role assignment delete --ids` removed it. For an identity
   whose assignment was created beforehand to stand in for other automation, the
   check printed that assignment's ID, so the procedure created and deleted nothing,
-  and that assignment remained. The section 4 policy loop listed the three
-  assignments that apply to the resource group in one page. To confirm that it
+  and that assignment remained. The section 4 policy loop, with its earlier
+  columns, listed the three assignments that apply to the resource group in one
+  page. To confirm that it
   follows `nextLink`, it was also run with a test-only `$top=1` added to the first
   URL: a single `az rest` call then returned one assignment and a `nextLink`, and
   the loop followed the links and listed the same three assignments. The resource
@@ -785,3 +862,4 @@ the full bootstrap was not run.
 | --- | --- |
 | 2026-11-24 | The section 1 module block now checks for newer Az.Accounts copies that were not installed with `Install-Module` before it installs 4.0.2, so that stop, like the other precondition stops, happens before any module changes. The section 4 role check now uses the object ID of the identity that minted the registration token, with a lookup for each identity type, instead of the account that runs the checks. |
 | 2026-11-24 | Section 3 now checks whether the managed identity already holds **Azure Connected Machine Onboarding** on the resource group before granting it. If it does, no assignment is created and none is deleted afterward; otherwise the cleanup deletes only the assignment that the procedure created, by its ID. The section 4 policy listing now follows `nextLink`, so assignments on later result pages are not missed. |
+| 2026-11-24 | The section 1 module block now stops before any change for every Az.Accounts copy that `Install-Module` cannot remove, including a copy with the same version as an installed one. Its final check, which runs after the changes, now reports what it installed and uninstalled and how to roll back. Section 3 now states that removing the role assignment does not revoke a token already minted. The section 4 policy listing now prints each assignment's ID and policy definition ID, and explains how to match them to the denying assignment named in the error. |
