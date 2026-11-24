@@ -45,6 +45,7 @@
 | 2026-11-24 | Added the administrator surfaces observed in a lab run, the `RESULT` lines for each cause, the repository endpoint, and a prevention note. Validated the first cause again as an automated loop. Stated which steps automation can run and that resuming a deployment from the Azure portal needs a person. |
 | 2026-11-24 | Step 2 now keeps every version that another installed module requires as an exact version (`RequiredVersion`), not only as a minimum or maximum version. It installs the recipe version of a module for all users when the only copy of that version is in a user's `Documents` folder, before it removes the newer version. After installing, it reads the installed modules again and plans the removals from that list, so that a newer `Az.Accounts` that `Install-Module` adds as a dependency is also removed, and it prints `RESULT: CHANGED` only after it confirms that no newer `Az.Accounts` remains. |
 | 2026-11-24 | Issue Validation now reports `RESULT: UNKNOWN` when a module that is not in the recipe needs a newer `Az.Accounts` than any installed version and the recipe version, because this article cannot make that module importable. When another cause is also present, it still reports `RESULT: AFFECTED` and prints a `WARNING:` line for that module; Step 2 prints the same warning. Step 2's dependency check now counts only versions that remain in the all-users module folder, so a copy in a user's `Documents` folder no longer allows a version that other users and services need to be removed. |
+| 2026-11-24 | Cause now states that the fix keeps or installs the recipe version of `Az.Accounts` and also removes any `Az.Accounts` version newer than the recipe, after the dependent-module check, so that the recipe version is the one that loads. Rollback now installs from the repository in `$Repository`, the same repository used in Step 2, confirms that the exact removed version is available there before it installs anything, and stops if it is not. |
 
 ## At a glance
 
@@ -88,7 +89,7 @@ Every Azure PowerShell module (for example `Az.Storage` or `Az.Resources`) decla
 
 The cluster witness check imports `Az.Storage` and `Az.Accounts` by name, without a version, so PowerShell loads the highest version installed on the machine. The message therefore means that the machine has an Azure PowerShell module version that needs a newer `Az.Accounts` than the one the session uses. It usually happens in one of these two ways:
 
-- **A module newer than the recipe was installed outside of Azure Local.** For example, `Install-Module Az` or `Install-Module Az.Storage` adds `Az.Storage` 9.2.0, which needs `Az.Accounts` 5.3.0, to a build whose recipe uses an older `Az.Accounts`. The fix is to remove the newer module versions that are not part of the recipe. `Az.Accounts` is not downgraded.
+- **A module newer than the recipe was installed outside of Azure Local.** For example, `Install-Module Az` or `Install-Module Az.Storage` adds `Az.Storage` 9.2.0, which needs `Az.Accounts` 5.3.0, to a build whose recipe uses an older `Az.Accounts`. The fix keeps, or installs if it is missing, the recipe version of `Az.Accounts`, and removes the newer module versions that are not part of the recipe. If an `Az.Accounts` version newer than the recipe is also installed, for example one that `Install-Module Az` added, the fix removes it too, after it checks that no other installed module still needs it, so that the recipe version is the one that loads afterward.
 - **The recipe's `Az.Accounts` version is missing.** For example, `Az.Accounts` was downgraded by hand on a build whose recipe requires 5.x, so the product's own modules can no longer load. The fix is to install the exact recipe version of `Az.Accounts` and use a new PowerShell session.
 
 Module versions whose published manifest requires `Az.Accounts` 5.3.0 or later include `Az.Storage` 9.2.0 and later, `Az.Resources` 8.1.1 and later, `Az.StackHCI` 2.6.2 and later, and the `Az` rollup module 14.4.0 and later (PowerShell Gallery package metadata, checked 2026-11-23).
@@ -520,13 +521,36 @@ If `Uninstall-Module` reports that a module version is in use, a process still h
 
 ## Rollback
 
-There is no automatic rollback. To restore a version that Step 2 removed, take the `Name` and `Version` from its `REMOVING:` line and run this in an elevated Windows PowerShell 5.1 session on the same machine.
+There is no automatic rollback. To restore a version that Step 2 removed, take the `Name` and `Version` from its `REMOVING:` line, put them in the block below, and run it in an elevated Windows PowerShell 5.1 session on the same machine.
 
-**Changes:** installs that one module version for all users. It does not remove other versions. Restoring a version that Step 2 removed brings this error back, so restore it only after the operation completes and only if you need it for other work.
+Set `$Repository` to the same repository that you used in Step 2: leave it set to `'PSGallery'` unless your organization requires an approved internal repository, in which case use that repository's name. The block first confirms with `Find-Module` that this exact version is available in that repository. If it is not, the block stops without installing anything; choose an approved repository that contains this exact version, or contact Microsoft support.
+
+**Changes:** installs that one module version for all users from `$Repository`. It does not remove other versions. Restoring a version that Step 2 removed brings this error back, so restore it only after the operation completes and only if you need it for other work.
 
 ```powershell
-Install-Module -Name 'module-name-from-REMOVING-line' -RequiredVersion 'version-from-REMOVING-line' -Repository 'PSGallery' -Scope AllUsers -Force
+& {
+    $ErrorActionPreference = 'Stop'
+    $Repository = 'PSGallery'
+    $Name = 'module-name-from-REMOVING-line'
+    $Version = 'version-from-REMOVING-line'
+
+    if (-not ($Version -as [version])) { throw "Replace the version placeholder with the version from the REMOVING: line. Nothing was installed." }
+    Get-PSRepository -Name $Repository | Out-Null
+    $found = @()
+    try { $found = @(Find-Module -Name $Name -RequiredVersion $Version -Repository $Repository) } catch { $found = @() }
+    if ($found.Count -ne 1 -or [version][string]$found[0].Version -ne [version]$Version) {
+        throw "$Name $Version is not available in $Repository. Nothing was installed. Choose an approved repository that contains this exact version."
+    }
+    Write-Output "INSTALLING: $Name $Version from $Repository"
+    Install-Module -Name $Name -RequiredVersion $Version -Repository $Repository -Scope AllUsers -Force
+    $installed = @()
+    try { $installed = @(Get-InstalledModule -Name $Name -RequiredVersion $Version) } catch { $installed = @() }
+    if ($installed.Count -eq 0) { throw "$Name $Version is not listed as installed. Keep this output and contact Microsoft support." }
+    Write-Output "RESTORED: $Name $Version"
+}
 ```
+
+Expected result: `RESTORED:` followed by the module name and version.
 
 Do not uninstall a version that Step 2 installed. It is the version that the machine's validated recipe requires.
 
@@ -561,7 +585,7 @@ Later on 2026-11-24 Step 2 was revised as described in [Revision history](#revis
 
 The last 2026-11-24 revision, which added the `RESULT: UNKNOWN` case for modules that are not in the recipe and counts only all-users versions in Step 2's dependency check, was tested the same way. With simulated module folders, not on a cluster, Issue Validation reported `RESULT: UNKNOWN` for `Az.KeyVault` 6.6.2 (which needs `Az.Accounts` 5.5.4) with only `Az.Accounts` 5.5.3 installed, a `WARNING:` line for it followed by `RESULT: AFFECTED` when `Az.Storage` 9.8.0 was also present, and `RESULT: NOT AFFECTED` when `Az.Accounts` 5.5.5 was also installed or when no such module was present. Step 2 stopped with `No changes were made` when another module needed at least an `Az.Storage` version that remained only in a user's `Documents` folder, and removed `Az.Storage` 9.8.0 when that version was also installed for all users. On a lab machine in Windows PowerShell 5.1, Issue Validation reported `RESULT: NOT AFFECTED`; with scratch modules placed only in a session module path outside `C:\Program Files`, it reported `RESULT: UNKNOWN` for a scratch module outside the recipe that needed `Az.Accounts` 5.5.4, and the `WARNING:` line followed by `RESULT: AFFECTED` when a scratch `Az.Storage` version that needed `Az.Accounts` 5.5.5 was added. The scratch modules were then removed. The automated loop for the first cause ran again with this Step 2 unchanged and passed (`REMOVING: Az.Storage 9.8.0`, `RESULT: CHANGED`), and every module folder matched its state before the test.
 
-Not exercised: the second cause inside the automated loop (it was exercised only in the discrete runs on 2026-11-23), the user-folder and dependency-installation cases of Step 2 on a cluster, the rollback command, the portal **Resume deployment** retry in Step 3, and the Windows Admin Center surfaces (the standalone row is inferred, not viewed).
+Not exercised: the second cause inside the automated loop (it was exercised only in the discrete runs on 2026-11-23), the user-folder and dependency-installation cases of Step 2 on a cluster, the rollback block on a cluster (it was checked for syntax and run only with simulated `Find-Module`, `Install-Module`, and `Get-InstalledModule` commands, which confirmed that it installs from the PowerShell Gallery by default, uses an internal repository name when `$Repository` is set to one, and stops before installing when the exact version is not found), the portal **Resume deployment** retry in Step 3, and the Windows Admin Center surfaces (the standalone row is inferred, not viewed).
 
 ## Related documentation
 
