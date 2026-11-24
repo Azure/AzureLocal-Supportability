@@ -76,7 +76,7 @@ Read the status code of the failed attempt in `azcmagent.log` first:
 | The failed attempt shows | Follow | Who acts |
 | --- | --- | --- |
 | `status code 401` | [Section 1](#1-azaccounts-version-on-the-system-is-incorrect) (module check), then [sections 2 and 3](#3-arm-access-token-is-passed-incorrectly): mint a new plain-text token and retry | The node administrator, with a token from an identity that holds the required roles |
-| `httpStatusCode:403`, the code `RequestDisallowedByPolicy`, or a quota error code such as `QuotaExceeded` | [Section 4](#4-permissions-policy-or-quota-http-403-or-a-policy-or-quota-error). Do not change modules or tokens | The subscription owner makes any role, provider, or policy change |
+| `httpStatusCode:403`, the code `RequestDisallowedByPolicy`, or a quota error code such as `QuotaExceeded` | [Section 4](#4-permissions-policy-or-quota-http-403-or-a-policy-or-quota-error). The fix is the permission, policy, or quota; do not change modules or the token's source or format to work around it. After the fix, the retry still needs a valid token: if it was cleared or has 10 minutes or less left, repeat the sign-in and token steps in section 3 first | The subscription owner makes any role, provider, or policy change |
 | `429` (too many requests) | Azure Resource Manager throttled the request ([throttling](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/request-limits-and-throttling)). Wait for the `Retry-After` interval if the log shows one, otherwise a few minutes, then retry the original initialization command. Do not change modules, tokens, roles, or policies | The node administrator |
 | A 5xx status, such as 500, 502, 503, or 504 | A transient service failure. Retry the original initialization command later and check [Azure Service Health](https://learn.microsoft.com/en-us/azure/service-health/overview) for the region. Do not change modules, tokens, roles, or policies. If it persists, [contact Microsoft support](#when-to-contact-microsoft-support) | The node administrator; Microsoft support if it persists |
 | Another 4xx status | Read the error code on the same line. If it does not name an authorization, policy, or quota error, [contact Microsoft support](#when-to-contact-microsoft-support) | Microsoft support |
@@ -383,24 +383,41 @@ identity for other purposes include registration; check them as in step 1.
 *Step 1: sign in as the identity that will mint the token.* Use an identity that
 holds the required roles, on the machine where its credential is kept. For
 automation this is normally off the node, on the automation host, so that no
-service principal credential is placed on the node. For example, for a service
-principal whose certificate is in that machine's certificate store, replace the
-placeholders and run:
+service principal credential is placed on the node.
+
+**Keep this procedure's sign-in separate.** Open a new PowerShell session that
+you use only for this procedure, and run steps 1 to 4 in it. Every Azure
+PowerShell sign-in below uses `-Scope Process`, which keeps the sign-in in that
+process and does not save it to the user profile. If you use the Azure CLI,
+first point it at a new, empty profile folder for this session, so that
+`az login` and `az logout` do not read or change the default Azure CLI profile,
+which all sessions of the user share:
 
 ```powershell
-Connect-AzAccount -ServicePrincipal -ApplicationId '<application-id>' -CertificateThumbprint '<certificate-thumbprint>' -Tenant '<tenant-id>'
+$env:AZURE_CONFIG_DIR = Join-Path $env:TEMP ('arc42-az-' + [guid]::NewGuid())
+```
+
+**Changes:** sets an environment variable for the current PowerShell process
+only. The Azure CLI creates the folder when you sign in. Sign-ins saved earlier,
+in the user profile or the default Azure CLI profile, are not read or changed.
+
+For example, for a service principal whose certificate is in that machine's
+certificate store, replace the placeholders and run:
+
+```powershell
+Connect-AzAccount -ServicePrincipal -ApplicationId '<application-id>' -CertificateThumbprint '<certificate-thumbprint>' -Tenant '<tenant-id>' -Scope Process
 ```
 
 An operator who mints the token instead signs in with device code, which needs a
 person to complete it in a browser:
 
 ```powershell
-Connect-AzAccount -Tenant '<tenant-id>' -UseDeviceAuthentication
+Connect-AzAccount -Tenant '<tenant-id>' -UseDeviceAuthentication -Scope Process
 ```
 
-**Changes:** signs in to Azure PowerShell. By default the sign-in context is
-saved in the user profile; run `Disconnect-AzAccount` after registration to
-remove it (step 4). It does not change the node or Azure resources.
+**Changes:** signs in to Azure PowerShell for the current PowerShell process
+only; nothing is saved to the user profile, and sign-ins saved earlier are not
+changed. Step 4 signs out of it. It does not change the node or Azure resources.
 
 *Managed identity of another registered machine (no person, no stored secret).*
 An Azure Arc-enabled machine that is already registered and trusted, for example
@@ -455,17 +472,77 @@ those received through groups. This command is read-only and informational:
 az role assignment list --assignee-object-id '<principal-id>' --scope '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>' --include-inherited --include-groups --query "[].{role:roleDefinitionName, scope:scope}" -o table
 ```
 
-**Owner**, **Contributor**, **Azure Connected Machine Onboarding**, and
-**Azure Connected Machine Resource Administrator** each grant
-`Microsoft.HybridCompute/machines/write`; for a custom role, check its actions in
-its role definition. If any listed role grants that permission, the identity can
-already register machines in that resource group, the temporary assignment is
-not needed, and that access remains after this procedure. Azure role permissions
-are additive
+Registering a machine needs more than `Microsoft.HybridCompute/machines/write`;
+for example, the agent also reads the machine resource (the `get resource`
+request in `azcmagent.log`), so a role that grants only that write permission
+can still fail with a 403. So the temporary
+assignment is not needed only when the identity's roles at that resource group
+together grant every action of the built-in **Azure Connected Machine
+Onboarding** role
+([role definition](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/management-and-governance#azure-connected-machine-onboarding)):
+
+- `Microsoft.HybridCompute/machines/read`
+- `Microsoft.HybridCompute/machines/write`
+- `Microsoft.HybridCompute/machines/addExtensions/action`
+- `Microsoft.HybridCompute/settings/read`
+- `Microsoft.HybridCompute/settings/write`
+- `Microsoft.HybridCompute/gateways/read`
+- `Microsoft.HybridCompute/privateLinkScopes/read`
+- `Microsoft.GuestConfiguration/guestConfigurationAssignments/read`
+- `Microsoft.Insights/dataCollectionRuleAssociations/read`
+- `Microsoft.Insights/dataCollectionRuleAssociations/write`
+- `Microsoft.Insights/dataCollectionRuleAssociations/delete`
+
+**Owner**, **Contributor**, and **Azure Connected Machine Onboarding** each grant
+all of these
+([privileged roles](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged)).
+**Azure Connected Machine Resource Administrator** on its own does not: it lacks
+the `Microsoft.GuestConfiguration` and `Microsoft.Insights` actions. A custom
+role grants an action when one of its `actions` entries matches it (an entry
+with `*` matches every action it covers) and no entry in its `notActions`
+matches it. To check all of the identity's roles together, including custom
+roles, run this read-only Bash block (for example, Azure Cloud Shell in Bash)
+with the same placeholders. It reads the Onboarding role's current actions and
+the definition of every role in the listing, and prints exactly one result:
+
+```bash
+(
+  set -f
+  shopt -s nocasematch
+  scope='/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>'
+  need=$(az role definition list --name 'Azure Connected Machine Onboarding' --query "[].permissions[].actions[]" -o tsv) && [ -n "$need" ] || { echo 'LOOKUP-FAILED'; exit 1; }
+  ids=$(az role assignment list --assignee-object-id '<principal-id>' --scope "$scope" --include-inherited --include-groups --query "[].roleDefinitionId" -o tsv) || { echo 'LOOKUP-FAILED'; exit 1; }
+  covered=' '
+  for id in $(printf '%s\n' $ids | sort -fu); do
+    acts=$(az rest --method get --url "$id?api-version=2022-04-01" --query "properties.permissions[].actions[]" -o tsv) || { echo 'LOOKUP-FAILED'; exit 1; }
+    nots=$(az rest --method get --url "$id?api-version=2022-04-01" --query "properties.permissions[].notActions[]" -o tsv) || { echo 'LOOKUP-FAILED'; exit 1; }
+    for a in $need; do
+      hit=''
+      for p in $acts; do [[ $a == $p ]] && hit=1; done
+      for p in $nots; do [[ $a == $p ]] && hit=''; done
+      [ -n "$hit" ] && covered="$covered$a "
+    done
+  done
+  missing=''
+  for a in $need; do [[ $covered == *" $a "* ]] || missing="$missing $a"; done
+  if [ -z "$missing" ]; then echo 'COVERED'; else echo "MISSING:$missing"; fi
+)
+```
+
+- `COVERED`: the identity's roles at that resource group together grant every
+  Onboarding action. Do not create the temporary assignment; the identity can
+  already register machines there, and that access remains after this procedure.
+- `MISSING: <actions>`: the listed actions are not granted. Create the temporary
+  assignment below if the check block printed `NONE`.
+- `LOOKUP-FAILED`: a lookup failed, for example because the account cannot read
+  role assignments or role definitions. Do not create the assignment and do not
+  assume the identity has access; fix the cause and run the block again.
+
+Azure role permissions are additive
 ([Azure RBAC overview](https://learn.microsoft.com/en-us/azure/role-based-access-control/overview)),
 so deleting the temporary assignment later does not remove access that another
 assignment gives. Create the temporary assignment only when the check block
-printed `NONE` and no listed role grants that permission, and record the ID that
+printed `NONE` and the block above printed `MISSING`, and record the ID that
 the create command prints as `<assignment-id>`:
 
 ```azurecli
@@ -506,20 +583,22 @@ broader scope. If you created an assignment, remove it with the delete command
 above, then mint the token from a service principal or operator account that
 already holds the roles in the permissions article, or use device code (option 2).
 
-Then, in an elevated Windows PowerShell 5.1 session on the registered machine,
-sign in as its managed identity, and continue with step 2 in the same session:
+Then, in a new elevated Windows PowerShell 5.1 session on the registered machine
+that you use only for this procedure, sign in as its managed identity, and
+continue with step 2 in the same session:
 
 ```powershell
 Connect-AzAccount -Identity -Scope Process
 ```
 
-With the Azure CLI on that machine, use `az login --identity --allow-no-subscriptions`
-followed by the Azure CLI block in step 2, and run `az logout` afterward.
+With the Azure CLI on that machine, set `AZURE_CONFIG_DIR` in that session as
+shown at the start of step 1, then use `az login --identity --allow-no-subscriptions`
+followed by the Azure CLI block in step 2.
 
-**Changes:** signs in for the current PowerShell process only; nothing is saved.
-Close the session, or run `Disconnect-AzAccount -Scope Process`, after
-registration (step 4). `az login --identity` saves the sign-in in the Azure CLI
-profile until `az logout`.
+**Changes:** signs in for the current PowerShell process only; nothing is saved
+to the user profile. `az login --identity` saves the sign-in only in the
+procedure's Azure CLI profile folder. Step 4 signs out of both and removes that
+folder.
 
 > [!IMPORTANT]
 > Any local administrator of the minting machine, and any member of its
@@ -588,10 +667,11 @@ and it restores the session's `$ErrorActionPreference` when it finishes.
 }
 ```
 
-If the automation host uses the Azure CLI instead of Azure PowerShell, sign in
-as the service principal with `az login --service-principal --username '<application-id>' --certificate '<path-to-certificate.pem>' --tenant '<tenant-id>'`
-(this saves the sign-in in the Azure CLI profile; run `az logout` after
-registration), then run this block in PowerShell on that host. It applies the
+If the automation host uses the Azure CLI instead of Azure PowerShell, set
+`AZURE_CONFIG_DIR` as shown at the start of step 1, then, in the same session,
+sign in as the service principal with `az login --service-principal --username '<application-id>' --certificate '<path-to-certificate.pem>' --tenant '<tenant-id>'`
+(this saves the sign-in only in the procedure's profile folder, which step 4
+removes), then run this block in that session. It applies the
 same lifetime and tenant checks and does not display the token. It requests the
 token for the current sign-in without `--tenant`, which the Azure CLI does not
 support for a managed identity
@@ -666,7 +746,10 @@ when an update is required, install it and restart the node.
 *Step 4: clear the token and sign out.* After the initialization attempt, and
 whenever you stop after step 2, clean up on every machine and in every session
 where the token existed: the minting machine, the node, and any machine used to
-pass the token between them.
+pass the token between them. Clean up even if you expect to retry later, for
+example after the subscription owner fixes a 403 as in cause 4; for that retry,
+repeat steps 1 to 3 in a new session to mint a fresh token, instead of keeping
+this one while you wait.
 
 1. In each PowerShell session that held the token, run:
 
@@ -686,16 +769,42 @@ pass the token between them.
    run `Remove-PSSession -Session $session`. This closes the session on the remote
    machine, together with the copy of the token it held. `Invoke-Command -ComputerName`
    without `-Session` closes its temporary session itself.
-3. On the minting machine, sign out of the sign-in that step 1 made for this
-   procedure. Leave any sign-in that existed before for other work.
-   - Azure PowerShell with a managed identity (`-Scope Process`):
-     `Disconnect-AzAccount -Scope Process`. Afterward, `Get-AzContext` prints nothing.
-   - Azure PowerShell with a service principal or operator account:
-     `Disconnect-AzAccount`, which removes the saved sign-in from the user profile.
-   - Azure CLI, including `az login --identity`: `az logout`. Afterward,
-     `az account show` reports `Please run 'az login' to setup account.` In
-     validation with a managed identity, the Azure CLI did not create a token cache
-     file (`msal_token_cache.bin`) in its profile folder at any point.
+3. On the minting machine, in the session that step 1 used, sign out of the
+   sign-in that step 1 made for this procedure. These commands affect only that
+   sign-in: sign-ins saved earlier, in the user profile or the default Azure CLI
+   profile, stay as they were.
+   - Azure PowerShell (managed identity, service principal, or operator account,
+     all signed in with `-Scope Process`): `Disconnect-AzAccount -Scope Process`,
+     or close the session. Afterward, `Get-AzContext` no longer shows the
+     identity that this procedure used. Do not run `Disconnect-AzAccount` without
+     `-Scope Process`: it removes all saved credentials and contexts of the
+     account from the user profile, including ones that existed before this
+     procedure
+     ([Disconnect-AzAccount](https://learn.microsoft.com/en-us/powershell/module/az.accounts/disconnect-azaccount)).
+   - Azure CLI (service principal or `az login --identity`): run this block in the
+     same session. It signs out and deletes the procedure's profile folder only
+     when `AZURE_CONFIG_DIR` names a folder that step 1 created; otherwise it
+     changes nothing.
+
+     ```powershell
+     & {
+         $dir = $env:AZURE_CONFIG_DIR
+         if ($dir -and (Split-Path -Path $dir -Leaf) -like 'arc42-az-*' -and (Test-Path -LiteralPath $dir -PathType Container)) {
+             az logout 2>$null
+             Remove-Item -LiteralPath $dir -Recurse -Force
+             Remove-Item -Path Env:\AZURE_CONFIG_DIR
+             'Procedure Azure CLI profile removed'
+         } else {
+             'AZURE_CONFIG_DIR does not name this procedure''s profile folder; nothing removed'
+         }
+     }
+     ```
+
+     Expect `Procedure Azure CLI profile removed`. Afterward, `az account show`
+     uses the default Azure CLI profile again, which this procedure did not
+     change. In validation with a managed identity, the Azure CLI did not create
+     a token cache file (`msal_token_cache.bin`) in the procedure's profile
+     folder at any point.
 4. Close the PowerShell windows and sessions that you used. A PowerShell string
    cannot be overwritten in place, so ending the process removes the last copy
    held in memory.
@@ -707,9 +816,10 @@ until it expires. For a managed identity, removing the role assignment in step 1
 removes only the registration access that this assignment granted; it does not
 remove access that other role assignments give the identity.
 
-**Changes:** removes session variables, the remote sessions you name, and the
-sign-ins that this procedure created. It does not change the node, Azure
-resources, or role assignments, and it does not revoke the token.
+**Changes:** removes session variables, the remote sessions you name, the
+sign-ins that this procedure created, and the procedure's Azure CLI profile
+folder. It does not change sign-ins saved earlier, the node, Azure resources, or
+role assignments, and it does not revoke the token.
 
 **Option 2 (interactive only): let the registration command sign in with device
 code.** The `-ArmAccessToken` parameter is optional. If you omit it, the script
@@ -740,8 +850,9 @@ the machine resource produces a line ending in
 `Code: RequestDisallowedByPolicy httpStatusCode:403`, and the agent also logs
 `Please verify that the login credentials or token used has access to create resources in resource group '<resource-group>'`.
 These responses are not 401 authentication failures, so the module and token
-steps in sections 1 to 3 do not apply; do not change modules or request a new
-token for this pattern. A 429 or 5xx status is not this cause either: it is
+fixes in sections 1 to 3 do not apply: changing modules, or the source or
+format of the token, does not fix this pattern. After the cause below is fixed,
+the retry still needs a valid token, as described at the end of this section. A 429 or 5xx status is not this cause either: it is
 throttling or a transient service failure; follow its row in
 [Which section to follow](#which-section-to-follow) and retry later instead of
 changing roles, providers, or policies.
@@ -821,8 +932,15 @@ for an initiative. Do not match on display names: the `name` shown under
 `policyAssignment` in that message is the display name, which can be empty or
 shared by several assignments. If the message is not available, review each
 assignment whose enforcement is `Default` for a deny on
-`Microsoft.HybridCompute/machines` or on the resource group's location. Then
-retry your original initialization command.
+`Microsoft.HybridCompute/machines` or on the resource group's location.
+
+After the subscription owner fixes the cause, retry your original initialization
+command. With a token (section 3, option 1), the retry needs a valid one: if
+step 4 already cleared the earlier token, or it has 10 minutes or less left,
+repeat section 3, steps 1 and 2 in a new session to sign in and mint a fresh
+token, pass it as in step 3, and clean up again with step 4 after the retry. Mint
+it from the identity whose access was checked and fixed above. With device code (option 2),
+the retry prompts for the sign-in again.
 
 **Changes:** Retrying initialization can create Azure resources, change the
 node's registration configuration, and, when an update is required, install it
@@ -873,6 +991,7 @@ the full bootstrap was not run.
   `status code 401` (`InvalidAuthenticationToken`), and no machine was created.
   The section 3 Azure PowerShell token block produced a plain-text token, and the
   same connect succeeded (machine `Connected`, provisioning `Succeeded`).
+  In that run, which predates the `-Scope Process` sign-in in step 1, a bare
   `Disconnect-AzAccount` then removed the saved sign-in. With Az.Accounts 4.0.2,
   the same block used the plain-text token as is, and the connect succeeded. In a
   second run, the 401 was reproduced again, then the section 3 Azure CLI block
@@ -1014,6 +1133,40 @@ the full bootstrap was not run.
   unchanged. The instruction to remove the role assignment on every exit after it is
   created is procedural; the delete command itself was validated in the role grant
   run below.
+- **Sign-in isolation and role coverage (section 3, steps 1 and 4), revised
+  2026-11-24:** on the same registered node (Windows PowerShell 5.1, Az.Accounts
+  5.5.3 with context autosave on, one saved context already present), a separate
+  PowerShell process ran `Connect-AzAccount -Identity -Scope Process`, then
+  `Disconnect-AzAccount -Scope Process`, which removed the managed identity
+  context from that process. A new session still listed the same one saved
+  context, and the user profile's `.Azure` and `.IdentityService` folders, listed
+  by file name, size, and time only, were unchanged. In Az.Accounts 5.5.3,
+  `-Scope` is available in every `Connect-AzAccount` parameter set, including the
+  service principal certificate, device code, and managed identity sets, and in
+  every `Disconnect-AzAccount` parameter set; only the managed identity sign-in
+  was run. In another separate process, the step 1 line set `AZURE_CONFIG_DIR`
+  to a folder that did not exist yet; `az login --identity --allow-no-subscriptions`
+  created it and signed in, and the step 4 cleanup block printed
+  `Procedure Azure CLI profile removed`, deleted the folder, and cleared the
+  variable. Run with `AZURE_CONFIG_DIR` unset, or set to the default `.azure`
+  folder, the block printed that nothing was removed and the folder remained. The
+  default Azure CLI profile folder was listed the same way before and after and was
+  unchanged. With Azure CLI 2.85.0, `az role definition list` returned the same 11
+  **Azure Connected Machine Onboarding** actions that the role definition article
+  lists. The section 3 coverage block, run read-only, printed `MISSING` with the
+  three write and extension actions for a user-assigned identity that holds only a
+  monitoring role, `COVERED` for an operator account that holds **Owner** and
+  **Contributor** roles, and `LOOKUP-FAILED` for a malformed subscription ID, the
+  same whether run as a file or piped into a new Bash shell. With `az` replaced by a
+  Bash function, it printed `COVERED` for **Owner**, **Contributor**, and the
+  Onboarding role; `MISSING` for **Azure Connected Machine Resource Administrator**
+  alone (the four `Microsoft.GuestConfiguration` and `Microsoft.Insights` actions),
+  for a custom role with only `Microsoft.HybridCompute/machines/write`, and for a
+  wildcard custom role whose `notActions` excluded `machines/read`; `COVERED` when
+  another role supplied the missing actions; and `LOOKUP-FAILED` for each failed
+  lookup. No role assignment was created or deleted, and no machine was registered.
+  Repeating the sign-in and token steps after a fixed 403 is procedural and was
+  not rerun.
 - **Blocks pasted line by line (sections 1 and 3), 2026-11-24:** when PSReadLine
   reads a paste as keystrokes, PowerShell runs each top-level statement as soon as
   it is complete, and a `throw` ends only that statement. To reproduce this, each
@@ -1101,6 +1254,7 @@ the full bootstrap was not run.
 
 | Date | Summary |
 | --- | --- |
+| 2026-11-24 | Section 3 now skips the temporary **Azure Connected Machine Onboarding** assignment only when the identity's roles together grant every action of that role, not just `Microsoft.HybridCompute/machines/write`; it lists those actions and adds a read-only check that prints `COVERED`, `MISSING`, or `LOOKUP-FAILED`. Every Azure PowerShell sign-in now uses `-Scope Process` in a session used only for this procedure, and the Azure CLI uses a separate profile folder that step 4 removes, so cleanup no longer touches sign-ins saved earlier; step 4 warns against running `Disconnect-AzAccount` without `-Scope Process`. For a 403, the status code table, section 4, and step 4 now say that the fix is the permission, policy, or quota, and that the retry needs a fresh sign-in and token when the earlier one was cleared or is near expiry. |
 | 2026-11-24 | The status code table now sends only 403, `RequestDisallowedByPolicy`, and quota errors to section 4; a 429 is throttling (wait for the `Retry-After` interval, then retry), a 5xx is a transient service failure (retry later, check Azure Service Health, contact support if it persists), and other statuses go to support. Section 4 no longer states that any non-401 response means the token was accepted. The section 3 role lookup now prints `EXISTS`, `NONE`, or `LOOKUP-FAILED`, and the assignment is created only after `NONE`, so a failed lookup no longer looks like a missing assignment. Section 3 adds a read-only listing of the identity's roles at the resource group, including inherited ones, and states that deleting the temporary assignment removes only that assignment's grant, not access from other roles. |
 | 2026-11-24 | The section 1 module block now runs as a single statement (`& { ... }`), so a failed recipe check stops the module changes even when the block is pasted line by line, and its `$ErrorActionPreference` setting no longer carries over into the session. The section 3 token blocks are now single dot-sourced statements (`. { ... }`): a failed check stops the token request, `$token` stays in the session for step 3, and the session's `$ErrorActionPreference` is restored. Sections 1 and 3 now say to paste or run each block whole. |
 | 2026-11-24 | The section 1 module block now checks for newer Az.Accounts copies that were not installed with `Install-Module` before it installs 4.0.2, so that stop, like the other precondition stops, happens before any module changes. The section 4 role check now uses the object ID of the identity that minted the registration token, with a lookup for each identity type, instead of the account that runs the checks. |
