@@ -152,7 +152,11 @@ declares in `RequiredModules` or `ModuleList` that it needs an Az.Accounts versi
 newer than 4.0.2, or if any newer Az.Accounts copy is not the copy that
 `Install-Module` recorded in the all-users module folder
 (`%ProgramFiles%\WindowsPowerShell\Modules`). That last check applies even when a
-copy has the same version as one installed with `Install-Module`. Only after these
+copy has the same version as one installed with `Install-Module`. It also stops
+with `No changes were made` if the repository named in `$Repository` is not
+registered, or does not have each newer version that the block would remove (so
+that the rollback below can restore it from there) and, when 4.0.2 is not
+already available, 4.0.2. Only after these
 checks pass does the block install 4.0.2 and remove newer versions. It then
 verifies the result; that final verification runs after the changes, so if it
 fails, its message lists what was installed and uninstalled and how to roll back.
@@ -167,7 +171,8 @@ uninstalls newer Az.Accounts versions, printing `ARC42-INSTALLED` after it
 installs 4.0.2 and each version and path as `ARC42-REMOVING` before it removes
 it. It does not uninstall other modules or
 register the node, but other modules that need a removed version stop loading.
-Installing 4.0.2 needs access to the PowerShell Gallery. Do not run this legacy
+Installing 4.0.2, and restoring a removed version with the rollback below, needs
+access to the repository named in `$Repository`. Do not run this legacy
 path during deployment or solution servicing.
 
 > [!WARNING]
@@ -176,7 +181,20 @@ path during deployment or solution servicing.
 > stops with `No changes were made` when an available module declares such a
 > requirement, but it cannot detect a module that loads Az.Accounts without
 > declaring it. The removal is undone only by reinstalling each printed version
-> with the rollback command below, which needs access to the PowerShell Gallery.
+> with the rollback command below, which needs access to the repository named in
+> `$Repository`.
+
+**Choose the repository first.** Leave `$Repository` set to `'PSGallery'` unless
+your organization requires an approved internal repository; in that case, set it
+to that repository's registered name (`Get-PSRepository` lists them), and use the
+same name in the rollback command. With the PowerShell Gallery, the node needs
+HTTPS access to `www.powershellgallery.com` and to the download hosts
+`cdn.powershellgallery.com` and `cdn.oneget.org`
+([network access to the PowerShell Gallery](https://learn.microsoft.com/powershell/gallery/getting-started#network-access-to-the-powershell-gallery)).
+The block's repository check uses `Find-Module`, which confirms that a version is
+listed in the repository but not that the node can download it, so confirm that
+those hosts are allowed before you run the block. If a download fails, the
+installation of 4.0.2 fails before any version is removed.
 
 **Paste or run the whole block at once, not line by line.** It runs as one unit
 so that a failed check stops everything after it, and its
@@ -185,6 +203,8 @@ so that a failed check stops everything after it, and its
 ```powershell
 & {
     $ErrorActionPreference = 'Stop'
+    # Leave 'PSGallery' unless your organization requires an approved internal repository.
+    $Repository = 'PSGallery'
     try {
         $recipePath = Join-Path $env:SystemRoot 'System32\AzureLocalImage\OSImageRecipe.xml'
         [xml]$recipe = Get-Content -LiteralPath $recipePath -Raw -ErrorAction Stop
@@ -238,11 +258,30 @@ so that a failed check stops everything after it, and its
             throw ('Uninstall-Module cannot remove these newer Az.Accounts copies. No changes were made: ' +
                 (($unmanaged | ForEach-Object { "$($_.Version) at $($_.ModuleBase)" }) -join '; '))
         }
+        # The rollback restores each removed version from $Repository, so it must have every version
+        # this block removes, and 4.0.2 if it must be installed. A missing build number counts as 0.
+        $full = { param([version]$v) [version]::new($v.Major, $v.Minor, [math]::Max($v.Build, 0), [math]::Max($v.Revision, 0)) }
+        $needed = @($newer | ForEach-Object { $_.Version })
+        if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) { $needed += [version]'4.0.2' }
+        if ($needed.Count) {
+            try { Get-PSRepository -Name $Repository -ErrorAction Stop | Out-Null } catch {
+                throw "The repository $Repository is not registered on this machine. No changes were made."
+            }
+            $notFound = @($needed | Sort-Object -Unique | Where-Object {
+                $want = $_
+                $found = @()
+                try { $found = @(Find-Module -Name Az.Accounts -RequiredVersion $want.ToString() -Repository $Repository -ErrorAction Stop) } catch { $found = @() }
+                -not @($found | Where-Object { (& $full ([string]$_.Version)) -eq (& $full $want) }).Count })
+            if ($notFound.Count) {
+                throw ("Az.Accounts $($notFound -join ', ') is not available in $Repository, so it could not be " +
+                    'installed or restored from there. No changes were made.')
+            }
+        }
         # Every check above runs before any change. The checks below verify the changes.
         $installed = $false
         if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) {
             Install-Module -Name Az.Accounts -RequiredVersion 4.0.2 -Scope AllUsers `
-                -Repository PSGallery -Force -ErrorAction Stop | Out-Null
+                -Repository $Repository -Force -ErrorAction Stop | Out-Null
             $installed = $true
             Write-Output 'ARC42-INSTALLED: Az.Accounts 4.0.2'
             $available = @(Get-Module -ListAvailable -Name Az.Accounts)
@@ -306,15 +345,39 @@ names, to return to the previous module set. Contact Microsoft support with the 
 **Rollback:** Keep the `ARC42-REMOVING` lines the block printed. To restore a
 removed version, for example after registration completes, run this for each
 printed version, or, after a `Post-change verification failed` stop, for each
-version that the message lists (requires access to the PowerShell
-Gallery).
+version that the message lists. Replace `<removed-version>` with the version, and
+set `$Repository` to the same repository that you used in the module block:
+leave `'PSGallery'` unless your organization requires an approved internal
+repository, in which case use that repository's registered name. The block first
+confirms with `Find-Module` that this exact version is listed in that repository.
+If it is not, the block stops with `Nothing was installed`; choose an approved
+repository that contains this exact version, or contact Microsoft support. As in
+the module block, `Find-Module` does not prove that the node can reach the
+download hosts listed above; if the download fails, nothing is installed.
 
-**Changes:** installs the named Az.Accounts version for all users. It does not
-remove 4.0.2 or change other modules. A newer version installed again before
+**Changes:** installs the named Az.Accounts version for all users from
+`$Repository` and prints `ARC42-RESTORED` when that version is available. It does
+not remove 4.0.2 or change other modules. A newer version installed again before
 registration finishes can reintroduce the problem that the 4.0.2 path addresses.
 
 ```powershell
-Install-Module -Name Az.Accounts -RequiredVersion '<removed-version>' -Scope AllUsers -Repository PSGallery -Force
+& {
+    $ErrorActionPreference = 'Stop'
+    $Repository = 'PSGallery'
+    $Version = '<removed-version>'
+    if (-not ($Version -as [version])) { throw 'Replace <removed-version> with a version from an ARC42-REMOVING line. Nothing was installed.' }
+    try { Get-PSRepository -Name $Repository | Out-Null } catch { throw "The repository $Repository is not registered on this machine. Nothing was installed." }
+    $found = @()
+    try { $found = @(Find-Module -Name Az.Accounts -RequiredVersion $Version -Repository $Repository) } catch { $found = @() }
+    if ($found.Count -ne 1) {
+        throw "Az.Accounts $Version is not available in $Repository. Nothing was installed. Choose an approved repository that contains this exact version."
+    }
+    Install-Module -Name Az.Accounts -RequiredVersion $Version -Repository $Repository -Scope AllUsers -Force
+    if (-not (Get-Module -ListAvailable -Name Az.Accounts | Where-Object { $_.Version -eq [version]$Version })) {
+        throw "Az.Accounts $Version is not available after installation. Keep this output and contact Microsoft support."
+    }
+    Write-Output "ARC42-RESTORED: Az.Accounts $Version from $Repository"
+}
 ```
 
 ## 2. ARM access token is expired
@@ -409,6 +472,26 @@ certificate store, replace the placeholders and run:
 Connect-AzAccount -ServicePrincipal -ApplicationId '<application-id>' -CertificateThumbprint '<certificate-thumbprint>' -Tenant '<tenant-id>' -Scope Process
 ```
 
+If the service principal uses a client secret instead of a certificate, do not
+type the secret into a command or a script: Azure Local nodes can have PowerShell
+script block logging turned on, which records script text. Let `Get-Credential`
+prompt for it instead; it keeps the secret as a `SecureString` and does not
+display it:
+
+```powershell
+$credential = Get-Credential -UserName '<application-id>' -Message 'Enter the service principal client secret'
+Connect-AzAccount -ServicePrincipal -Credential $credential -Tenant '<tenant-id>' -Scope Process
+```
+
+Without `-Scope Process`, Azure PowerShell saves a service principal's secret in
+`AzureRmContext.json` in the user profile (`%USERPROFILE%\.Azure`)
+([service principal sign-in](https://learn.microsoft.com/powershell/azure/authenticate-noninteractive#login-with-a-service-principal));
+with `-Scope Process`, the context is kept for the current process only and is
+not saved, whatever the context autosave setting
+([Azure PowerShell context objects](https://learn.microsoft.com/powershell/azure/context-persistence#save-azure-contexts-across-powershell-sessions)).
+For the Azure CLI, this procedure uses a certificate; to use a client secret, use
+the Azure PowerShell sign-in above instead.
+
 An operator who mints the token instead signs in with device code, which needs a
 person to complete it in a browser:
 
@@ -418,7 +501,9 @@ Connect-AzAccount -Tenant '<tenant-id>' -UseDeviceAuthentication -Scope Process
 
 **Changes:** signs in to Azure PowerShell for the current PowerShell process
 only; nothing is saved to the user profile, and sign-ins saved earlier are not
-changed. Step 4 signs out of it. It does not change the node or Azure resources.
+changed. A client secret entered at the `Get-Credential` prompt stays in the
+process, in `$credential` and the sign-in, until step 4. Step 4 signs out of it.
+It does not change the node or Azure resources.
 
 *Managed identity of another registered machine (no person, no stored secret).*
 An Azure Arc-enabled machine that is already registered and trusted, for example
@@ -672,7 +757,9 @@ If the automation host uses the Azure CLI instead of Azure PowerShell, set
 `AZURE_CONFIG_DIR` as shown at the start of step 1, then, in the same session,
 sign in as the service principal with `az login --service-principal --username '<application-id>' --certificate '<path-to-certificate.pem>' --tenant '<tenant-id>'`
 (this saves the sign-in only in the procedure's profile folder, which step 4
-removes), then run this block in that session. It applies the
+removes: a service principal entry that records the application ID, tenant, and
+the path of the certificate file, not the certificate itself, and a token cache;
+on Windows both files are encrypted), then run this block in that session. It applies the
 same lifetime and tenant checks and does not display the token. It requests the
 token for the current sign-in without `--tenant`, which the Azure CLI does not
 support for a managed identity
@@ -755,14 +842,16 @@ this one while you wait.
 1. In each PowerShell session that held the token, run:
 
    ```powershell
-   Remove-Variable -Name token, t, r -ErrorAction SilentlyContinue
-   if (Get-Variable -Name token -ErrorAction SilentlyContinue) { 'Token variable still present' } else { 'Token variable cleared' }
+   Remove-Variable -Name token, t, r, credential -ErrorAction SilentlyContinue
+   if (Get-Variable -Name token, credential -ErrorAction SilentlyContinue) { 'Token or credential variable still present' } else { 'Token and credential variables cleared' }
    ```
 
-   Expect `Token variable cleared`. The token blocks already clear their
+   Expect `Token and credential variables cleared`. The token blocks already clear their
    intermediate copies when they finish: `$t`, which holds the `SecureString`
    result, and `$r`, which holds the Azure CLI response. The command removes them
-   as well in case a block was interrupted. If you also stored the token elsewhere,
+   as well in case a block was interrupted, and removes `$credential`, which holds
+   a service principal's client secret if you signed in with `Get-Credential` in
+   step 1. If you also stored the token elsewhere,
    such as in `$params.ArmAccessToken`, remove it there too, for example with
    `$params.Remove('ArmAccessToken')`.
 2. If you passed the token through a remote session that you created, for example
@@ -776,7 +865,12 @@ this one while you wait.
    profile, stay as they were.
    - Azure PowerShell (managed identity, service principal, or operator account,
      all signed in with `-Scope Process`): `Disconnect-AzAccount -Scope Process`,
-     or close the session. Afterward, `Get-AzContext` no longer shows the
+     or close the session. This removes the process's context for that sign-in,
+     including, for a service principal, the certificate thumbprint or the client
+     secret that `Get-Credential` supplied; because the sign-in used
+     `-Scope Process`, none of it was written to `%USERPROFILE%\.Azure`. A
+     certificate in the certificate store is not changed. Afterward,
+     `Get-AzContext` no longer shows the
      identity that this procedure used. Do not run `Disconnect-AzAccount` without
      `-Scope Process`: it removes all saved credentials and contexts of the
      account from the user profile, including ones that existed before this
@@ -791,8 +885,11 @@ this one while you wait.
      & {
          $dir = $env:AZURE_CONFIG_DIR
          if ($dir -and (Split-Path -Path $dir -Leaf) -like 'arc42-az-*' -and (Test-Path -LiteralPath $dir -PathType Container)) {
+             # Without this, the Azure CLI telemetry upload that follows az logout can recreate the folder.
+             $env:AZURE_CORE_COLLECT_TELEMETRY = 'false'
              az logout 2>$null
              Remove-Item -LiteralPath $dir -Recurse -Force
+             Remove-Item -Path Env:\AZURE_CORE_COLLECT_TELEMETRY
              Remove-Item -Path Env:\AZURE_CONFIG_DIR
              'Procedure Azure CLI profile removed'
          } else {
@@ -801,12 +898,24 @@ this one while you wait.
      }
      ```
 
-     Expect `Procedure Azure CLI profile removed`. Afterward, `az account show`
+     Expect `Procedure Azure CLI profile removed`. `az logout` removes the
+     sign-in, including a service principal's entry, and deleting the folder
+     removes every file the Azure CLI wrote for this procedure, including the
+     service principal entry and token cache files. The block turns off Azure CLI
+     telemetry for `az logout`; otherwise the telemetry upload that follows it can
+     recreate the folder a few seconds later with only a `logs\telemetry.log`
+     file, which holds no credentials. Afterward, `az account show`
      uses the default Azure CLI profile again, which this procedure did not
      change. In validation with a managed identity, the Azure CLI did not create
      a token cache file (`msal_token_cache.bin`) in the procedure's profile
      folder at any point.
-4. Close the PowerShell windows and sessions that you used. A PowerShell string
+4. If you copied or exported a certificate file with its private key (a `.pem`
+   or `.pfx` file) to the minting machine only for this procedure, delete it now,
+   for example with `Remove-Item -LiteralPath '<path-to-certificate.pem>'`, and
+   remove any variable that held its password. Neither sign-out removes it: the
+   Azure CLI records only the file's path. Do not delete a certificate file or a
+   certificate store entry that existed before this procedure.
+5. Close the PowerShell windows and sessions that you used. A PowerShell string
    cannot be overwritten in place, so ending the process removes the last copy
    held in memory.
 
@@ -817,10 +926,12 @@ until it expires. For a managed identity, removing the role assignment in step 1
 removes only the registration access that this assignment granted; it does not
 remove access that other role assignments give the identity.
 
-**Changes:** removes session variables, the remote sessions you name, the
-sign-ins that this procedure created, and the procedure's Azure CLI profile
-folder. It does not change sign-ins saved earlier, the node, Azure resources, or
-role assignments, and it does not revoke the token.
+**Changes:** removes session variables (including a client secret held in
+`$credential`), the remote sessions you name, the sign-ins that this procedure
+created, the procedure's Azure CLI profile folder, and a certificate file that
+you copied for this procedure and name. It does not change sign-ins saved
+earlier, the certificate store, the node, Azure resources, or role assignments,
+and it does not revoke the token.
 
 **Option 2 (interactive only): let the registration command sign in with device
 code.** The `-ArmAccessToken` parameter is optional. If you omit it, the script
@@ -1220,11 +1331,11 @@ the full bootstrap was not run.
   RBAC overview; it was not tested.
 - **Not validated:** device code sign-in (option 2, and the operator's
   `Connect-AzAccount -UseDeviceAuthentication` sign-in in option 1), which needs a
-  person; service principal sign-in (`Connect-AzAccount -ServicePrincipal` and
-  `az login --service-principal`), because no service principal was created for the
-  test (an existing operator account minted the token instead, and the
-  `Connect-AzAccount` certificate parameter set was confirmed present in
-  Az.Accounts 5.5.3); a token that Azure rejects because it expired (expiry was
+  person; the service principal client secret sign-in with
+  `Connect-AzAccount -ServicePrincipal -Credential` (that a process-scoped sign-in
+  does not save its secret is based on the linked Azure PowerShell documentation;
+  the certificate sign-in was run, see the next bullet); service principal tokens
+  passed to registration (the service principal held no role); a token that Azure rejects because it expired (expiry was
   tested only against stubbed responses); the quota variant of cause 4 (the
   missing-role variant is covered by the managed identity run above); a real image
   whose recipe requires 4.0.2 (none was available, so a staged recipe file stood
@@ -1234,6 +1345,46 @@ the full bootstrap was not run.
   was available for that run. The section 4 object ID lookups for a service
   principal (`az ad sp show`) and a user (`az ad signed-in-user show`) were not run;
   the managed identity lookup (`az resource show`) and the role list command were.
+- **Repository choice and service principal cleanup (sections 1 and 3),
+  2026-11-24:** with mocked module and repository cmdlets in PowerShell 7.5, the
+  section 1 block, on the 4.0.2 path, stopped with `No changes were made` and made
+  no `Install-Module` or `Uninstall-Module` call when a version it would remove, or
+  4.0.2 when it had to be installed, was not in the repository, and when the
+  repository was not registered. It used an internal repository name for every
+  repository command when `$Repository` was set to one, did not query the
+  repository when 4.0.2 was already present and only newer versions were checked,
+  and made no repository call for a 5.x recipe. The 15 earlier mocked cases gave
+  the same output, errors, and module changes as before. The rollback block, with
+  mocked cmdlets, installed from the PowerShell Gallery by default, used an
+  internal repository name when `$Repository` was set to one, and stopped with
+  `Nothing was installed` when the exact version was not found, when the
+  repository was not registered, or when the placeholder was not replaced. On the
+  registered Azure Local node (Windows PowerShell 5.1, PowerShellGet 2.2.5, recipe
+  requiring 5.5.3), the revised block, run as one input, printed `KEEP-MODULES`, and
+  the module inventory was identical before and after; `Find-Module -RequiredVersion`
+  found 4.0.2, 5.5.1, and 5.5.3 in the PowerShell Gallery. The 4.0.2 path and the
+  rollback were not run against a real repository after this change. A throwaway
+  service principal with no role assignment was created in a lab tenant for the
+  sign-in checks and deleted afterward. On that node, with context autosave on for
+  the user, `Connect-AzAccount -ServicePrincipal -CertificateThumbprint -Scope Process`
+  signed in and issued an ARM token; the user profile's `.Azure` folder, listed by
+  file name, size, and time, was unchanged while signed in and after
+  `Disconnect-AzAccount -Scope Process`, a new process had no saved context for the
+  service principal, and the current context reverted to the context saved before
+  the test. The throwaway certificate was then removed from the store. With Azure
+  CLI 2.85.0 on a macOS workstation and a new `arc42-az-*` profile folder, `az login --service-principal`
+  with a certificate and, separately, with a client secret signed in and issued a
+  token. The service principal entry recorded the application ID, tenant, and the
+  certificate file's path (not its content) for the certificate, and the client
+  secret for the secret; the token cache file was in the same folder. The step 4
+  cleanup block printed `Procedure Azure CLI profile removed` and deleted the
+  folder, and the certificate file stayed where it was. In the first run, the
+  telemetry upload that followed `az logout` recreated the folder within seconds,
+  holding only `logs/telemetry.log`; with telemetry turned off for `az logout`, as
+  the block now does, the folder was still absent 45 seconds later in both runs.
+  On Windows, the Azure CLI encrypts these files and names them differently
+  ([MSAL-based Azure CLI](https://learn.microsoft.com/cli/azure/msal-based-azure-cli));
+  the Windows file names were not observed.
 - **Role grant and policy listing, revised 2026-11-24:** with Azure CLI 2.85.0
   against a throwaway resource group and two throwaway user-assigned identities,
   the section 3 role commands ran unchanged except for their placeholders. For an
@@ -1255,6 +1406,7 @@ the full bootstrap was not run.
 
 | Date | Summary |
 | --- | --- |
+| 2026-11-24 | The section 1 module block and its rollback now install from the repository in `$Repository`, which defaults to the PowerShell Gallery and can name an approved internal repository. Before it changes anything, the module block confirms that the repository is registered and has 4.0.2, when it must be installed, and every version it would remove, so the rollback can restore them; otherwise it stops with `No changes were made`. The rollback confirms the exact version with `Find-Module` and stops with `Nothing was installed` if it is missing. Section 1 lists the PowerShell Gallery download hosts that must be reachable. Section 3 adds a client secret sign-in that prompts with `Get-Credential` instead of placing the secret in script text, and step 4 states what each sign-out removes, clears `$credential`, deletes a certificate file copied only for this procedure, and keeps Azure CLI telemetry from recreating the procedure's profile folder. |
 | 2026-11-24 | Section 3 now skips the temporary **Azure Connected Machine Onboarding** assignment only when the identity's roles together grant every action of that role, not just `Microsoft.HybridCompute/machines/write`; it lists those actions and adds a read-only check that prints `COVERED`, `MISSING`, or `LOOKUP-FAILED`. Every Azure PowerShell sign-in now uses `-Scope Process` in a session used only for this procedure, and the Azure CLI uses a separate profile folder that step 4 removes, so cleanup no longer touches sign-ins saved earlier; step 4 warns against running `Disconnect-AzAccount` without `-Scope Process`. For a 403, the status code table, section 4, and step 4 now say that the fix is the permission, policy, or quota, and that the retry needs a fresh sign-in and token when the earlier one was cleared or is near expiry. |
 | 2026-11-24 | The status code table now sends only 403, `RequestDisallowedByPolicy`, and quota errors to section 4; a 429 is throttling (wait for the `Retry-After` interval, then retry), a 5xx is a transient service failure (retry later, check Azure Service Health, contact support if it persists), and other statuses go to support. Section 4 no longer states that any non-401 response means the token was accepted. The section 3 role lookup now prints `EXISTS`, `NONE`, or `LOOKUP-FAILED`, and the assignment is created only after `NONE`, so a failed lookup no longer looks like a missing assignment. Section 3 adds a read-only listing of the identity's roles at the resource group, including inherited ones, and states that deleting the temporary assignment removes only that assignment's grant, not access from other roles. |
 | 2026-11-24 | The section 1 module block now runs as a single statement (`& { ... }`), so a failed recipe check stops the module changes even when the block is pasted line by line, and its `$ErrorActionPreference` setting no longer carries over into the session. The section 3 token blocks are now single dot-sourced statements (`. { ... }`): a failed check stops the token request, `$token` stays in the session for step 3, and the session's `$ErrorActionPreference` is restored. Sections 1 and 3 now say to paste or run each block whole. |
