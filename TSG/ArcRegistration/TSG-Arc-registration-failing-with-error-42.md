@@ -25,7 +25,7 @@
 - [1. Az.Accounts version on the system is incorrect](#1-azaccounts-version-on-the-system-is-incorrect)
 - [2. ARM access token is expired](#2-arm-access-token-is-expired)
 - [3. ARM access token is passed incorrectly](#3-arm-access-token-is-passed-incorrectly)
-- [4. Permissions, policy, or quota (HTTP 403 or another non-401 status)](#4-permissions-policy-or-quota-http-403-or-another-non-401-status)
+- [4. Permissions, policy, or quota (HTTP 403 or a policy or quota error)](#4-permissions-policy-or-quota-http-403-or-a-policy-or-quota-error)
 - [When to contact Microsoft support](#when-to-contact-microsoft-support)
 - [Validation status of this article](#validation-status-of-this-article)
 - [Revision history](#revision-history)
@@ -62,9 +62,12 @@ get resource failed with status code 401
 A 401 points to the token: expired, issued for a different tenant, or not a
 plain-text ARM token. Passing an unconverted Az.Accounts 5.x token produces this
 pattern, because the registration command receives the text
-`System.Security.SecureString` instead of the token. A 403 or another status
-points to permissions, policy, or quota instead; see
-[cause 4](#4-permissions-policy-or-quota-http-403-or-another-non-401-status).
+`System.Security.SecureString` instead of the token. A 403, a
+`RequestDisallowedByPolicy` code, or a quota error code points to permissions,
+policy, or quota instead; see
+[cause 4](#4-permissions-policy-or-quota-http-403-or-a-policy-or-quota-error).
+A 429 (throttling) or a 5xx status (service failure) points to neither; retry
+later as described in the table below.
 
 ### Which section to follow
 
@@ -73,7 +76,10 @@ Read the status code of the failed attempt in `azcmagent.log` first:
 | The failed attempt shows | Follow | Who acts |
 | --- | --- | --- |
 | `status code 401` | [Section 1](#1-azaccounts-version-on-the-system-is-incorrect) (module check), then [sections 2 and 3](#3-arm-access-token-is-passed-incorrectly): mint a new plain-text token and retry | The node administrator, with a token from an identity that holds the required roles |
-| `httpStatusCode:403` or another non-401 status | [Section 4](#4-permissions-policy-or-quota-http-403-or-another-non-401-status). Do not change modules or tokens | The subscription owner makes any role, provider, or policy change |
+| `httpStatusCode:403`, the code `RequestDisallowedByPolicy`, or a quota error code such as `QuotaExceeded` | [Section 4](#4-permissions-policy-or-quota-http-403-or-a-policy-or-quota-error). Do not change modules or tokens | The subscription owner makes any role, provider, or policy change |
+| `429` (too many requests) | Azure Resource Manager throttled the request ([throttling](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/request-limits-and-throttling)). Wait for the `Retry-After` interval if the log shows one, otherwise a few minutes, then retry the original initialization command. Do not change modules, tokens, roles, or policies | The node administrator |
+| A 5xx status, such as 500, 502, 503, or 504 | A transient service failure. Retry the original initialization command later and check [Azure Service Health](https://learn.microsoft.com/en-us/azure/service-health/overview) for the region. Do not change modules, tokens, roles, or policies. If it persists, [contact Microsoft support](#when-to-contact-microsoft-support) | The node administrator; Microsoft support if it persists |
+| Another 4xx status | Read the error code on the same line. If it does not name an authorization, policy, or quota error, [contact Microsoft support](#when-to-contact-microsoft-support) | Microsoft support |
 | The section 1 block prints `UNKNOWN-STOP` | [Contact Microsoft support](#when-to-contact-microsoft-support) | Microsoft support |
 | A different exit code, such as 26 (network error) | Not this article. Use the [agent exit codes](https://learn.microsoft.com/en-us/azure/azure-arc/servers/troubleshoot-agent-onboard#agent-exit-codes) and [network requirements](https://learn.microsoft.com/en-us/azure/azure-arc/servers/network-requirements) | Depends on the code; for 26, the network administrator |
 
@@ -111,7 +117,7 @@ For a new machine that is not yet registered or clustered:
 1. Az.Accounts version on the system is incorrect.
 2. ARM access token is expired.
 3. ARM access token is passed incorrectly.
-4. Permissions, policy, or quota (HTTP 403 or another non-401 status).
+4. Permissions, policy, or quota (HTTP 403 or a policy or quota error).
 
 ## 1. Az.Accounts version on the system is incorrect
 
@@ -349,7 +355,7 @@ With either option, retrying initialization can install an update on the node an
 restart it.
 
 **Automation boundary.** A script or an on-box assistant can classify the failed attempt from `azcmagent.log`
-(401 here, 403 or another status in [cause 4](#4-permissions-policy-or-quota-http-403-or-another-non-401-status)),
+(401 here, 403 or a policy or quota error in [cause 4](#4-permissions-policy-or-quota-http-403-or-a-policy-or-quota-error), 429 or 5xx to retry later),
 run the module block in section 1, check the lifetime and tenant of a token and
 convert it to plain text, retry initialization with a token it was given, and
 verify the result. It cannot create the credential or the role assignment, and it
@@ -369,8 +375,8 @@ A node that fails with exit code 42 has no Azure Arc resource yet, so
 `az login --identity` or `Connect-AzAccount -Identity` on that node cannot
 authenticate its registration. A different machine that is already registered,
 such as another node of the same instance, does have a managed identity; step 1
-describes how to use it. Do not rely on roles that a deployment assigned to that
-identity for other purposes; grant the registration role to it explicitly.
+describes how to use it. Do not assume that roles a deployment assigned to that
+identity for other purposes include registration; check them as in step 1.
 
 **Option 1 (automation and scripted runs): pass a plain-text ARM token.**
 
@@ -401,7 +407,8 @@ An Azure Arc-enabled machine that is already registered and trusted, for example
 another node of the same instance, can mint the token with its system-assigned
 managed identity
 ([managed identity on Arc-enabled servers](https://learn.microsoft.com/en-us/azure/azure-arc/servers/managed-identity-authentication)).
-Before the first use, the subscription owner looks up that identity and grants it
+Before the first use, the subscription owner looks up that identity and, unless the
+checks below show that it can already register machines there, grants it
 **Azure Connected Machine Onboarding** on the resource group where the failing node
 registers, and on nothing else. Replace the `<machine-...>` placeholders with
 that machine's subscription, resource group, and name (shown by `azcmagent show`
@@ -410,16 +417,56 @@ subscription and resource group, then run:
 
 ```azurecli
 az resource show --subscription '<machine-subscription-id>' --resource-group '<machine-resource-group>' --name '<machine-name>' --resource-type Microsoft.HybridCompute/machines --query identity.principalId -o tsv
-az role assignment list --assignee-object-id '<principal-id>' --role 'Azure Connected Machine Onboarding' --scope '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>' --query "[].id" -o tsv
 ```
 
-The first command prints the identity's principal ID, which you use as
+The command prints the identity's principal ID, which you use as
 `<principal-id>`. If it prints nothing, the machine has no system-assigned
-identity; stop and use another identity. The second command is read-only. If it
-prints an assignment ID, the identity already holds the role on that resource
-group, for example for other onboarding automation: do not create another
-assignment, and do not delete that one after registration. If it prints nothing,
-create the assignment and record the ID that it prints as `<assignment-id>`:
+identity; stop and use another identity.
+
+Then check whether the identity already holds the role on that resource group.
+This Bash block (for example, Azure Cloud Shell in Bash) is read-only and prints
+exactly one result:
+
+```bash
+if ids=$(az role assignment list --assignee-object-id '<principal-id>' --role 'Azure Connected Machine Onboarding' --scope '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>' --query "[].id" -o tsv); then
+  if [ -n "$ids" ]; then echo "EXISTS: $ids"; else echo 'NONE'; fi
+else
+  echo 'LOOKUP-FAILED'
+fi
+```
+
+- `EXISTS: <id>`: the identity already holds the role on that resource group, for
+  example for other onboarding automation. Do not create another assignment, and
+  do not delete that one after registration.
+- `NONE`: the lookup succeeded and found no assignment. Only this result permits
+  the create command below. A resource group name that does not exist also
+  returns `NONE`, so confirm that the scope names the intended resource group.
+- `LOOKUP-FAILED`: the lookup itself failed, for example because the account
+  cannot read role assignments, the scope is wrong, or the request failed. An
+  empty result from a failed lookup does not show that no assignment exists, so do
+  not create the assignment. Fix the cause and run the block again.
+
+To see whether other roles already let the identity register machines there,
+also list every role assignment that applies to the identity at that resource
+group, including those inherited from the subscription or a management group and
+those received through groups. This command is read-only and informational:
+
+```azurecli
+az role assignment list --assignee-object-id '<principal-id>' --scope '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>' --include-inherited --include-groups --query "[].{role:roleDefinitionName, scope:scope}" -o table
+```
+
+**Owner**, **Contributor**, **Azure Connected Machine Onboarding**, and
+**Azure Connected Machine Resource Administrator** each grant
+`Microsoft.HybridCompute/machines/write`; for a custom role, check its actions in
+its role definition. If any listed role grants that permission, the identity can
+already register machines in that resource group, the temporary assignment is
+not needed, and that access remains after this procedure. Azure role permissions
+are additive
+([Azure RBAC overview](https://learn.microsoft.com/en-us/azure/role-based-access-control/overview)),
+so deleting the temporary assignment later does not remove access that another
+assignment gives. Create the temporary assignment only when the check block
+printed `NONE` and no listed role grants that permission, and record the ID that
+the create command prints as `<assignment-id>`:
 
 ```azurecli
 az role assignment create --assignee-object-id '<principal-id>' --assignee-principal-type ServicePrincipal --role 'Azure Connected Machine Onboarding' --scope '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>' --query id -o tsv
@@ -433,7 +480,10 @@ command only for an ID that this create command printed. Azure Resource Manager
 checks the identity's role assignments on each request; the token carries no
 role data. So once the removal takes effect, requests with any token of this
 identity, including one minted before the removal, can no longer register
-machines. The token itself remains a valid credential until it expires and can
+machines through this assignment. The deletion removes only this assignment's
+grant: if another assignment that applies at that resource group, such as an
+inherited **Contributor** role shown by the listing above, also grants
+registration, the identity can still register machines. The token itself remains a valid credential until it expires and can
 still use any other access the identity has. Adding or removing an assignment can
 take several minutes to take effect
 ([Azure RBAC troubleshooting](https://learn.microsoft.com/en-us/azure/role-based-access-control/troubleshooting));
@@ -476,9 +526,10 @@ profile until `az logout`.
 > **Hybrid Agent Extension Applications** group, can mint this identity's token.
 > The token is valid for up to about 24 hours and cannot be revoked. Removing the
 > role assignment does not invalidate the token, but once the removal takes effect,
-> usually within minutes, Azure denies registration to every token of this
-> identity, including one minted before the removal. Until it expires, the token
-> can still use any other access the identity has, so clear it (step 4) and limit
+> usually within minutes, Azure no longer grants registration through that
+> assignment to any token of this identity, including one minted before the
+> removal. Until it expires, the token can still use any other access the identity
+> has, including registration through any other role that grants it, so clear it (step 4) and limit
 > where you send it. Mint the token just before you start the initialization, and remove
 > the assignment right after the initialization attempt. The machine caches the
 > token, so it can have much less than 24 hours left; step 2 checks the remaining
@@ -603,7 +654,8 @@ identity and step 1 created its **Azure Connected Machine Onboarding** assignmen
 have the subscription owner remove that assignment with the `az role assignment delete --ids`
 command in step 1 right after the initialization attempt. Once the removal takes
 effect, no token of that identity, including the one you minted, can register
-machines, but the token remains a valid credential until it expires, so clearing
+machines through that assignment; any other role that grants the identity
+registration at that resource group still applies. The token remains a valid credential until it expires, so clearing
 `$token` and limiting where it was sent still matter. Do not remove an assignment
 that existed before step 1.
 
@@ -652,7 +704,8 @@ These commands contain no token text, so script block logging records nothing
 sensitive from them; still never place the token itself in script text.
 Clearing the local copies does not revoke the token: it remains a valid credential
 until it expires. For a managed identity, removing the role assignment in step 1
-is what stops the token from registering machines.
+removes only the registration access that this assignment granted; it does not
+remove access that other role assignments give the identity.
 
 **Changes:** removes session variables, the remote sessions you name, and the
 sign-ins that this procedure created. It does not change the node, Azure
@@ -676,17 +729,22 @@ error and follow the [agent troubleshooting guidance](https://learn.microsoft.co
 instead of repeating module downgrades. If you stop here and option 1, step 1
 created a role assignment, remove it first, then clear the token as in step 4.
 
-## 4. Permissions, policy, or quota (HTTP 403 or another non-401 status)
+## 4. Permissions, policy, or quota (HTTP 403 or a policy or quota error)
 
 ### Issue Validation
 
 In `azcmagent.log` and the console output, the failed `AZCM0042` attempt reports
-an HTTP status other than 401. For example, an Azure Policy assignment that denies
+a 403, the code `RequestDisallowedByPolicy`, or a quota error code such as
+`QuotaExceeded`. For example, an Azure Policy assignment that denies
 the machine resource produces a line ending in
 `Code: RequestDisallowedByPolicy httpStatusCode:403`, and the agent also logs
 `Please verify that the login credentials or token used has access to create resources in resource group '<resource-group>'`.
-The token was accepted, so the module and token steps in sections 1 to 3 do not
-apply; do not change modules or request a new token for this pattern.
+These responses are not 401 authentication failures, so the module and token
+steps in sections 1 to 3 do not apply; do not change modules or request a new
+token for this pattern. A 429 or 5xx status is not this cause either: it is
+throttling or a transient service failure; follow its row in
+[Which section to follow](#which-section-to-follow) and retry later instead of
+changing roles, providers, or policies.
 
 ### Resolution
 
@@ -773,8 +831,10 @@ and restart the node.
 ## When to contact Microsoft support
 
 Contact Microsoft support when the module block in section 1 stops, when
-registration still fails with exit code 42 after the applicable section, or when
-`azcmagent.log` shows a status code that the checks in section 4 do not explain.
+registration still fails with exit code 42 after the applicable section, when a
+5xx status persists after retries, or when `azcmagent.log` shows a status code
+that the table in [Which section to follow](#which-section-to-follow) and the
+checks in section 4 do not explain.
 
 Before you contact support, if section 3, step 1 created an
 **Azure Connected Machine Onboarding** assignment for a managed identity, have the
@@ -935,8 +995,9 @@ the full bootstrap was not run.
   workstation signed in with a user account, the revised Azure CLI block produced a
   token for the matching tenant, stopped on a tenant mismatch, and stopped when
   `<tenant-id>` was not replaced. That a token minted before the role assignment is
-  removed loses the onboarding permission once the removal takes effect is based on
-  the Azure RBAC documentation linked in section 3; it was not tested.
+  removed loses the permission that the assignment granted once the removal takes
+  effect, while access through other role assignments remains, is based on the
+  Azure RBAC documentation linked in section 3; it was not tested.
 - **Token cleanup (section 3, step 4), 2026-11-24:** on the same registered node
   (Windows PowerShell 5.1, Az.Accounts 5.5.3, Azure CLI 2.90.0, script block
   logging on), after `Connect-AzAccount -Identity -Scope Process` and the Azure
@@ -988,6 +1049,21 @@ the full bootstrap was not run.
   automation that holds a pre-provisioned identity, or, without a person, by the
   managed identity of a registered machine that was granted the role ahead of time;
   see the automation boundary in section 3.
+- **Status code routing, role lookup outcomes, and inherited roles (sections 3
+  and 4), 2026-11-24:** the section 3 lookup block now prints `EXISTS`, `NONE`, or
+  `LOOKUP-FAILED`. With `az` replaced by a Bash function, it printed `EXISTS` with
+  the ID for a successful call that returned one, `NONE` for a successful empty
+  call, and `LOOKUP-FAILED` for a failed call, both when run as a block and when
+  pasted into a new Bash shell. With Azure CLI 2.85.0, read-only against an
+  existing user-assigned identity and its resource group, the block printed `NONE`
+  for that identity, `LOOKUP-FAILED` for a malformed subscription ID, and `NONE`
+  for a resource group that does not exist; the inherited-roles listing printed the
+  identity's one role and its scope. No role assignment was created or deleted in
+  this run. The routing of 429 and 5xx responses follows the linked Azure Resource
+  Manager throttling and Service Health documentation; neither response was
+  reproduced. That deleting the temporary assignment leaves access from other
+  assignments in place follows from the additive role model in the linked Azure
+  RBAC overview; it was not tested.
 - **Not validated:** device code sign-in (option 2, and the operator's
   `Connect-AzAccount -UseDeviceAuthentication` sign-in in option 1), which needs a
   person; service principal sign-in (`Connect-AzAccount -ServicePrincipal` and
@@ -1025,9 +1101,10 @@ the full bootstrap was not run.
 
 | Date | Summary |
 | --- | --- |
+| 2026-11-24 | The status code table now sends only 403, `RequestDisallowedByPolicy`, and quota errors to section 4; a 429 is throttling (wait for the `Retry-After` interval, then retry), a 5xx is a transient service failure (retry later, check Azure Service Health, contact support if it persists), and other statuses go to support. Section 4 no longer states that any non-401 response means the token was accepted. The section 3 role lookup now prints `EXISTS`, `NONE`, or `LOOKUP-FAILED`, and the assignment is created only after `NONE`, so a failed lookup no longer looks like a missing assignment. Section 3 adds a read-only listing of the identity's roles at the resource group, including inherited ones, and states that deleting the temporary assignment removes only that assignment's grant, not access from other roles. |
 | 2026-11-24 | The section 1 module block now runs as a single statement (`& { ... }`), so a failed recipe check stops the module changes even when the block is pasted line by line, and its `$ErrorActionPreference` setting no longer carries over into the session. The section 3 token blocks are now single dot-sourced statements (`. { ... }`): a failed check stops the token request, `$token` stays in the session for step 3, and the session's `$ErrorActionPreference` is restored. Sections 1 and 3 now say to paste or run each block whole. |
 | 2026-11-24 | The section 1 module block now checks for newer Az.Accounts copies that were not installed with `Install-Module` before it installs 4.0.2, so that stop, like the other precondition stops, happens before any module changes. The section 4 role check now uses the object ID of the identity that minted the registration token, with a lookup for each identity type, instead of the account that runs the checks. |
 | 2026-11-24 | Section 3 now checks whether the managed identity already holds **Azure Connected Machine Onboarding** on the resource group before granting it. If it does, no assignment is created and none is deleted afterward; otherwise the cleanup deletes only the assignment that the procedure created, by its ID. The section 4 policy listing now follows `nextLink`, so assignments on later result pages are not missed. |
 | 2026-11-24 | The section 1 module block now stops before any change for every Az.Accounts copy that `Install-Module` cannot remove, including a copy with the same version as an installed one. Its final check, which runs after the changes, now reports what it installed and uninstalled and how to roll back. Section 3 now describes what removing the role assignment means for a token already minted. The section 4 policy listing now prints each assignment's ID and policy definition ID, and explains how to match them to the denying assignment named in the error. |
-| 2026-11-24 | Section 3 now explains that Azure checks role assignments on each request: once the removal of the managed identity's role assignment takes effect, no token of that identity can register machines, including one minted before the removal, although the token remains a valid credential until it expires. The section 3 token blocks no longer pass `-TenantId` or `--tenant`, which the Azure CLI does not support for a managed identity; they request the token for the current sign-in and still stop if its tenant does not match the deployment plan. |
+| 2026-11-24 | Section 3 now explains that Azure checks role assignments on each request: once the removal of the managed identity's role assignment takes effect, no token of that identity can register machines through that assignment, including one minted before the removal, although the token remains a valid credential until it expires. The section 3 token blocks no longer pass `-TenantId` or `--tenant`, which the Azure CLI does not support for a managed identity; they request the token for the current sign-in and still stop if its tenant does not match the deployment plan. |
 | 2026-11-24 | Section 3 now states that once the managed identity's **Azure Connected Machine Onboarding** assignment is created, every stop or abandoned attempt must remove it, and the token block stops, the 403 stop, the section 4 stop, and the support section point to that removal. A new section 3, step 4 clears the token on every machine and session where it existed: it removes the variables and any remote session, signs out of the sign-ins this procedure made, and explains that clearing local copies does not revoke the token. |
