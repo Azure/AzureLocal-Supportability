@@ -262,7 +262,7 @@ so that a failed check stops everything after it, and its
         # this block removes, and 4.0.2 if it must be installed. A missing build number counts as 0.
         $full = { param([version]$v) [version]::new($v.Major, $v.Minor, [math]::Max($v.Build, 0), [math]::Max($v.Revision, 0)) }
         $needed = @($newer | ForEach-Object { $_.Version })
-        if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) { $needed += [version]'4.0.2' }
+        if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' -and ([string]$_.ModuleBase).StartsWith($allUsersPath, [StringComparison]::OrdinalIgnoreCase) })) { $needed += [version]'4.0.2' }
         if ($needed.Count) {
             try { Get-PSRepository -Name $Repository -ErrorAction Stop | Out-Null } catch {
                 throw "The repository $Repository is not registered on this machine. No changes were made."
@@ -279,15 +279,15 @@ so that a failed check stops everything after it, and its
         }
         # Every check above runs before any change. The checks below verify the changes.
         $installed = $false
-        if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) {
+        if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' -and ([string]$_.ModuleBase).StartsWith($allUsersPath, [StringComparison]::OrdinalIgnoreCase) })) {
             Install-Module -Name Az.Accounts -RequiredVersion 4.0.2 -Scope AllUsers `
                 -Repository $Repository -Force -ErrorAction Stop | Out-Null
             $installed = $true
             Write-Output 'ARC42-INSTALLED: Az.Accounts 4.0.2'
             $available = @(Get-Module -ListAvailable -Name Az.Accounts)
         }
-        if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) {
-            throw 'Required version 4.0.2 is not available after installation; nothing was removed.'
+        if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' -and ([string]$_.ModuleBase).StartsWith($allUsersPath, [StringComparison]::OrdinalIgnoreCase) })) {
+            throw 'Az.Accounts 4.0.2 is not in the all-users module folder after installation; nothing was removed.'
         }
         foreach ($module in $newer) {
             Write-Output "ARC42-REMOVING: Az.Accounts $($module.Version) at $($module.ModuleBase)"
@@ -304,8 +304,8 @@ so that a failed check stops everything after it, and its
             if ($left.Count) {
                 $problem = 'Newer Az.Accounts copies remain: ' +
                     (($left | ForEach-Object { "$($_.Version) at $($_.ModuleBase)" }) -join '; ') + '.'
-            } elseif (-not ($remaining | Where-Object { $_.Version -eq [version]'4.0.2' })) {
-                $problem = 'Az.Accounts 4.0.2 is no longer available.'
+            } elseif (-not ($remaining | Where-Object { $_.Version -eq [version]'4.0.2' -and ([string]$_.ModuleBase).StartsWith($allUsersPath, [StringComparison]::OrdinalIgnoreCase) })) {
+                $problem = 'Az.Accounts 4.0.2 is not available in the all-users module folder.'
             }
         } catch {
             $problem = "Uninstall-Module failed ($($_.Exception.Message))."
@@ -1428,3 +1428,4 @@ the full bootstrap was not run.
 | 2026-11-24 | Section 3 now states that once the managed identity's **Azure Connected Machine Onboarding** assignment is created, every stop or abandoned attempt must remove it, and the token block stops, the 403 stop, the section 4 stop, and the support section point to that removal. A new section 3, step 4 clears the token on every machine and session where it existed: it removes the variables and any remote session, signs out of the sign-ins this procedure made, and explains that clearing local copies does not revoke the token. |
 | 2026-11-24 | The 429 and 5xx rows now say that a retry with a token is a new attempt: repeat section 3, option 1, steps 1 to 3 after waiting, to get a fresh token and, if needed, the temporary role assignment again, then clean up again. |
 | 2026-11-24 | The Azure CLI cleanup block now stops with an error and keeps `AZURE_CONFIG_DIR` when the procedure's profile folder cannot be deleted completely, so it reports success only after the folder is gone and the cleanup can be run again. |
+| 2026-11-24 | The section 1 block now counts Az.Accounts 4.0.2 as present only when it is in the all-users module folder, so a copy installed only for the current user no longer lets it remove the shared newer versions; in that case it installs 4.0.2 for all users first. |
