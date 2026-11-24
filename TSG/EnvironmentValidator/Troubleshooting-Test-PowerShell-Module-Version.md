@@ -51,6 +51,7 @@
 | 2026-11-24 | The manual alternative now keeps every version of the module that another installed module requires, as declared in that module's manifest file: an exact version (`RequiredVersion`), a minimum version, or a maximum version. Before this change it checked only minimum versions, so a module that required an exact newer version could lose that version. The block names the module and stops before any change. It also repeats the check after it installs the recipe version and before it removes anything. |
 | 2026-11-24 | The manual alternative now confirms, before any change, that every version it would remove is available in `$ApprovedRepository`, so that the version can be restored from there, and stops if one is not. Its dependency check now also covers modules in every user's `Documents` folder, and treats a requirement that it cannot read, such as one given as a file path, as unmet, so that it stops instead of removing a version that might be needed. It compares versions the way PowerShell does when it loads a module, and treats `5.5.3` and `5.5.3.0` as the same version when it compares installed versions with the recipe or the repository. |
 | 2026-11-24 | Named the PowerShell Gallery download hosts (`cdn.powershellgallery.com`, `cdn.oneget.org`) in Preconditions and noted that the `Find-Module` restore check does not show that downloads work. The recipe-aware helper's **Changes** line now states that it removes versions that are not in the recipe, including older ones and `Az.Accounts` versions that are not in the recipe, without checking dependent modules, and that it uninstalls before it reinstalls; checks to run with Microsoft Support first were added. The manual alternative is now one statement, wrapped in `& { }`, so a failed check ends the whole block even when it is pasted into a console. Its dependency check now treats a requirement given as a file path as unmet even when another entry names the module, accepts a requirement that names a module GUID only from a kept version with that GUID, and, after an installation, counts only the versions that are actually installed. When `Install-Module` also installs a dependency version newer than the recipe, such as `Az.Accounts`, the block finishes the named module and then stops with an error that names that version and tells you to run the block again for it. |
+| 2026-11-24 | The recipe-aware helper block now runs as one statement (`& { ... }`), so if the helper is unavailable its check stops the block before `Remediate-PSModules` runs, even when the block is pasted line by line. |
 
 ## Overview
 
@@ -331,12 +332,17 @@ If either check fails, do not run the helper; contact Microsoft Support. The
 dependent-module check itself and stops before any change, but use it only with
 Microsoft Support guidance.
 
+Paste or run the whole block at once. It runs as one statement, so if the helper is
+unavailable the check stops the block before `Remediate-PSModules` runs.
+
 ```powershell
-if (-not (Get-Command -Name Remediate-PSModules -Module AzureLocalImageModule -ErrorAction SilentlyContinue)) {
-    throw 'The recipe-aware helper is unavailable. Do not run automatic remediation.'
+& {
+    if (-not (Get-Command -Name Remediate-PSModules -Module AzureLocalImageModule -ErrorAction SilentlyContinue)) {
+        throw 'The recipe-aware helper is unavailable. Do not run automatic remediation.'
+    }
+    $driftResult = Remediate-PSModules -Verbose
+    $driftResult
 }
-$driftResult = Remediate-PSModules -Verbose
-$driftResult
 ```
 
 Inspect the returned result for completion or errors, then run
