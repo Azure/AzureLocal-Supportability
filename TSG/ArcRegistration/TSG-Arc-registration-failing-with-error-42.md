@@ -74,7 +74,7 @@ Read the status code of the failed attempt in `azcmagent.log` first:
 | `status code 401` | [Section 1](#1-azaccounts-version-on-the-system-is-incorrect) (module check), then [sections 2 and 3](#3-arm-access-token-is-passed-incorrectly): mint a new plain-text token and retry | The node administrator, with a token from an identity that holds the required roles |
 | `httpStatusCode:403` or another non-401 status | [Section 4](#4-permissions-policy-or-quota-http-403-or-another-non-401-status). Do not change modules or tokens | The subscription owner makes any role, provider, or policy change |
 | The section 1 block prints `UNKNOWN-STOP` | [Contact Microsoft support](#when-to-contact-microsoft-support) | Microsoft support |
-| A different exit code, such as 26 (network error) | Not this article. Use the [agent exit codes](https://learn.microsoft.com/en-us/azure/azure-arc/servers/troubleshoot-agent-onboard#agent-exit-codes) and [network requirements](https://learn.microsoft.com/en-us/azure/azure-arc/servers/network-requirements) | The network administrator |
+| A different exit code, such as 26 (network error) | Not this article. Use the [agent exit codes](https://learn.microsoft.com/en-us/azure/azure-arc/servers/troubleshoot-agent-onboard#agent-exit-codes) and [network requirements](https://learn.microsoft.com/en-us/azure/azure-arc/servers/network-requirements) | Depends on the code; for 26, the network administrator |
 
 ### Version-dependent behavior
 
@@ -378,9 +378,11 @@ A new assignment can take several minutes to apply; in validation it took about
 20 minutes, and retries before then still failed with 403.
 
 In validation, this role alone let the token register a machine with the agent's
-connect command. The initialization command was not validated with this identity;
-if its retry reports a 403 for another resource type, have the owner grant the
-additional roles in the permissions article and retry.
+connect command. The initialization command was not validated with this identity.
+If its retry reports a 403, stop: do not grant this identity any other role or a
+broader scope. Remove the assignment with the command above, then mint the token
+from a service principal or operator account that already holds the roles in the
+permissions article, or use device code (option 2).
 
 Then, in an elevated Windows PowerShell 5.1 session on the registered machine,
 sign in as its managed identity, and continue with step 2 in the same session:
@@ -495,7 +497,9 @@ script: Azure Local nodes can have PowerShell script block logging turned on
 (it was on in validation), which records the text of every script that runs.
 Do not write the token to a file, print, export, or transcribe it, or include it
 in a ticket; clear `$token = $null` after the initialization attempt and sign out
-as described in step 1.
+as described in step 1. If the token came from a managed identity, have the
+subscription owner remove its **Azure Connected Machine Onboarding** assignment
+with the `az role assignment delete` command in step 1.
 
 **Changes:** The token blocks only set session variables. Retrying initialization
 can create Azure resources and change the node's registration configuration and,
@@ -696,6 +700,5 @@ the full bootstrap was not run.
   whose recipe requires 4.0.2 (none was available, so a staged recipe file stood
   in); and the full bootstrap command on an unregistered Azure Local machine,
   including whether it needs roles beyond **Azure Connected Machine Onboarding**
-  when the token comes from a managed identity. The only spare machine in the lab
-  instance had no operating system installed (a blank system disk set to network
-  boot), so no Azure Local image was available for that run.
+  when the token comes from a managed identity. No unregistered Azure Local machine
+  was available for that run.
