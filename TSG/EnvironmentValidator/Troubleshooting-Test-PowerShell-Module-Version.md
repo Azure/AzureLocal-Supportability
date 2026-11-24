@@ -10,7 +10,7 @@
   "validation": {
     "fidelity_level": "L4",
     "technical_grade": "A",
-    "reproduction_substrate": "either",
+    "reproduction_substrate": "vm",
     "automation_status": "proven",
     "last_validated": "2026-11-24",
     "spec_ref": "AzStackHci_ValidatedRecipe_PowerShellModule_Version"
@@ -489,6 +489,11 @@ Repeat the read-only PASS/FAIL script under
 on every affected node before retrying the update. `FAIL` or an error means
 resolution is not verified.
 
+The node-by-node view in [Symptoms](#symptoms) shows the last completed system health check, so
+it keeps showing `FAILURE` until a new system health check completes; it is not a resolution check.
+Do not start a system health check (`Invoke-SolutionUpdatePrecheck -SystemHealth`) while an update or
+another health check is in progress; in the lab one took about 11 to 26 minutes to complete.
+
 If a drift health fault was also present, check it with `Get-HealthFault` after
 the next scheduled drift-detection run. An on-demand validator result does not
 prove that a previously raised health fault has already cleared.
@@ -507,7 +512,7 @@ present, for about 15 minutes, before the module was repaired.
 | Windows event logs | shown | Event Viewer > Applications and Services Logs > **AzStackHciEnvironmentChecker**, source `AzStackHciEnvironmentChecker/Telemetry`, Event ID **17205**. Each run writes one event per node whose JSON message has `"Name": "AzStackHci_ValidatedRecipe_PowerShellModule_Version"`; the failing node's event is a Warning with `"Status": 1`, passing nodes are Information with `"Status": 0`. |
 | Cluster logs (`Get-ClusterLog`) | not evident | `Get-ClusterLog -TimeSpan 15` from all three nodes (about 65 MB), covering the time the module was missing and a full system health check, contains no entry for this check, its title, or `Test-PSModules`. |
 | Windows Failover Cluster Manager | not evident | No node, role, or resource changed state compared with a snapshot taken just before the module was removed, and `Microsoft-Windows-FailoverClustering/Operational` recorded no Critical, Error, or Warning event in the same 15 minutes. The other cluster-tool events in that time were `Microsoft-Windows-FailoverClustering-NetFt/Operational` Event ID 57344 timer-skew warnings and `Microsoft-Windows-FailoverClustering-Manager/Admin` Event ID 4657 errors about a `Get-ClusterParameter` property named `CauResourceName`; neither concerns PowerShell modules. |
-| Windows Admin Center (standalone) | not evident | Inferred, not viewed in Windows Admin Center: no new Health Service fault was raised while the module was missing (`Get-HealthFault` compared with the snapshot taken just before), and the Windows Admin Center cluster dashboard **Alerts** list Health Service faults. Its **Updates** and **Events** tools were not checked. |
+| Windows Admin Center (standalone) | shown | Inferred, not viewed in Windows Admin Center: on a node connection, the **Events** tool reads the same **AzStackHciEnvironmentChecker** log, so it carries the Event ID 17205 entry described in the Windows event logs row. The cluster dashboard **Alerts** do not carry this failure: no new Health Service fault was raised while the module was missing (`Get-HealthFault` compared with the snapshot taken just before). The **Updates** tool was not checked. |
 | Windows Admin Center in the Azure portal | absent | Not characterized. |
 | Component / tool log files | shown | Each system health check writes `HealthCheckResult.EnvironmentChecker.<date-time>.json` to `C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\HealthCheck\System`. In the lab run it listed this check as `FAILURE` for the affected node with the `Failed to parse installed version` detail. A validator run that you start yourself also writes `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log`; retain both for support. |
 
