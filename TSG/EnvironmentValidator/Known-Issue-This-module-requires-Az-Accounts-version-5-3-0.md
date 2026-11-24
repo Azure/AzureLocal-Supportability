@@ -47,6 +47,7 @@
 | 2026-11-24 | Issue Validation now reports `RESULT: UNKNOWN` when a module that is not in the recipe needs a newer `Az.Accounts` than any installed version and the recipe version, because this article cannot make that module importable. When another cause is also present, it still reports `RESULT: AFFECTED` and prints a `WARNING:` line for that module; Step 2 prints the same warning. Step 2's dependency check now counts only versions that remain in the all-users module folder, so a copy in a user's `Documents` folder no longer allows a version that other users and services need to be removed. |
 | 2026-11-24 | Cause now states that the fix keeps or installs the recipe version of `Az.Accounts` and also removes any `Az.Accounts` version newer than the recipe, after the dependent-module check, so that the recipe version is the one that loads. Rollback now installs from the repository in `$Repository`, the same repository used in Step 2, confirms that the exact removed version is available there before it installs anything, and stops if it is not. |
 | 2026-11-24 | Step 2 now confirms, before it installs or removes anything, that every version it would remove is available in the repository in `$Repository`, so that [Rollback](#rollback) can restore it; it repeats this check for a version that installation adds. Its dependency check now also covers modules in every user's `Documents` folder, and treats a requirement that it cannot read, such as one given as a file path, as unmet, so that it stops instead of removing a version that might be needed. It compares versions the way PowerShell does when it loads a module, and treats `5.5.3` and `5.5.3.0` as the same version when it compares installed versions with the recipe or the repository. |
+| 2026-11-24 | Corrected the cluster witness check's import order (`Az.Storage`, then `Az.Accounts`), explained that the message means an older `Az.Accounts` was already loaded in the session, described importing `Az.Accounts` first as a way to recreate that state, and named the PowerShell Gallery download hosts in Step 2. Issue Validation now prints `RESULT: NOT AFFECTED` after the `WARNING:` line when the only finding is a module that is not in the recipe and that this article cannot make importable, so a fix that worked is verified instead of ending in `RESULT: UNKNOWN`; it also treats `5.5.3` and `5.5.3.0` as the same version when it compares installed versions with the recipe. Step 2's dependency check now treats a requirement given as a file path as unmet even when another entry names the module, accepts a requirement that names a module GUID only from a remaining version with that GUID, and checks a copy in another user's `Documents` folder even when an all-users copy with the same name and version is removed. Rollback treats `5.5.5` and `5.5.5.0` as the same version when it checks the repository, as Step 2 does. |
 
 ## At a glance
 
@@ -161,6 +162,11 @@ Run this block in a new elevated Windows PowerShell 5.1 session on each machine.
 
     $loaded = @(Get-Module -Name 'Az', 'Az.*')
     $accountsTarget = $recipe['Az.Accounts']
+    function ConvertTo-FullVersion {
+        # Missing build and revision numbers count as 0, so 5.5.3 and 5.5.3.0 name the same installed version.
+        param([version]$Version)
+        [version]::new($Version.Major, $Version.Minor, [math]::Max($Version.Build, 0), [math]::Max($Version.Revision, 0))
+    }
     $inventory = foreach ($m in @(Get-Module -Name 'Az', 'Az.*' -ListAvailable)) {
         $needs = @(@($m.RequiredModules) + @($m.ModuleList) | Where-Object { $_.Name -eq 'Az.Accounts' -and [version]$_.Version -gt [version]'0.0' } |
             ForEach-Object { [version]$_.Version } | Sort-Object -Descending) | Select-Object -First 1
@@ -169,12 +175,12 @@ Run this block in a new elevated Windows PowerShell 5.1 session on each machine.
         $finding = ''
         if ($accountsTarget) {
             if ($m.Name -ne 'Az.Accounts' -and $needs -and $needs -gt $accountsTarget) {
-                if ($recipeVersion -and [version]$m.Version -gt $recipeVersion) { $finding = 'CAUSE: newer than recipe and needs a newer Az.Accounts' }
+                if ($recipeVersion -and (ConvertTo-FullVersion $m.Version) -gt (ConvertTo-FullVersion $recipeVersion)) { $finding = 'CAUSE: newer than recipe and needs a newer Az.Accounts' }
                 elseif ($recipeVersion) { $finding = 'STOP: recipe conflict' }
                 else { $finding = 'Not in recipe; needs a newer Az.Accounts' }
             } elseif ($recipeVersion) {
-                if ([version]$m.Version -eq $recipeVersion) { $finding = 'Recipe version' }
-                elseif ([version]$m.Version -gt $recipeVersion) { $finding = 'Newer than recipe' }
+                if ((ConvertTo-FullVersion $m.Version) -eq (ConvertTo-FullVersion $recipeVersion)) { $finding = 'Recipe version' }
+                elseif ((ConvertTo-FullVersion $m.Version) -gt (ConvertTo-FullVersion $recipeVersion)) { $finding = 'Newer than recipe' }
                 else { $finding = 'Older than recipe' }
             }
         }
@@ -209,7 +215,7 @@ Run this block in a new elevated Windows PowerShell 5.1 session on each machine.
         Write-Output "RESULT: UNKNOWN - the validated recipe could not be read on this machine: $recipeError Do not change modules on this machine."
     } else {
         $reasons = @()
-        if (-not @($inventory | Where-Object { $_.Name -eq 'Az.Accounts' -and $_.Version -eq $accountsTarget })) {
+        if (-not @($inventory | Where-Object { $_.Name -eq 'Az.Accounts' -and (ConvertTo-FullVersion $_.Version) -eq (ConvertTo-FullVersion $accountsTarget) })) {
             $reasons += "the recipe version of Az.Accounts ($accountsTarget) is not installed"
         }
         $reasons += @($inventory | Where-Object { $_.Finding -like 'CAUSE*' } |
@@ -228,16 +234,15 @@ Run this block in a new elevated Windows PowerShell 5.1 session on each machine.
         } elseif ($otherAccounts.Count -gt 0) {
             Write-Output ('RESULT: UNKNOWN - Az.Accounts is also installed outside the all-users module folder (' + (($otherAccounts | ForEach-Object { $_.Path }) -join '; ') +
                 '). That copy can load first. Do not change modules; contact Microsoft support.')
-        } elseif ($reasons.Count -gt 0) {
-            foreach ($u in $unmetOther) {
-                Write-Output "WARNING: $u. The fix does not change it, and it still cannot be imported after the fix. Contact Microsoft support or the owner of that module."
-            }
-            Write-Output ('RESULT: AFFECTED - ' + ($reasons -join '; '))
-        } elseif ($unmetOther.Count -gt 0) {
-            Write-Output ('RESULT: UNKNOWN - ' + ($unmetOther -join '; ') +
-                '. This article does not change modules outside the recipe. Do not change modules on this machine; contact Microsoft support or the owner of that module.')
         } else {
-            Write-Output "RESULT: NOT AFFECTED - the recipe version of Az.Accounts ($accountsTarget) is installed and no recipe module needs a newer one."
+            foreach ($u in $unmetOther) {
+                Write-Output "WARNING: $u. This article does not change it, and it cannot be imported on this machine. Contact Microsoft support or the owner of that module."
+            }
+            if ($reasons.Count -gt 0) {
+                Write-Output ('RESULT: AFFECTED - ' + ($reasons -join '; '))
+            } else {
+                Write-Output "RESULT: NOT AFFECTED - the recipe version of Az.Accounts ($accountsTarget) is installed and no recipe module needs a newer one."
+            }
         }
     }
 }
@@ -247,20 +252,20 @@ Example `RESULT` lines from a lab machine whose recipe lists `Az.Accounts` 5.5.3
 
 - A newer module: `RESULT: AFFECTED - Az.Storage 9.8.0 needs Az.Accounts 5.5.5 but the recipe version is 5.5.3`
 - The recipe `Az.Accounts` missing: `RESULT: AFFECTED - the recipe version of Az.Accounts (5.5.3) is not installed`
-- A module that is not in the recipe and needs a newer `Az.Accounts` than the machine has, with no other cause present: `RESULT: UNKNOWN - <module> <version> is not in the recipe and needs Az.Accounts 5.5.4, newer than any installed version and the recipe version (5.5.3). ...`. For example, `Az.KeyVault` 6.6.2 needs `Az.Accounts` 5.5.4.
+- A module that is not in the recipe and needs a newer `Az.Accounts` than the machine has, with no other cause present: `WARNING: <module> <version> is not in the recipe and needs Az.Accounts 5.5.4, newer than any installed version and the recipe version (5.5.3). ...`, followed by `RESULT: NOT AFFECTED - the recipe version of Az.Accounts (5.5.3) is installed and no recipe module needs a newer one.` For example, `Az.KeyVault` 6.6.2 needs `Az.Accounts` 5.5.4. With another cause present, the same `WARNING:` line comes before `RESULT: AFFECTED`, and after Step 2 the check reports the `WARNING:` line and `RESULT: NOT AFFECTED`.
 
 How to read the result for each machine:
 
 | Result | Meaning | Next step |
 | --- | --- | --- |
 | `RESULT: AFFECTED` | The line names what causes the error on this machine. A `WARNING:` line before it names a module that is not in the recipe and that the fix does not repair. | Follow [Mitigation Details](#mitigation-details) on this machine. For a module named in a `WARNING:` line, also [contact Microsoft support](#when-to-contact-microsoft-support) or the owner of that module. |
-| `RESULT: NOT AFFECTED` | The modules on this machine do not cause this error. | None on this machine. If no machine is affected, [contact Microsoft support](#when-to-contact-microsoft-support). |
-| `RESULT: UNKNOWN` | The required versions could not be established on this machine, or a module that is not in the recipe needs a newer `Az.Accounts` than any installed version and the recipe version. This article does not fix that module: removing or installing other modules does not make it importable. | Do not change modules on this machine. [Contact Microsoft support](#when-to-contact-microsoft-support) with the output. If the line names a module that is not in the recipe, you can also ask the owner of that module which `Az.Accounts` version it supports. |
+| `RESULT: NOT AFFECTED` | The modules on this machine do not cause this error. A `WARNING:` line before it names a module that is not in the recipe and needs a newer `Az.Accounts` than any installed version and the recipe version. This article does not fix that module, and removing or installing other modules does not make it importable, but it does not stop the recipe modules from loading. | None on this machine. If no machine is affected, [contact Microsoft support](#when-to-contact-microsoft-support). For a module named in a `WARNING:` line, contact Microsoft support or the owner of that module, and ask which `Az.Accounts` version it supports. |
+| `RESULT: UNKNOWN` | The required versions could not be established on this machine: the recipe could not be read, a recipe module version needs a newer `Az.Accounts` than the recipe lists, or `Az.Accounts` is installed outside the all-users module folder. | Do not change modules on this machine. [Contact Microsoft support](#when-to-contact-microsoft-support) with the output. |
 
 In the table, `Finding` explains each row:
 
 - `CAUSE: newer than recipe and needs a newer Az.Accounts`: this version causes the error. The fix removes it and keeps the recipe version.
-- `Not in recipe; needs a newer Az.Accounts`: a module that Azure Local does not use, for example one installed with `Install-Module Az`. The fix does not remove it, but it stops if removing a newer `Az.Accounts` would break it. If neither an installed `Az.Accounts` version nor the recipe version is new enough for it, the module cannot be imported, and the check reports `RESULT: UNKNOWN`, or a `WARNING:` line before `RESULT: AFFECTED` when another cause is also present.
+- `Not in recipe; needs a newer Az.Accounts`: a module that Azure Local does not use, for example one installed with `Install-Module Az`. The fix does not remove it, but it stops if removing a newer `Az.Accounts` would break it. If neither an installed `Az.Accounts` version nor the recipe version is new enough for it, the module cannot be imported, and the check prints a `WARNING:` line for it before the `RESULT` line. It does not change the result: `RESULT: NOT AFFECTED` when it is the only finding, and `RESULT: AFFECTED` when another cause is also present.
 - `Newer than recipe` or `Older than recipe`: not the cause of this error. If the system health check reports `Test PowerShell Module Version`, see [Troubleshooting Test PowerShell Module Version](Troubleshooting-Test-PowerShell-Module-Version.md).
 - A row whose `Path` is not under `C:\Program Files\WindowsPowerShell\Modules` is a copy in another module folder, such as a user's `Documents` folder. Such copies can load before the all-users copies. For `Az.Accounts`, the check reports `RESULT: UNKNOWN` in this case, and Step 2 stops without changes.
 
@@ -289,7 +294,7 @@ The block stops before changing anything, and prints `No changes were made`, whe
 - Another installed module, including modules that are not in the recipe such as the `Az` rollup module, needs a version that would be removed: an exact version (`RequiredVersion`) that would be removed, or a minimum (`ModuleVersion`) or maximum (`MaximumVersion`) version that no remaining version meets. Only versions that remain in `C:\Program Files\WindowsPowerShell\Modules` count as remaining, because other users and services cannot load a copy in a user's `Documents` folder; a module that only one user needs can therefore also stop the block. The check covers the modules in this session's module path and in every user's `Documents\WindowsPowerShell\Modules` folder. The message names the module. This check reads each module's manifest file (`RequiredModules` and `ModuleList`); a module that enforces a version only inside its own script is not detected. `Uninstall-Module` is run with `-Force` because without it PowerShellGet refuses to remove any version that another module names as a dependency, whatever version that module needs; this check replaces that refusal with an exact version check.
 - A version that needs to be installed, or a version that would be removed, is not available in the repository in `$Repository`. The message names the versions. Set `$Repository` to a repository that has them, or contact Microsoft support.
 
-The dependency check fails closed: when it cannot show that a requirement is still met, for example because a manifest cannot be read or names the module by a file path, it treats the requirement as unmet and stops with `No changes were made`. It compares versions the way PowerShell does when it loads a module, so a module that requires exactly `5.5.5.0` is not satisfied by version `5.5.5`. When it compares installed versions with the recipe or the repository, it treats a missing build or revision number as 0, so `5.5.3` and `5.5.3.0` are the same version.
+The dependency check fails closed: when it cannot show that a requirement is still met, for example because a manifest cannot be read or names any module by a file path, it treats the requirement as unmet and stops with `No changes were made`. A requirement that also names a module GUID is met only by a remaining version whose manifest has that GUID. A copy of a module in another user's `Documents` folder is checked even when an all-users copy with the same name and version would be removed. It compares versions the way PowerShell does when it loads a module, so a module that requires exactly `5.5.5.0` is not satisfied by version `5.5.5`. When it compares installed versions with the recipe or the repository, it treats a missing build or revision number as 0, so `5.5.3` and `5.5.3.0` are the same version.
 
 After it installs a version, the block reads the installed modules again and builds the plan again with the same checks, including the repository check, because `Install-Module` can also install a newer `Az.Accounts` as a dependency. That newer version is then removed as well. If a check fails at that point, the block stops with `The installed versions were kept and no versions were removed`. It prints `RESULT: CHANGED` only after it confirms that the recipe version of `Az.Accounts` is installed for all users and that no newer `Az.Accounts` remains.
 
@@ -393,32 +398,41 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
         # is an exact version, ModuleVersion a minimum, and MaximumVersion a maximum. The manifest file is read
         # because Get-Module reports an exact RequiredModules version as a minimum. Versions are compared as
         # PowerShell compares them when it loads a module. A requirement that cannot be read is reported as unmet.
-        param([string]$ModuleName, [version[]]$KeptVersion, [object[]]$Modules, [string[]]$ExcludeKey = @())
+        # ExcludePath lists the module folders that are removed in the same change, so they need nothing.
+        param([string]$ModuleName, [version[]]$KeptVersion, [object[]]$Modules, [string[]]$ExcludePath = @())
         foreach ($d in $Modules) {
-            if ($d.Name -eq $ModuleName -or $ExcludeKey -contains "$($d.Name)|$([version]$d.Version)") { continue }
+            if ($d.Name -eq $ModuleName -or $ExcludePath -contains $d.ModuleBase) { continue }
             if (-not @(@($d.RequiredModules) + @($d.ModuleList) | Where-Object { $_ -and $_.Name -eq $ModuleName })) { continue }
             try {
                 $data = Import-PowerShellDataFile -LiteralPath $d.Path -ErrorAction Stop
                 $named = $false
                 foreach ($entry in @(@($data.RequiredModules) + @($data.ModuleList) | Where-Object { $_ })) {
                     $s = [Microsoft.PowerShell.Commands.ModuleSpecification]::new($entry)
+                    # A requirement given as a path to a module file or folder can pin any version, so it is not checked here.
+                    if ($s.Name -match '[\\/]|\.(psd1|psm1|dll)$') { throw "A module is required by a file path: $($s.Name)" }
                     if ($s.Name -ne $ModuleName) { continue }
                     $named = $true
+                    # A GUID in the requirement is met only by a kept version whose manifest has that GUID.
+                    $candidates = $KeptVersion
+                    if ($s.Guid) {
+                        $guidVersions = @(Get-Module -Name $ModuleName -ListAvailable | Where-Object { $_.Guid -eq $s.Guid } | ForEach-Object { $_.Version })
+                        $candidates = @($KeptVersion | Where-Object { $guidVersions -contains $_ })
+                    }
                     if ($s.RequiredVersion) {
-                        $ok = $KeptVersion -contains $s.RequiredVersion
+                        $ok = $candidates -contains $s.RequiredVersion
                         $needs = "exactly $($s.RequiredVersion)"
                     } elseif ($s.Version -or $s.MaximumVersion) {
                         $max = $null
                         if ($s.MaximumVersion) { $max = [version]($s.MaximumVersion -replace '\*', '999999999') }
-                        $ok = @($KeptVersion | Where-Object { (-not $s.Version -or $_ -ge $s.Version) -and (-not $max -or $_ -le $max) }).Count -gt 0
+                        $ok = @($candidates | Where-Object { (-not $s.Version -or $_ -ge $s.Version) -and (-not $max -or $_ -le $max) }).Count -gt 0
                         $range = @()
                         if ($s.Version) { $range += "$($s.Version) or later" }
                         if ($s.MaximumVersion) { $range += "at most $($s.MaximumVersion)" }
                         $needs = $range -join ' and '
                     } else { continue }
+                    if ($s.Guid) { $needs += " with GUID $($s.Guid)" }
                     if (-not $ok) { [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Needs = "$ModuleName $needs" } }
                 }
-                # For example, a requirement given as a path to a manifest file pins a version that is not checked here.
                 if (-not $named) { throw "$ModuleName is required in a form that this check does not read." }
             } catch {
                 [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Needs = "a $ModuleName version that could not be read from $($d.Path)" }
@@ -459,16 +473,16 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
         }
         $removals += @($Inventory | Where-Object { $_.Name -eq 'Az.Accounts' -and $_.FullVersion -gt $accountsFull })
 
-        $removalKeys = @($removals | ForEach-Object { "$($_.Name)|$($_.Version)" })
+        $removalPaths = @($removals | ForEach-Object { $_.ModuleBase })
         $allModules = @(Get-DependentCandidate)
         foreach ($r in $removals) {
             if (-not $r.AllUsers -or -not $r.Managed) {
                 throw "$($r.Name) $($r.Version) at $($r.ModuleBase) was not installed with Install-Module in the all-users folder. Contact Microsoft support. $Outcome"
             }
             # Only all-users copies count as kept: a copy in a user's Documents folder is not available to other accounts or services.
-            $kept = @(@($Inventory | Where-Object { $_.Name -eq $r.Name -and $_.AllUsers -and $removalKeys -notcontains "$($_.Name)|$($_.Version)" } | ForEach-Object { $_.Version }) +
+            $kept = @(@($Inventory | Where-Object { $_.Name -eq $r.Name -and $_.AllUsers -and $removalPaths -notcontains $_.ModuleBase } | ForEach-Object { $_.Version }) +
                 @($installs | Where-Object { $_.Name -eq $r.Name } | ForEach-Object { $_.Version }))
-            $dependents = @(Get-UnmetDependent -ModuleName $r.Name -KeptVersion $kept -Modules $allModules -ExcludeKey $removalKeys)
+            $dependents = @(Get-UnmetDependent -ModuleName $r.Name -KeptVersion $kept -Modules $allModules -ExcludePath $removalPaths)
             if ($dependents.Count -gt 0) {
                 throw ("These installed modules need a version of $($r.Name) that this fix would remove: " +
                     (($dependents | ForEach-Object { "$($_.Name) $($_.Version) needs $($_.Needs)" }) -join '; ') +
@@ -554,14 +568,14 @@ If `Uninstall-Module` reports that a module version is in use, a process still h
 
 ## Verify the fix
 
-- In a new elevated Windows PowerShell 5.1 session, [Issue Validation](#issue-validation) reports `RESULT: NOT AFFECTED` on every machine.
+- In a new elevated Windows PowerShell 5.1 session, [Issue Validation](#issue-validation) reports `RESULT: NOT AFFECTED` on every machine. A `WARNING:` line before it, for a module that is not in the recipe, does not block the retry; follow up on that module with Microsoft support or its owner.
 - The retried operation continues past the step that failed.
 
 ## Rollback
 
 There is no automatic rollback. Step 2 confirmed, before it changed anything, that every version it removed was available in its `$Repository`. To restore a version that Step 2 removed, take the `Name` and `Version` from its `REMOVING:` line, put them in the block below, and run it in an elevated Windows PowerShell 5.1 session on the same machine.
 
-Set `$Repository` to the same repository that you used in Step 2: leave it set to `'PSGallery'` unless your organization requires an approved internal repository, in which case use that repository's name. The block first confirms with `Find-Module` that this exact version is available in that repository. If it is not, the block stops without installing anything; choose an approved repository that contains this exact version, or contact Microsoft support.
+Set `$Repository` to the same repository that you used in Step 2: leave it set to `'PSGallery'` unless your organization requires an approved internal repository, in which case use that repository's name. The block first confirms with `Find-Module` that this exact version is available in that repository, treating a missing build or revision number as 0 as Step 2 does, so `5.5.5` and `5.5.5.0` are the same version; it then installs the version as the repository lists it. If it is not available, the block stops without installing anything; choose an approved repository that contains this exact version, or contact Microsoft support.
 
 **Changes:** installs that one module version for all users from `$Repository`. It does not remove other versions. Restoring a version that Step 2 removed brings this error back, so restore it only after the operation completes and only if you need it for other work.
 
@@ -573,12 +587,19 @@ Set `$Repository` to the same repository that you used in Step 2: leave it set t
     $Version = 'version-from-REMOVING-line'
 
     if (-not ($Version -as [version])) { throw "Replace the version placeholder with the version from the REMOVING: line. Nothing was installed." }
+    function ConvertTo-FullVersion {
+        # Missing build and revision numbers count as 0, so 5.5.3 and 5.5.3.0 name the same installed version.
+        param([version]$Version)
+        [version]::new($Version.Major, $Version.Minor, [math]::Max($Version.Build, 0), [math]::Max($Version.Revision, 0))
+    }
     Get-PSRepository -Name $Repository | Out-Null
     $found = @()
     try { $found = @(Find-Module -Name $Name -RequiredVersion $Version -Repository $Repository) } catch { $found = @() }
-    if ($found.Count -ne 1 -or [version][string]$found[0].Version -ne [version]$Version) {
+    if ($found.Count -ne 1 -or (ConvertTo-FullVersion ([string]$found[0].Version)) -ne (ConvertTo-FullVersion $Version)) {
         throw "$Name $Version is not available in $Repository. Nothing was installed. Choose an approved repository that contains this exact version."
     }
+    # Install and confirm the version as the repository writes it, for example 5.5.5 for 5.5.5.0.
+    $Version = [string]$found[0].Version
     Write-Output "INSTALLING: $Name $Version from $Repository"
     Install-Module -Name $Name -RequiredVersion $Version -Repository $Repository -Scope AllUsers -Force
     $installed = @()
@@ -626,6 +647,8 @@ Later on 2026-11-24 Step 2 was revised as described in [Revision history](#revis
 The last 2026-11-24 revision, which added the `RESULT: UNKNOWN` case for modules that are not in the recipe and counts only all-users versions in Step 2's dependency check, was tested the same way. With simulated module folders, not on a cluster, Issue Validation reported `RESULT: UNKNOWN` for `Az.KeyVault` 6.6.2 (which needs `Az.Accounts` 5.5.4) with only `Az.Accounts` 5.5.3 installed, a `WARNING:` line for it followed by `RESULT: AFFECTED` when `Az.Storage` 9.8.0 was also present, and `RESULT: NOT AFFECTED` when `Az.Accounts` 5.5.5 was also installed or when no such module was present. Step 2 stopped with `No changes were made` when another module needed at least an `Az.Storage` version that remained only in a user's `Documents` folder, and removed `Az.Storage` 9.8.0 when that version was also installed for all users. On a lab machine in Windows PowerShell 5.1, Issue Validation reported `RESULT: NOT AFFECTED`; with scratch modules placed only in a session module path outside `C:\Program Files`, it reported `RESULT: UNKNOWN` for a scratch module outside the recipe that needed `Az.Accounts` 5.5.4, and the `WARNING:` line followed by `RESULT: AFFECTED` when a scratch `Az.Storage` version that needed `Az.Accounts` 5.5.5 was added. The scratch modules were then removed. The automated loop for the first cause ran again with this Step 2 unchanged and passed (`REMOVING: Az.Storage 9.8.0`, `RESULT: CHANGED`), and every module folder matched its state before the test.
 
 The revision that added the repository check and the wider dependency check was tested the same way. With simulated module folders, not on a cluster, Step 2 stopped with `No changes were made`, before any `Install-Module` or `Uninstall-Module` call, when a version it would remove was not in the repository; when installation added a newer `Az.Accounts` that was not in the repository, it stopped with `The installed versions were kept and no versions were removed`. It used an internal repository name for every repository command when `$Repository` was set to one, stopped when a dependent module's manifest could not be read, named the module by a file path, or was in another user's `Documents` folder, and treated a recipe version `5.5.3.0` as the installed `5.5.3`. In Windows PowerShell 5.1 on a lab machine and in PowerShell 7, the dependency check agreed with `Import-Module` in all 54 combinations of exact, minimum, maximum, and wildcard maximum requirements (`5.*`, `5.5.*`) that were tried. The automated loop for the first cause then ran again with this Step 2 unchanged and passed (`REMOVING: Az.Storage 9.8.0`, `RESULT: CHANGED`, after the repository check found `Az.Storage` 9.8.0 in the PowerShell Gallery), and every module folder matched its state before the test.
+
+The last 2026-11-24 revision, which changed the result after a `WARNING:` line, the version comparisons, and the dependency check, was tested the same way. With simulated module folders, not on a cluster, Issue Validation printed a `WARNING:` line for `Az.KeyVault` 6.6.2 followed by `RESULT: NOT AFFECTED` when it was the only finding, followed by `RESULT: AFFECTED` when `Az.Storage` 9.8.0 was also present, and followed by `RESULT: NOT AFFECTED` again after Step 2 removed `Az.Storage` 9.8.0. With a recipe version of `5.5.3.0` and `Az.Accounts` 5.5.3 installed, Issue Validation reported `RESULT: NOT AFFECTED` and Step 2 reported `RESULT: NO CHANGE NEEDED`. Step 2 stopped with `No changes were made` when a dependent module named `Az.Accounts` by a file path beside an ordinary requirement, when a requirement's module GUID matched only a version that would be removed, and when another user's `Documents` folder had a copy of a module version that was removed from the all-users folder. Rollback restored `Az.Accounts` 5.5.5 from a `REMOVING:` line that recorded `5.5.5.0`. Issue Validation, Step 2, and Rollback each parse as a single statement. In Windows PowerShell 5.1 on a lab machine, the dependency check agreed with `Import-Module` in the 54 earlier combinations and in 5 combinations of requirements with a module GUID, `Find-Module` returned `5.5.5` for a request of `5.5.5.0` from the PowerShell Gallery, and Issue Validation reported `RESULT: NOT AFFECTED`. The automated loop for the first cause then ran again with this Step 2 unchanged and passed (`REMOVING: Az.Storage 9.8.0`, `RESULT: CHANGED`), and every module folder on the three machines matched its state before the test.
 
 Not exercised: the second cause inside the automated loop (it was exercised only in the discrete runs on 2026-11-23), the user-folder and dependency-installation cases of Step 2 on a cluster, the rollback block on a cluster (it was checked for syntax and run only with simulated `Find-Module`, `Install-Module`, and `Get-InstalledModule` commands, which confirmed that it installs from the PowerShell Gallery by default, uses an internal repository name when `$Repository` is set to one, and stops before installing when the exact version is not found), the portal **Resume deployment** retry in Step 3, and the Windows Admin Center surfaces (the standalone row is inferred, not viewed).
 
