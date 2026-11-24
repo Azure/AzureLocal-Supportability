@@ -9,10 +9,10 @@
   },
   "validation": {
     "fidelity_level": "L4",
-    "technical_grade": "B",
+    "technical_grade": "A",
     "reproduction_substrate": "either",
     "automation_status": "proven",
-    "last_validated": "2026-11-23",
+    "last_validated": "2026-11-24",
     "spec_ref": "AzStackHci_ValidatedRecipe_PowerShellModule_Version"
   }
 }
@@ -27,8 +27,10 @@
 | Applicable products | Azure Local nodes with the Validated Recipe validator installed |
 | Applicability | Pre-update validation; the automatic remediation path additionally requires `AzureLocalImageModule` and `Remediate-PSModules` |
 | Severity | Critical validator failure; update readiness may be affected |
+| Time and impact | In the lab, the full check, helper repair, and recheck on one node took under 10 minutes; plan for 30 minutes per affected node plus the update retry. Neither remediation path restarts the node or moves virtual machines. Module replacement can interrupt a management operation that is using the module, so remediate in a maintenance window. |
+| Who acts | A local administrator on each affected node. The manual alternative runs only with Microsoft Support guidance. |
 | Execution surface | on-device |
-| Validation | On 2026-11-23, on a lab cluster (solution 12.2701.1004.15, validator 10.2701.0.2017, Windows PowerShell 5.1), the full loop ran with the recipe-aware helper path: baseline PASS; an injected missing module and, separately, a newer gallery module beside the recipe version each produced FAILURE; the image-module import and helper blocks remediated; and the check returned PASS. The manual alternative ran verbatim on the same build with the helper module temporarily moved out of the module path. With `Az.Accounts` 5.5.5 installed and the recipe version 5.5.3 missing, it installed 5.5.3, removed 5.5.5, kept the older 5.5.1, and the check returned PASS. The live run also showed that current Az modules declare their `Az.Accounts` minimum under `ModuleList`, not `RequiredModules`: the previous dependent-module guard removed `Az.Accounts` 5.5.5 while `Az.Storage` 9.8.0 still needed it, after which importing `Az.Storage` failed with `This module requires Az.Accounts version 5.5.5`. The guard now reads both lists and stopped before any change when `Az.KeyVault` 6.6.2 needed `Az.Accounts` 5.5.4. Health-fault clearing was not tested. |
+| Validation | On 2026-11-23, on a lab cluster (solution 12.2701.1004.15, validator 10.2701.0.2017, Windows PowerShell 5.1), the full loop ran with the recipe-aware helper path: baseline PASS; an injected missing module and, separately, a newer gallery module beside the recipe version each produced FAILURE; the image-module import and helper blocks remediated; and the check returned PASS. The manual alternative ran verbatim on the same build with the helper module temporarily moved out of the module path. With `Az.Accounts` 5.5.5 installed and the recipe version 5.5.3 missing, it installed 5.5.3, removed 5.5.5, kept the older 5.5.1, and the check returned PASS. The live run also showed that current Az modules declare their `Az.Accounts` minimum under `ModuleList`, not `RequiredModules`: the previous dependent-module guard removed `Az.Accounts` 5.5.5 while `Az.Storage` 9.8.0 still needed it, after which importing `Az.Storage` failed with `This module requires Az.Accounts version 5.5.5`. The guard now reads both lists and stopped before any change when `Az.KeyVault` 6.6.2 needed `Az.Accounts` 5.5.4. Health-fault clearing was not tested. On 2026-11-24, on the same build, the loop ran again with the system health check started while the module was missing, and each administrator surface was checked; see [Administrator detection surfaces](#administrator-detection-surfaces). |
 
 ## Table of contents
 
@@ -44,6 +46,11 @@
 ## Overview
 
 Environment Validator runs a Validated Recipe validator prior to Update. The test detects issues with install components that have drifted from the validated recipe.
+The validated recipe is the list of exact component versions, including PowerShell modules, that a
+given Azure Local build is tested with; each node can read it locally.
+
+After the fix, the check reports `SUCCESS` on every node and the update readiness check no longer
+lists `Test PowerShell Module Version` as failed.
 
 Do not infer applicability to disconnected, disaggregated, or multi-rack deployments.
 If the validator is absent, stop and obtain release-specific guidance. If the
@@ -80,6 +87,31 @@ HealthCheckSource  : Manual\Standard\Medium\ValidatedRecipe\6f49f155
 ```
 
 This result means the validation found PowerShell Modules it was not expecting but it is lacking the detail on which modules are wrong (this issue is being addressed). 
+
+On newer builds the system health check keeps one result per node, with the module detail. This
+read-only block, run on any node, lists each node's latest result. It reads the last completed
+health check; the `completed` time shows how old that result is.
+
+```powershell
+$checkName = 'AzStackHci_ValidatedRecipe_PowerShellModule_Version'
+$environment = @(Get-SolutionUpdateEnvironment -FullHealthCheckDetails -ErrorAction Stop)[0]
+"Last system health check: $($environment.HealthState), completed $($environment.HealthCheckDate)"
+@($environment.HealthCheckResult) | Where-Object Name -eq $checkName |
+    Sort-Object TargetResourceName, Status -Unique |
+    Select-Object TargetResourceName, Status, @{ Name = 'Detail'; Expression = { $_.AdditionalData.Detail } } |
+    Format-List | Out-String -Width 200
+```
+
+Expected result: one entry per node. A node with `Status : FAILURE` needs the steps below; its
+`Detail` names the module. Two forms appear in `Detail`:
+
+- A newer module: `Checking version of PS module 'Az.Accounts' on host 'NODE01'. Got '5.0.1' but expected less-than or equal to '4.0.2' so it is invalid.`
+- A missing module: `Failed to parse installed version of PS module 'ArcHci' on host 'NODE01'. Got 'N/A'.`
+
+While a health check is running, the first line shows `InProgress` with a completion time of
+`01/01/0001` and no entries are listed; run the block again after it finishes. If a completed health
+check returns no entry, it did not evaluate this check; use the read-only check in
+[Issue validation](#issue-validation) on each node instead.
 
 
 ## Issue Validation
@@ -203,9 +235,14 @@ Before changing installed modules:
 - Do not run remediation concurrently with deployment, an update, another
   installation, or scripts that depend on these modules.
 - Confirm access to the approved repository and the required recipe versions.
-  Stop if downloads or installation are unavailable.
+  Stop if downloads or installation are unavailable. With the public PowerShell Gallery this is
+  `www.powershellgallery.com` over HTTPS; an internal repository needs the same versions.
 - Obtain a maintenance window and a recovery plan approved by Microsoft Support.
   The helper can uninstall and reinstall modules used by management operations.
+
+Which path to use: run the import block below. If it finds `Remediate-PSModules`, use the
+recipe-aware helper. If it warns that the helper is unavailable, stop and contact Microsoft
+Support; use the manual alternative only with their guidance.
 
 ### Discover and import the Azure Local Image module
 
@@ -272,7 +309,8 @@ with the historical `4.0.2` example or interpret a validator upper bound as an
 exact pin.
 
 This narrow fallback handles versioned, PowerShellGet-managed modules in the
-Windows PowerShell **AllUsers** directory only. Stop for CurrentUser copies,
+Windows PowerShell **AllUsers** directory only (`C:\Program Files\WindowsPowerShell\Modules`,
+where modules installed with `-Scope AllUsers` are available to every user on the node). Stop for CurrentUser copies,
 duplicate paths, unregistered copies, or a module loaded in this session.
 Do not use it to replace `PowerShellGet`, `PackageManagement`, or the modules
 providing the validator and recipe commands; those require Support-led recovery.
@@ -457,16 +495,21 @@ prove that a previously raised health fault has already cleared.
 
 ## Administrator detection surfaces
 
+These rows come from a lab run on 2026-11-24 (solution 12.2701.1004.15, three nodes): a recipe
+module was removed from one node, the system health check was started with
+`Invoke-SolutionUpdatePrecheck -SystemHealth`, and each surface was checked while the failure was
+present, for about 15 minutes, before the module was repaired.
+
 | Surface | Status | Evidence or validation gap |
 | --- | --- | --- |
-| PowerShell on a node | shown | The validator result and `AdditionalData.Detail`; use the PASS/FAIL script above. |
-| Azure portal | absent | Pre-update validation is described above; the current portal presentation was not exercised for this revision. |
-| Windows event logs | absent | A failure-event query was not validated for this revision. |
-| Cluster logs (`Get-ClusterLog`) | absent | No drift-specific cluster-log query was validated. |
-| Windows Failover Cluster Manager | absent | No drift-specific view was validated. |
-| Windows Admin Center (standalone) | absent | No drift-specific view was validated. |
-| Windows Admin Center in the Azure portal | absent | No drift-specific view was validated. |
-| Component / tool log files | shown | The validator writes `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log` and `AzStackHciEnvironmentReport.json`; retain them for support. |
+| PowerShell on a node | shown | The validator result and `AdditionalData.Detail`; use the PASS/FAIL script above. A missing module reads `Failed to parse installed version of PS module '<name>' on host '<node>'. Got 'N/A'.` From any node, `Get-SolutionUpdateEnvironment -FullHealthCheckDetails` lists every node's result from the last system health check (block in [Symptoms](#symptoms)). |
+| Azure portal | shown | Inferred, not viewed in the portal: the system health check that ran while the module was missing recorded `Test PowerShell Module Version` as `FAILURE` for the affected node and `SUCCESS` for the others in the update service's health check record, which the Azure portal shows under your Azure Local instance > **Updates**. Source: `Get-SolutionUpdateEnvironment -FullHealthCheckDetails`. |
+| Windows event logs | shown | Event Viewer > Applications and Services Logs > **AzStackHciEnvironmentChecker**, source `AzStackHciEnvironmentChecker/Telemetry`, Event ID **17205**. Each run writes one event per node whose JSON message has `"Name": "AzStackHci_ValidatedRecipe_PowerShellModule_Version"`; the failing node's event is a Warning with `"Status": 1`, passing nodes are Information with `"Status": 0`. |
+| Cluster logs (`Get-ClusterLog`) | not evident | `Get-ClusterLog -TimeSpan 15` from all three nodes (about 65 MB), covering the time the module was missing and a full system health check, contains no entry for this check, its title, or `Test-PSModules`. |
+| Windows Failover Cluster Manager | not evident | No node, role, or resource changed state compared with a snapshot taken just before the module was removed, and `Microsoft-Windows-FailoverClustering/Operational` recorded no Critical, Error, or Warning event in the same 15 minutes. The other cluster-tool events in that time were `Microsoft-Windows-FailoverClustering-NetFt/Operational` Event ID 57344 timer-skew warnings and `Microsoft-Windows-FailoverClustering-Manager/Admin` Event ID 4657 errors about a `Get-ClusterParameter` property named `CauResourceName`; neither concerns PowerShell modules. |
+| Windows Admin Center (standalone) | not evident | Inferred, not viewed in Windows Admin Center: no new Health Service fault was raised while the module was missing (`Get-HealthFault` compared with the snapshot taken just before), and the Windows Admin Center cluster dashboard **Alerts** list Health Service faults. Its **Updates** and **Events** tools were not checked. |
+| Windows Admin Center in the Azure portal | absent | Not characterized. |
+| Component / tool log files | shown | Each system health check writes `HealthCheckResult.EnvironmentChecker.<date-time>.json` to `C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\HealthCheck\System`. In the lab run it listed this check as `FAILURE` for the affected node with the `Failed to parse installed version` detail. A validator run that you start yourself also writes `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log`; retain both for support. |
 
-`absent` denotes an uncharacterized surface, not proof that no signal exists.
-These six surfaces and health-fault clearing remain unvalidated.
+`absent` denotes an uncharacterized surface, not proof that no signal exists. Health-fault
+clearing was not tested.
