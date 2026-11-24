@@ -4,15 +4,15 @@
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
-    "type": "manual",
-    "signal": "ValidateClusterWitness: This module requires Az.Accounts version 5.3.0. An earlier version of Az.Accounts is imported in the current PowerShell session."
+    "type": "command",
+    "signal": "Import-Module Az.Accounts, then Import-Module Az.Storage in a new session (as ValidateClusterWitness does): This module requires Az.Accounts version <version>. An earlier version of Az.Accounts is imported in the current PowerShell session."
   },
   "validation": {
     "fidelity_level": "L4",
-    "technical_grade": "B",
+    "technical_grade": "A",
     "reproduction_substrate": "either",
-    "automation_status": "scaffold",
-    "last_validated": "2026-11-23",
+    "automation_status": "proven",
+    "last_validated": "2026-11-24",
     "spec_ref": "KnownIssue_AzAccounts_ValidatedRecipeMismatch"
   }
 }
@@ -42,6 +42,7 @@
 | --- | --- |
 | 2026-11-23 | Removed the fixed module versions (Az.Accounts 4.0.2, Az.Resources 7.8.0, Az.Storage 8.1.0, Az.StackHCI 2.5.0) and the commands that uninstalled every other version. On builds whose validated recipe requires Az.Accounts 5.x, those commands downgraded the product's own modules. The check and the fix now read the exact versions from the machine's validated recipe, install a missing recipe version, and remove only the versions that cause this error. They stop before changing anything when the recipe cannot be read, when another installed module still needs a version that would be removed, or when Azure PowerShell modules are already loaded in the session. |
 | 2026-11-23 | Validated on an Azure Local lab machine in Windows PowerShell 5.1, which found and fixed two defects in the earlier 2026-11-23 revision. The checks now read each module's `Az.Accounts` requirement from `ModuleList` as well as `RequiredModules`, because current Az module manifests declare it there; before this fix the check reported `NOT AFFECTED` on an affected machine. Step 2 now lists installed versions one module name at a time, because `Get-InstalledModule -AllVersions` rejects several or wildcard names; before this fix Step 2 stopped with that error before making any change. |
+| 2026-11-24 | Added the administrator surfaces observed in a lab run, the `RESULT` lines for each cause, the repository endpoint, and a prevention note. Validated the first cause again as an automated loop. |
 
 ## At a glance
 
@@ -51,8 +52,8 @@
 | Applies to | Azure Local, any release. The correct module versions depend on the build and come from the machine's validated recipe, not from this article. |
 | Severity | High. The operation stays blocked until the module versions are corrected. |
 | Who should act | An administrator with local administrator rights on every machine. |
-| Time to fix | About 15 minutes per machine, plus the time to retry the operation. |
-| First step | Run the read-only check in [Issue Validation](#issue-validation) on every machine. |
+| Time to fix | About 15 minutes per machine, plus the time to retry the operation. No machine restart is needed, virtual machines are not affected, and the retry can follow as soon as every affected machine is fixed. |
+| First step | Run the read-only check in [Issue Validation](#issue-validation) on every machine. After the fix, resume the deployment from the Azure portal (**Deployments** > **Resume deployment**). |
 
 ## Symptoms
 
@@ -72,6 +73,14 @@ Other steps that load Azure PowerShell modules can show the same message with a 
 
 ## Cause
 
+> [!TIP]
+> To prevent this error, do not install or update Azure PowerShell modules (for example with
+> `Install-Module Az` or `Update-Module`) on Azure Local machines. Azure Local installs the versions
+> its validated recipe needs. Run other Azure PowerShell tooling from a management computer instead.
+
+The validated recipe is the list of exact component versions, including Azure PowerShell modules,
+that an Azure Local build is tested with. Each machine can read it locally, and the steps below use it.
+
 Every Azure PowerShell module (for example `Az.Storage` or `Az.Resources`) declares the lowest `Az.Accounts` version it works with. Current versions declare it in the `ModuleList` entry of the module manifest and leave `RequiredModules` empty. When the module is imported, it checks the `Az.Accounts` version that is already loaded in the PowerShell session. If that version is lower, the import stops with this message. The number in the message is the version that the imported module declares, not a version that Azure Local requires.
 
 The cluster witness check imports `Az.Storage` and `Az.Accounts` by name, without a version, so PowerShell loads the highest version installed on the machine. The message therefore means that the machine has an Azure PowerShell module version that needs a newer `Az.Accounts` than the one the session uses. It usually happens in one of these two ways:
@@ -86,9 +95,25 @@ Module versions whose published manifest requires `Az.Accounts` 5.3.0 or later i
 
 ## Where you can see this problem
 
-- **Azure portal:** the failed deployment step shows the error text from [Symptoms](#symptoms). This is the report that this article was first written from; the portal view was not re-checked for this revision.
-- **PowerShell on each machine:** the check in [Issue Validation](#issue-validation) names the module versions that cause the error.
-- **Log files, Windows event logs, cluster log, Failover Cluster Manager, and Windows Admin Center:** not characterized for this revision. Do not treat the absence of a signal there as proof that a machine is not affected.
+The rows below come from a lab run on 2026-11-24 (solution 12.2701.1004.15, three machines, recipe
+`Az.Accounts` 5.5.3) with the first cause present on one machine: `Az.Storage` 9.8.0 installed
+without the `Az.Accounts` 5.5.5 that it needs. The system health check was started with
+`Invoke-SolutionUpdatePrecheck -SystemHealth`, and each surface was checked while the state was
+present, for about 17 minutes. The second cause was not checked on these surfaces.
+
+| Surface | Status | Evidence |
+| --- | --- | --- |
+| PowerShell on each machine | shown | In a new Windows PowerShell 5.1 session, `Import-Module Az.Accounts` followed by `Import-Module Az.Storage`, which is what the cluster witness check does, fails with `This module requires Az.Accounts version 5.5.5. An earlier version of Az.Accounts is imported in the current PowerShell session.` [Issue Validation](#issue-validation) names the module versions that cause it. |
+| Azure portal | shown | The failed deployment step shows the error text from [Symptoms](#symptoms); this is the report the article was first written from, and the deployment view was not re-checked. Also inferred, not viewed in the portal: on a deployed system, the system health check recorded `Test PowerShell Module Version` as `FAILURE` for the affected machine with `Checking version of PS module 'Az.Storage' on host '<machine>'. Got '9.8.0' but expected less-than or equal to '9.7.2' so it is invalid.`, in the update service's health check record that the portal shows under your Azure Local instance > **Updates**. Source: `Get-SolutionUpdateEnvironment -FullHealthCheckDetails`. See [Troubleshooting Test PowerShell Module Version](Troubleshooting-Test-PowerShell-Module-Version.md). |
+| Windows event logs | shown | The import error itself was not written to any of the 21 event channels scanned, including Application, System, Windows PowerShell, and Microsoft-Windows-PowerShell/Operational. The system health check wrote Event ID **17205** in Applications and Services Logs > **AzStackHciEnvironmentChecker** (source `AzStackHciEnvironmentChecker/Telemetry`) for `AzStackHci_ValidatedRecipe_PowerShellModule_Version`, as a Warning with `"Status": 1` for the affected machine. |
+| Cluster logs (`Get-ClusterLog`) | not evident | `Get-ClusterLog -TimeSpan 16` from all three machines (about 66 MB), covering the time the state was present and a full system health check, contains no entry with `requires Az.Accounts version` or the check name. |
+| Windows Failover Cluster Manager | not evident | No machine, role, or resource changed state compared with a snapshot taken just before the change, and `Microsoft-Windows-FailoverClustering/Operational` recorded no Critical, Error, or Warning event in the same time. The only other cluster-tool events were `Microsoft-Windows-FailoverClustering-Manager/Admin` Event ID 4657 errors about a `Get-ClusterParameter` property named `CauResourceName`, which do not concern PowerShell modules. |
+| Windows Admin Center (standalone) | not evident | Inferred, not viewed in Windows Admin Center: no new Health Service fault was raised while the state was present (`Get-HealthFault` compared with the snapshot taken just before), and the Windows Admin Center cluster dashboard **Alerts** list Health Service faults. Its **Updates** and **Events** tools were not checked. |
+| Windows Admin Center in the Azure portal | absent | Not characterized. |
+| Component / tool log files | shown | The system health check wrote `HealthCheckResult.EnvironmentChecker.<date-time>.json` to `C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\HealthCheck\System`; it lists `Test PowerShell Module Version` as `FAILURE` for the affected machine with the `Az.Storage` 9.8.0 detail. The import error text was not found in files written during that time under the `.AzStackHci` folders, `C:\CloudDeployment\Logs`, or `C:\MASLogs`. |
+
+`absent` marks a surface that was not characterized; it is not proof that the problem does not
+appear there.
 
 ## Before you start
 
@@ -198,6 +223,11 @@ Run this block in a new elevated Windows PowerShell 5.1 session on each machine.
 }
 ```
 
+Example `RESULT` lines from a lab machine whose recipe lists `Az.Accounts` 5.5.3:
+
+- A newer module: `RESULT: AFFECTED - Az.Storage 9.8.0 needs Az.Accounts 5.5.5 but the recipe version is 5.5.3`
+- The recipe `Az.Accounts` missing: `RESULT: AFFECTED - the recipe version of Az.Accounts (5.5.3) is not installed`
+
 How to read the result for each machine:
 
 | Result | Meaning | Next step |
@@ -235,10 +265,12 @@ The block stops before changing anything, and prints `No changes were made`, whe
 - It is not running in an elevated Windows PowerShell 5.1 session, or an Azure PowerShell module is already loaded in the session.
 - The validated recipe cannot be read, does not list `Az.Accounts`, or lists an invalid or duplicated version.
 - A copy of `Az.Accounts`, or a copy that would be removed, is outside `C:\Program Files\WindowsPowerShell\Modules` or was not installed with `Install-Module`.
-- Another installed module, including modules that are not in the recipe such as the `Az` rollup module, needs a version that would be removed. `Uninstall-Module` is run with `-Force` because without it PowerShellGet refuses to remove any version that another module names as a dependency, whatever version that module needs; this check replaces that refusal with an exact version check.
+- Another installed module, including modules that are not in the recipe such as the `Az` rollup module, needs a version that would be removed. This check reads each module's manifest (`RequiredModules` and `ModuleList`); a module that enforces a minimum version only inside its own script is not detected. `Uninstall-Module` is run with `-Force` because without it PowerShellGet refuses to remove any version that another module names as a dependency, whatever version that module needs; this check replaces that refusal with an exact version check.
 - A version that needs to be installed is not available in the repository.
 
-Leave `$Repository` set to `'PSGallery'` unless your organization requires an approved internal repository. Paste or run the whole block at once; it runs as one unit so that a failed check stops everything after it.
+Leave `$Repository` set to `'PSGallery'` unless your organization requires an approved internal repository. With the PowerShell Gallery, the machine needs HTTPS access to `www.powershellgallery.com`.
+
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
 
 ```powershell
 & {
@@ -450,7 +482,9 @@ On 2026-11-23 this revision was validated on an Azure Local lab machine (solutio
 - A newer `Az.Storage` 9.8.0 without the `Az.Accounts` 5.5.5 that it needs: the import failed with `This module requires Az.Accounts version 5.5.5`. Issue Validation reported `RESULT: AFFECTED - Az.Storage 9.8.0 needs Az.Accounts 5.5.5 but the recipe version is 5.5.3`. Step 2 printed `REMOVING: Az.Storage 9.8.0` and `RESULT: CHANGED`. In a new session the import succeeded and Issue Validation reported `RESULT: NOT AFFECTED`.
 - The recipe `Az.Accounts` 5.5.3 removed, leaving 5.5.1: the import failed with `This module requires Az.Accounts version 5.5.2`. Issue Validation reported that the recipe version was not installed. Step 2 printed `INSTALLING: Az.Accounts 5.5.3` and `RESULT: CHANGED`. In a new session the import succeeded and Issue Validation reported `RESULT: NOT AFFECTED`.
 
-With `Az.KeyVault` 6.6.2, which is not in the recipe and needs `Az.Accounts` 5.5.4, installed beside `Az.Accounts` 5.5.5, Step 2 stopped with `No changes were made` and listed `Az.KeyVault`. The module inventory was unchanged. The rollback command and the portal retry in Step 3 were not exercised, and the log, event, cluster-log, Failover Cluster Manager, and Windows Admin Center surfaces were not characterized.
+With `Az.KeyVault` 6.6.2, which is not in the recipe and needs `Az.Accounts` 5.5.4, installed beside `Az.Accounts` 5.5.5, Step 2 stopped with `No changes were made` and listed `Az.KeyVault`. The module inventory was unchanged. The rollback command and the portal retry in Step 3 were not exercised.
+
+On 2026-11-24 the first cause ran as an automated loop on the same build. The loop installed `Az.Storage` 9.8.0 without `Az.Accounts` 5.5.5, confirmed the import failure in a new session, ran Step 2 from this article unchanged (`REMOVING: Az.Storage 9.8.0`, `RESULT: CHANGED`), confirmed that the import succeeded in a new session, and verified that every Azure PowerShell module folder matched its state before the test. While the state was present, the system health check and each administrator surface were checked; see [Where you can see this problem](#where-you-can-see-this-problem).
 
 ## Related documentation
 
