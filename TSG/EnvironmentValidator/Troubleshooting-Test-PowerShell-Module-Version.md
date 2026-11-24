@@ -243,8 +243,16 @@ Before changing installed modules:
 - Do not run remediation concurrently with deployment, an update, another
   installation, or scripts that depend on these modules.
 - Confirm access to the approved repository and the required recipe versions.
-  Stop if downloads or installation are unavailable. With the public PowerShell Gallery this is
-  `www.powershellgallery.com` over HTTPS; an internal repository needs the same versions.
+  Stop if downloads or installation are unavailable. With the public PowerShell Gallery, the
+  node needs HTTPS access to `www.powershellgallery.com` and to the hosts that
+  [Network access to the PowerShell Gallery](https://learn.microsoft.com/powershell/gallery/getting-started#network-access-to-the-powershell-gallery)
+  lists for package discovery and download, `cdn.powershellgallery.com` and `cdn.oneget.org`.
+  The Gallery redirects package downloads to `cdn.powershellgallery.com`, so with only
+  `www.powershellgallery.com` allowed, `Find-Module` can succeed while `Install-Module` fails.
+  The manual alternative's check that removed versions can be restored uses `Find-Module`: it
+  confirms that a version is in the repository, not that the node can download it. Confirm
+  that these hosts are allowed before running either remediation path. An internal
+  repository needs the same versions.
 - Obtain a maintenance window and a recovery plan approved by Microsoft Support.
   The helper can uninstall and reinstall modules used by management operations.
 
@@ -284,7 +292,14 @@ Closing this session discards its module imports; no installation was changed.
 
 **Changes:** checks the PowerShell module category against the VSR and uninstalls
 and reinstalls modules whose versions differ from the recipe. It can affect more
-than the first module named in the validator result. In the 2026-11-23 lab run,
+than the first module named in the validator result. For each module it repairs, it
+removes every installed version except the recipe version, older versions included,
+and whenever it repairs drift it also removes every `Az.Accounts` version except the
+recipe version. It removes those versions without checking whether other installed
+modules need them, so a module that needs one of them can fail to import afterward.
+It uninstalls before it reinstalls and has no rollback, so if the recipe version
+cannot be downloaded, a module whose only installed version was newer than the recipe
+can be left not installed at all. In the 2026-11-23 lab run,
 repairing a missing `ArcHci` also reinstalled its dependency modules and removed an
 older side-by-side `Az.Accounts` version that was not in the recipe.
 
@@ -292,6 +307,28 @@ older side-by-side `Az.Accounts` version that was not in the recipe.
 > There is no automatic rollback for this helper. Replacing a module that a
 > management operation is using can interrupt that operation, so run it only in
 > the maintenance window agreed with Microsoft Support.
+
+Before you run the helper, check these with Microsoft Support:
+
+1. The node can download the recipe versions, including from the PowerShell Gallery
+   download hosts named in [Preconditions](#preconditions). A blocked download host
+   is found only after the helper has started uninstalling.
+2. No other installed module needs a version that the helper would remove: any
+   version of a module named in the failure details other than its recipe version,
+   and any `Az.Accounts` version other than the recipe version. Look in the module
+   manifests (`.psd1` files) in the session's module path and in each user's
+   `Documents\WindowsPowerShell\Modules` folder for `RequiredModules` or `ModuleList`
+   entries that name one of those modules. Current Az modules declare their
+   `Az.Accounts` requirement under `ModuleList`. A requirement matters if only a
+   version that would be removed meets it: an exact `RequiredVersion`, a minimum
+   `ModuleVersion` above the recipe version, or a `MaximumVersion` below it. In the
+   lab run for this article, `Az.KeyVault` 6.6.2 needed `Az.Accounts` 5.5.4, above
+   the recipe version 5.5.3.
+
+If either check fails, do not run the helper; contact Microsoft Support. The
+[manual alternative](#manual-alternative-for-nodes-without-the-helper) makes the
+dependent-module check itself and stops before any change, but use it only with
+Microsoft Support guidance.
 
 ```powershell
 if (-not (Get-Command -Name Remediate-PSModules -Module AzureLocalImageModule -ErrorAction SilentlyContinue)) {
@@ -358,7 +395,10 @@ the node, or delete module folders as a workaround.
 **Changes:** For the one module you name, installs the recipe version if it is
 missing and uninstalls only versions newer than that recipe version. Older
 versions are not changed. Before any change, it confirms that every version it
-would remove is available in `$ApprovedRepository`. When it installs the recipe version, `Install-Module`
+would remove is available in `$ApprovedRepository`. That check uses `Find-Module`, which
+does not show that the download hosts in [Preconditions](#preconditions) are reachable;
+the block installs before it removes, so a failed download stops it before any removal.
+When it installs the recipe version, `Install-Module`
 may also install modules that the publisher declares as dependencies of that
 version, as described in
 [Install-Module](https://learn.microsoft.com/powershell/module/powershellget/install-module).
