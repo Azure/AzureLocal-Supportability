@@ -388,7 +388,7 @@ Connect-AzAccount -Tenant '<tenant-id>' -UseDeviceAuthentication
 
 **Changes:** signs in to Azure PowerShell. By default the sign-in context is
 saved in the user profile; run `Disconnect-AzAccount` after registration to
-remove it. It does not change the node or Azure resources.
+remove it (step 4). It does not change the node or Azure resources.
 
 *Managed identity of another registered machine (no person, no stored secret).*
 An Azure Arc-enabled machine that is already registered and trusted, for example
@@ -434,6 +434,15 @@ take several minutes to take effect
 in validation, a new assignment took about 20 minutes, and retries before then
 still failed with 403.
 
+**Remove the assignment on every exit.** From the moment the create command prints
+an ID until that assignment is deleted, every way out of this procedure includes
+the delete. If a token block in step 2 stops, if the initialization retry fails or
+reports a 403, or if you abandon the attempt for any reason, either fix the cause
+and continue right away, or have the subscription owner run
+`az role assignment delete --ids '<assignment-id>'` before you leave the procedure,
+then clear the token as in step 4. Run it only for the ID that the create command
+printed; if the check printed an existing assignment, delete nothing.
+
 In validation, this role alone let the token register a machine with the agent's
 connect command. The initialization command was not validated with this identity.
 If its retry reports a 403, stop: do not grant this identity any other role or a
@@ -453,8 +462,8 @@ followed by the Azure CLI block in step 2, and run `az logout` afterward.
 
 **Changes:** signs in for the current PowerShell process only; nothing is saved.
 Close the session, or run `Disconnect-AzAccount -Scope Process`, after
-registration. `az login --identity` saves the sign-in in the Azure CLI profile
-until `az logout`.
+registration (step 4). `az login --identity` saves the sign-in in the Azure CLI
+profile until `az logout`.
 
 > [!IMPORTANT]
 > Any local administrator of the minting machine, and any member of its
@@ -463,8 +472,8 @@ until `az logout`.
 > role assignment does not invalidate the token, but once the removal takes effect,
 > usually within minutes, Azure denies registration to every token of this
 > identity, including one minted before the removal. Until it expires, the token
-> can still use any other access the identity has, so clear it and limit where
-> you send it. Mint the token just before you start the initialization, and remove
+> can still use any other access the identity has, so clear it (step 4) and limit
+> where you send it. Mint the token just before you start the initialization, and remove
 > the assignment right after the initialization attempt. The machine caches the
 > token, so it can have much less than 24 hours left; step 2 checks the remaining
 > time.
@@ -551,6 +560,12 @@ try {
 }
 ```
 
+If either block stops (tenant mismatch, 10 minutes or less remaining, a failed
+request, or an empty or unexpected token) after step 1 created an assignment, fix
+the cause and rerun the block now, or remove that assignment before you stop, as
+described under **Remove the assignment on every exit** in step 1. A tenant
+mismatch for a managed identity cannot be fixed by rerunning.
+
 *Step 3: pass the token to the initialization command.* On the node, pass the
 string as `-ArmAccessToken $token`, or as `$params.ArmAccessToken = $token` when
 you build parameters as in the
@@ -563,10 +578,10 @@ example with `Invoke-Command -ArgumentList $token`, never as text inside a
 script: Azure Local nodes can have PowerShell script block logging turned on
 (it was on in validation), which records the text of every script that runs.
 Do not write the token to a file, print, export, or transcribe it, or include it
-in a ticket; clear `$token = $null` after the initialization attempt and sign out
-as described in step 1. If the token came from a managed identity and step 1
-created its **Azure Connected Machine Onboarding** assignment, have the
-subscription owner remove that assignment with the `az role assignment delete --ids`
+in a ticket. After the initialization attempt, whether or not it succeeded, clear
+the token and sign out as described in step 4. If the token came from a managed
+identity and step 1 created its **Azure Connected Machine Onboarding** assignment,
+have the subscription owner remove that assignment with the `az role assignment delete --ids`
 command in step 1 right after the initialization attempt. Once the removal takes
 effect, no token of that identity, including the one you minted, can register
 machines, but the token remains a valid credential until it expires, so clearing
@@ -576,6 +591,53 @@ that existed before step 1.
 **Changes:** The token blocks only set session variables. Retrying initialization
 can create Azure resources and change the node's registration configuration and,
 when an update is required, install it and restart the node.
+
+*Step 4: clear the token and sign out.* After the initialization attempt, and
+whenever you stop after step 2, clean up on every machine and in every session
+where the token existed: the minting machine, the node, and any machine used to
+pass the token between them.
+
+1. In each PowerShell session that held the token, run:
+
+   ```powershell
+   Remove-Variable -Name token, t, r -ErrorAction SilentlyContinue
+   if (Get-Variable -Name token -ErrorAction SilentlyContinue) { 'Token variable still present' } else { 'Token variable cleared' }
+   ```
+
+   Expect `Token variable cleared`. The token blocks already clear their
+   intermediate copies when they finish: `$t`, which holds the `SecureString`
+   result, and `$r`, which holds the Azure CLI response. The command removes them
+   as well in case a block was interrupted. If you also stored the token elsewhere,
+   such as in `$params.ArmAccessToken`, remove it there too, for example with
+   `$params.Remove('ArmAccessToken')`.
+2. If you passed the token through a remote session that you created, for example
+   `$session = New-PSSession ...` used with `Invoke-Command -Session $session`,
+   run `Remove-PSSession -Session $session`. This closes the session on the remote
+   machine, together with the copy of the token it held. `Invoke-Command -ComputerName`
+   without `-Session` closes its temporary session itself.
+3. On the minting machine, sign out of the sign-in that step 1 made for this
+   procedure. Leave any sign-in that existed before for other work.
+   - Azure PowerShell with a managed identity (`-Scope Process`):
+     `Disconnect-AzAccount -Scope Process`. Afterward, `Get-AzContext` prints nothing.
+   - Azure PowerShell with a service principal or operator account:
+     `Disconnect-AzAccount`, which removes the saved sign-in from the user profile.
+   - Azure CLI, including `az login --identity`: `az logout`. Afterward,
+     `az account show` reports `Please run 'az login' to setup account.` In
+     validation with a managed identity, the Azure CLI did not create a token cache
+     file (`msal_token_cache.bin`) in its profile folder at any point.
+4. Close the PowerShell windows and sessions that you used. A PowerShell string
+   cannot be overwritten in place, so ending the process removes the last copy
+   held in memory.
+
+These commands contain no token text, so script block logging records nothing
+sensitive from them; still never place the token itself in script text.
+Clearing the local copies does not revoke the token: it remains a valid credential
+until it expires. For a managed identity, removing the role assignment in step 1
+is what stops the token from registering machines.
+
+**Changes:** removes session variables, the remote sessions you name, and the
+sign-ins that this procedure created. It does not change the node, Azure
+resources, or role assignments, and it does not revoke the token.
 
 **Option 2 (interactive only): let the registration command sign in with device
 code.** The `-ArmAccessToken` parameter is optional. If you omit it, the script
@@ -592,7 +654,8 @@ and restart the node.
 Verify resolution using the original bootstrap status and the node's Azure Arc
 registration state. If registration still fails, retain the complete sanitized
 error and follow the [agent troubleshooting guidance](https://learn.microsoft.com/en-us/azure/azure-arc/servers/troubleshoot-agent-onboard)
-instead of repeating module downgrades.
+instead of repeating module downgrades. If you stop here and option 1, step 1
+created a role assignment, remove it first, then clear the token as in step 4.
 
 ## 4. Permissions, policy, or quota (HTTP 403 or another non-401 status)
 
@@ -662,7 +725,8 @@ done
 Expect `Registered`, then `Owner` or both Azure Connected Machine roles for the
 minting principal. A managed identity set up as in section 3 lists only
 **Azure Connected Machine Onboarding**; if its retry still returns 403, follow
-the stop instruction in section 3 instead of granting more roles. The loop prints
+the stop instruction in section 3, which removes the assignment that section 3
+created, instead of granting more roles. The loop prints
 one tab-separated line for each policy assignment that applies to the resource
 group, including those inherited from the subscription and management groups:
 the assignment ID (its scope followed by `/providers/Microsoft.Authorization/policyAssignments/`
@@ -692,6 +756,12 @@ and restart the node.
 Contact Microsoft support when the module block in section 1 stops, when
 registration still fails with exit code 42 after the applicable section, or when
 `azcmagent.log` shows a status code that the checks in section 4 do not explain.
+
+Before you contact support, if section 3, step 1 created an
+**Azure Connected Machine Onboarding** assignment for a managed identity, have the
+subscription owner remove it with `az role assignment delete --ids '<assignment-id>'`,
+using only the ID that the create command printed, and clear the token as in
+section 3, step 4. If support asks for another retry, grant the role again then.
 
 Collect logs on the affected node by running `Collect-ArcBootstrapSupportLogs`,
 as described in [Register Azure Local with Azure Arc](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-without-azure-arc-gateway), and share them
@@ -848,6 +918,22 @@ the full bootstrap was not run.
   `<tenant-id>` was not replaced. That a token minted before the role assignment is
   removed loses the onboarding permission once the removal takes effect is based on
   the Azure RBAC documentation linked in section 3; it was not tested.
+- **Token cleanup (section 3, step 4), 2026-11-24:** on the same registered node
+  (Windows PowerShell 5.1, Az.Accounts 5.5.3, Azure CLI 2.90.0, script block
+  logging on), after `Connect-AzAccount -Identity -Scope Process` and the Azure
+  PowerShell token block, the token was passed as an argument into a loopback
+  session created with `New-PSSession`; `Remove-PSSession` closed it. The step 4
+  commands then printed `Token variable cleared`, and after
+  `Disconnect-AzAccount -Scope Process`, `Get-AzContext` returned nothing. After
+  `az login --identity --allow-no-subscriptions` and the Azure CLI token block, run
+  with a separate, empty Azure CLI profile folder, `az logout` succeeded and
+  `az account show` reported `Please run 'az login' to setup account.` That folder
+  never contained `msal_token_cache.bin`; after `az logout` it contained
+  `azureProfile.json` and `msal_http_cache.bin`, whose contents were not inspected.
+  The user profile's `.azure` folder was only listed, before and after, and was
+  unchanged. The instruction to remove the role assignment on every exit after it is
+  created is procedural; the delete command itself was validated in the role grant
+  run below.
 - **Automation status:** remains `proven` because the documented token fix
   (section 3, option 1) and policy fix (remove the denying assignment, then
   retry) each connected the machine live, including with a token minted off the
@@ -896,3 +982,4 @@ the full bootstrap was not run.
 | 2026-11-24 | Section 3 now checks whether the managed identity already holds **Azure Connected Machine Onboarding** on the resource group before granting it. If it does, no assignment is created and none is deleted afterward; otherwise the cleanup deletes only the assignment that the procedure created, by its ID. The section 4 policy listing now follows `nextLink`, so assignments on later result pages are not missed. |
 | 2026-11-24 | The section 1 module block now stops before any change for every Az.Accounts copy that `Install-Module` cannot remove, including a copy with the same version as an installed one. Its final check, which runs after the changes, now reports what it installed and uninstalled and how to roll back. Section 3 now describes what removing the role assignment means for a token already minted. The section 4 policy listing now prints each assignment's ID and policy definition ID, and explains how to match them to the denying assignment named in the error. |
 | 2026-11-24 | Section 3 now explains that Azure checks role assignments on each request: once the removal of the managed identity's role assignment takes effect, no token of that identity can register machines, including one minted before the removal, although the token remains a valid credential until it expires. The section 3 token blocks no longer pass `-TenantId` or `--tenant`, which the Azure CLI does not support for a managed identity; they request the token for the current sign-in and still stop if its tenant does not match the deployment plan. |
+| 2026-11-24 | Section 3 now states that once the managed identity's **Azure Connected Machine Onboarding** assignment is created, every stop or abandoned attempt must remove it, and the token block stops, the 403 stop, the section 4 stop, and the support section point to that removal. A new section 3, step 4 clears the token on every machine and session where it existed: it removes the variables and any remote session, signs out of the sign-ins this procedure made, and explains that clearing local copies does not revoke the token. |
