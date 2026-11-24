@@ -125,12 +125,29 @@ registration. Rerun this block after any reboot that registration triggers. It k
 recipe requires 5.x or later. Only a recipe explicitly requiring 4.0.2 permits
 removal of newer versions; older versions and 4.0.2 are preserved. If the recipe
 is missing, ambiguous, or different, it stops without changing any modules.
+When a newer version is present, the 4.0.2 path also stops, before it installs or
+removes anything, if any other available module declares in `RequiredModules` or
+`ModuleList` that it needs an Az.Accounts version newer than 4.0.2.
+`Uninstall-Module -Force` skips PowerShellGet's dependency check, and current Az
+modules declare their Az.Accounts minimum under `ModuleList`, so both lists are
+read.
+
+**[HIGH RISK]**
 
 **Changes:** On the 4.0.2 path only, this installs 4.0.2 first if missing and
 uninstalls newer Az.Accounts versions, printing each version and path as
-`ARC42-REMOVING` before it removes it. It does not change other modules or register
-the node. Installing 4.0.2 needs access to the PowerShell Gallery. Do not run this
-legacy path during deployment or solution servicing.
+`ARC42-REMOVING` before it removes it. It does not uninstall other modules or
+register the node, but other modules that need a removed version stop loading.
+Installing 4.0.2 needs access to the PowerShell Gallery. Do not run this legacy
+path during deployment or solution servicing.
+
+> [!WARNING]
+> Removing a newer Az.Accounts version breaks any module that requires it: importing
+> that module fails with `This module requires Az.Accounts version ...`. The block
+> stops with `No changes were made` when an available module declares such a
+> requirement, but it cannot detect a module that loads Az.Accounts without
+> declaring it. The removal is undone only by reinstalling each printed version
+> with the rollback command below, which needs access to the PowerShell Gallery.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -157,6 +174,19 @@ if ($required -ge [version]'5.0.0') {
         throw 'A newer Az.Accounts version is loaded. Start a fresh PowerShell session.'
     }
     $available = @(Get-Module -ListAvailable -Name Az.Accounts)
+    if (@($available | Where-Object { $_.Version -gt [version]'4.0.2' }).Count) {
+        $dependents = @(Get-Module -ListAvailable | Where-Object { $_.Name -ne 'Az.Accounts' } | Where-Object {
+            @(@($_.RequiredModules) + @($_.ModuleList) | Where-Object {
+                $name = if ($_ -is [string]) { $_ } elseif ($_.Name) { [string]$_.Name } else { [string]$_.ModuleName }
+                $need = @($_.RequiredVersion, $_.Version, $_.ModuleVersion | Where-Object { $_ })
+                $name -eq 'Az.Accounts' -and $need.Count -and
+                    (-not ([string]$need[0] -as [version]) -or [version][string]$need[0] -gt [version]'4.0.2')
+            }).Count })
+        if ($dependents.Count) {
+            $dependents | ForEach-Object { Write-Output "ARC42-DEPENDENT: $($_.Name) $($_.Version) at $($_.ModuleBase)" }
+            throw 'The modules listed above require Az.Accounts newer than 4.0.2. No changes were made.'
+        }
+    }
     if (-not ($available | Where-Object { $_.Version -eq [version]'4.0.2' })) {
         Install-Module -Name Az.Accounts -RequiredVersion 4.0.2 -Scope AllUsers `
             -Repository PSGallery -Force -ErrorAction Stop | Out-Null
@@ -344,8 +374,30 @@ Check the subscription and resource group against
   that resource group, and the subscription has not reached a resource quota.
 
 These are read-only checks; any role, provider, or policy change is made by the
-subscription owner using the linked article. Then retry your original
-initialization command.
+subscription owner using the linked article. To run the provider, role, and
+policy checks with the Azure CLI (for example, in Azure Cloud Shell), sign in to
+the same tenant as the account that registers the node.
+`az ad signed-in-user show --query id -o tsv` prints that account's object ID.
+Replace the placeholders with the subscription, the resource group, and that
+object ID, and run:
+
+```azurecli
+az provider show --namespace Microsoft.HybridCompute --subscription '<subscription-id>' --query registrationState -o tsv
+az role assignment list --assignee-object-id '<object-id>' --resource-group '<resource-group>' --subscription '<subscription-id>' --include-inherited --include-groups --query "[].roleDefinitionName" -o tsv
+az rest --method get --url '/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.Authorization/policyAssignments' --url-parameters 'api-version=2023-04-01' '$filter=atScope()' --query "value[].{name:properties.displayName, scope:properties.scope, enforcement:properties.enforcementMode}" -o table
+```
+
+Expect `Registered`, then `Owner` or both Azure Connected Machine roles. The last
+command lists every policy assignment that applies to the resource group,
+including those inherited from the subscription and management groups. Keep
+`'$filter=atScope()'` in single quotes so the shell does not expand it. Do not
+substitute `az policy assignment list --resource-group`: in validation it listed
+only assignments made directly on the resource group, even with
+`--disable-scope-strict-match`. Compare the listed names with the
+`policyAssignment` name in the `RequestDisallowedByPolicy` message, and review
+each assignment whose enforcement is `Default` for a deny on
+`Microsoft.HybridCompute/machines` or on the resource group's location. Then
+retry your original initialization command.
 
 **Changes:** Retrying initialization can create Azure resources, change the
 node's registration configuration, and, when an update is required, install it
@@ -367,7 +419,7 @@ with Microsoft support. Also include:
 - The `AZCM0042` and status code lines from
   `%ProgramData%\AzureConnectedMachineAgent\Log\azcmagent.log`.
 
-> [!WARNING]
+> [!IMPORTANT]
 > Bootstrap logs, PowerShell transcripts, and command history can contain access
 > tokens. Before you attach any file or paste output into a ticket, review it and
 > remove tokens and other secrets. Never include the value of `$token`.
@@ -403,11 +455,30 @@ the full bootstrap was not run.
   A recipe requiring 5.5.3 printed `KEEP-MODULES`. The rollback command restored
   5.5.3. Earlier, on a deployed node of solution 12.2701.1004.15 whose real recipe
   requires 5.5.3, the block printed `KEEP-MODULES` and changed no modules.
+- **Dependent-module guard (section 1):** added after the lab runs above and
+  tested with mocked module inventories in PowerShell 7.5, not on the lab
+  machine. It stopped with `No changes were made`, before any install or removal,
+  when another module declared Az.Accounts 5.3.0 under `ModuleList` or
+  `RequiredModules`, as a minimum or a required version, or declared an
+  unreadable version. It continued for a maximum-only or lower requirement. With
+  only 4.0.2, with 5.3.0 or 10.0.0 beside 4.0.2, and with a newer copy not
+  installed by `Install-Module`, the block behaved exactly as before. The lab
+  machine had no other Az modules, so the guard would not have changed the runs
+  above.
 - **Cause 4:** an Azure Policy assignment that denies Azure Arc machine resources
   in the target resource group reproduced exit code 42 with `AZCM0042` and
-  `httpStatusCode:403` (`RequestDisallowedByPolicy`). The section 4 checks found
-  the provider registered, the required roles present, and the policy assignment.
-  After the assignment was removed, the retry connected.
+  `httpStatusCode:403` (`RequestDisallowedByPolicy`). After the assignment was
+  removed, the retry connected. Separately, against a throwaway resource group
+  with the same deny assignment, the section 4 commands ran unchanged except for
+  their placeholders, in bash and in PowerShell with Azure CLI 2.85.0. They
+  returned `Registered`, the required roles, and the deny assignment together with
+  assignments inherited from the subscription and a management group.
+  `az policy assignment list --resource-group`, with or without
+  `--disable-scope-strict-match`, returned only the resource group's own
+  assignment.
+- **Automation status:** remains `proven` because the documented token fix
+  (section 3, option 2) and policy fix (remove the denying assignment, then
+  retry) each connected the machine live.
 - **Not validated:** device code sign-in (option 1, and the
   `Connect-AzAccount -UseDeviceAuthentication` sign-in in option 2), which needs a
   person; a token that Azure rejects because it expired (expiry was tested only
