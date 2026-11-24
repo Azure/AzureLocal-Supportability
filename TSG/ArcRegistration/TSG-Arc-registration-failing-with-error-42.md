@@ -687,13 +687,14 @@ the full bootstrap was not run.
 - **Not validated:** device code sign-in (option 2, and the operator's
   `Connect-AzAccount -UseDeviceAuthentication` sign-in in option 1), which needs a
   person; service principal sign-in (`Connect-AzAccount -ServicePrincipal` and
-  `az login --service-principal`), because no service principal was created for
-  the test (an existing operator account minted the token instead, and the
+  `az login --service-principal`), because no service principal was created for the
+  test (an existing operator account minted the token instead, and the
   `Connect-AzAccount` certificate parameter set was confirmed present in
-  Az.Accounts 5.5.3); a token that Azure rejects because it expired (expiry was tested only against
-  stubbed responses); the missing-role and quota variants of cause 4; a real
-  image whose recipe requires 4.0.2 (none was available, so a staged recipe file
-  stood in); and the full bootstrap command on an unregistered Azure Local machine,
+  Az.Accounts 5.5.3); a token that Azure rejects because it expired (expiry was
+  tested only against stubbed responses); the quota variant of cause 4 (the
+  missing-role variant is covered by the managed identity run above); a real image
+  whose recipe requires 4.0.2 (none was available, so a staged recipe file stood
+  in); and the full bootstrap command on an unregistered Azure Local machine,
   including whether it needs roles beyond **Azure Connected Machine Onboarding**
   when the token comes from a managed identity. The only spare machine in the lab
   instance had no operating system installed (a blank system disk set to network
