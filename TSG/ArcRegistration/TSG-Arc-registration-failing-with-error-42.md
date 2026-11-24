@@ -421,13 +421,18 @@ az role assignment create --assignee-object-id '<principal-id>' --assignee-princ
 
 **Changes:** adds one role assignment; while it applies, anyone who can mint a
 token on that machine can register machines into that resource group. Remove it
-right after registration with `az role assignment delete --ids '<assignment-id>'`,
+right after the initialization attempt with `az role assignment delete --ids '<assignment-id>'`,
 which deletes only the assignment that this command created. Run that delete
-command only for an ID that this create command printed. Removing it stops
-tokens minted afterward from registering machines once the change applies; it
-does not revoke a token minted before, which stays usable until it expires.
-A new assignment can take several minutes to apply; in validation it took about
-20 minutes, and retries before then still failed with 403.
+command only for an ID that this create command printed. Azure Resource Manager
+checks the identity's role assignments on each request; the token carries no
+role data. So once the removal takes effect, requests with any token of this
+identity, including one minted before the removal, can no longer register
+machines. The token itself remains a valid credential until it expires and can
+still use any other access the identity has. Adding or removing an assignment can
+take several minutes to take effect
+([Azure RBAC troubleshooting](https://learn.microsoft.com/en-us/azure/role-based-access-control/troubleshooting));
+in validation, a new assignment took about 20 minutes, and retries before then
+still failed with 403.
 
 In validation, this role alone let the token register a machine with the agent's
 connect command. The initialization command was not validated with this identity.
@@ -455,20 +460,25 @@ until `az logout`.
 > Any local administrator of the minting machine, and any member of its
 > **Hybrid Agent Extension Applications** group, can mint this identity's token.
 > The token is valid for up to about 24 hours and cannot be revoked. Removing the
-> role assignment stops tokens minted afterward from carrying the permission to
-> register machines, but a token minted before the removal stays usable until it
-> expires. Mint the token just before you start the initialization, and remove the
-> assignment right after it finishes. The machine caches the token, so it can
-> have much less than 24 hours left; step 2 checks the remaining time.
+> role assignment does not invalidate the token, but once the removal takes effect,
+> usually within minutes, Azure denies registration to every token of this
+> identity, including one minted before the removal. Until it expires, the token
+> can still use any other access the identity has, so clear it and limit where
+> you send it. Mint the token just before you start the initialization, and remove
+> the assignment right after the initialization attempt. The machine caches the
+> token, so it can have much less than 24 hours left; step 2 checks the remaining
+> time.
 
 *Step 2: mint and convert the token.* In the same session, replace `<tenant-id>`
 in the block below with the resource tenant ID from the deployment plan (in the
 Azure portal, **Microsoft Entra ID** > **Properties** > **Tenant ID**), then
-run the complete block. It requests an ARM token and converts only its `Token`
-property; it does not sign in, switch context, or display the token. The
-conversion is compatible with Windows PowerShell 5.1. It stops if the identity
-belongs to a different tenant, so a managed identity works only when its machine
-is registered in the same tenant as the failing node.
+run the complete block. It requests an ARM token for the tenant of the current
+sign-in and converts only its `Token` property; it does not sign in, switch
+context, or display the token. The conversion is compatible with Windows
+PowerShell 5.1. It stops if the token is from a different tenant. For a user
+account or service principal, sign in again with `-Tenant '<tenant-id>'` (or
+`--tenant` with the Azure CLI) as in step 1; a managed identity works only when
+its machine is registered in the same tenant as the failing node.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -480,7 +490,7 @@ if (-not [guid]::TryParse($TenantId, [ref]$parsedTenant) -or $parsedTenant -eq [
     throw 'Replace <tenant-id> with the resource tenant ID before requesting a token.'
 }
 try {
-    $t = Get-AzAccessToken -ResourceTypeName Arm -TenantId $TenantId -ErrorAction Stop
+    $t = Get-AzAccessToken -ResourceTypeName Arm -ErrorAction Stop
     if (-not $t.ExpiresOn -or [DateTimeOffset]$t.ExpiresOn -le [DateTimeOffset]::UtcNow.AddMinutes(10)) {
         throw 'Token expires within 10 minutes; sign in again and rerun this block.'
     }
@@ -507,7 +517,11 @@ If the automation host uses the Azure CLI instead of Azure PowerShell, sign in
 as the service principal with `az login --service-principal --username '<application-id>' --certificate '<path-to-certificate.pem>' --tenant '<tenant-id>'`
 (this saves the sign-in in the Azure CLI profile; run `az logout` after
 registration), then run this block in PowerShell on that host. It applies the
-same lifetime and tenant checks and does not display the token.
+same lifetime and tenant checks and does not display the token. It requests the
+token for the current sign-in without `--tenant`, which the Azure CLI does not
+support for a managed identity
+([az account get-access-token](https://learn.microsoft.com/en-us/cli/azure/account#az-account-get-access-token)),
+so the same block works after `az login --identity --allow-no-subscriptions`.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -519,7 +533,7 @@ if (-not [guid]::TryParse($TenantId, [ref]$parsedTenant) -or $parsedTenant -eq [
     throw 'Replace <tenant-id> with the resource tenant ID before requesting a token.'
 }
 try {
-    $r = (az account get-access-token --resource https://management.azure.com --tenant $TenantId -o json | Out-String)
+    $r = (az account get-access-token --resource https://management.azure.com -o json | Out-String)
     if ($LASTEXITCODE -ne 0) { throw 'az account get-access-token failed; sign in with az login and rerun this block.' }
     $r = $r | ConvertFrom-Json
     if (-not $r.expires_on) { throw 'The response has no expires_on value; update the Azure CLI or use the Azure PowerShell block.' }
@@ -553,10 +567,11 @@ in a ticket; clear `$token = $null` after the initialization attempt and sign ou
 as described in step 1. If the token came from a managed identity and step 1
 created its **Azure Connected Machine Onboarding** assignment, have the
 subscription owner remove that assignment with the `az role assignment delete --ids`
-command in step 1 right after the initialization attempt. The removal does not
-revoke the token you already minted; clearing `$token` and limiting where it was
-sent is what protects it until it expires. Do not remove an assignment that
-existed before step 1.
+command in step 1 right after the initialization attempt. Once the removal takes
+effect, no token of that identity, including the one you minted, can register
+machines, but the token remains a valid credential until it expires, so clearing
+`$token` and limiting where it was sent still matter. Do not remove an assignment
+that existed before step 1.
 
 **Changes:** The token blocks only set session variables. Retrying initialization
 can create Azure resources and change the node's registration configuration and,
@@ -799,8 +814,9 @@ the full bootstrap was not run.
   registered node of an Azure Local instance (solution 12.2701.1004.15, Windows
   PowerShell 5.1, Az.Accounts 5.5.3, Azure CLI 2.90.0), `Connect-AzAccount -Identity -Scope Process`
   and `az login --identity --allow-no-subscriptions` signed in as the node's
-  system-assigned identity, and the section 3 Azure PowerShell and Azure CLI blocks
-  ran unchanged except for the tenant placeholder. Each produced a plain-text
+  system-assigned identity, and the section 3 Azure PowerShell and Azure CLI blocks,
+  in their earlier form that passed the tenant parameter, ran unchanged except for
+  the tenant placeholder. Each produced a plain-text
   token whose tenant matched; the Azure PowerShell token, served from the node's
   token cache, had about 3 hours left of its 24-hour lifetime. Script block logging
   was turned on by policy on that node. In an earlier run, a token from the same
@@ -816,6 +832,22 @@ the full bootstrap was not run.
   `az role assignment delete` commands, in their form before the existing-assignment
   check was added, ran unchanged except for their placeholders against a throwaway
   resource group, and the assignment list was empty afterward.
+- **Token request without a tenant parameter (section 3, step 2), revised
+  2026-11-24:** on the same registered node, after `Connect-AzAccount -Identity -Scope Process`
+  and, separately, `az login --identity --allow-no-subscriptions`, the revised
+  Azure PowerShell and Azure CLI blocks, which no longer pass `-TenantId` or
+  `--tenant`, ran unchanged except for the tenant placeholder. Each produced a
+  plain-text token whose tenant matched the node's registration tenant, with about
+  11 and 8 hours left. With the managed identity, `az account get-access-token --tenant`
+  for another tenant failed with `For managed identity account, getting access token for non-current tenants is not supported`,
+  and `Get-AzAccessToken -TenantId` for another tenant returned a token from the
+  identity's own tenant while reporting the requested tenant in `TenantId`, which
+  is why the blocks check the tenant of the current sign-in instead. On a
+  workstation signed in with a user account, the revised Azure CLI block produced a
+  token for the matching tenant, stopped on a tenant mismatch, and stopped when
+  `<tenant-id>` was not replaced. That a token minted before the role assignment is
+  removed loses the onboarding permission once the removal takes effect is based on
+  the Azure RBAC documentation linked in section 3; it was not tested.
 - **Automation status:** remains `proven` because the documented token fix
   (section 3, option 1) and policy fix (remove the denying assignment, then
   retry) each connected the machine live, including with a token minted off the
@@ -862,4 +894,5 @@ the full bootstrap was not run.
 | --- | --- |
 | 2026-11-24 | The section 1 module block now checks for newer Az.Accounts copies that were not installed with `Install-Module` before it installs 4.0.2, so that stop, like the other precondition stops, happens before any module changes. The section 4 role check now uses the object ID of the identity that minted the registration token, with a lookup for each identity type, instead of the account that runs the checks. |
 | 2026-11-24 | Section 3 now checks whether the managed identity already holds **Azure Connected Machine Onboarding** on the resource group before granting it. If it does, no assignment is created and none is deleted afterward; otherwise the cleanup deletes only the assignment that the procedure created, by its ID. The section 4 policy listing now follows `nextLink`, so assignments on later result pages are not missed. |
-| 2026-11-24 | The section 1 module block now stops before any change for every Az.Accounts copy that `Install-Module` cannot remove, including a copy with the same version as an installed one. Its final check, which runs after the changes, now reports what it installed and uninstalled and how to roll back. Section 3 now states that removing the role assignment does not revoke a token already minted. The section 4 policy listing now prints each assignment's ID and policy definition ID, and explains how to match them to the denying assignment named in the error. |
+| 2026-11-24 | The section 1 module block now stops before any change for every Az.Accounts copy that `Install-Module` cannot remove, including a copy with the same version as an installed one. Its final check, which runs after the changes, now reports what it installed and uninstalled and how to roll back. Section 3 now describes what removing the role assignment means for a token already minted. The section 4 policy listing now prints each assignment's ID and policy definition ID, and explains how to match them to the denying assignment named in the error. |
+| 2026-11-24 | Section 3 now explains that Azure checks role assignments on each request: once the removal of the managed identity's role assignment takes effect, no token of that identity can register machines, including one minted before the removal, although the token remains a valid credential until it expires. The section 3 token blocks no longer pass `-TenantId` or `--tenant`, which the Azure CLI does not support for a managed identity; they request the token for the current sign-in and still stop if its tenant does not match the deployment plan. |
