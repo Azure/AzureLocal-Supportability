@@ -9,7 +9,7 @@
     "technical_grade": "A",
     "reproduction_substrate": "vm",
     "automation_status": "proven",
-    "last_validated": "2026-11-23",
+    "last_validated": "2026-11-24",
     "spec_ref": "AzLocal_ArcRegistration_Error42"
   }
 }
@@ -65,6 +65,17 @@ pattern, because the registration command receives the text
 points to permissions, policy, or quota instead; see
 [cause 4](#4-permissions-policy-or-quota-http-403-or-another-non-401-status).
 
+### Which section to follow
+
+Read the status code of the failed attempt in `azcmagent.log` first:
+
+| The failed attempt shows | Follow | Who acts |
+| --- | --- | --- |
+| `status code 401` | [Section 1](#1-azaccounts-version-on-the-system-is-incorrect) (module check), then [sections 2 and 3](#3-arm-access-token-is-passed-incorrectly): mint a new plain-text token and retry | The node administrator, with a token from an identity that holds the required roles |
+| `httpStatusCode:403` or another non-401 status | [Section 4](#4-permissions-policy-or-quota-http-403-or-another-non-401-status). Do not change modules or tokens | The subscription owner makes any role, provider, or policy change |
+| The section 1 block prints `UNKNOWN-STOP` | [Contact Microsoft support](#when-to-contact-microsoft-support) | Microsoft support |
+| A different exit code, such as 26 (network error) | Not this article. Use the [agent exit codes](https://learn.microsoft.com/en-us/azure/azure-arc/servers/troubleshoot-agent-onboard#agent-exit-codes) and [network requirements](https://learn.microsoft.com/en-us/azure/azure-arc/servers/network-requirements) | The network administrator |
+
 ### Version-dependent behavior
 
 The recipe check in section 1 decides which row applies to the machine being
@@ -117,9 +128,10 @@ The recipe's Az.Accounts version, not this display value, controls the workaroun
 
 ### Resolution
 
-Run the complete block below in an elevated Windows PowerShell session on the
-node being registered. The release check reads the node's own image recipe, which
-does not require a deployed cluster. The check reads the node's current recipe,
+Run the complete block below in an elevated Windows PowerShell 5.1 session on the
+node being registered (right-click **Windows PowerShell** and select **Run as
+administrator**; do not use PowerShell 7). The release check reads the node's own
+image recipe, which does not require a deployed cluster. The check reads the node's current recipe,
 which reflects its installed image, including any image update applied during
 registration. Rerun this block after any reboot that registration triggers. It keeps every installed version when the
 recipe requires 5.x or later. Only a recipe explicitly requiring 4.0.2 permits
@@ -232,7 +244,12 @@ version and module inventory; installed versions alone cannot prove the requirem
 If the block stops because a newer copy was not installed with `Install-Module`
 (for example, a copy placed in a module folder by hand or by another tool), it
 names the version and folder and removes nothing. Do not delete that folder to
-force the workaround; contact Microsoft support with the message.
+force the workaround; contact Microsoft support with the message. If a hand-placed
+copy has the same version as a copy installed with `Install-Module`, the block
+treats that version as removable: it prints both copies as `ARC42-REMOVING`,
+uninstalls the installed copy, and then stops at its final check, naming the copy
+that remains. Use the rollback command below for the printed version and contact
+Microsoft support.
 
 **Rollback:** Keep the `ARC42-REMOVING` lines the block printed. To restore a
 removed version, for example after registration completes, run this for each
@@ -278,17 +295,24 @@ The initialization command accepts that sign-in in one of two ways
 
 | Option | Who supplies the sign-in | Use it for |
 | --- | --- | --- |
-| 1. Pass `-ArmAccessToken` | Automation signed in as a pre-provisioned identity, such as a service principal, or an operator who signs in | Scripted and unattended registration. This is the only option that automation can complete. |
+| 1. Pass `-ArmAccessToken` | Automation signed in as a pre-provisioned identity, such as a service principal or the managed identity of another Arc-enabled machine, or an operator who signs in | Scripted and unattended registration. This is the only option that automation can complete. |
 | 2. Device code | A person at a keyboard who completes the sign-in in a browser | Interactive registration only. Unattended or on-box automation cannot complete it. |
+
+With either option, retrying initialization can install an update on the node and
+restart it.
 
 **Automation boundary.** A script or an on-box assistant can classify the failed attempt from `azcmagent.log`
 (401 here, 403 or another status in [cause 4](#4-permissions-policy-or-quota-http-403-or-another-non-401-status)),
 run the module block in section 1, check the lifetime and tenant of a token and
 convert it to plain text, retry initialization with a token it was given, and
-verify the result. It cannot perform the sign-in or create the credential, and it
+verify the result. It cannot create the credential or the role assignment, and it
 does not make the role, provider, or policy changes in cause 4. The token must
 come from an identity that already holds the required roles, through automation
-that holds that identity's credential or through an operator who signs in.
+that holds that identity's credential or through an operator who signs in. An
+assistant running on a healthy, already registered machine can mint the token
+without a person, from that machine's managed identity, but only if the
+subscription owner granted that identity the role ahead of time (see step 1). The
+failing node itself cannot do this.
 
 **Why the node's managed identity cannot be used.** An Azure Arc-enabled server
 gets its managed identity, and the local endpoint that issues its tokens, only
@@ -296,8 +320,10 @@ after it is connected to Azure Arc
 ([managed identity on Arc-enabled servers](https://learn.microsoft.com/en-us/azure/azure-arc/servers/managed-identity-authentication)).
 A node that fails with exit code 42 has no Azure Arc resource yet, so
 `az login --identity` or `Connect-AzAccount -Identity` on that node cannot
-authenticate its registration. Even a previously registered machine's identity
-is not given the roles that create Azure Arc machine resources.
+authenticate its registration. A different machine that is already registered,
+such as another node of the same instance, does have a managed identity; step 1
+describes how to use it. Do not rely on roles that a deployment assigned to that
+identity for other purposes; grant the registration role to it explicitly.
 
 **Option 1 (automation and scripted runs): pass a plain-text ARM token.**
 
@@ -323,11 +349,71 @@ Connect-AzAccount -Tenant '<tenant-id>' -UseDeviceAuthentication
 saved in the user profile; run `Disconnect-AzAccount` after registration to
 remove it. It does not change the node or Azure resources.
 
+*Managed identity of another registered machine (no person, no stored secret).*
+An Azure Arc-enabled machine that is already registered and trusted, for example
+another node of the same instance, can mint the token with its system-assigned
+managed identity
+([managed identity on Arc-enabled servers](https://learn.microsoft.com/en-us/azure/azure-arc/servers/managed-identity-authentication)).
+Before the first use, the subscription owner looks up that identity and grants it
+**Azure Connected Machine Onboarding** on the resource group where the failing node
+registers, and on nothing else. Replace the `<machine-...>` placeholders with
+that machine's subscription, resource group, and name (shown by `azcmagent show`
+on that machine), and the others with the failing node's registration
+subscription and resource group, then run:
+
+```azurecli
+az resource show --subscription '<machine-subscription-id>' --resource-group '<machine-resource-group>' --name '<machine-name>' --resource-type Microsoft.HybridCompute/machines --query identity.principalId -o tsv
+az role assignment create --assignee-object-id '<principal-id>' --assignee-principal-type ServicePrincipal --role 'Azure Connected Machine Onboarding' --scope '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>'
+```
+
+The first command prints the identity's principal ID, which you use as
+`<principal-id>`. If it prints nothing, the machine has no system-assigned
+identity; stop and use another identity.
+
+**Changes:** the second command adds one role assignment; until it is removed,
+anyone who can mint a token on that machine can register machines into that
+resource group. Remove it after registration with
+`az role assignment delete --assignee '<principal-id>' --role 'Azure Connected Machine Onboarding' --scope '/subscriptions/<subscription-id>/resourceGroups/<registration-resource-group>'`.
+A new assignment can take several minutes to apply; in validation it took about
+20 minutes, and retries before then still failed with 403.
+
+In validation, this role alone let the token register a machine with the agent's
+connect command. The initialization command was not validated with this identity;
+if its retry reports a 403 for another resource type, have the owner grant the
+additional roles in the permissions article and retry.
+
+Then, in an elevated Windows PowerShell 5.1 session on the registered machine,
+sign in as its managed identity, and continue with step 2 in the same session:
+
+```powershell
+Connect-AzAccount -Identity -Scope Process
+```
+
+With the Azure CLI on that machine, use `az login --identity --allow-no-subscriptions`
+followed by the Azure CLI block in step 2, and run `az logout` afterward.
+
+**Changes:** signs in for the current PowerShell process only; nothing is saved.
+Close the session, or run `Disconnect-AzAccount -Scope Process`, after
+registration. `az login --identity` saves the sign-in in the Azure CLI profile
+until `az logout`.
+
+> [!IMPORTANT]
+> Any local administrator of the minting machine, and any member of its
+> **Hybrid Agent Extension Applications** group, can mint this identity's token.
+> The token is valid for up to about 24 hours and cannot be revoked. Removing the
+> role assignment is the only way to stop an issued token from registering
+> machines, and it takes effect only after the role change applies. The machine
+> caches the token, so it can have much less than 24 hours left; step 2 checks the
+> remaining time.
+
 *Step 2: mint and convert the token.* In the same session, replace `<tenant-id>`
-in the block below with the resource tenant ID from the deployment plan, then
+in the block below with the resource tenant ID from the deployment plan (in the
+Azure portal, **Microsoft Entra ID** > **Properties** > **Tenant ID**), then
 run the complete block. It requests an ARM token and converts only its `Token`
 property; it does not sign in, switch context, or display the token. The
-conversion is compatible with Windows PowerShell 5.1.
+conversion is compatible with Windows PowerShell 5.1. It stops if the identity
+belongs to a different tenant, so a managed identity works only when its machine
+is registered in the same tenant as the failing node.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -403,9 +489,13 @@ you build parameters as in the
 keeping its other parameters unchanged. When the token was minted off the node,
 deliver it through the channel your automation already uses to run commands on
 the node, and start the initialization while at least 10 minutes remain; if
-delayed, repeat step 2. Do not write the token to a file, print, export, or
-transcribe it, or include it in a ticket; clear `$token = $null` after the
-initialization attempt and sign out as described in step 1.
+delayed, repeat step 2. Pass the token as a variable or as an argument, for
+example with `Invoke-Command -ArgumentList $token`, never as text inside a
+script: Azure Local nodes can have PowerShell script block logging turned on
+(it was on in validation), which records the text of every script that runs.
+Do not write the token to a file, print, export, or transcribe it, or include it
+in a ticket; clear `$token = $null` after the initialization attempt and sign out
+as described in step 1.
 
 **Changes:** The token blocks only set session variables. Retrying initialization
 can create Azure resources and change the node's registration configuration and,
@@ -506,9 +596,11 @@ with Microsoft support. Also include:
 
 ## Validation status of this article
 
-Validated in a lab on 2026-11-23 with Windows PowerShell 5.1 and Azure Connected
-Machine agent 1.70.03595.3521. These runs used disposable Windows Server 2022
-test machines, not an Azure Local image, and throwaway resource groups. The
+Validated in a lab on 2026-11-23 and 2026-11-24 with Windows PowerShell 5.1 and
+Azure Connected Machine agent 1.70.03595.3521. The registration runs used
+disposable Windows Server 2022 test machines, not an Azure Local image, and
+throwaway resource groups; managed identity tokens were minted on a registered
+Azure Local node. The
 article's blocks ran unchanged except for their placeholders. The agent's connect
 command was run directly in place of the initialization command that wraps it;
 the full bootstrap was not run.
@@ -565,12 +657,33 @@ the full bootstrap was not run.
   `az policy assignment list --resource-group`, with or without
   `--disable-scope-strict-match`, returned only the resource group's own
   assignment.
+- **Managed identity token source (section 3, step 1), 2026-11-24:** on a
+  registered node of an Azure Local instance (solution 12.2701.1004.15, Windows
+  PowerShell 5.1, Az.Accounts 5.5.3, Azure CLI 2.90.0), `Connect-AzAccount -Identity -Scope Process`
+  and `az login --identity --allow-no-subscriptions` signed in as the node's
+  system-assigned identity, and the section 3 Azure PowerShell and Azure CLI blocks
+  ran unchanged except for the tenant placeholder. Each produced a plain-text
+  token whose tenant matched; the Azure PowerShell token, served from the node's
+  token cache, had about 3 hours left of its 24-hour lifetime. Script block logging
+  was turned on by policy on that node. In an earlier run, a token from the same
+  identity, passed to a disposable Windows Server 2022 machine, failed the agent's
+  connect command with exit code 42, `AZCM0042`, and a 403 while the identity had
+  no role; after **Azure Connected Machine Onboarding** was granted on the
+  throwaway resource group only, retries at 3 and 11 minutes still returned 403,
+  and the retry at about 20 minutes connected (machine created by the identity).
+  On a disposable machine before and after the agent was installed, but before it
+  connected, the managed identity sign-in failed (no endpoint, then
+  `service_unavailable`), which confirms that the failing node cannot use its own
+  identity. The section 3 `az resource show`, `az role assignment create`, and
+  `az role assignment delete` commands ran unchanged except for their placeholders
+  against a throwaway resource group, and the assignment list was empty afterward.
 - **Automation status:** remains `proven` because the documented token fix
   (section 3, option 1) and policy fix (remove the denying assignment, then
   retry) each connected the machine live, including with a token minted off the
-  node. The sign-in that produces the token is supplied by an operator or by
-  automation that holds a pre-provisioned identity; see the automation boundary in
-  section 3.
+  node. The sign-in that produces the token is supplied by an operator, by
+  automation that holds a pre-provisioned identity, or, without a person, by the
+  managed identity of a registered machine that was granted the role ahead of time;
+  see the automation boundary in section 3.
 - **Not validated:** device code sign-in (option 2, and the operator's
   `Connect-AzAccount -UseDeviceAuthentication` sign-in in option 1), which needs a
   person; service principal sign-in (`Connect-AzAccount -ServicePrincipal` and
@@ -580,4 +693,8 @@ the full bootstrap was not run.
   Az.Accounts 5.5.3); a token that Azure rejects because it expired (expiry was tested only against
   stubbed responses); the missing-role and quota variants of cause 4; a real
   image whose recipe requires 4.0.2 (none was available, so a staged recipe file
-  stood in); and the full bootstrap command on an unregistered Azure Local machine.
+  stood in); and the full bootstrap command on an unregistered Azure Local machine,
+  including whether it needs roles beyond **Azure Connected Machine Onboarding**
+  when the token comes from a managed identity. The only spare machine in the lab
+  instance had no operating system installed (a blank system disk set to network
+  boot), so no Azure Local image was available for that run.
