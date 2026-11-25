@@ -168,6 +168,8 @@ Read the result:
 
 A warning that a ping failed doesn't matter by itself. The check reads only the TCP result.
 
+The check tries each port up to five times before it reports a failure. If a test fails, run it again a few times before you change anything, and act on a result that keeps failing.
+
 ### Check the node's own firewall
 
 This read-only block lists the Windows Firewall settings on the node that can block the check: each profile's default outbound action, and each enabled outbound block rule that covers TCP 80 or 443.
@@ -230,6 +232,8 @@ Allowlist `internetbeacon.msedge.net` on your network firewall appliance for out
 ### If the node can't resolve the name
 
 Fix DNS on the nodes first. A node that can't resolve `internetbeacon.msedge.net` usually can't resolve other required endpoints either. See [Troubleshoot external DNS resolution](../Troubleshooting-DNS-External-DNS-Resolution.md).
+
+Then run the tests in [Manually test from the affected node](#manually-test-from-the-affected-node) again. If a port still fails, continue with [Check the node's own firewall](#check-the-nodes-own-firewall).
 
 ### If a firewall rule on the node blocks the connection
 
