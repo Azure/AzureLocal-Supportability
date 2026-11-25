@@ -43,54 +43,113 @@ We have not validated that .NET 8 has the bug but just incase I have included so
 
 ## Diagnosis
 
-Run in elevated x64 PowerShell on the affected node:
+From elevated x64 PowerShell on a cluster node, run this **[READ-ONLY]** check to inspect each node:
 
 ```powershell
 $ErrorActionPreference = 'Stop'
-$dotnet = Join-Path $env:ProgramW6432 'dotnet\dotnet.exe'
-if (Test-Path -LiteralPath $dotnet -PathType Leaf) {
-    & $dotnet --list-runtimes
-} else {
-    Write-Output "x64 .NET host not found: $dotnet"
+$nodes = (Get-ClusterNode).Name
+$impacted_nodes = $()
+foreach ($node in $nodes) {
+    try {
+        $impacted = Invoke-Command -ComputerName $node -ScriptBlock {
+            $ErrorActionPreference = 'Stop'
+            Write-Host "`nChecking node: $env:COMPUTERNAME"
+            $foundIssue = $false
+            $dotnet = Join-Path $env:ProgramW6432 'dotnet\dotnet.exe'
+            $dotnet_exists = Test-Path -LiteralPath $dotnet -PathType Leaf
+            if (!$dotnet_exists) {
+                Write-Output "dotnet.exe is missing; issue detected on $env:COMPUTERNAME."
+                $foundIssue = $true
+            }
+
+            $runtimes = @(& $dotnet --list-runtimes)
+            if ($dotnet_exists -and -not ($runtimes -match '\s10\.0\.')) {
+                Write-Output "Required .NET 10 runtime is missing; issue detected on $env:COMPUTERNAME."
+                $foundIssue = $true
+            }
+
+            $service = Get-Service -Name 'ECEAgent'
+            if ($service.Status -ne 'Running') {
+                Write-Output "ECEAgent is $($service.Status) on $env:COMPUTERNAME; node could be impacted."
+                $foundIssue = $true
+            }
+
+            if ($foundIssue) {
+                Write-Host "Issues found on node $env:COMPUTERNAME"
+            } else {
+                Write-Host "No Issues found on node $env:COMPUTERNAME"
+            }
+
+            return $foundIssue
+        }
+
+        if ($impacted) {
+            $impacted_nodes += @($node)
+        }
+    } catch {
+        Write-Warning "Unable to assess node '$node': $($_.Exception.Message)"
+    }
 }
-Get-Service -Name 'ECEAgent'
-Get-ClusterGroup -Name '*orch*'
+
+$hciOrc = Get-ClusterGroup -Name '*HCI Orchestrator*'
+if ($hciOrc.State -ne 'Online') {
+    Write-Output "HCI Orchestrator '$($hciOrc.Name)' on owner '$($hciOrc.OwnerNode)' is $($hciOrc.State); cluster could be impacted."
+}
 ```
 
-Confirm whether the component-required `.NETCore.App` or `AspNetCore.App` 10.0 runtime is listed. Record the service status and orchestrator group state and owner; include any failed start or restart error. If the service or cluster group is missing, stop and contact Microsoft Support because this indicates a broader issue.
+Review the output under each node name. A missing .NET 10 runtime confirms the runtime-loss issue but does not prove which installer caused it. A stopped `ECEAgent` or offline HCI Orchestrator means the node or cluster could be impacted; neither alone confirms runtime loss. A successful remote check adds the node to `$impacted_nodes` when it detects a missing .NET 10 runtime or a stopped `ECEAgent`; treat this as a candidate list, not an installer target list. If the x64 host is missing, the script still attempts to run it, which can fail before the node is added. The script also does not check `$LASTEXITCODE` after `--list-runtimes`, so verify the inventory command succeeds before relying on its result. The orchestrator query is cluster-wide and is not expected to show a running group on every node. If the `ECEAgent` service or orchestrator group is missing, contact Microsoft Support because this indicates a broader issue.
 
 For .NET 8 you should only see that there is no .NET 8 runtimes installed.
 
 ## Recovery
 
-Run the recovery on the impacted nodes. Since all services are down you should not need a maintenance window since .NET does not require a restart and does not impact any services (since they are all failing to start).
+The package-inspection and installer blocks run remotely on every node in `$impacted_nodes`; the diagnosis itself checks every cluster node and is read-only. Before running the installer block, review this candidate list and retain only nodes where the required .NET runtime is confirmed missing. A stopped `ECEAgent` alone means the node could be impacted, not that the runtime is missing. The installer block runs on every node left in the list, so do not include candidates without confirmed runtime absence. Installing the runtime does not require a restart.
 
 `Get-ASArtifactPath` resolves the latest `Microsoft.DotNet10.Runtime.Installer` package. List its executable installers and confirm they are the expected package contents:
 
 For .NET 8 you would use the 'Microsoft.DotNet8.Runtime.Installer' package name.
 
 ```powershell
-$ErrorActionPreference = 'Stop'
-$packagePath = Get-ASArtifactPath -NugetName 'Microsoft.DotNet10.Runtime.Installer' -ErrorAction Stop
-if ([string]::IsNullOrWhiteSpace([string]$packagePath) -or
-    -not (Test-Path -LiteralPath $packagePath -PathType Container)) {
-    throw 'The latest approved runtime package path was not found. Stop and contact Microsoft Support.'
+foreach ($node in $impacted_nodes) {
+    Invoke-Command -ComputerName $node -ScriptBlock {
+        Write-Host "Inspecting the runtime package on $env:COMPUTERNAME"
+
+        $ErrorActionPreference = 'Stop'
+
+        $packagePath = Get-ASArtifactPath -NugetName 'Microsoft.DotNet10.Runtime.Installer' -ErrorAction Stop
+        if (!$packagePath) {
+            Write-Warning "The package 'Microsoft.DotNet10.Runtime.Installer' was not found on $($env:COMPUTERNAME). Stop and contact Microsoft Support."
+            return
+        }
+
+        $installers = @(Get-ChildItem -LiteralPath $packagePath -Recurse -Filter '*.exe' -File -ErrorAction Stop)
+        if ($installers.Count -eq 0) {
+            Write-Warning "No executable installers were found on $($env:COMPUTERNAME). Stop and contact Microsoft Support."
+            return
+        }
+
+        $installers | Select-Object FullName, @{ Name = 'ProductVersion'; Expression = { $_.VersionInfo.ProductVersion } }
+    }
 }
-$installers = @(Get-ChildItem -LiteralPath $packagePath -Recurse -Filter '*.exe' -File -ErrorAction Stop)
-if ($installers.Count -eq 0) {
-    throw 'No executable installers were found. Stop and contact Microsoft Support.'
-}
-$installers | Select-Object FullName, @{ Name = 'ProductVersion'; Expression = { $_.VersionInfo.ProductVersion } }
 ```
 
 After confirming the installer list, run each executable with `/install /quiet /norestart`:
 
 ```powershell
-foreach ($installer in $installers) {
-    $process = Start-Process -FilePath $installer.FullName `
-        -ArgumentList '/install', '/quiet', '/norestart' -Wait -PassThru -ErrorAction Stop
-    if ($process.ExitCode -ne 0) {
-        throw "Installer failed or requested a reboot (exit code $($process.ExitCode)). Stop and contact Microsoft Support."
+foreach ($node in $impacted_nodes) {
+    Invoke-Command -ComputerName $node -ScriptBlock {
+        Write-Host "Installing the approved runtime on $env:COMPUTERNAME"
+
+        $packagePath = Get-ASArtifactPath -NugetName 'Microsoft.DotNet10.Runtime.Installer' -ErrorAction Stop
+        $installers = @(Get-ChildItem -LiteralPath $packagePath -Recurse -Filter '*.exe' -File -ErrorAction Stop)
+
+        foreach ($installer in $installers) {
+            $process = Start-Process -FilePath $installer.FullName -ArgumentList '/install', '/quiet', '/norestart' -Wait -PassThru -ErrorAction Stop
+            if ($process.ExitCode -ne 0) {
+                Write-Warning "Installer failed or requested a reboot (exit code $($process.ExitCode)). Stop and contact Microsoft Support."
+                return
+            }
+        }
     }
 }
 ```
