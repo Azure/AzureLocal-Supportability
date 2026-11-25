@@ -1,31 +1,43 @@
-# Azure Local: LLDP, DCBX, and PFC Configuration Guide
+<!-- tsg-metadata
+{
+    "schema": "azure-local-supportability/tsg-metadata/v1",
+    "document_type": "troubleshoot",
+    "products": ["Azure Local"],
+    "detector": {
+        "type": "command",
+        "signal": "Get-NetAdapterQos and Cisco NX-OS show interface priority-flow-control"
+    },
+    "validation": {
+        "fidelity_level": "L3",
+        "technical_grade": null,
+        "reproduction_substrate": "hardware",
+        "automation_status": "manual",
+        "last_validated": "2026-09-09",
+        "spec_ref": "Appendix A: Test Evidence Matrix"
+    }
+}
+-->
+
+# Troubleshoot LLDP, DCBX, and PFC on Mellanox ConnectX with Cisco NX-OS
 
 | Field | Value |
 |---|---|
 | **Component** | Networking / Top-of-Rack Switch / RDMA (RoCEv2) |
 | **Severity** | High |
-| **Applicable Scenarios** | Azure Local clusters using RoCEv2 storage with Mellanox ConnectX or Intel E810 NICs and Cisco NX-OS or Aruba CX top-of-rack switches |
+| **Applicable Scenarios** | Azure Local clusters using Mellanox ConnectX RoCEv2 storage and Cisco NX-OS top-of-rack switches |
 | **Affected Versions** | Azure Local 23H2 and later |
 | **Audience** | Azure Local operators and network engineers |
 | **Document Version** | 1.0 (2026-06-10) |
 
-> **Impact at a glance** (for a quick read before the technical detail):
-> - **What breaks:** Priority Flow Control (PFC) silently drops on the storage priority, so RoCEv2 storage RDMA stalls and storage performance degrades or collapses.
-> - **Customer-visible symptom:** slow, stalling, or dropped storage; RDMA / SMB Direct errors; or an Aruba `multiple_peers` LLDP error on storage ports. This is a performance and availability issue, not data corruption, and there is no data loss.
-> - **Root nature:** an interoperability and configuration issue (two LLDP/DCBX agents, the Windows host and the NIC firmware, compete and break PFC auto-negotiation), not an Azure Local product defect. The fix is a durable configuration change, not a patch.
-> - **Effort and disruption:** the diagnosis is read-only and safe during production hours; the fix is applied node by node in a maintenance window (budget at least 4 hours for a 4-node cluster, see "Plan a maintenance window" below).
+> [!IMPORTANT]
+> **Impact:** PFC can remain operationally off on the storage priority, causing RoCEv2 storage latency, stalls, RDMA health faults, and workload disruption. Diagnosis is read-only. Remediation changes switch and NIC firmware state and must follow the maintenance and storage-health gates in [Resolution](#resolution).
 
-**What this guide does.** On Azure Local clusters carrying RoCEv2 storage
-traffic, Priority Flow Control (PFC) must stay enabled on the storage priority,
-or RDMA stalls and storage performance collapses. This guide explains why PFC
-silently drops on affected clusters (two LLDP/DCBX agents, the Windows host and
-the NIC firmware, compete and break PFC auto-negotiation), shows how to confirm
-the conflict with read-only diagnostics, and then makes the fix durable in three
-steps: make the Windows LLDP agent persistent (Resolution Step 1), force PFC
-statically on the top-of-rack switch (Resolution Step 2), and disable the NIC
-firmware LLDP/DCBX agent (Resolution Step 3). The objective is a configuration
-where PFC stays on across reboots, firmware events, and node servicing, with no
-reliance on DCBX auto-negotiation.
+This guide addresses one validated failure case: competing Windows and Mellanox firmware LLDP agents, followed by Cisco NX-OS PFC auto-negotiation that does not converge in the remediated single-agent state. It diagnoses that state and establishes three outcomes: a durable Windows LLDP agent, forced PFC on Cisco storage ports, and a disabled Mellanox firmware LLDP/DCBX agent.
+
+The companion documents own the baseline design and protocol details:
+
+- [Azure Local QoS Policy](./Reference-TOR-QOS-Policy-Configuration.md) defines the end-to-end RDMA QoS requirements and Cisco NX-OS configuration.
+- [Explicit Congestion Notification](./Reference-TOR-Explicit-Congestion-Notification.md) explains ECT/CE marking and endpoint congestion feedback. ECN is not the failure investigated here.
 
 > **Version naming used in this guide.** Each Azure Local release has an OS
 > baseline (for example, 23H2 or 24H2) and a solution (build) version written as
@@ -38,15 +50,7 @@ reliance on DCBX auto-negotiation.
 > `Get-AzureStackHCI` (or check the Azure portal) and compare the reported OS and
 > solution versions to those cited here.
 
-> **Quick summary.** If your storage NICs are Mellanox ConnectX, your
-> top-of-rack switches are Cisco NX-OS or Aruba CX, and you see PFC failing to
-> stay on or an Aruba `multiple_peers` LLDP error on storage ports, this guide
-> confirms a dual LLDP-agent conflict (Diagnosis Steps) and then fixes it in three
-> moves: make the Windows LLDP agent durable (Resolution Step 1), force PFC on at
-> the switch (Resolution Step 2), and disable the Mellanox firmware LLDP agent
-> (Resolution Step 3).
->
-> **Plan a maintenance window.** Working this guide end to end touches NIC
+> **Plan a maintenance window.** Remediation touches NIC
 > firmware and resets or reboots storage NICs node by node. Schedule **at least a
 > 4-hour maintenance window for a 4-node cluster**, and budget longer for larger
 > clusters or for clusters whose storage plane has no card-level redundancy
@@ -55,7 +59,7 @@ reliance on DCBX auto-negotiation.
 > the Resolution steps are not.
 
 > **Start here (fast path).** If you just need to get moving, follow these five moves; each links to the section with the full detail.
-> 1. **Match the symptom.** Storage RDMA/PFC not staying on, or an Aruba `multiple_peers` LLDP error on storage ports, on a Mellanox or Intel RoCEv2 cluster? If yes, continue.
+> 1. **Match the scope and symptom.** Mellanox ConnectX RoCEv2 storage on Cisco NX-OS, with storage PFC failing to remain operational? If yes, continue. Otherwise, use the [QoS design reference](./Reference-TOR-QOS-Policy-Configuration.md) and platform-specific support guidance.
 > 2. **Confirm it (read-only, safe in production).** Work the [Diagnosis Steps](#diagnosis-steps) to confirm the dual LLDP-agent conflict. If PFC is already correct, stop here.
 > 3. **Fix it (in a maintenance window).** Apply [Resolution](#resolution) Step 1 (make the Windows LLDP agent durable), Step 2 (force PFC at the switch), and Step 3 (disable the Mellanox firmware LLDP agent).
 > 4. **Pick your Step 3 activation method.** Your topology (REDUNDANT vs NOT-REDUNDANT) and NIC generation decide which of Options 1 to 4 is safe; use the option table in Resolution Step 3.
@@ -75,77 +79,17 @@ reliance on DCBX auto-negotiation.
 10. [Resolution](#resolution)
 11. [Verification After Remediation](#verification-after-remediation)
 12. [Prevention](#prevention)
-13. [Background: DCBX Dialects and Why They Matter](#background-dcbx-dialects-and-why-they-matter)
-14. [Known Limitations and Open Items](#known-limitations-and-open-items)
-15. [References](#references)
-16. [Appendix A: Test Evidence Matrix](#appendix-a-test-evidence-matrix)
-17. [Appendix B: Switch-Side Command Reference](#appendix-b-switch-side-command-reference)
-18. [Appendix C: Acronym Quick Reference](#appendix-c-acronym-quick-reference)
+13. [Known Limitations and Open Items](#known-limitations-and-open-items)
+14. [References](#references)
+15. [Appendix A: Test Evidence Matrix](#appendix-a-test-evidence-matrix)
+16. [Appendix B: Cisco NX-OS Command Reference](#appendix-b-cisco-nx-os-command-reference)
+17. [Appendix C: Acronym Quick Reference](#appendix-c-acronym-quick-reference)
 
 ## Relationship to Official Documentation
 
-This guide supplements the official Azure Local network requirements
-documentation. It does not replace or contradict the published guidance.
+This guide supplements, but does not redefine, the official Azure Local network requirements. The [Azure Local QoS Policy](./Reference-TOR-QOS-Policy-Configuration.md) is the repository authority for the standards-based design and Cisco NX-OS realization.
 
-**Official requirements (from Microsoft Learn):**
-- Switches must comply with IEEE 802.1Qbb, Priority Flow Control (PFC),
-  IEEE 802.1Qaz, Enhanced Transmission Selection (ETS), and IEEE 802.1AB,
-  Link Layer Discovery Protocol (LLDP)
-- Data Center Bridging (DCB), meaning PFC + ETS, is required for RDMA
-  over Converged Ethernet version 2 (RoCEv2) and optional for Internet
-  Wide Area RDMA Protocol (iWARP)
-- Remote Direct Memory Access (RDMA) traffic class: Priority 3, PFC
-  enabled, 50% bandwidth reservation
-- Cluster heartbeat traffic class: Priority 7, 1% bandwidth reservation
-- Switches should advertise LLDP Type-Length-Value (TLV) fields including
-  Data Center Bridging Exchange (DCBX) PFC and ETS Configuration TLVs on
-  storage ports
-
-**How this guide refines the official guidance:**
-The official documentation states that DCBX TLVs "must be dynamically
-enabled." This means the switch should be capable of advertising DCBX TLVs
-via LLDP. It does NOT mean PFC must be negotiated dynamically via DCBX.
-This guide prescribes forcing PFC ON at the switch (rather than relying on
-DCBX negotiation) because DCBX-negotiated (auto) PFC does not converge once
-the cluster is in the remediated single-LLDP-agent state (see Contributing
-Factors and
-Appendix A). Forced PFC is fully compatible with the IEEE 802.1Qbb
-requirement; it simply removes the dependency on a successful DCBX handshake
-and therefore hardens the RDMA configuration for Azure Local cluster storage
-traffic.
-
-**What this guide adds:**
-- Diagnosis and resolution for DCBX interoperability issues between
-  Mellanox ConnectX Network Interface Card (NIC) firmware and specific
-  switch platforms (Aruba CX,
-  Cisco NX-OS)
-- Guidance on forced PFC configuration as a reliable alternative to
-  DCBX-negotiated PFC when firmware-level DCBX TLV conflicts prevent
-  negotiation from converging
-- Guidance on installing and using the Mellanox Firmware Tools (WinMFT)
-  to diagnose and configure NIC firmware LLDP/DCBX settings
-- A mitigation for an Azure Local platform bug in which the Windows LLDP
-  agent, enabled by the pre-deployment Environment Validator, was not kept
-  enabled across operating system reboots, along with guidance on which
-  clusters still require the mitigation
-
-**Important note on DCBX and forced PFC:**
-The official documentation requires switches to support DCBX TLV
-advertisement. This guide recommends forcing PFC on the switch rather than
-relying on DCBX negotiation. This does not disable DCBX on the switch; it
-only changes PFC from negotiated to locally enforced, so DCBX TLVs (including
-ETS and Application Priority) can still be exchanged for telemetry. Advertising
-the DCBX TLVs over LLDP may require a platform-specific option (for example, the
-`send-tlv` keyword on the `priority-flow-control` line, standard from Cisco NX-OS
-9.3(x) onward and dependent on DCBX being enabled on the switch; consult your
-switch vendor's documentation for the equivalent on Aruba CX or other
-platforms). When the switch is configured to advertise DCBX TLVs, set
-switch-side DCBX Willing to False so the host stays authoritative. See
-[Reference-TOR-QOS-Policy-Configuration.md](./Reference-TOR-QOS-Policy-Configuration.md)
-for the switch-side QoS, DCBX, and TLV-advertisement details. The only change
-forced PFC introduces is that PFC activation no longer depends on a successful
-DCBX handshake, which avoids the DCBX auto-negotiation issue described in this
-guide.
+This TSG adds only the validated incident path: detect competing LLDP agents, verify that Cisco PFC auto mode is not operational, force PFC locally, disable the Mellanox firmware agent, and verify the resulting state. Forced PFC removes activation dependency on DCBX negotiation; it does not remove the switch's ability to advertise DCBX TLVs.
 
 For the official network requirements and background on RDMA, DCBX, and related concepts, see:
 - [Host network requirements for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/concepts/host-network-requirements)
@@ -153,150 +97,25 @@ For the official network requirements and background on RDMA, DCBX, and related 
 
 ## Recommended Configuration (RoCEv2 Deployments)
 
-For any Azure Local cluster using RoCEv2 for storage RDMA, the recommended
-configuration is:
+The required end state for this failure case is:
 
-**Host side:**
-- Windows LLDP agent: **Enabled** by Azure Local's pre-deployment Environment
-  Validator. Keep it enabled durably with the Step 1 toggle in the Resolution
-  section (otherwise the enablement is lost on the next reboot). See Resolution Step 1 for
-  which clusters still require the toggle on Azure Local 12.2607 and later.
-- Mellanox NIC firmware LLDP agent: **Disabled** (this may require a `mlxconfig` change)
-- Intel NIC firmware LLDP agent: see the Intel note in Resolution Step 3
-  (whether a competing Intel firmware agent is present is not established on the
-  tested adapters; if one is active alongside the Windows agent, the same
-  single-agent guidance applies)
-- DCBX Willing: **False** (required, host-authoritative). The Willing flag
-  decides who wins when the host and the switch disagree on DCBX settings:
-  Willing = True means "defer to the switch's settings," and Willing = False
-  means "use the host's own settings and ignore what the switch advertises."
-  Azure Local sets the host DCBX Willing flag to False; the Resolution Step 1 toggle
-  re-asserts it so the posture is preserved across reboots. Do not set
-  Willing to True.
+1. The Windows LLDP agent is durably enabled on the Network ATC fabric adapters.
+2. Cisco NX-OS forces PFC on priority 3 for every storage-facing port; PFC activation does not depend on DCBX auto-negotiation.
+3. The Mellanox firmware LLDP/DCBX agent is disabled, leaving one host LLDP identity per link.
 
-**Switch side:**
-- PFC: **Forced ON** for priority 3 on **storage ports only**. Do not use
-  AUTO or DCBX-negotiated PFC on storage ports.
-  - Cisco NX-OS: `priority-flow-control mode on` (already the default on
-    most Azure Local validated switch templates)
-  - Aruba CX (AOS-CX): `flow-control priority rxtx 3` on each storage
-    interface (priority 3 must be mapped to a lossless queue/pool, which the
-    standard Azure Local Aruba template already configures)
-  - Dell OS10: `priority-flow-control mode on`
-  - Arista EOS: `priority-flow-control on`, plus
-    `priority-flow-control priority 3 no-drop` on each storage interface (Arista
-    marks the lossless priority inline and does not use the `mode` keyword)
-- Compute and management ports: set PFC **explicitly OFF**. These ports carry
-  TCP traffic that handles retransmission at the transport layer, and Microsoft's
-  traffic-class model places all management and VM/compute traffic in the default
-  class, which is defined as PFC-disabled (priority 0, no host PFC configuration).
-  Setting these ports explicitly OFF (rather than leaving them at AUTO) is
-  deterministic, keeps them out of any DCBX negotiation, and avoids the same
-  PFC auto-negotiation issue that affects storage ports. Enabling PFC on
-  compute ports is unnecessary and can cause unintended pause behavior on VM
-  traffic.
-  - Cisco NX-OS: `priority-flow-control mode off`
-  - Aruba CX (AOS-CX): no `flow-control priority` mapping on the interface (leave
-    the lossless priority unconfigured on management/compute ports)
-  - Dell OS10: `priority-flow-control mode off`
-  - Arista EOS: `no priority-flow-control`
-
-  > **Special case (converged topology):** The explicit-OFF guidance applies to a
-  > disaggregated design, where storage runs on dedicated NICs and the
-  > management/compute ports carry no RDMA. In a **fully converged** design, the
-  > same physical port trunks storage, compute, and management on different
-  > priorities, so that port must keep PFC **forced ON** for the storage priority;
-  > do not set it OFF. Use the "Mapping NIC Roles to Switch Ports" section to
-  > confirm which model applies before configuring any port.
-  >
-  > Guest (in-VM) RDMA does **not** create an exception here: Guest RDMA is not
-  > supported on Azure Local, so tenant VMs and AKS Arc nodes (which run as VMs)
-  > never carry RDMA on the compute ports. There is no workload that requires PFC
-  > on a disaggregated compute port.
-
-**Why forced PFC, not AUTO:** the recommended remediation disables the
-Mellanox firmware LLDP agent to resolve the dual-agent conflict (see
-Contributing Factors). In that single-agent state the host transmits bare LLDP with no DCBX
-TLVs at the NDIS layer (CONFIRMED by direction-split packet capture; see
-Appendix A), yet a switch in AUTO mode still detects the Mellanox host as `CIN`
-and PFC auto-negotiation does not converge (the switch does not report an IEEE
-802.1 DCBX peer on that port in PFC auto mode; see
-Contributing Factors). Forcing PFC bypasses the DCBX handshake entirely and is
-dialect-independent, which makes it the safe universal configuration for both
-Mellanox and Intel clusters.
-
-**The Willing flag is not the cause of the PFC failure.** Whether the switch
-detects a clean IEEE 802.1 peer on the port (rather than reporting `CIN` and not
-converging) is what determines whether PFC auto-negotiation converges, not
-the DCBX Willing flag. Set the host Willing flag to False (host-authoritative);
-this is the required posture. Do not set Willing to True.
-
-> **Corroborating Azure Local guidance (this guide does not change these
-> settings).** The priority and PFC posture above is the established Azure Local
-> baseline, documented elsewhere in this repository. This troubleshooting guide
-> promotes the same settings and exists to explain a dual-LLDP-agent failure
-> mode that prevents them from taking effect, plus how to resolve it. For the
-> baseline configuration these recommendations align with, see:
-> - [Reference-TOR-QOS-Policy-Configuration.md](./Reference-TOR-QOS-Policy-Configuration.md):
->   priority-3 storage (RDMA) as a no-drop class, priority-7 cluster, host-authoritative
->   DCBX with Willing=False, and forced PFC on storage.
-> - [Reference-TOR-Explicit-Congestion-Notification.md](./Reference-TOR-Explicit-Congestion-Notification.md):
->   ECN/WRED congestion handling for the lossless storage class.
-> - Per-topology switch templates that apply forced PFC on storage ports:
->   [Fully-Converged](./Reference-TOR-Fully-Converged-Storage.md),
->   [Disaggregated](./Reference-TOR-Disaggregated-Switched-Storage.md), and
->   [2-Node Switchless](./Reference-TOR-2Node-Switchless-Storage.md).
+The local host `Willing = False` posture is retained, but it is not the cause of this failure and does not imply that the Windows LLDP agent transmits DCBX TLVs. See [Azure Local QoS Policy](./Reference-TOR-QOS-Policy-Configuration.md) for the full baseline configuration.
 
 ## Problem
 
-Azure Local clusters using Mellanox ConnectX NICs with RoCEv2 storage may
-experience PFC failures when connected to switches that negotiate PFC
-through DCBX. The trigger is a dual-LLDP-agent conflict on each storage port:
-the Windows OS agent and the Mellanox NIC firmware agent are both active (see
-the dual-agent description below). Once the firmware agent is disabled to
-resolve that conflict, the host operating-system LLDP agent transmits bare
-LLDP with no DCBX TLVs at the NDIS layer (CONFIRMED by direction-split packet
-capture; see Appendix A). Even so, a Cisco switch port configured for PFC
-auto-negotiation detects the affected Mellanox host as `CIN` (Cisco/Intel/Nuova)
-and PFC does not converge, while a port on the same host configured for forced
-PFC (`mode on`) detects `IEEE 802.1` and PFC stays up (CONFIRMED on Cisco
-NX-OS 10.3(4a)). The precise reason the switch reports `CIN` here is not
-established. What is CONFIRMED is the per-port contrast itself: on the same
-bare-egress host, a forced port reports `IEEE 802.1` while an auto port reports
-`CIN`, so the reading tracks the port's PFC configuration, and auto PFC does not
-converge in the `CIN` state. We do not assert a specific Cisco mechanism for the
-`CIN` reading (see Known Limitations). Because auto-negotiation is
-unreliable in this state, PFC must be forced at the switch.
+Azure Local clusters using Mellanox ConnectX NICs with RoCEv2 storage can expose two LLDP identities on each link: one from the Windows LLDP agent and one from NIC firmware. The dual-agent state is the combined result of Windows LLDP enablement and the firmware agent's default state; it is not an intentional Network ATC configuration.
 
-Additionally, on Mellanox-based clusters two LLDP agents are typically active
-on each storage port at the same time: the Windows OS agent, which Azure
-Local's pre-deployment Environment Validator (Environment Checker) enables on
-the physical adapters so it can read the switch-side DCBX and PFC
-advertisements during validation, and the Mellanox NIC firmware agent, which
-is enabled by the NIC firmware default and is not disabled during deployment.
-The Windows LLDP agent lifecycle is owned by the operating system (the
-`Mslldp` agent), not by NetworkATC (Azure Local's host networking
-configuration engine). Azure Local does not deliberately configure a
-dual-agent setup; the dual-agent state is the combined result of the
-Environment Validator enabling the Windows agent and the firmware shipping with
-its own agent enabled. The two agents produce two conflicting LLDP identities
-per port and can cause switches to enter a "multiple peers" state that blocks
-DCBX negotiation entirely.
+After the firmware agent is disabled, direction-split capture confirms that the Windows agent sends bare LLDP without DCBX TLVs at the host NDIS layer. On Cisco NX-OS 10.3(4a), PFC auto mode did not converge in this state, while forced PFC remained operational. The switch reported `Detected: CIN`, but the reason for that internal reading is not established. This guide acts on the proven operational contrast and does not assert an unverified Cisco mechanism. See [Appendix A](#appendix-a-test-evidence-matrix).
 
 When PFC is inactive, RDMA storage traffic, specifically Server Message
 Block (SMB) Direct over RoCEv2, loses its lossless guarantee. Under load,
 this can
 cause storage timeouts, RDMA.Alert health faults, and in severe cases,
 Cluster Shared Volume (CSV) access failures and VM disruption.
-
-On Intel E810 Network Interface Cards (NICs) with the Windows LLDP agent
-active, host egress is also bare LLDP with no DCBX TLVs (CONFIRMED by a
-direction-split capture on an Intel node), so the host-sent DCBX dialect is
-not what distinguishes the vendors. What matters is whether the NIC also runs
-a competing firmware LLDP agent; this is established for Mellanox ConnectX and
-is a data gap for Intel E810 on the tested adapters. Intel E810 supports both
-iWARP and RoCEv2; if an Intel cluster is configured for RoCEv2, PFC is still
-required and should be forced ON at the switch.
 
 ## Symptoms
 
@@ -316,11 +135,6 @@ Operators may observe one or more of the following:
   established (see Contributing Factors and Known Limitations).
 - Switch-side `show lldp neighbors` shows two different chassis-IDs per
   storage port (MAC-based from NIC firmware and hostname-based from Windows)
-- On Aruba CX: `DCBx operational state: multiple_peers` and
-  `PFC operational state: inactive` on cluster storage ports.
-  This behavior was observed on AOS-CX 10.16.1030. Earlier versions
-  (e.g., 10.13.1150) may silently pick one LLDP peer and converge, masking
-  the dual-agent issue until an upgrade exposes it.
 - On Cisco NX-OS: PFC auto mode fails to converge despite PFC being
   configured on both host and switch
 - Periodic storage latency spikes or SMB Direct connection drops during
@@ -328,36 +142,15 @@ Operators may observe one or more of the following:
 
 ## Affected Configurations
 
-| Component | Affected | Not Affected |
-|---|---|---|
-| NIC | Mellanox ConnectX-6 Lx, ConnectX-6 Dx (runs a competing firmware LLDP agent) | Intel E810 (competing firmware LLDP agent not confirmed on tested adapters; see the Intel note in Step 3) |
-| RDMA Transport | RoCEv2 (requires PFC) | iWARP (PFC not required, but note: Intel E810 supports both iWARP and RoCEv2; if configured for RoCEv2, PFC is required) |
-| Switch: Aruba CX | Affected (multiple_peers deadlock) | N/A |
-| Switch: Cisco NX-OS 10.3(4a) | Affected: PFC auto does not converge (switch reports `Detected: CIN` and no IEEE peer on that port in auto mode, precise reason not established; see Contributing Factors) | Not affected when PFC mode on (forced) |
-| Switch: Dell OS10 / SONiC | Potentially affected (untested) | N/A |
-| Switch: Arista EOS | Potentially affected (untested) | N/A |
-
-### RDMA Transport Availability by NIC Vendor
-
-Not all NIC vendors support both RDMA transports. This determines whether
-PFC is mandatory for a given cluster.
-
-| NIC Vendor | iWARP | RoCEv2 | PFC Required? |
-|---|---|---|---|
-| NVIDIA / Mellanox | Not available | Yes | **Always** (RoCEv2 is the only option) |
-| Intel | Yes | Yes (E810 series) | Only if configured for RoCEv2; not required for iWARP |
-| Marvell (QLogic) | Yes | Yes | Only if configured for RoCEv2 |
-| Broadcom | Not available | Yes | **Always** (same as Mellanox) |
-
-**Key implication:** If a cluster uses Mellanox or Broadcom NICs, PFC is
-always required because RoCEv2 is the only RDMA transport available. There
-is no iWARP fallback. This makes the forced PFC recommendation mandatory,
-not optional, for these NIC vendors.
+| Component | In scope | Stop condition |
+| --- | --- | --- |
+| NIC | Mellanox ConnectX-4 Lx through ConnectX-7; activation behavior varies by generation | Stop if no Mellanox ConnectX adapter is present. The WinMFT remediation does not apply. |
+| RDMA transport | RoCEv2 storage | Stop if storage uses iWARP; this PFC failure path does not apply. |
+| Switch | Cisco NX-OS; auto-PFC behavior validated on 10.3(4a) | For another switch operating system, use its supported diagnostics and configuration guidance. Do not reuse Cisco commands. |
 
 ## Contributing Factors
 
-Three independent factors contribute to PFC failures on Mellanox clusters.
-Any one of them can cause problems, and a given cluster may exhibit all three or only a subset.
+Three observed conditions control this failure and its remediation.
 
 ### Factor 1: Dual LLDP Agent (Host Side)
 
@@ -373,70 +166,11 @@ deployment:
 | Windows `mslldp.sys` | Hostname (e.g., `NODE01`) | ~120s | None (bare LLDP, CONFIRMED on host egress) | OS networking stack |
 | Mellanox NIC firmware | NIC MAC address | ~30s | IEEE 802.1 DCBX (clean) | NIC firmware |
 
-The two agents race on each storage port. The switch sees one identity at
-a time (on Cisco NX-OS) or both simultaneously (on Aruba CX). Both agents are
-certain they speak for the link, and like any two parties equally certain they
-are right, they reach no agreement; PFC is the casualty.
-
-On Aruba CX, seeing two chassis-IDs on the same port causes the switch to
-enter `DCBx operational state: multiple_peers`, where it refuses to
-negotiate DCBX with either agent and PFC goes inactive. This Aruba behavior is
-inferred from a production deployment; it was not reproduced in the
-in-house Cisco test matrix.
+The two agents advertise different identities on one physical link. Diagnosis must establish which agents are active before firmware state is changed.
 
 ### Factor 2: Cisco Auto-Negotiation Detects CIN, Not IEEE
 
-The Mellanox firmware LLDP agent is the component that supplies clean IEEE
-802.1Qaz DCBX (OUI `00:80:C2`) to the switch. When it is the sole active agent
-(Windows agent disabled), a Cisco NX-OS switch in auto mode detects
-`IEEE 802.1` and PFC auto-negotiation succeeds (CONFIRMED on Cisco NX-OS
-10.3(4a); see Appendix A, states C1/C2).
-
-In the remediated single-agent state, direction-split packet capture confirms
-that the Windows OS agent transmits bare LLDP with no DCBX TLVs at the host NDIS
-layer, on both Mellanox and Intel (CONFIRMED; Appendix A, states A1/A2). A Cisco
-port in PFC auto mode still reports `Detected: CIN` with `Willing=No` in this
-state and PFC does not converge, while a port on the same Mellanox host
-configured for forced PFC reports `IEEE 802.1` and PFC stays up (CONFIRMED on
-Cisco NX-OS 10.3(4a)). The switch also reports `CIN` in the production
-dual-agent state (B1), where the firmware IEEE speaker is still active, so
-removing the firmware speaker is not what produces the `CIN` reading; see
-Appendix A and the "Why DCBX state matters" block.
-
-What we can state from the evidence is observational, not a confirmed Cisco
-mechanism. On the same bare-egress Mellanox host, a Cisco port in forced PFC is
-detected as `IEEE 802.1` while a port in PFC auto is detected as `CIN`
-(CONFIRMED on Cisco NX-OS 10.3(4a)); auto PFC does not converge in the `CIN`
-state, and forced PFC does. The precise reason the switch reports `CIN` here is
-not established: the relevant Cisco DCBX state-machine and `show` references were
-not accessible, and Cisco's documented auto-negotiation behavior (negotiate the
-highest version common to both peers) does not by itself predict a `CIN` reading
-for this configuration. We therefore do not assert a specific Cisco mechanism.
-The recovered direction-split capture additionally shows no CIN-subtype (`0x01`)
-TLV on the wire from any device, so the `CIN` reading is a switch-internal label
-rather than a received dialect; this corroborates treating the reason as
-unestablished rather than asserting a wire-level mechanism.
-The actionable, CONFIRMED facts are the per-port contrast above and that forcing
-PFC resolves it (see Known Limitations).
-
-An earlier hypothesis, that the ConnectX firmware injects legacy CEE TLVs below
-the NDIS capture point, has been withdrawn. The firmware's CEE emitter
-(`cee_dcbx_en`) is gated by the same NV parameter (`LLDP_NB_TX_MODE`) that
-disables the firmware LLDP agent, so once the agent is disabled the firmware
-cannot be the CEE source. (CEE and CIN are in any case distinct dialects that
-share Intel's OUI `00:1B:21` and differ by TLV subtype, CIN `0x01` and CEE
-`0x02`.) The CEE TLVs seen near the host in the earlier non-direction-split
-capture are confirmed, by OUI and subtype decode of the recovered
-direction-split capture, to be the switch's own inbound advertisement (switch
-RX): every `00:1B:21` DCBX TLV on the wire was sourced from the Cisco switch
-ports and decodes as CEE (subtype `0x02`), and no host frame carried a
-`00:1B:21` TLV. They are not host egress. The firmware is also not
-an unconditional CEE source: when it is the sole active agent (states C1/C2),
-the switch detects clean IEEE 802.1 and auto PFC converges in that state.
-
-The practical consequence is the same regardless of mechanism: with the firmware
-agent disabled, PFC must be forced at the switch so that activation does not
-depend on DCBX auto-negotiation.
+With the firmware agent disabled, Cisco NX-OS 10.3(4a) in PFC auto mode reported `Detected: CIN` and PFC did not converge. A forced-PFC port on the same host remained operational. The precise reason for the `CIN` display is not established, so this guide relies only on the observed PFC contrast. Detailed packet and switch evidence is in [Appendix A](#appendix-a-test-evidence-matrix).
 
 ### Factor 3: Switch PFC Mode (Switch Side)
 
@@ -678,9 +412,8 @@ $verdict | Sort-Object Node | Format-Table -AutoSize
 "and the management/compute plane on that node. NOT-REDUNDANT means at least one"
 "of those planes has both its ports on a single card; resetting that card drops"
 "the whole plane, so drain the node first. Port/cable/switch redundancy is"
-"unaffected. On a non-Mellanox node the verdict is still shown for awareness, but"
-"the Reset action reads n/a because Step 3's reset/reboot procedures are"
-"Mellanox-only; use the switch-side neighbor check instead."
+"unaffected. If Reset action is n/a, stop because the node is outside this TSG's"
+"Mellanox ConnectX scope."
 "=============================================================================="
 ```
 
@@ -750,7 +483,7 @@ card), even though all four ports report RDMA enabled.
 
 > **About the "Other (not in ATC intent)" rows.** Some nodes have physical NICs
 > that belong to no NetworkATC intent, for example Dell onboard LOM ports or a
-> BMC-shared management port (often shown with a GUID name and a non-Mellanox
+> BMC-shared management port (often shown with a GUID name and a different
 > OUI, frequently Disconnected). These are
 > neither storage nor ATC-managed management/compute uplinks. The script tags them
 > "Other" rather than sweeping them into the mgmt/compute list, so do not put their
@@ -853,9 +586,8 @@ $cardRedundancy | Sort-Object Node | Format-Table -AutoSize
 "and the management/compute plane on that node. NOT-REDUNDANT means at least one"
 "of those planes has both its ports on a single card; resetting that card drops"
 "the whole plane, so drain the node first. Port/cable/switch redundancy is"
-"unaffected. On a non-Mellanox node the verdict is still shown for awareness, but"
-"the Reset action reads n/a because Step 3's reset/reboot procedures are"
-"Mellanox-only; use the switch-side neighbor check instead."
+"unaffected. If Reset action is n/a, stop because the node is outside this TSG's"
+"Mellanox ConnectX scope."
 "=============================================================================="
 ```
 
@@ -875,23 +607,13 @@ are native, non-teamed adapters, so the host sources traffic from each storage
 port's own MAC and the switch learns it on exactly one port. This gives a clean,
 direct port mapping.
 
-**MAC format differs by vendor.** Windows prints `00-00-5E-00-53-A1`. Cisco
-prints `0000.5e00.53a1`. Aruba CX prints `00005e-0053a1` (or colon-separated).
-Convert the host MAC to the switch's format before searching.
+Windows prints a MAC address as `00-00-5E-00-53-A1`; Cisco NX-OS prints the same address as `0000.5e00.53a1`. Convert the host MAC to Cisco format before searching.
 
-**Cisco NX-OS:**
 ```
 show mac address-table address 0000.5e00.53a1
 ```
 
-**Aruba CX (AOS-CX):**
-```
-show mac-address-table | include 00005e-0053a1
-```
-
-Each command returns the switch interface (for example `Ethernet1/21` on Cisco
-or `1/1/17` on Aruba) that the storage MAC is connected to. Repeat for every MAC
-in the STORAGE list.
+The command returns the Cisco interface, such as `Ethernet1/21`, connected to the storage MAC. Repeat for every MAC in the STORAGE list.
 
 > Tip: Before Resolution Step 3, the Mellanox firmware LLDP agent advertises each storage
 > NIC's own MAC as the LLDP chassis ID, so storage MACs also appear directly in
@@ -916,8 +638,7 @@ the host **System Name** (hostname) and a host-level chassis ID, not the physica
 port MAC, so you cannot join an LLDP neighbor entry back to a specific row in your
 MAC inventory. Instead, identify the mgmt/compute ports two ways:
 
-- **LLDP neighbor** (`show lldp neighbors` on Cisco, `show lldp neighbor-info` on
-  Aruba): confirms which switch ports land on an Azure Local host, by System Name.
+- **LLDP neighbor** (`show lldp neighbors`): confirms which Cisco switch ports land on an Azure Local host, by System Name.
 - **Elimination:** any host-connected port that is not in your storage port list
   is a mgmt/compute port.
 
@@ -952,10 +673,9 @@ redundancy" in Step A): a whole-card reset drops the entire plane, so Resolution
 applied with the node drained. (Port and switch redundancy still exist: each plane
 has two ports across ToR-A and ToR-B.) The "Storage" rows
 give you the exact storage port list to force PFC ON in Resolution Step 2
-(`priority-flow-control mode on` on Cisco, `flow-control priority rxtx 3` on
-Aruba CX). The "Mgmt/Compute" rows are the ports to set explicitly PFC off in
-Resolution Step 2. Applying a label or description to each switch port (for example a Cisco
-interface `description Storage-Node01` or the Aruba equivalent) makes the policy
+with `priority-flow-control mode on send-tlv`. The "Mgmt/Compute" rows are the ports to set explicitly PFC off in
+Resolution Step 2. Applying a label or description to each Cisco switch port, such as
+`description Storage-Node01`, makes the policy
 self-documenting and reduces the risk of forcing PFC on the wrong port during
 future maintenance.
 
@@ -996,7 +716,7 @@ skip this and the Mellanox-specific steps.)
            [pscustomobject]@{
                Node = $env:COMPUTERNAME; WinMFT = 'NOT INSTALLED'
                Devices = 0
-               'Device names' = 'WinMFT not installed (Mellanox-only tool); if non-Mellanox, firmware state is not host-readable (use switch-side check)'
+               'Device names' = 'WinMFT not installed; stop and install it before continuing'
            }
            return
        }
@@ -1044,13 +764,12 @@ skip this and the Mellanox-specific steps.)
    `mst status`, so you normally do not need to type a device name. If you run a
    single `mlxconfig` command by hand, substitute the device name that
    `mst status` reports on your node. If a `mlxconfig` command returns no output,
-   the two most common causes are: the node has no Mellanox NICs at all (for
-   example, an Intel-only cluster, where `mst status` lists no devices and the
-   Mellanox firmware steps do not apply), or the device name used does not exist
+    the two most common causes are: the node has no Mellanox NICs, in which case
+    this TSG does not apply, or the device name used does not exist
    on the node. Append `2>&1` to the command (as shown below) so any "device not
    found" error is shown instead of hidden.
 
-### Step 1: Identify NIC Vendor and RDMA Transport
+### Step 1: Confirm Mellanox ConnectX and RoCEv2 [READ-ONLY]
 
 ```powershell
 # Identify the storage NICs, their vendor, and their RDMA transport on every node.
@@ -1103,28 +822,17 @@ ContosoNode-02 ethernet 3 Mellanox ConnectX-6 Dx Adapter #2 RoCEv2
 ContosoNode-02 ethernet 4 Mellanox ConnectX-6 Dx Adapter    RoCEv2
 ```
 
-Interpret the output by vendor:
+Interpret the output:
 
-- **Mellanox ConnectX** (`InterfaceDescription` shows ConnectX-6 Lx/Dx):
+- **In scope:** `InterfaceDescription` identifies Mellanox ConnectX and
   `RdmaTransport` reports **RoCEv2** on current drivers. ConnectX supports only RoCE,
   so RoCEv2 is the only valid transport here; if an older driver leaves the value
   blank ("not reported by driver"), treat it as RoCEv2 regardless. Either way PFC is
   required, so continue with Step 2. ConnectX is also the vendor that runs the
-  competing firmware LLDP agent this guide addresses.
-- **Intel E810 / Chelsio** (`RdmaTransport` shows a value): the value tells you the
-  selected transport.
-  - **RoCEv2**: PFC is required. Continue with Step 2.
-  - **iWARP**: PFC is not required. LLDP/DCBX issues are informational only.
+    competing firmware LLDP agent this guide addresses.
+- **Stop:** If no Mellanox ConnectX adapter is present or storage uses iWARP, this TSG does not apply. Use the [Azure Local QoS Policy](./Reference-TOR-QOS-Policy-Configuration.md) and adapter-specific support guidance.
 
-> **If no Mellanox NICs are present**, the Mellanox-specific remediation in this
-> guide (Resolution Step 3, disable the Mellanox firmware LLDP agent using WinMFT)
-> does not apply: only Resolution Steps 1 and 2 are relevant. See "Which steps apply
-> to your cluster" at the top of the Resolution section. Intel E810 and Broadcom NICs
-> may also ship a firmware LLDP agent; if one is active alongside the Windows agent,
-> the same dual-agent guidance applies, but the command to disable it is
-> vendor-specific (the WinMFT procedure in Step 3 is Mellanox-only).
-
-### Step 2: Check PFC Status on Host
+### Step 2: Check PFC Status on Host [READ-ONLY]
 
 Paste this into one PowerShell terminal on one node; it queries every node in the
 cluster and returns one row per storage NIC, plus that node's host-wide priority 3
@@ -1216,7 +924,7 @@ Interpret the output:
   Priority 3 is not enabled. Re-run the intent or inspect the per-host error
   before continuing.
 
-### Step 3: Check for Dual LLDP Agents
+### Step 3: Check for Dual LLDP Agents [READ-ONLY]
 
 The Mellanox part requires WinMFT (see Prerequisites above). Paste this into one
 PowerShell terminal on one node; it checks every node and distills the result to
@@ -1268,8 +976,7 @@ $lldp = Invoke-Command -ComputerName $nodes -ScriptBlock {
     # Mellanox FW LLDP TX: one row per card + port (P1/P2). OFF(0) = disabled (good).
     $fw = @()
     $mstDir = 'C:\Program Files\Mellanox\WinMFT'
-    # Physical NIC models present; used to make a non-Mellanox result explicit
-    # instead of leaving the firmware section silently empty.
+    # Physical NIC models present; used to make an out-of-scope result explicit.
     $nonMlx = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
         Where-Object { $_.InterfaceDescription -notmatch 'Mellanox|ConnectX|NVIDIA|Remote NDIS|USB' } |
         ForEach-Object { $_.InterfaceDescription -replace '\s*#\d+\s*$', '' } | Sort-Object -Unique)
@@ -1354,49 +1061,34 @@ and every firmware `ALL(2)` turned to `OFF(0)`):
 - Per-node differences are normal: a fix applied on one node does not change the
   others, so expect nodes to be in different states until every node is remediated.
 
-### Step 4: Check DCBX Dialect from the Switch
+### Step 4: Check DCBX State on Cisco NX-OS [READ-ONLY]
 
 > **Which ports?** Use the storage port list from the port map you built in
 > "Mapping NIC Roles to Switch Ports" (Step C). Substitute each storage port for
 > `<port>` below and repeat per storage port.
 
-On Cisco NX-OS:
 ```
 show lldp dcbx interface ethernet 1/<port>
 ```
 
-On Aruba CX:
-```
-show lldp neighbor-info detail
-show dcbx interface 1/1/<port>
-```
-
-Interpret the output (either platform):
+Interpret the output:
 - **GOOD:** `Detected: IEEE 802.1` = correct dialect, DCBX should converge.
 - **BAD:** `Detected: CIN` = the switch is not detecting an IEEE DCBX peer on this port; PFC auto will not converge (force PFC at the switch instead, Step 2).
-- **BAD:** `DCBx operational state: multiple_peers` (Aruba) = dual-agent deadlock.
 
-### Step 5: Check PFC Status on the Switch
+### Step 5: Check PFC Status on Cisco NX-OS [READ-ONLY]
 
 > **Which ports?** Check the storage ports from your port map (Mapping NIC Roles
 > to Switch Ports, Step C). These are the ports where PFC must be active.
 
-On Cisco NX-OS:
 ```
 show interface priority-flow-control
 ```
 
-On Aruba CX:
-```
-show interface 1/1/<port> flow-control
-```
-
-Interpret the output (either platform):
+Interpret the output:
 - **GOOD:** `Mode On, Oper On` = PFC is forced and working (not affected by DCBX issues).
 - **BAD:** `Mode Auto, Oper Off` = PFC depends on DCBX and is not converging.
-- **BAD:** `PFC operational state: inactive` (Aruba) = PFC is off.
 
-### Step 6: Check Mellanox NIC Firmware DCBX Settings (Requires WinMFT)
+### Step 6: Check Mellanox NIC Firmware DCBX Settings [READ-ONLY]
 
 With WinMFT installed (see Prerequisites above), paste this into one PowerShell
 terminal on one node. It queries every node in the cluster and distills the result
@@ -1409,8 +1101,7 @@ you act on here. What matters is whether the firmware LLDP/DCBX agent is off:
 $nodes = (Get-ClusterNode).Name      # or list node names explicitly
 $fwDcbx = Invoke-Command -ComputerName $nodes -ScriptBlock {
     $mstDir = 'C:\Program Files\Mellanox\WinMFT'
-    # Physical NIC models present; used to make a non-Mellanox result explicit
-    # instead of returning an empty table.
+    # Physical NIC models present; used to make an out-of-scope result explicit.
     $nonMlx = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
         Where-Object { $_.InterfaceDescription -notmatch 'Mellanox|ConnectX|NVIDIA|Remote NDIS|USB' } |
         ForEach-Object { $_.InterfaceDescription -replace '\s*#\d+\s*$', '' } | Sort-Object -Unique)
@@ -1435,12 +1126,11 @@ $fwDcbx = Invoke-Command -ComputerName $nodes -ScriptBlock {
             Select-String 'mt\d+_pciconf\d+' -AllMatches |
             ForEach-Object { $_.Matches.Value } | Sort-Object -Unique)
         if (-not $devices) {
-            # WinMFT is installed but mst found no Mellanox devices: a non-Mellanox
-            # host (for example Intel E810 or Broadcom). Firmware LLDP/DCBX is not
-            # host-readable on these NICs; validate at the switch instead.
+            # WinMFT is installed but mst found no Mellanox devices. Stop because
+            # this node is outside the scope of this TSG.
             $what = if ($nonMlx) { "No Mellanox NICs (this host has $($nonMlx -join ', '))." }
                     else         { 'No Mellanox NICs on this host.' }
-            New-Note "$what Firmware LLDP/DCBX is not host-readable; use the switch-side neighbor check."
+            New-Note "$what Stop: this TSG does not apply to this node."
             return
         }
         foreach ($dev in $devices) {
@@ -1497,42 +1187,7 @@ order below. Do **not** perform them out of order:
   the switch (Step 2) and a durable host LLDP speaker is already in place (Step 1),
   removing the firmware agent cannot drop lossless behavior on the storage fabric.
 
-(All step numbers in this section refer to the Resolution steps below, not to the
-Diagnosis Steps earlier in the guide.)
-
-**Which steps apply to your cluster.** This TSG addresses a PFC negotiation failure
-rooted in a competing firmware LLDP agent on Mellanox ConnectX clusters, and in the
-loss of host DCBX once that agent is disabled (see Affected Configurations). How much
-of the resolution you run depends on your NIC vendor:
-
-| Step | Mellanox ConnectX cluster | Non-Mellanox cluster (for example, Intel E810) |
-|------|---------------------------|------------------------------------------------|
-| Step 1: durable Windows LLDP agent (Willing = False) | Required | Recommended hardening; vendor-agnostic |
-| Step 2: force PFC on the switch | Required (RoCEv2 is the only transport, so PFC is mandatory) | Required if the cluster runs RoCEv2; otherwise recommended |
-| Step 3: disable the firmware LLDP agent | Required; this collapses each storage port to a single LLDP agent and resolves the dual-agent conflict | Does not apply as written: Step 3 disables the Mellanox firmware agent using Mellanox-only tooling. Skip Step 3 and the WinMFT prerequisite. See the note on other vendors below. |
-
-- **No Mellanox NICs at all (for example, an Intel E810 cluster):** there is no
-  Mellanox firmware LLDP agent to disable, so Step 3 does not apply. Run Step 1, and
-  on a RoCEv2 cluster run Step 2, as standard lossless-fabric hygiene.
-- **Mixed cluster:** run Step 3 only on the nodes whose Mellanox cards the diagnostics
-  flagged with firmware LLDP `ALL(2)`. Nodes with no Mellanox NICs need only Steps 1
-  and 2.
-- **Broadcom NICs:** like Mellanox, Broadcom is RoCEv2-only, so Steps 1 and 2 apply
-  the same way. Step 3 as written uses the Mellanox WinMFT tooling and is specific to
-  ConnectX; to silence a Broadcom firmware agent, first confirm it is competing using
-  the switch-side neighbor-count check, then see the vendor pointers in the
-  neighbor-count note under Verification After Remediation.
-- **Other NICs also have firmware LLDP agents.** Intel E810 and Broadcom ship a
-  firmware LLDP agent too, so a competing agent is not unique to Mellanox. The
-  shared problem is the dual-agent state itself: on Aruba CX the `multiple_peers`
-  deadlock (Factor 1) comes from two chassis-IDs on a port and is independent of any
-  DCBX dialect, so a non-Mellanox cluster that leaves a firmware agent enabled could
-  see the same deadlock. What is established for Mellanox ConnectX is that it runs
-  such a competing agent; whether a given Intel or Broadcom adapter does is a data gap
-  on the tested hardware. The remedy follows the same principle (one durable host
-  agent, firmware agent off), but the command to disable a non-Mellanox firmware agent
-  is vendor-specific; see the vendor pointers in the neighbor-count note under
-  Verification After Remediation.
+(All step numbers in this section refer to the Resolution steps below, not to the Diagnosis Steps.) Complete all three steps, in order, only after the diagnostics confirm this TSG's Mellanox ConnectX and Cisco NX-OS failure state.
 
 ### Step 1: Ensure the Windows LLDP Agent Is Durably Enabled (Willing = False) [LOW RISK]
 
@@ -1571,8 +1226,8 @@ safe to re-apply, including on a cluster that already has the durable platform f
 re-asserting the durable state and Willing = False posture causes no harm.
 
 Use the following one-time toggle, applied to every node, to write a durable LLDP
-agent state that survives reboot and to re-assert the host-authoritative DCBX
-posture (Willing = False). It targets the ATC-managed fabric uplinks (the storage
+agent state that survives reboot and to retain the local DCBX `Willing = False`
+posture. This local setting does not cause the Windows LLDP agent to advertise DCBX TLVs. The command targets the ATC-managed fabric uplinks (the storage
 and management/compute ports). It deliberately does not enable LLDP on the
 iDRAC/BMC USB NIC (a GUID-named Remote NDIS adapter that is always Up but has no
 switch peer). Use `Set-NetLldpAgent` only; do not use
@@ -1610,7 +1265,7 @@ $result = Invoke-Command -ComputerName $nodes -ScriptBlock {
         Set-NetLldpAgent -NetAdapterName $nic.Name -AdminStatus Disabled -ErrorAction SilentlyContinue
         Set-NetLldpAgent -NetAdapterName $nic.Name -AdminStatus Enabled  -ErrorAction Stop
 
-        # Re-assert host-authoritative DCBX (Willing = False), matching the deployment posture
+        # Retain the local DCBX Willing=False posture; this does not enable DCBX TLV transmission.
         Set-NetQosDcbxSetting -InterfaceAlias $nic.Name -Willing $false -Confirm:$false -ErrorAction SilentlyContinue
     }
 
@@ -1650,8 +1305,7 @@ ContosoNode-02 ethernet 4 Enabled
 **Effect:** The Windows LLDP agent remains `Enabled` on the storage NICs across
 reboots without requiring a scheduled task (validated on a ConnectX-6 Dx node
 through a full Suspend / Restart / Resume cluster reboot cycle), and the host
-DCBX Willing flag is set to False (host-authoritative) to match the deployment
-posture.
+local DCBX Willing flag remains False. In the validated state, the Windows LLDP agent still transmits bare LLDP without DCBX TLVs.
 
 **Confirm durability before proceeding to Step 3.** Reboot one node (or wait for
 a planned reboot), then verify `Get-NetLldpAgent` still reports
@@ -1672,14 +1326,7 @@ should still be applied.
 > depends on DCBX negotiation, so the later removal of the firmware DCBX agent
 > (Step 3) cannot drop lossless behavior on the storage fabric.
 
-> **Switchless / 2-node direct-attached storage.** Steps 2 and 3 assume the storage
-> NICs connect through a ToR switch. On a 2-node switchless cluster the storage NICs
-> are cabled host-to-host, so there is no switch on which to force PFC. There, the
-> Step 2 substitute is confirming host-enforced PFC on both peers
-> (`Get-NetQosFlowControl -Priority 3` shows priority 3 enabled on each node), and
-> the "PFC is pinned on the switch" guarantee that makes Step 3 safe does not apply.
-> On that topology, the host PFC posture is the only thing keeping the fabric
-> lossless after the firmware agent is removed, so verify it before running Step 3.
+> **Scope guard:** This step applies only to Cisco NX-OS switched storage. Stop if the storage links are switchless or use another switch operating system.
 
 Configure PFC to be enforced locally on each **storage port**, independent
 of DCBX negotiation. This is the single most impactful step and works
@@ -1695,44 +1342,27 @@ Ports" section first to build the storage port list.
 > you the exact storage switch ports per node and ToR. Apply forced PFC ON to
 > every storage port; do not apply it to any mgmt/compute port.
 
-**Cisco NX-OS** (already the default on most Azure Local deployments):
+**Precheck:** On each mapped storage port, capture the current interface configuration and PFC state. Keep this output as the rollback source.
+
+```console
+show running-config interface ethernet 1/<port>
+show interface priority-flow-control | include Ethernet1/<port>
+```
+
+Stop if the port map is incomplete, the interface is not storage-facing, or the active QoS policy does not map storage to priority 3. See [Azure Local QoS Policy](./Reference-TOR-QOS-Policy-Configuration.md) for the complete design and Cisco NX-OS policy.
+
+**Change:** Replace the example range with the exact storage ports from the port map.
+
 ```
 interface ethernet 1/21-36
-  priority-flow-control mode on
+  priority-flow-control mode on send-tlv
 ```
 Note: Replace `ethernet 1/21-36` with the actual storage port range from the
 "Storage" rows of your port map. Storage ports are typically labeled
-`Switched-Storage` in the switch configuration.
-
-**Aruba CX (AOS-CX):**
-```
-interface 1/1/17-1/1/22
-  flow-control priority rxtx 3
-```
-Note: Replace `1/1/17-1/1/22` with the actual storage port range. The command
-`flow-control priority rxtx 3` enables bidirectional (symmetric) PFC for
-priority 3 locally on the interface; it is the per-priority PFC command and is
-distinct from the plain `flow-control` (802.3x link pause) command, which is
-negotiated with the link partner. Priority 3 must already be assigned to a
-lossless queue and pool, which the standard Azure Local Aruba QoS template
-configures. This syntax applies to AOS-CX 10.10 and later (the
-`flow-control priority rxtx <list>` form was finalized in 10.10); Azure Local
-Aruba CX deployments typically run 10.13 or later.
-
-> **Lab-validation note (Aruba CX).** The `flow-control priority rxtx 3` syntax is
-> verified against the AOS-CX command documentation but was not validated on live
-> Aruba hardware in our test lab; the lab evidence in this guide is from Cisco
-> NX-OS. See "Known Limitations and Open Items." Confirm the command against your
-> AOS-CX version, and validate on a non-production port first.
-
-Follow-on validation (confirm the change took effect on the switch):
-```
-show interface 1/1/<port> flow-control
-```
-Run this on a representative storage port immediately after applying the
-configuration. The output should show priority-based flow control enabled on
-priority 3. If it does not, confirm priority 3 is mapped to a lossless
-queue/pool in the active QoS profile before re-applying.
+`Switched-Storage` in the switch configuration. `send-tlv` matches the
+[Azure Local QoS Policy](./Reference-TOR-QOS-Policy-Configuration.md) baseline and keeps the
+switch advertising the PFC TLV over LLDP, so the DCBX telemetry this guide relies on
+remains available after PFC is forced.
 
 **Set compute and management ports explicitly OFF:**
 
@@ -1752,10 +1382,6 @@ Cisco NX-OS:
 interface ethernet 1/1-20
   priority-flow-control mode off
 ```
-Aruba CX (AOS-CX): leave the lossless priority unmapped on these interfaces (do
-not apply `flow-control priority rxtx 3`). Dell OS10:
-`priority-flow-control mode off`. Arista EOS: `no priority-flow-control`.
-
 > **Special case (converged topology):** Do NOT set ports OFF if the deployment
 > is fully converged (a single intent where the same physical NICs carry storage,
 > compute, and management). On a converged port, the storage priority shares the
@@ -1770,28 +1396,22 @@ not apply `flow-control priority rxtx 3`). Dell OS10:
 > traffic lossy. On such deployments, treat the converged ports like storage ports
 > (PFC forced ON for the RDMA priority) rather than OFF.
 
-**Verification:**
+**Expected result and verification:** Every storage port reports `Mode On, Oper On`. Stop before Step 3 if any storage port remains operationally off.
 
-Cisco:
 ```
 show interface priority-flow-control
 ```
-Expected: `Mode On, Oper On (8)` on all storage ports.
 
-Aruba:
-```
-show interface 1/1/<port> flow-control
-```
-Expected: priority-based flow control shown as enabled on priority 3.
-
-**Save the configuration.** Forced PFC above is applied to the running config only.
+**Save the configuration only after verification succeeds.** Forced PFC above is applied to the running config only.
 Persist it so a later switch reload (power event, firmware upgrade) does not revert
 PFC to its default while the NIC firmware agent stays disabled, which would silently
 drop losslessness on the storage fabric with no DCBX fallback:
 
-- Cisco NX-OS: `copy running-config startup-config`
-- Dell OS10: `copy running-configuration startup-configuration`
-- Aruba CX (AOS-CX): `write memory`
+```console
+copy running-config startup-config
+```
+
+**Rollback:** Restore the captured interface configuration. If the prior state was PFC auto mode, apply it only long enough to return to the recorded state, verify the interface, and stop the remediation because Step 3 requires forced PFC to remain operational.
 
 **Effect:** PFC is always on for the RDMA priority class, regardless of
 LLDP or DCBX state. ETS and Application Priority are still configured
@@ -1800,17 +1420,10 @@ any DCB parameter.
 
 ### Step 3: Disable the Mellanox Firmware LLDP Agent [MEDIUM RISK]
 
-> **THIS STEP APPLIES ONLY TO MELLANOX ConnectX NICs.** Disabling a NIC firmware
-> LLDP/DCBX agent is the only part of this remediation that is vendor-specific, and
-> the code blocks below use the Mellanox WinMFT tooling (`mst`, `mlxconfig`,
+> **THIS STEP APPLIES ONLY TO MELLANOX ConnectX NICs.** The code blocks below use the Mellanox WinMFT tooling (`mst`, `mlxconfig`,
 > `mlxfwreset`). The preflight script in this step prints a `NIC CHECK:` line that
 > tells you whether this node has Mellanox NICs. If it reports none, **skip Step 3
-> entirely**: there is no Mellanox firmware agent to disable. Steps 1 (durable Windows
-> LLDP agent) and 2 (forced PFC on the switch) are vendor-agnostic and still apply to
-> your cluster. To confirm a non-Mellanox firmware agent (Intel E810, Broadcom) is
-> silent, use the vendor-neutral switch-side neighbor-count check in Verification
-> After Remediation; if it shows the agent is competing, that same note lists the
-> vendor tools and URLs for disabling it.
+> and stop this TSG**. Do not apply these firmware commands to another adapter family.
 
 > **COMPLETE STEP 1 AND STEP 2 FIRST.** This step removes the firmware DCBX/LLDP agent,
 > which is what currently negotiates PFC with the switch. Make sure the durable
@@ -1942,22 +1555,12 @@ else {
 # How many distinct Mellanox cards back each traffic plane on this node?
 # Two ports sharing the same PCI Segment/Bus/Device are one dual-port card.
 # This card-level redundancy verdict only governs the Step 3 PCIe card reset, so it
-# is computed only when Mellanox NICs are present. On a non-Mellanox node it is
-# skipped: Step 3 does not apply, so there is no reset or reboot choice to make.
+# is computed only when Mellanox NICs are present. Otherwise, stop this TSG.
 if (-not $mellanoxNics) {
     "TOPOLOGY VERDICT: not computed on this node (no Mellanox NICs)."
     "  Step 3's Option 1/2/3 PCIe card reset and reboot procedures are Mellanox-only,"
     "  so the card-level redundancy verdict does not apply here."
-    "  IMPORTANT: this does NOT mean there is nothing to do. From the host we cannot"
-    "  read whether this NIC's firmware LLDP agent is transmitting, so we cannot"
-    "  confirm here whether a competing (dual) LLDP agent exists on this cluster."
-    "  To find out, use the switch-side neighbor check (see Verification, Switch Side):"
-    "  run 'show lldp neighbors' on a storage port. Exactly ONE neighbor (the host)"
-    "  means no competing firmware agent and Steps 1 and 2 are sufficient. TWO"
-    "  neighbors (host + a NIC-MAC chassis-ID) means a firmware LLDP agent IS"
-    "  competing and must be disabled using the NIC vendor's or OEM's procedure,"
-    "  which Step 3 does not provide for non-Mellanox NICs."
-    "  Steps 1 (durable Windows LLDP) and 2 (forced PFC) apply to this cluster either way."
+    "  STOP: this TSG does not apply to this node. Do not run the firmware commands below."
 }
 else {
     $storageAdapters = @((Get-NetIntent |
@@ -2108,14 +1711,9 @@ What this means for the four options:
 
 Both `mlxfwreset`-based options need the WinMFT tooling (see Prerequisites: Mellanox Firmware Tools).
 
-#### Option 1: Live PCIe card reset, no drain (REDUNDANT topology only)
+#### Stage the firmware setting before activation
 
-Use this only if the check above reported REDUNDANT. Each plane spans two or more
-cards, so a single PCIe card reset at a time leaves a surviving card in every plane and
-the node stays online throughout. Run these two commands in order.
-
-**1. Write the firmware setting to NVM.** This is non-disruptive on its own; it
-takes effect only when the NIC receives a PCIe card reset in the next command.
+Run this block once on the node before selecting an activation option. It writes the disabled LLDP/DCBX setting to NVM on every Mellanox card. The write is non-disruptive; the current firmware state does not change until one of the activation options resets or reboots the card.
 
 ```powershell
 # Requires WinMFT (Mellanox Firmware Tools).
@@ -2142,7 +1740,7 @@ else {
     )
 
     if (-not $devices) {
-        Write-Warning "No Mellanox devices found via 'mst status'. Nothing to do on this node (for example, an Intel-only cluster)."
+        Write-Warning "No Mellanox devices found via 'mst status'. Stop: this TSG does not apply to this node."
     }
 
     # Write the setting to NVM on each device (both ports). Persists across reboots;
@@ -2156,7 +1754,13 @@ else {
 }
 ```
 
-**2. Activate it with a live PCIe card reset, one card at a time.** This performs a level-3 PCIe reset of each
+Confirm the staging command succeeds for every discovered device. If any write fails, stop before resetting or rebooting a card. Re-run Diagnosis Step 6 to record the current and next-boot values.
+
+#### Option 1: Live PCIe card reset, no drain (REDUNDANT topology only)
+
+Use this only if the check above reported REDUNDANT and the shared staging step succeeded. Each plane spans two or more cards, so a single PCIe card reset at a time leaves a surviving card in every plane and the node stays online throughout.
+
+**1. Activate it with a live PCIe card reset, one card at a time.** This performs a level-3 PCIe reset of each
 Mellanox card and waits for both traffic planes to fully recover before moving to
 the next card, so only one card is ever offline at once. The card itself is offline
 only briefly during the reset, but a port can take longer to relink at the switch,
@@ -2322,61 +1926,15 @@ The node was not drained, so there is nothing to resume. Option 1 is complete.
 
 Use this if the check above reported NOT-REDUNDANT (single-card plane). Draining
 first means the brief per-card interruptions during the live PCIe card reset have no
-workload to affect, while you keep the fast live activation (no reboot). Run these
-commands in order.
+workload to affect, while you keep the fast live activation (no reboot). The shared staging step above must have completed successfully.
 
-**1. Write the firmware setting to NVM.** Non-disruptive on its own; it takes
-effect only when the NIC receives a PCIe card reset below.
-
-> This is the same NVM-write block shown in Option 1. It is repeated here so you
-> can follow Option 2 top to bottom; there is no hidden difference to spot.
-
-```powershell
-# Requires WinMFT (Mellanox Firmware Tools).
-$mstDir = 'C:\Program Files\Mellanox\WinMFT'
-if (-not (Test-Path (Join-Path $mstDir 'mst.exe'))) {
-    # WinMFT is not installed. Say why, and whether Step 3 applies to this node.
-    if (Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
-            Where-Object { $_.InterfaceDescription -match 'Mellanox|ConnectX|NVIDIA' }) {
-        Write-Warning "WinMFT (mst.exe) is not installed, but this node has Mellanox NICs. Install WinMFT (see Prerequisites) and re-run this block."
-    }
-    else {
-        Write-Host "No Mellanox NICs on this node. Step 3 is Mellanox-specific and does not apply here; skip it. Steps 1 and 2 still apply to this cluster."
-    }
-}
-else {
-    Push-Location $mstDir
-
-    # Discover all Mellanox firmware devices on this node from `mst status`.
-    $devices = @(
-        (.\mst.exe status 2>&1) |
-            Select-String -Pattern 'mt\d+_pciconf\d+' -AllMatches |
-            ForEach-Object { $_.Matches.Value } |
-            Sort-Object -Unique
-    )
-
-    if (-not $devices) {
-        Write-Warning "No Mellanox devices found via 'mst status'. Nothing to do on this node (for example, an Intel-only cluster)."
-    }
-
-    # Write the setting to NVM on each device (both ports). Persists across reboots;
-    # not yet active until the NIC receives a PCIe card reset below.
-    foreach ($dev in $devices) {
-        Write-Host "Writing firmware LLDP/DCBX-off setting to $dev ..."
-        .\mlxconfig.exe -y -d $dev set LLDP_NB_TX_MODE_P1=0 LLDP_NB_TX_MODE_P2=0 LLDP_NB_RX_MODE_P1=0 LLDP_NB_RX_MODE_P2=0 LLDP_NB_DCBX_P1=0 LLDP_NB_DCBX_P2=0
-    }
-
-    Pop-Location
-}
-```
-
-**2. Drain the node.**
+**1. Drain the node.**
 
 ```powershell
 Suspend-ClusterNode -Name $env:COMPUTERNAME -Drain -Wait
 ```
 
-**3. Activate it with a live PCIe card reset, one card at a time.** This performs a level-3 PCIe reset of each
+**2. Activate it with a live PCIe card reset, one card at a time.** This performs a level-3 PCIe reset of each
 Mellanox card and waits for both traffic planes to fully recover before moving to
 the next card. Because the node is drained, these interruptions affect no workload.
 The card itself is offline only briefly during the reset, but a port can take longer
@@ -2536,7 +2094,7 @@ else {
 > not recover, which cards were not yet reset, and what to do next; the node stays
 > drained, so follow that guidance before running the resume command below.
 
-**4. After all resets complete, return the node to service.**
+**3. After all resets complete, return the node to service.**
 
 ```powershell
 Resume-ClusterNode -Name $env:COMPUTERNAME -Failback Immediate
@@ -2557,59 +2115,15 @@ supported on this NIC or firmware). On ConnectX-6 (Lx and Dx) the firmware chang
 activates on a warm/OS reboot, so there is no PCIe card reset loop. On ConnectX-4 Lx a
 warm reboot does NOT activate it: use Option 1 or Option 2 instead, or substitute a
 COLD power cycle for the `Restart-Computer` in step 3 (see NIC generation determines
-how the firmware change activates). Run these commands in order.
+how the firmware change activates). The shared staging step above must have completed successfully.
 
-**1. Write the firmware setting to NVM.** Persists across reboots; activates on
-the next boot (on ConnectX-4 Lx, on the next cold power cycle, not a warm reboot).
-
-> This is the same NVM-write block shown in Options 1 and 2. It is repeated here so
-> you can follow Option 3 top to bottom; there is no hidden difference to spot.
-
-```powershell
-# Requires WinMFT (Mellanox Firmware Tools).
-$mstDir = 'C:\Program Files\Mellanox\WinMFT'
-if (-not (Test-Path (Join-Path $mstDir 'mst.exe'))) {
-    # WinMFT is not installed. Say why, and whether Step 3 applies to this node.
-    if (Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
-            Where-Object { $_.InterfaceDescription -match 'Mellanox|ConnectX|NVIDIA' }) {
-        Write-Warning "WinMFT (mst.exe) is not installed, but this node has Mellanox NICs. Install WinMFT (see Prerequisites) and re-run this block."
-    }
-    else {
-        Write-Host "No Mellanox NICs on this node. Step 3 is Mellanox-specific and does not apply here; skip it. Steps 1 and 2 still apply to this cluster."
-    }
-}
-else {
-    Push-Location $mstDir
-
-    # Discover all Mellanox firmware devices on this node from `mst status`.
-    $devices = @(
-        (.\mst.exe status 2>&1) |
-            Select-String -Pattern 'mt\d+_pciconf\d+' -AllMatches |
-            ForEach-Object { $_.Matches.Value } |
-            Sort-Object -Unique
-    )
-
-    if (-not $devices) {
-        Write-Warning "No Mellanox devices found via 'mst status'. Nothing to do on this node (for example, an Intel-only cluster)."
-    }
-
-    # Write the setting to NVM on each device (both ports). Activates on the next boot.
-    foreach ($dev in $devices) {
-        Write-Host "Writing firmware LLDP/DCBX-off setting to $dev ..."
-        .\mlxconfig.exe -y -d $dev set LLDP_NB_TX_MODE_P1=0 LLDP_NB_TX_MODE_P2=0 LLDP_NB_RX_MODE_P1=0 LLDP_NB_RX_MODE_P2=0 LLDP_NB_DCBX_P1=0 LLDP_NB_DCBX_P2=0
-    }
-
-    Pop-Location
-}
-```
-
-**2. Drain the node.**
+**1. Drain the node.**
 
 ```powershell
 Suspend-ClusterNode -Name $env:COMPUTERNAME -Drain -Wait
 ```
 
-**3. Reboot the node.** On ConnectX-6 (Lx and Dx) the setting written above activates
+**2. Reboot the node.** On ConnectX-6 (Lx and Dx) the staged setting activates
 during this boot. On ConnectX-4 Lx a warm `Restart-Computer` will NOT activate it:
 perform a cold power cycle (full power off, then on) instead, or use Option 1 or
 Option 2.
@@ -2618,7 +2132,7 @@ Option 2.
 Restart-Computer -Force
 ```
 
-**4. After the node rejoins the cluster, return it to service.**
+**3. After the node rejoins the cluster, return it to service.**
 
 ```powershell
 Resume-ClusterNode -Name $env:COMPUTERNAME -Failback Immediate
@@ -2647,73 +2161,28 @@ nodes as each node took its update reboot, and the setting persisted through the
 firmware flash. It is the lowest-disruption path when a maintenance window is already planned,
 the change rides the reboots the update performs anyway.
 
-**1. Write the firmware setting to NVM on every Mellanox node (stage only; do not reset or
-reboot to activate).**
+The shared staging step above must have completed successfully on every Mellanox node. Do not reset or reboot a node when staging; the fabric remains unchanged until the scheduled update.
 
-> This is the same NVM-write block shown in Options 1 to 3. It is non-disruptive on its own:
-> it sets the next-boot value while the current value stays live, so nothing changes on the
-> fabric until the update reboots the node. Because staging does not disrupt the node, you do
-> not drain or reboot at this point; run it on every Mellanox node before the update.
-
-```powershell
-# Requires WinMFT (Mellanox Firmware Tools); see Prerequisites.
-$mstDir = 'C:\Program Files\Mellanox\WinMFT'
-if (-not (Test-Path (Join-Path $mstDir 'mst.exe'))) {
-    if (Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
-            Where-Object { $_.InterfaceDescription -match 'Mellanox|ConnectX|NVIDIA' }) {
-        Write-Warning "WinMFT (mst.exe) is not installed, but this node has Mellanox NICs. Install WinMFT (see Prerequisites) and re-run this block."
-    }
-    else {
-        Write-Host "No Mellanox NICs on this node. Step 3 is Mellanox-specific and does not apply here; skip it."
-    }
-}
-else {
-    Push-Location $mstDir
-    $devices = @(
-        (.\mst.exe status 2>&1) |
-            Select-String -Pattern 'mt\d+_pciconf\d+' -AllMatches |
-            ForEach-Object { $_.Matches.Value } |
-            Sort-Object -Unique
-    )
-    if (-not $devices) {
-        Write-Warning "No Mellanox devices found via 'mst status'. Nothing to do on this node."
-    }
-    foreach ($dev in $devices) {
-        Write-Host "Staging firmware LLDP/DCBX-off setting on $dev (activates on the next update reboot) ..."
-        .\mlxconfig.exe -y -d $dev set LLDP_NB_TX_MODE_P1=0 LLDP_NB_TX_MODE_P2=0 LLDP_NB_RX_MODE_P1=0 LLDP_NB_RX_MODE_P2=0 LLDP_NB_DCBX_P1=0 LLDP_NB_DCBX_P2=0
-    }
-    Pop-Location
-}
-```
-
-**2. Confirm the change is staged (not yet active).** Re-run the Diagnosis Step 6 query. The
+**1. Confirm the change is staged (not yet active).** Re-run the Diagnosis Step 6 query. The
 next-boot column should show the disabled value (`OFF(0)` / `False(0)`) while the current
 column still shows the old value, so the change is pending and the fabric is unchanged.
 
-**3. Run the Azure Local solution update.** Start it the normal way, or let a scheduled update
+**2. Run the Azure Local solution update.** Start it the normal way, or let a scheduled update
 run. Its Cluster-Aware Updating orchestration drains and reboots each node in turn, and that
 per-node reboot activates the staged setting on that node. You do not run any extra reboot or
 PCIe card reset.
 
-**4. After the update completes, verify the change activated and persisted.** Re-run the
+**3. After the update completes, verify the change activated and persisted.** Re-run the
 Diagnosis Step 6 query on every node: the current column should now show the disabled value on
 every card. A firmware or NVM component in the update package can in principle reset the
 setting to defaults, so this post-update re-check is mandatory. It was preserved in the
 in-house ConnectX-6 validation, but confirm on your hardware.
 
-> **Watch the update, not just the NIC.** Activating through a solution update means the update
-> itself must succeed. The update's SBE applicability scan queries each node's baseboard
-> management controller (Dell iDRAC) over Redfish; a wedged controller can stall the update
-> independently of this change (see Known Limitations and Open Items, "Activating via an Azure
-> Local solution update can stall on a wedged BMC"). That is a controller issue, not a
-> consequence of the firmware LLDP change.
-
 #### Notes that apply to all four options
 
 **Effect:** Removes the firmware LLDP agent's separate identity (the MAC-based
 chassis-ID), collapsing each storage port to a single LLDP agent: the Windows
-agent (hostname chassis-ID, bare LLDP with no DCBX TLVs). This resolves the
-Aruba CX dual-agent `multiple_peers` deadlock. In this single-agent state a
+agent (hostname chassis-ID, bare LLDP with no DCBX TLVs). This removes the competing Mellanox LLDP identity. In this single-agent state a
 Cisco NX-OS switch in auto mode reports `Detected: CIN`
 with `Willing=No` (the switch does not report an IEEE peer on that port; see
 Contributing Factors) and PFC auto-negotiation will not
@@ -2754,7 +2223,7 @@ provide defense in depth:
   and keeps PFC active even if Step 3 is later reverted by an OS update, NIC
   firmware update, or configuration drift.
 - Step 3 disables the Mellanox firmware LLDP agent, collapsing each storage port to
-  a single LLDP agent and resolving the Aruba CX dual-agent deadlock.
+    a single LLDP identity.
 
 All three steps are independently reversible. Step 1 and Step 2 are control-plane
 changes that carry no link disruption; the MEDIUM risk for the overall procedure
@@ -2811,8 +2280,8 @@ $verify = Invoke-Command -ComputerName $nodes -ScriptBlock {
     $rows += [pscustomobject]@{ Node = $env:COMPUTERNAME; Check = 'Host PFC priority 3'
         Item = 'Priority 3'; State = if ($pfc) { "$($pfc.Enabled)" } else { '(n/a)' }; Expected = 'True' }
 
-    # Mellanox firmware LLDP/DCBX (requires WinMFT; Mellanox NICs only). On a
-    # non-Mellanox host this emits one explicit n/a row instead of going silent.
+    # Mellanox firmware LLDP/DCBX (requires WinMFT). An out-of-scope host emits
+    # one explicit n/a row instead of going silent.
     $mstDir = 'C:\Program Files\Mellanox\WinMFT'
     $nonMlx = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
         Where-Object { $_.InterfaceDescription -notmatch 'Mellanox|ConnectX|NVIDIA|Remote NDIS|USB' } |
@@ -2860,8 +2329,7 @@ port reporting firmware LLDP TX `OFF(0)` and firmware DCBX `False(0)`.
 
 Because the check covers every ATC fabric NIC, a management or compute port that
 still reports `Willing = True` appears as a `FAIL` even though it does not affect
-storage PFC; set those ports to `Willing = False` to match the cluster-wide
-host-authoritative posture in the Recommended Configuration.
+storage PFC; set those ports to `Willing = False` to retain the documented local posture.
 
 Sample (abbreviated; both nodes remediated, additional NIC and device rows
 omitted):
@@ -2894,65 +2362,15 @@ show interface priority-flow-control | include Ethernet1/<port>
 ```
 Expected: exactly one LLDP neighbor per port (your host's hostname), PFC Mode On / Oper On. See the neighbor-count note below.
 
-**Aruba CX:**
-```
-show lldp neighbor-info interface 1/1/<port>
-show interface 1/1/<port> flow-control
-```
-Expected: exactly one LLDP neighbor per port, PFC active on priority 3. See the neighbor-count note below.
-
-> **Reading the neighbor count (vendor-neutral firmware-agent check).** Exactly one
+> **Reading the neighbor count.** Exactly one
 > LLDP neighbor per storage port, your host's hostname, confirms the firmware LLDP
 > agent is silent and the Windows agent is the sole speaker. Two neighbors on a port
 > (your hostname plus a NIC MAC address as a second chassis-ID) mean a firmware LLDP
-> agent is still transmitting. This neighbor count is the authoritative check for any
-> NIC vendor, and on non-Mellanox clusters (Intel E810, Broadcom), where the host-side
-> table above has no firmware rows to inspect, it is the only way to confirm the
-> firmware agent's state.
->
-> **If a storage port shows two neighbors on a non-Mellanox NIC**, the firmware agent
-> is competing with the Windows agent and should be silenced (the same end state that
-> Step 3 achieves on Mellanox). Whether you need to act at all is decided by this
-> neighbor count: one neighbor means there is nothing more to do; two neighbors means
-> you do. The command to silence the agent is vendor-specific and version-specific, so
-> confirm the exact syntax against your NIC vendor's and server OEM's current
-> documentation before applying. The general path is the same for every vendor:
-> download the vendor's Windows NIC management or firmware tool for your exact adapter
-> model, then follow that tool's own documentation for the command that disables the
-> firmware LLDP/DCBX agent. Starting points:
->
-> - **Broadcom NetXtreme:** use the Broadcom `niccli` (NIC command-line) utility, which
->   sets the adapter's nonvolatile configuration (for example,
->   `niccli -nic <index> -lldp_agent --disable`, or the `-dcbx_agent --disable` form;
->   option names vary by firmware version). Download the utility for your model from the
->   [Broadcom network-adapter portal](https://www.broadcom.com/products/ethernet-connectivity/network-adapters)
->   and see the [NICCLI configuration guide](https://techdocs.broadcom.com/us/en/storage-and-ethernet-connectivity/ethernet-nic-controllers/bcm957xxx/adapters/ethernet-network-adapter-utilities/nic-cli-configuration-utility.html).
->   The same DCB/LLDP control is often also exposed in the server BIOS/UEFI device
->   settings or in the adapter's Windows Advanced properties.
-> - **Intel E810:** there is currently no Windows-side toggle (no PROSet setting, no
->   registry key, no PowerShell property) for the firmware LLDP agent; it is governed at
->   the firmware level. Intel documents the behavior in
->   ["FW LLDP Usage Control"](https://cdrdv2-public.intel.com/783899/783899_FW_LLDP_Agent_Usage_Control_v1.1.pdf);
->   drivers and firmware/NVM packages are on the
->   [Intel Download Center](https://www.intel.com/content/www/us/en/download/19314/intel-ethernet-adapter-complete-driver-pack.html).
->   Contact Intel support if your firmware does not expose the control. (On Linux the
->   control is `ethtool --set-priv-flags <interface> fw-lldp-agent off`.) Note that
->   on the tested Intel adapters, host egress with the Windows agent active carries no
->   DCBX TLVs (CONFIRMED); the risk an Intel firmware agent would carry, if active, is
->   the dual-agent `multiple_peers` case (Factor 1) on Aruba CX, not a DCBX dialect.
-> - **Server OEM (Dell, HPE, and others):** the firmware DCBX/LLDP agent can also be
->   governed by BIOS/UEFI HII or by BMC (iDRAC, iLO) DCB settings; check the OEM's DCB
->   configuration guide.
->
-> Whatever method you use, the goal state is the same: `show lldp neighbors` reports
-> exactly one neighbor (the host) per storage port.
+> agent is still transmitting. Stop and repeat Step 3 for the affected Mellanox card.
 
 ## Prevention
 
-1. **Include forced PFC (Resolution Step 2) in standard switch deployment templates.** Ensure all
-   Azure Local switch configurations use forced PFC (`priority-flow-control
-   mode on` on Cisco, `flow-control priority rxtx 3` on Aruba CX) rather than
-   DCBX-negotiated PFC.
+1. **Include forced PFC in Cisco NX-OS deployment templates.** Use `priority-flow-control mode on send-tlv` on storage-facing ports rather than DCBX-negotiated PFC. Keep the complete policy aligned with the [Azure Local QoS Policy](./Reference-TOR-QOS-Policy-Configuration.md).
 
 2. **Monitor for FW LLDP re-enablement.** NIC firmware updates or SBE
    updates may re-enable the Mellanox FW LLDP agent. Include a periodic
@@ -2970,166 +2388,16 @@ Expected: exactly one LLDP neighbor per port, PFC active on priority 3. See the 
    deployed on an earlier build still need the toggle even after updating to
    12.2607 or later.
 
-## Background: DCBX Dialects and Why They Matter
-
-DCBX is the protocol that allows a host and switch to automatically
-agree on PFC, ETS, and application priority settings. It runs as a set of
-TLVs inside LLDP frames.
-
-The problem is that DCBX was implemented by vendors BEFORE the IEEE
-finalized the standard, resulting in three incompatible dialects:
-
-> This is the classic engineering outcome of shipping a protocol before its
-> specification: a standard so widely adopted that three vendors each
-> implemented a different one.
-
-### CIN
-Cisco Intel Nuova (CIN) was the earliest implementation, developed jointly
-by Cisco, Intel, and Nuova Systems (acquired by Cisco in 2008). It uses
-proprietary TLV encoding. On Cisco NX-OS 10.3(4a), a storage port in PFC auto
-mode reports `Detected: CIN` with `Willing=No` against the affected Mellanox
-hosts. This reading was observed both in the production dual-agent state and in
-the remediated single-agent state (Appendix A, B1 and A1/A2), so disabling the
-firmware LLDP agent did not by itself change the auto-mode reading to
-`IEEE 802.1`; the switch does not report an IEEE 802.1 peer on that port in auto
-mode. The recovered
-direction-split capture shows no CIN-subtype (`0x01`) TLV on the wire from any
-device, so `CIN` here is a switch-internal reading rather than a received
-dialect; the precise reason for the `CIN` reading is not established (see
-Contributing Factors and Known Limitations).
-
-### CEE
-Converged Enhanced Ethernet (CEE) was a later pre-standard draft developed
-by Intel and partners. It uses OUI `00:1B:21`, the same OUI as CIN; the two
-dialects differ by TLV subtype (CIN subtype `0x01`, CEE subtype `0x02`). In
-the scenarios this guide covers, CEE TLVs are not present on the host's
-NDIS-layer egress (CONFIRMED by direction-split packet capture; see Appendix A).
-An earlier non-direction-split capture near the host showed CEE alongside IEEE
-TLVs; OUI and subtype decode of the recovered direction-split capture confirms
-both came from the switch's own inbound advertisement (switch RX), not host
-egress: every `00:1B:21` DCBX TLV on the wire was switch-sourced and decoded as
-CEE subtype `0x02`, and no host frame carried a `00:1B:21` TLV (CONFIRMED). An
-earlier hypothesis that the firmware injects CEE below the host capture point
-has been withdrawn: the firmware's CEE emitter (`cee_dcbx_en`) is gated by the
-same NV parameter (`LLDP_NB_TX_MODE`) that disables the firmware LLDP agent, and
-a switch receiving CEE would report it as CEE, not `CIN` (see Known Limitations).
-
-### IEEE 802.1Qaz (2011, ratified standard)
-The Institute of Electrical and Electronics Engineers (IEEE) ratified this
-as the final standard. It uses OUI `00:80:C2` (IEEE's own OUI). This is
-the only dialect that all modern switches are required to support. Azure
-Local's NetworkATC configures the host QoS settings to match the IEEE
-standard's PFC and ETS parameters.
-
-### Why DCBX state matters for PFC convergence
-
-When a switch port is configured for PFC auto-negotiation (rather than
-forced PFC), the switch uses DCBX to determine whether the host wants PFC
-and on which priorities. If the switch has no IEEE 802.1 DCBX peer, it cannot
-converge PFC.
-
-On Mellanox ConnectX, the firmware LLDP agent is the component that supplies
-IEEE 802.1 DCBX to the switch. When that firmware agent is the sole LLDP speaker
-on the port (the Windows agent disabled, Appendix A states C1/C2), a Cisco NX-OS
-10.3(4a) switch in auto mode detects `IEEE 802.1` and PFC converges. In every
-observed state where the Windows agent was active, by contrast, the switch
-reported `Detected: CIN`: both the production dual-agent state (B1, firmware
-agent also enabled) and the remediated single-agent state (A1/A2, firmware agent
-disabled, host NDIS-layer egress bare LLDP with no DCBX TLVs, CONFIRMED on both
-Mellanox and Intel). Disabling the firmware agent therefore did not change the
-auto-mode reading away from `CIN`; the switch does not report an IEEE peer on
-that port in auto mode, and the precise reason for the `CIN` reading is not
-established (see Known Limitations). Auto PFC does not converge in the remediated
-single-agent state (A1/A2, CONFIRMED), which is why PFC must be forced at the
-switch.
-
-This is why forced PFC (`mode on`) is recommended: it bypasses DCBX
-negotiation entirely, so PFC activation does not depend on the host presenting
-a DCBX peer.
-
 ## Known Limitations and Open Items
 
-**The reason for the Cisco `CIN` detection is not established; the per-port
-behavior is what is CONFIRMED.** With the Windows LLDP agent active and the firmware
-agent disabled, the host NDIS-layer egress is bare LLDP with no DCBX TLVs on both
-Mellanox and Intel (CONFIRMED by direction-split packet capture). On the same
-Mellanox host, a Cisco port in PFC auto mode is detected as `CIN` while a port in
-forced PFC is detected as `IEEE 802.1` (CONFIRMED on Cisco NX-OS 10.3(4a)). This
-per-port contrast shows that the `Detected:` reading tracks the port's own PFC
-configuration on this switch: the same bare-egress host is read as `CIN` on an
-auto port and `IEEE 802.1` on a forced port. The precise reason the switch
-reports `CIN` is not established. Cisco's documented DCBX auto-negotiation
-behavior (negotiate the highest version common to both peers) does not by itself
-predict a `CIN` reading for this configuration, and the relevant Cisco
-state-machine and `show` references were not accessible, so we do not assert a
-specific Cisco mechanism. The recovered direction-split capture shows no
-CIN-subtype (`0x01`) TLV on the wire from any device, so the `CIN` reading is a
-switch-internal label rather than a received dialect. What is CONFIRMED and
-actionable is the per-port contrast and that forcing PFC resolves it.
+**The reason for the Cisco `CIN` display is not established.** The confirmed and actionable evidence is that Cisco NX-OS 10.3(4a) PFC auto mode did not converge in the validated single-agent state, while forced PFC remained operational. Direction-split capture found no CIN-subtype TLV on the wire. This guide therefore does not infer a Cisco state-machine mechanism from the display value. See [Appendix A](#appendix-a-test-evidence-matrix) for packet direction, OUI/subtype decoding, and CONFIRMED versus INFERRED boundaries.
 
-An earlier hypothesis, that the ConnectX firmware injects legacy CEE DCBX TLVs to
-the wire below the host capture point, has been withdrawn. The firmware's CEE
-emitter (`cee_dcbx_en`) is gated by the same NV parameter (`LLDP_NB_TX_MODE`)
-that disables the firmware LLDP agent, so once the agent is disabled the firmware
-cannot be the CEE source. (CEE and CIN are in any case distinct dialects: they
-share Intel's OUI `00:1B:21` and differ by TLV subtype, CIN `0x01` and CEE
-`0x02`.) An earlier non-direction-split capture near the host
-showed both IEEE 802.1 (`00:80:C2`) and legacy CEE (`00:1B:21`) DCBX TLVs. The
-recovered direction-split capture resolves their origin at the byte level: every
-`00:1B:21` DCBX TLV on the wire was sourced from the Cisco switch ports and
-decodes as CEE (subtype `0x02`), while no host frame carried a `00:1B:21` TLV
-(CONFIRMED). This is the direct empirical basis for the withdrawal: the CEE on
-the wire is the switch's own advertisement, not a host-side or below-the-tap
-firmware injection. The remediation (force PFC at the
-switch) resolves the symptom regardless of mechanism. The firmware is also not an
-unconditional CEE source: when it is the sole active agent (states C1/C2),
-the switch detects clean IEEE 802.1. The `mlxconfig DCBX_CEE_P1` / `DCBX_CEE_P2`
-and `DCBX_IEEE` parameters were not used in the recommended remediation, which
-does not depend on suppressing CEE in firmware.
-
-This is consistent with the Azure Local QoS guidance that the host operating
-system does not configure or send DCB TLVs (see
-[Reference-TOR-QOS-Policy-Configuration.md](./Reference-TOR-QOS-Policy-Configuration.md),
-which states the host has no DCBX settings and does not send DCB TLVs back to the
-switch). The OS LLDP agent egress is bare (CONFIRMED); any DCBX TLVs reaching the
-switch in the remediated state originate from the switch's own advertisement, not
-from the host.
+**The Windows LLDP agent transmits no DCBX TLVs in the validated state.** The local `Willing = False` setting does not contradict this observation and is not evidence of DCBX advertisement. The [Azure Local QoS Policy](./Reference-TOR-QOS-Policy-Configuration.md) defines the baseline relationship between static PFC/ETS and DCBX telemetry.
 
 **The firmware-supplied IEEE DCBX injection point is not localized.** In states
 C1/C2 the firmware-supplied IEEE DCBX originates below the host packet-capture
 tap, so the captures confirm the switch-side effect but do not localize where on
 the host the firmware generates the frames. This does not affect the remediation.
-
-**Aruba CX PFC syntax (verified against AOS-CX CLI documentation).** The
-correct AOS-CX command for locally enabling PFC on priority 3 is
-`flow-control priority rxtx 3` at the interface level (confirmed against the
-HPE Aruba Networking AOS-CX CLI Bank, `flow-control` command reference, which
-applies to the 8100, 8325, 8360, 9300/9300S, and 10000 series). The
-`pfc mode forced` / `pfc priority 3 enable` form does not exist on AOS-CX
-(that syntax belongs to ArubaOS-Switch / Comware). This syntax has not been
-applied on live Aruba hardware in our lab; confirm command availability and
-the lossless queue/pool prerequisites against the exact AOS-CX version and
-switch model deployed in your environment before applying. Per the AOS-CX
-CLI Bank Command History, the `flow-control priority rxtx <list>` syntax was
-finalized in AOS-CX 10.10; it is current as of the 2025 documentation and
-applies to the 10.13 and 10.16 releases referenced elsewhere in this guide.
-
-**Activating via an Azure Local solution update can stall on a wedged BMC (Dell
-iDRAC).** When you let a rolling Azure Local solution (SBE) update reboot the nodes to
-activate the firmware change (the ConnectX-6 path above), the update's SBE
-applicability scan queries each node's local BMC over Redfish. In-house validation hit
-a case where one node's Dell iDRAC returned HTTP 500 on its Thermal endpoint while the
-iDRAC overall health was OK, and the update failed at roughly 47 percent, during the
-pre-apply scan, before any node was drained or any firmware was flashed. This is a
-single-node BMC fault, not a result of the LLDP or firmware change. Because it fails in
-the scan phase, nothing was applied, so nothing reverts: the SBE stays at the prior
-version until a fixed retry moves it forward. To recover: confirm the failing step is
-the SBE scan and the BMC is returning 500 (not a genuine firmware failure); localize
-the node whose iDRAC Thermal endpoint returns 500 while its peers return 200; reset
-only that iDRAC (a BMC-only Manager.Reset, which does not touch the host OS or the
-cluster node); wait for the endpoint to return 200; then retry the update. The
-platform's own scan auto-retry does not clear a wedged iDRAC, so the BMC reset is the
-actual fix.
 
 **Firmware-LLDP activation is validated across ConnectX-4 Lx, ConnectX-5 Ex, ConnectX-6
 (Lx and Dx), and ConnectX-7.** The activation matrix in Step 3 (NIC generation determines
@@ -3145,6 +2413,8 @@ ConnectX-7 activate on a warm reboot, and every generation activates via the
 - [Priority-based Flow Control (PFC)](https://learn.microsoft.com/en-us/windows-server/networking/technologies/dcb/dcb-top#pfc)
 - [Set-NetQosDcbxSetting](https://learn.microsoft.com/en-us/powershell/module/dcbqos/set-netqosdcbxsetting)
 - [NVIDIA Mellanox Firmware Tools (WinMFT)](https://network.nvidia.com/products/adapter-software/firmware-tools/)
+- [Azure Local QoS Policy](./Reference-TOR-QOS-Policy-Configuration.md)
+- [Explicit Congestion Notification](./Reference-TOR-Explicit-Congestion-Notification.md)
 
 ## Appendix A: Test Evidence Matrix
 
@@ -3218,11 +2488,7 @@ from RX by source MAC and OUI/subtype-decoded):
   (C1/C2); the firmware-supplied IEEE DCBX is inferred from the switch-side
   detection.
 
-Aruba CX `multiple_peers` behavior referenced elsewhere in this guide is
-inferred from a production deployment; it was not reproduced in
-this Cisco test matrix.
-
-## Appendix B: Switch-Side Command Reference
+## Appendix B: Cisco NX-OS Command Reference
 
 > For any command below that takes a `<port>`, substitute the specific switch
 > ports from the port map you built in "Mapping NIC Roles to Switch Ports"
@@ -3239,31 +2505,6 @@ show interface counters errors non-zero
 show logging last 200
 ```
 
-### Aruba CX (AOS-CX)
-```
-show lldp neighbor-info detail
-show interface 1/1/<port> flow-control
-show qos interface 1/1/<port>
-show running-config interface 1/1/<port>
-```
-
-### Dell OS10 / Enterprise SONiC
-```
-show lldp neighbors detail
-show pfc counters
-show qos interface
-show ecn
-show running-config
-```
-
-### Arista EOS
-```
-show lldp neighbors detail
-show priority-flow-control
-show dcbx
-show interfaces counters errors
-```
-
 ## Appendix C: Acronym Quick Reference
 
 | Acronym | Full Name | One-Sentence Definition |
@@ -3276,7 +2517,7 @@ show interfaces counters errors
 | **DCB** | Data Center Bridging | A collection of IEEE standards (PFC, ETS, DCBX) that enable lossless Ethernet for storage traffic. |
 | **DCBX** | Data Center Bridging Exchange | An LLDP-based protocol that allows a host and switch to negotiate PFC, ETS, and application priority settings automatically. |
 | **ETS** | Enhanced Transmission Selection | IEEE 802.1Qaz feature that allocates bandwidth percentages to traffic classes (e.g., 50% for RDMA, 1% for cluster heartbeat). |
-| **FW** | Firmware | In this document, refers to the NIC's onboard firmware (Mellanox ConnectX or Intel E810), which runs independently of the OS. |
+| **FW** | Firmware | In this document, refers to Mellanox ConnectX onboard firmware, which runs independently of the OS. |
 | **IEEE** | Institute of Electrical and Electronics Engineers | The standards body that ratified 802.1Qaz (ETS), 802.1Qbb (PFC), and 802.1AB (LLDP). |
 | **iWARP** | Internet Wide Area RDMA Protocol | An RDMA transport that runs over TCP; does not require PFC or ETS because TCP handles retransmission. |
 | **LLDP** | Link Layer Discovery Protocol | IEEE 802.1AB protocol used by network devices to advertise their identity and capabilities to directly connected neighbors. |
