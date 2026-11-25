@@ -52,6 +52,7 @@
 | 2026-11-24 | Step 2 no longer checks the `Documents` folder in the profile folder of a user who is not signed in, because that user's folder can be redirected elsewhere and the modules there would be missed. When it would remove a version and such a user has a profile on the machine, it now stops with `No changes were made` and lists those profiles, so that each user can sign in and stay signed in while it runs. A new setting at the top of the block, `$AssumeDefaultDocumentsForSignedOutUsers`, lets it check the default folder instead, only after your domain or endpoint administrator confirms that folder redirection is not used for those users; it still stops if that folder is missing. Step 2 now also prints `RESULT: NO CHANGE NEEDED` without reading users' folders when it would remove nothing. |
 | 2026-11-24 | The Rollback **Changes:** line now says that restoring a module version also installs the dependencies it declares, at the newest version the repository has in the allowed range. |
 | 2026-11-24 | Step 2's dependency check now also reads `NestedModules` and stops with `No changes were made` on an entry there that gives a path to the folder or manifest of a version it would remove, because that entry loads only that copy. |
+| 2026-11-24 | Step 2's dependency check now applies one rule to every file that a module loads by path. Before it removes anything, and again after it installs a version, it stops with `No changes were made` when any module that remains, including another version of a module that it changes, loads a file from a version it would remove through `RootModule`, `NestedModules`, `RequiredAssemblies`, `ScriptsToProcess`, `TypesToProcess`, `FormatsToProcess`, `FileList`, `RequiredModules`, or `ModuleList`, or loads a file by a path that leaves its own folder and cannot be resolved. Before this change it read only `NestedModules` and did not check other versions of the module that it changed. |
 
 ## At a glance
 
@@ -295,7 +296,8 @@ The block stops before changing anything, and prints `No changes were made`, whe
 - It is not running in an elevated Windows PowerShell 5.1 session, an Azure PowerShell module is already loaded in the session, or `$AssumeDefaultDocumentsForSignedOutUsers` is not `$false` or `$true`.
 - The validated recipe cannot be read, does not list `Az.Accounts`, or lists an invalid or duplicated version.
 - A copy of `Az.Accounts`, or a copy that would be removed, is outside `C:\Program Files\WindowsPowerShell\Modules` or was not installed with `Install-Module`.
-- Another installed module, including modules that are not in the recipe such as the `Az` rollup module, needs a version that would be removed: an exact version (`RequiredVersion`) that would be removed, or a minimum (`ModuleVersion`) or maximum (`MaximumVersion`) version that no remaining version meets. Only versions that remain in `C:\Program Files\WindowsPowerShell\Modules` count as remaining, because other users and services cannot load a copy in a user's `Documents` folder; a module that only one user needs can therefore also stop the block. The check covers the modules in this session's module path and in every user's `Documents\WindowsPowerShell\Modules` folder. For a signed-in user, it uses the `Documents` folder that Windows records for that user, which can be redirected, for example to OneDrive. For a user who is not signed in, Windows does not show where that folder is redirected, so the block stops, as the next item describes. The message names the module. This check reads each module's manifest file (`RequiredModules` and `ModuleList`); a module that enforces a version only inside its own script is not detected. It also reads `NestedModules` and stops on an entry there that gives a path to the folder or manifest of a module whose version would be removed, because that entry loads only that copy. An entry there that names the module needs no version that this block removes: in Windows PowerShell 5.1 and PowerShell 7, with a version it loads only a copy in the module's own folder, and without one it loads any installed version. `Uninstall-Module` is run with `-Force` because without it PowerShellGet refuses to remove any version that another module names as a dependency, whatever version that module needs; this check replaces that refusal with an exact version check.
+- Another installed module, including modules that are not in the recipe such as the `Az` rollup module, needs a version that would be removed: an exact version (`RequiredVersion`) that would be removed, or a minimum (`ModuleVersion`) or maximum (`MaximumVersion`) version that no remaining version meets. Only versions that remain in `C:\Program Files\WindowsPowerShell\Modules` count as remaining, because other users and services cannot load a copy in a user's `Documents` folder; a module that only one user needs can therefore also stop the block. The check covers the modules in this session's module path and in every user's `Documents\WindowsPowerShell\Modules` folder. For a signed-in user, it uses the `Documents` folder that Windows records for that user, which can be redirected, for example to OneDrive. For a user who is not signed in, Windows does not show where that folder is redirected, so the block stops, as the next item describes. The message names the module. This check reads each module's manifest file (`RequiredModules` and `ModuleList`); a module that enforces a version only inside its own script is not detected. `Uninstall-Module` is run with `-Force` because without it PowerShellGet refuses to remove any version that another module names as a dependency, whatever version that module needs; this check replaces that refusal with an exact version check.
+- Any module that remains, including another version of a module that the block changes, loads a file by path from a version that would be removed, or by a path that leaves its own folder and cannot be resolved, such as one that uses an environment variable that is not set. The block reads these paths in each remaining manifest's `RootModule`, `NestedModules`, `RequiredAssemblies`, `ScriptsToProcess`, `TypesToProcess`, `FormatsToProcess`, `FileList`, `RequiredModules`, and `ModuleList` entries, and the message names the module and the path. A `NestedModules` entry that names a module, rather than giving a path, needs no version that this block removes: in Windows PowerShell 5.1 and PowerShell 7, with a version it loads only a copy in the module's own folder, and without one it loads any installed version.
 - A version would be removed, and a user who has a profile on the machine is not signed in, so where that user's `Documents` folder is, which can be redirected, cannot be read. Accepting the `Documents` folder in that user's profile folder instead could miss modules in a redirected folder, and allow a version that one of them needs to be removed. The message lists those profiles by security identifier (SID); `Get-CimInstance -ClassName Win32_UserProfile | Where-Object SID -eq '<SID>' | Select-Object LocalPath, Loaded` shows each profile's folder. Have each listed user sign in, and stay signed in, or keep a session such as a disconnected Remote Desktop session, while the block runs; then run the block again. Only if your domain or endpoint administrator confirms that `Documents` folder redirection is not used for those users, change `$AssumeDefaultDocumentsForSignedOutUsers = $false` to `$true` at the top of the block; the block then checks the `Documents` folder in each listed profile folder instead, and still stops if that folder does not exist.
 - A user's `Documents` folder cannot be found or read, so modules there cannot be checked. This includes a redirected folder that this session cannot reach and, when `$AssumeDefaultDocumentsForSignedOutUsers` is `$true`, a profile of a user who is not signed in without a `Documents` folder. Service profiles, such as the system profile, are not checked. The message names the profile by its SID. If that user is not signed in, have the user sign in, and stay signed in while the block runs, then run the block again; otherwise contact Microsoft support.
 - A version that needs to be installed, or a version that would be removed, is not available in the repository in `$Repository`. The message names the versions. Set `$Repository` to a repository that has them, or contact Microsoft support.
@@ -449,22 +451,12 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
             $pathPattern = "(^|[\\/])$([regex]::Escape($ModuleName))([\\/]|\.(psd1|psm1|dll)$|$)"
             $listed = @(@($d.RequiredModules) + @($d.ModuleList) | Where-Object { $_ -and ($_.Name -eq $ModuleName -or
                     ($_.Name -match '[\\/]|\.(psd1|psm1|dll)$' -and $_.Name -match $pathPattern)) }).Count -gt 0
-            # Get-Module does not keep a path given under NestedModules, so a manifest file that mentions the module is read too.
-            $mentioned = $listed
-            if (-not $listed -and $d.Path -like '*.psd1') {
-                try { $mentioned = [bool](Select-String -LiteralPath $d.Path -Pattern ([regex]::Escape($ModuleName)) -Quiet) } catch { $mentioned = $true }
-            }
-            if (-not $mentioned) { continue }
+            # Files that a manifest loads by path, including NestedModules entries, are checked by Get-RemovedFileReference.
+            # A NestedModules entry that names the module needs no removed copy: with a version it loads only a copy in the
+            # module's own folder, and without one it loads any installed version.
+            if (-not $listed) { continue }
             try {
                 $data = Import-PowerShellDataFile -LiteralPath $d.Path -ErrorAction Stop
-                # A NestedModules entry given as a path to the module's folder or manifest loads only that copy, so it is not checked here.
-                # An entry that names the module needs no removed copy: with a version it loads only a copy in the module's own folder,
-                # and without one it loads any installed version.
-                foreach ($entry in @(@($data.NestedModules) | Where-Object { $_ })) {
-                    $n = if ($entry -is [hashtable]) { [string]$entry.ModuleName } else { [string]$entry }
-                    if ($n -match '[\\/]|\.(psd1|psm1|dll)$' -and $n -match $pathPattern) { throw "A module is loaded by a file path: $n" }
-                }
-                if (-not $listed) { continue }
                 $named = $false
                 foreach ($entry in @(@($data.RequiredModules) + @($data.ModuleList) | Where-Object { $_ })) {
                     $s = [Microsoft.PowerShell.Commands.ModuleSpecification]::new($entry)
@@ -499,6 +491,70 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
                 if (-not $named) { throw "$ModuleName is required in a form that this check does not read." }
             } catch {
                 [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Needs = "a $ModuleName version that could not be read from $($d.Path)" }
+            }
+        }
+    }
+    function Get-RemovedFileReference {
+        # Lists every remaining module whose manifest loads a file from a module folder that is removed in the same change,
+        # including other versions of the module being changed and modules in users' folders. ExcludePath lists the removed
+        # folders; only modules in those folders are skipped. It reads RootModule (ModuleToProcess), NestedModules,
+        # RequiredAssemblies, ScriptsToProcess, TypesToProcess, FormatsToProcess, FileList, RequiredModules, and ModuleList,
+        # and resolves each entry from that manifest's folder. An entry inside that folder is fine. An entry that cannot be
+        # resolved, and could lead out of that folder ('..', a full path, or an environment variable), is reported as well.
+        # To stay fast, a manifest is read only when its text names a removed folder or has such a path.
+        param([object[]]$Modules, [string[]]$ExcludePath = @())
+        $sep = [IO.Path]::DirectorySeparatorChar
+        $removed = @($ExcludePath | Where-Object { $_ } | ForEach-Object { [IO.Path]::GetFullPath(($_ -replace '[\\/]', $sep)).TrimEnd($sep) })
+        if ($removed.Count -eq 0) { return }
+        $hint = (@($removed | ForEach-Object { [regex]::Escape((Split-Path -Leaf $_)) }) +
+            @('\.\.', '[%$~]', '(?<![A-Za-z0-9])[A-Za-z]:[\\/]', '[''"]\s*[\\/]')) -join '|'
+        $envPattern = [regex]::new('\$\{?env:(\w+)\}?', 'IgnoreCase')
+        $isUnder = { param([string]$Path) @($removed | Where-Object { $Path.Equals($_, [StringComparison]::OrdinalIgnoreCase) -or
+                $Path.StartsWith($_ + $sep, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 }
+        foreach ($d in $Modules) {
+            if ($d.Path -notlike '*.psd1') { continue }
+            $base = [IO.Path]::GetFullPath(([string]$d.ModuleBase -replace '[\\/]', $sep)).TrimEnd($sep)
+            if (& $isUnder $base) { continue }
+            try {
+                if ([IO.File]::ReadAllText($d.Path) -notmatch $hint) { continue }
+                try { $data = Import-PowerShellDataFile -LiteralPath $d.Path -ErrorAction Stop }
+                catch {
+                    # A manifest that picks a value with code, such as an if on $PSEdition, cannot be read as data. Its text is
+                    # parsed instead, without running it, and every string in a field below counts, in whichever branch it is.
+                    $parseErrors = $null
+                    $table = [Management.Automation.Language.Parser]::ParseFile($d.Path, [ref]$null, [ref]$parseErrors).Find({ param($n)
+                            $n -is [Management.Automation.Language.HashtableAst] }, $true)
+                    if (@($parseErrors).Count -gt 0 -or -not $table) { throw }
+                    $data = @{}
+                    foreach ($pair in $table.KeyValuePairs) {
+                        $data[[string]$pair.Item1.Value] = @($pair.Item2.FindAll({ param($n) $n -is [Management.Automation.Language.StringConstantExpressionAst] -or
+                                $n -is [Management.Automation.Language.ExpandableStringExpressionAst] }, $true) | ForEach-Object { $_.Value })
+                    }
+                }
+            } catch {
+                [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Reference = "a file that could not be read from $($d.Path)" }
+                continue
+            }
+            $refs = @(foreach ($key in 'RootModule', 'ModuleToProcess', 'NestedModules', 'RequiredAssemblies', 'ScriptsToProcess',
+                    'TypesToProcess', 'FormatsToProcess', 'FileList', 'RequiredModules', 'ModuleList') {
+                foreach ($e in @($data[$key])) { if ($e -is [hashtable]) { [string]$e.ModuleName } elseif ($e) { [string]$e } }
+            })
+            foreach ($ref in @($refs | Where-Object { $_ })) {
+                $leaves = $ref -match '\.\.|[%$]|^\s*([\\/]|[A-Za-z]:)'
+                # Environment variables are expanded in both forms, $env:NAME and %NAME%.
+                $expanded = $envPattern.Replace(($ref -replace '[\\/]', $sep), [Text.RegularExpressions.MatchEvaluator] { param($m)
+                        $v = [Environment]::GetEnvironmentVariable($m.Groups[1].Value); if ($null -eq $v) { $m.Value } else { $v } })
+                $expanded = [Environment]::ExpandEnvironmentVariables($expanded)
+                $full = $null
+                # Another variable, an environment variable that is not set, or a short (8.3) name on such a path cannot be resolved here.
+                if ($expanded -notmatch '[%$]' -and -not ($leaves -and $expanded -match '~')) {
+                    try { $full = [IO.Path]::GetFullPath([IO.Path]::Combine($base, $expanded)).TrimEnd($sep) } catch { $full = $null }
+                }
+                if ($null -eq $full) {
+                    if ($leaves) { [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Reference = "$ref, a path that cannot be resolved" } }
+                } elseif (& $isUnder $full) {
+                    [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Reference = $full }
+                }
             }
         }
     }
@@ -552,6 +608,13 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
                     (($dependents | ForEach-Object { "$($_.Name) $($_.Version) needs $($_.Needs)" }) -join '; ') +
                     ". Decide whether they are still needed, or contact Microsoft support. $Outcome")
             }
+        }
+        # Every remaining manifest, including other versions of the same module, must not load a file from a removed folder.
+        $fileReferences = @(Get-RemovedFileReference -Modules $allModules -ExcludePath $removalPaths)
+        if ($fileReferences.Count -gt 0) {
+            throw ("These installed modules load a file from a version that this fix would remove: " +
+                (($fileReferences | ForEach-Object { "$($_.Name) $($_.Version) loads $($_.Reference)" }) -join '; ') +
+                ". Decide whether they are still needed, or contact Microsoft support. $Outcome")
         }
         # Rollback reinstalls a removed version from $Repository, so every version to remove must be available there.
         if ($removals.Count -gt 0) {
@@ -721,6 +784,8 @@ The last 2026-11-24 revision, which makes Step 2 stop by default when a user who
 Later on 2026-11-24 the installation path of Step 2 and the rollback block ran on the same lab machine, each block unchanged except for the values that it asks you to set, in new elevated Windows PowerShell 5.1 sessions. `Az.Storage` 9.8.0 was installed for all users, which also installed `Az.Accounts` 5.5.5, and the recipe version `Az.Storage` 9.7.2 was uninstalled. Issue Validation reported `RESULT: AFFECTED - Az.Storage 9.8.0 needs Az.Accounts 5.5.5 but the recipe version is 5.5.3`. With `$AssumeDefaultDocumentsForSignedOutUsers` set to `$true`, for the same reason as above, Step 2 printed `INSTALLING: Az.Storage 9.7.2`, `REMOVING: Az.Storage 9.8.0`, `REMOVING: Az.Accounts 5.5.5`, and `RESULT: CHANGED`, and kept `Az.Accounts` 5.5.1 and 5.5.3. Issue Validation then reported `RESULT: NOT AFFECTED`. The rollback block, with `Az.Storage` and `9.8.0` from the `REMOVING:` line and `$Repository` left at `'PSGallery'`, printed `INSTALLING: Az.Storage 9.8.0 from PSGallery` and `RESTORED: Az.Storage 9.8.0`; `Install-Module` also installed `Az.Accounts` 5.5.5, which `Az.Storage` 9.8.0 requires. Every file in the machine's all-users module folder was then returned to a full backup taken before the run and matched it file by file, and the module folders on all three machines matched their state before the test.
 
 The last 2026-11-24 revision, which added the `NestedModules` check to Step 2, was tested the same way. In Windows PowerShell 5.1 on a lab machine and in PowerShell 7, a `NestedModules` entry that named a scratch module with an exact or a minimum version did not load an installed copy of that module, even when that version was installed, while an entry that gave a path to an installed version loaded that version, and the module that listed it failed to import after that version was removed. With simulated module folders, not on a cluster, Step 2 stopped with `No changes were made` for a `NestedModules` entry that gave a path, directly or in a module specification, to a version it would remove, and continued for an entry that named the module, for a module's own files listed there, and for a manifest that mentioned `Az.Accounts` only in its description; the earlier simulated cases still passed. On the lab machine, Issue Validation reported `RESULT: NOT AFFECTED`, and the revised dependency check read all 188 modules in the machine's module paths and users' folders without reporting any of them. The automated loop for the first cause ran again with this Step 2 and `$AssumeDefaultDocumentsForSignedOutUsers` set to `$true`, for the same reason as above, and passed (`REMOVING: Az.Storage 9.8.0`, `RESULT: CHANGED`); every file in the machine's all-users module folder then matched a full backup taken before the run, and the module folders on all three machines matched their state before the test.
+
+The last 2026-11-24 revision, which made Step 2 check every file that a remaining module loads by path, was tested the same way. With simulated module folders, not on a cluster, Step 2 stopped with `No changes were made` when a version that it kept, or another module, loaded a file from the version it would remove through `NestedModules`, `RootModule`, `RequiredAssemblies`, `ScriptsToProcess`, `TypesToProcess`, `FormatsToProcess`, or `FileList`, whether the path was a full path, a relative path that starts with `..`, or a path with an environment variable; when that module was in another user's `Documents` folder; when the manifest chose the file with an `if` on `$PSEdition`; and when a path used an environment variable that was not set. When the version that it installed loaded a file from the version it would remove, it stopped without removing anything. It continued for files in a module's own folder and for paths that led into a version it kept, and the earlier simulated cases still passed. Step 2 as it was before this revision removed the version in most of these cases. On the lab machine, in Windows PowerShell 5.1, the revised check read the 158 module manifests among the 188 modules in the machine's module paths and users' folders, including Windows modules that choose a file with `$PSEdition` or name one with `$env:windir`, without reporting any of them, in about 1.5 to 2.5 seconds, and Issue Validation reported `RESULT: NOT AFFECTED`. The automated loop for the first cause ran again with this Step 2 and `$AssumeDefaultDocumentsForSignedOutUsers` set to `$true`, for the same reason as above, and passed (`REMOVING: Az.Storage 9.8.0`, `RESULT: CHANGED`); every file in the machine's all-users module folder then matched a full backup taken before the run, and the module folders on all three machines matched their state before the test.
 
 Not exercised: the second cause inside the automated loop (it was exercised only in the discrete runs on 2026-11-23), the user-folder and dependency-installation cases of Step 2 on a cluster, the portal **Resume deployment** retry in Step 3, and the Windows Admin Center surfaces (the standalone row is inferred, not viewed).
 
