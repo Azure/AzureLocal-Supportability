@@ -184,7 +184,7 @@ Get-ChildItem C:\ -Directory -Force -ErrorAction SilentlyContinue | ForEach-Obje
 } | Sort-Object GB -Descending | Select-Object -First 12
 
 # How much the Windows component store (WinSxS) can reclaim
-Dism.exe /Online /Cleanup-Image /AnalyzeComponentStore
+Repair-WindowsImage -Online -ScanHealth
 
 # Largest Windows event logs
 Get-ChildItem C:\Windows\System32\winevt\Logs -File | Sort-Object Length -Descending |
@@ -238,7 +238,7 @@ can need a reboot to finish, so if the analysis still reports reclaimable packag
 afterward, a maintenance reboot completes the cleanup.
 
 ```powershell
-Dism.exe /Online /Cleanup-Image /StartComponentCleanup
+Repair-WindowsImage -Online -StartComponentCleanup
 ```
 
 **b. Clear the Windows Update download cache.** Safe to clear; Windows re-downloads
@@ -283,7 +283,7 @@ safe win):
 # cluster does not spike all at once; the returned per-node exit code confirms success
 # (0 = succeeded). Raise the throttle only if the cluster has headroom.
 Invoke-Command -ComputerName (Get-ClusterNode).Name -ThrottleLimit 2 -ScriptBlock {
-    Dism.exe /Online /Cleanup-Image /StartComponentCleanup
+    Repair-WindowsImage -Online -StartComponentCleanup
     [pscustomobject]@{ Node = $env:COMPUTERNAME; ExitCode = $LASTEXITCODE }
 } | Sort-Object Node | Format-Table -AutoSize
 ```
