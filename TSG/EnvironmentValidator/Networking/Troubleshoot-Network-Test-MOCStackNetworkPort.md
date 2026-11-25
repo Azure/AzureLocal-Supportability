@@ -175,11 +175,12 @@ This read-only block lists the Windows Firewall settings on the node that can bl
 ```powershell
 # Read-only: list Windows Firewall settings on this node that can block the check
 $Endpoint = 'internetbeacon.msedge.net'
-$addresses = @(Resolve-DnsName -Name $Endpoint -ErrorAction Stop |
+$addresses = @(Resolve-DnsName -Name $Endpoint -ErrorAction SilentlyContinue |
     Where-Object { $_.IPAddress } | Select-Object -ExpandProperty IPAddress -Unique)
 "Endpoint addresses: $($addresses -join ', ')"
-Get-NetFirewallProfile | Select-Object Name, Enabled, DefaultOutboundAction
-Get-NetFirewallRule -Direction Outbound -Action Block -Enabled True -PolicyStore ActiveStore |
+Get-NetFirewallProfile -PolicyStore ActiveStore | Format-Table Name, Enabled, DefaultOutboundAction
+$rules = @(Get-NetFirewallRule -PolicyStore ActiveStore |
+    Where-Object { "$($_.Direction)" -eq 'Outbound' -and "$($_.Action)" -eq 'Block' -and "$($_.Enabled)" -eq 'True' } |
     ForEach-Object {
         $pf = $_ | Get-NetFirewallPortFilter
         $remote = @(($_ | Get-NetFirewallAddressFilter).RemoteAddress)
@@ -198,10 +199,13 @@ Get-NetFirewallRule -Direction Outbound -Action Block -Enabled True -PolicyStore
                 Match         = $match
             }
         }
-    }
+    })
+if ($rules.Count -gt 0) { $rules | Format-List } else { 'No enabled outbound block rule on this node covers TCP 80 or 443.' }
 ```
 
-Expected result on a node that isn't blocking the check: no profile shows `DefaultOutboundAction` `Block`, and no rule is listed with `Match` `Endpoint address` or `Any address`.
+Expected result on a node that isn't blocking the check: an address after `Endpoint addresses:`, no profile with `DefaultOutboundAction` `Block`, and the line `No enabled outbound block rule on this node covers TCP 80 or 443.`
+
+* If nothing follows `Endpoint addresses:`, the node can't resolve the name, so the list can't show which rules match the endpoint. Go to [If the node can't resolve the name](#if-the-node-cant-resolve-the-name) first.
 
 * If a rule is listed with `Match` `Endpoint address`, see [If a firewall rule on the node blocks the connection](#if-a-firewall-rule-on-the-node-blocks-the-connection).
 * If a rule with `Any address` is listed, or a profile's `DefaultOutboundAction` is `Block`, your organization restricts outbound traffic on the node. Ask the owner of that rule or policy to allow TCP 80 and 443 to `internetbeacon.msedge.net`. Don't disable a broad rule to pass this check.
@@ -233,16 +237,26 @@ Use this block only when [Check the node's own firewall](#check-the-nodes-own-fi
 
 **Changes:** Disables the matching local Windows Firewall outbound block rules on this node. Other rules, policy-managed rules, and the profile defaults don't change. To undo, run the `Enable-NetFirewallRule` command that the block prints for each rule.
 
-Paste and run the whole block at once. It stops at the first error, and it changes nothing if it can't read the endpoint addresses or the firewall rules.
+Paste and run the whole block at once. It stops at the first error, and it changes nothing if it can't resolve the endpoint or read the firewall rules.
 
 ```powershell
 # Disable local outbound block rules that name an internetbeacon.msedge.net address on TCP 80 or 443
 & {
     $ErrorActionPreference = 'Stop'
     $Endpoint = 'internetbeacon.msedge.net'
-    $addresses = @(Resolve-DnsName -Name $Endpoint |
-        Where-Object { $_.IPAddress } | Select-Object -ExpandProperty IPAddress -Unique)
-    $targets = @(Get-NetFirewallRule -Direction Outbound -Action Block -Enabled True -PolicyStore ActiveStore |
+    $addresses = @()
+    foreach ($try in 1..3) {
+        if ($try -gt 1) { Start-Sleep -Seconds 5 }
+        $addresses = @(Resolve-DnsName -Name $Endpoint -ErrorAction SilentlyContinue |
+            Where-Object { $_.IPAddress } | Select-Object -ExpandProperty IPAddress -Unique)
+        if ($addresses.Count -gt 0) { break }
+    }
+    if ($addresses.Count -eq 0) {
+        "This node can't resolve $Endpoint, so nothing was changed. Fix name resolution first, then run this block again."
+        return
+    }
+    $targets = @(Get-NetFirewallRule -PolicyStore ActiveStore |
+        Where-Object { "$($_.Direction)" -eq 'Outbound' -and "$($_.Action)" -eq 'Block' -and "$($_.Enabled)" -eq 'True' } |
         Where-Object {
             $pf = $_ | Get-NetFirewallPortFilter
             $ports = @($pf.RemotePort)
@@ -268,6 +282,9 @@ Paste and run the whole block at once. It stops at the first error, and it chang
 
 Expected result: one `Disabled rule` line for each rule that was blocking the endpoint. Then run the re-test below.
 
+* If the block prints `This node can't resolve internetbeacon.msedge.net, so nothing was changed`, go to [If the node can't resolve the name](#if-the-node-cant-resolve-the-name), and run the block again once `Resolve-DnsName -Name internetbeacon.msedge.net` returns addresses.
+* If the block stops with any other error, nothing after that point ran. Read the error, and if a rule was already disabled, its `Disabled rule` line shows the command that undoes it.
+
 ### If your network requires a proxy server
 
 If your network allows internet access only through a proxy server, the nodes must be set up to use it, which you do when you register them with Azure Arc. See [Register Azure Local with Azure Arc without using Arc gateway](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-without-azure-arc-gateway). When a WinHTTP proxy is configured on the node that runs validation, this check is skipped. Don't open direct internet access only to pass this check.
@@ -283,7 +300,7 @@ Test-NetConnection -ComputerName internetbeacon.msedge.net -Port 80
 
 Both should show `TcpTestSucceeded : True`. Then run the Environment Validator again, for example by retrying the deployment or add-node validation. The result for `AzStackHci_MOCStack_Network_Port` should change to `SUCCESS` for every node.
 
-To rerun only this check for the node you're signed in to, use this read-only block. It works only with Environment Checker 10.2509 and earlier, because later versions skip this check and return nothing.
+To rerun only this check for the node you're signed in to, use this read-only block. It works only with Environment Checker 10.2509 and earlier. Later versions skip this check: they print `No tests to run.` and return an empty row.
 
 ```powershell
 # Read-only: rerun only this check for this node (Environment Checker 10.2509 and earlier)
@@ -306,7 +323,7 @@ Expected result: `Status` `SUCCESS` and an empty `Detail`. If both ports test `T
 | Failover Cluster Manager | not-evident | Not evident in Failover Cluster Manager. The check isn't a cluster role, resource, or node state. |
 | Windows Admin Center (standalone) | shown | On a connection to the node that ran the validation, the **Events** tool shows the same Event ID 17205 entry in the **AzStackHciEnvironmentChecker** log. |
 | Windows Admin Center in the Azure portal | shown | For add node, the **Events** tool on the node that ran the validation shows the same Event ID 17205 entry. Before deployment there's no Azure Local instance to open it from, so use one of the other surfaces. |
-| Component / tool log files | shown | When you run the validator yourself, it writes `AzStackHciEnvironmentChecker.log` and `AzStackHciEnvironmentReport.json` to `%USERPROFILE%\.AzStackHci` for the account that ran it, or to the folder you pass in `-OutputPath`. The log records the run, and the report lists each node's result with its `Status` and detail. |
+| Component / tool log files | shown | When you run the validator yourself, it writes `AzStackHciEnvironmentChecker.log` and `AzStackHciEnvironmentReport.json` to `%USERPROFILE%\.AzStackHci` for the account that ran it, or to the folder you pass in `-OutputPath`. The log records the run, and the report lists each node's result with its `Status` and detail. During deployment, the validation run is also logged in `C:\CloudDeployment\Logs\EnvironmentValidatorFull.<date>.log` on the node that runs the deployment. |
 
 ## Notes
 
