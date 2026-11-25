@@ -99,7 +99,7 @@ Expected result: every installer exits with code `0`. Do not reboot or repeatedl
 
 ## Verification
 
-Rerun the Diagnosis commands. Confirm the required x64 runtime is listed and `ECEAgent` and the orchestrator group are healthy. If either component is stopped or offline, start only the affected component using the supported Azure Local procedure. If it does not start, stop and contact Microsoft Support.
+Rerun the Diagnosis commands. Confirm the required x64 runtime is listed and `ECEAgent` and the orchestrator group are healthy. If either component is stopped or offline, start only the affected component using `Start-Service ECEAgent` and `Get-ClusterGroup "*HCI Orchestrator*" | Start-ClusterGroup` . If it does not start, please stop and contact Microsoft Support.
 
 ## Escalation
 
