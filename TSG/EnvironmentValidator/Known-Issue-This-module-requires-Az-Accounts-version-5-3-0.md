@@ -56,6 +56,7 @@
 | 2026-11-24 | Step 2's dependency check now stops with `No changes were made` when a module manifest builds a file path with an expression, such as joined strings or `-f`, that it cannot resolve without running the manifest, instead of checking the parts of the path separately. |
 | 2026-11-25 | Step 2's dependency check now treats a `NestedModules` entry that names a module with a version (`RequiredVersion`, `ModuleVersion`, or `MaximumVersion`, with or without a module GUID) as a requirement, as it does for `RequiredModules` and `ModuleList`, and stops with `No changes were made` when only a version that it would remove meets the entry. PowerShell loads such an entry from the module path, so the module that lists it cannot be imported once that version is gone; an entry that gives only the module name needs no particular version. The article previously said that these entries did not matter. The check also lists the modules that have such an entry, which `Get-Module` left out of its list when it ran with the block's setting to stop at the first error. The expected result after Step 2, and [When to contact Microsoft support](#when-to-contact-microsoft-support), now send the stops that list users who are not signed in, or ask you to set `$AssumeDefaultDocumentsForSignedOutUsers` to `$false` or `$true`, to the steps for that stop in Step 2; contact Microsoft support only if the block still stops after those users sign in or the setting is changed. |
 | 2026-11-25 | Step 2 now lists the installed modules in a separate PowerShell process (a background job) and reads back only their names, versions, paths, and requirements. In Windows PowerShell 5.1, listing them in the Step 2 session loaded the newest installed version of an Azure PowerShell module that another module names in `NestedModules`, and Step 2 then stopped with `An Azure PowerShell module became loaded` on every run, even when a version that it keeps met that entry. If the separate listing fails, Step 2 stops with `No changes were made`. [Validation status of this article](#validation-status-of-this-article) no longer says that Step 2 continued in Windows PowerShell 5.1 for an entry that only names the module or for a minimum that a kept version meets; it describes the revised Step 2. |
+| 2026-11-25 | Step 3 now says when to retry: only after Issue Validation, run again unchanged in a new session, reports `RESULT: NOT AFFECTED` on every machine. When a machine reports `RESULT: AFFECTED` or `RESULT: UNKNOWN`, Step 3 now says not to retry, to follow [Mitigation Details](#mitigation-details) first on an affected machine where Step 2 has not run, and otherwise to contact Microsoft support. [When to contact Microsoft support](#when-to-contact-microsoft-support) now lists `RESULT: AFFECTED` after Step 2 ended with `RESULT: CHANGED` or `RESULT: NO CHANGE NEEDED`. Before this change Step 3 said to run Issue Validation again and then retry, without saying what to do when it did not report `RESULT: NOT AFFECTED`. |
 
 ## At a glance
 
@@ -747,7 +748,12 @@ If `Uninstall-Module` reports that a module version is in use, a process still h
 
 ### Step 3: Retry the operation
 
-**Changes:** resumes the operation that failed. After Step 2 completed on every affected machine, run [Issue Validation](#issue-validation) again in a new session on each machine, then retry:
+After Step 2 completed on every affected machine, run the [Issue Validation](#issue-validation) block again, unchanged, in a new elevated Windows PowerShell 5.1 session on each machine. This check is read-only.
+
+- If every machine reports `RESULT: NOT AFFECTED`, retry the operation as the table below describes. A `WARNING:` line before it, for a module that is not in the recipe, does not block the retry.
+- If a machine reports `RESULT: AFFECTED` or `RESULT: UNKNOWN`, do not retry. For `RESULT: AFFECTED` on a machine where you have not run Step 2, follow [Mitigation Details](#mitigation-details) on that machine and then run this check again. Otherwise, keep the output from that machine and [contact Microsoft support](#when-to-contact-microsoft-support).
+
+**Changes:** resumes the operation that failed.
 
 | Operation | How to retry |
 | --- | --- |
@@ -808,6 +814,7 @@ Do not uninstall a version that Step 2 installed. It is the version that the mac
 Open a support request if any of these is true:
 
 - Issue Validation reports `RESULT: UNKNOWN` on a machine.
+- Issue Validation still reports `RESULT: AFFECTED` on a machine after Step 2 ended with `RESULT: CHANGED` or `RESULT: NO CHANGE NEEDED` there.
 - Step 2 stops with a message other than one asking you to open a new session, to have users who are not signed in sign in, or to set `$AssumeDefaultDocumentsForSignedOutUsers` to `$false` or `$true`, or it still stops with one of those messages after you followed it.
 - Every machine reports `RESULT: NOT AFFECTED`, but the operation still fails with this error.
 - The error returns after the retry.
