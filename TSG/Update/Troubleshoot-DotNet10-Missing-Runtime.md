@@ -35,9 +35,11 @@ Use this guide when a required .NET 10 runtime is missing on an Azure Local node
 - The required x64 .NET 10 runtime is missing from the node.
 - `ECEAgent` is not running, or HCI Orchestrator is not online or failed to start.
 
-It was reported that .NET 10 was removed after there was second logon for updates from 10.0.6 to 10.0.15. During internal testing on which versions had the issue we found that all versions of .NET 10.0.10 and below were impacted. These versions are installed for  Azure Local versions from 2604 to 2607. Not all updates should see this issue as it only happens when you indicate during update that .NET 10 should delay cleanup until the next session logon by an administrtaor. This change came in for both 2610 or 2611.
+It was reported that .NET 10 was removed after updating from 10.0.6 to 10.0.15. We investigated and found that there was a known bug in older versions of the .NET installer in which after updating and logging out and back in two the old and new version of the installer would be removed.
 
-We have not validated this but .NET 8 could be impacted as well. I will explain the small differences in each step below on how to handle that case.
+To find the exact versions impacted we did internal testing and found that versions of .NET 10.0.10 and below had the issue. These were installed for Azure Local versions from 2604 to 2607 inclusive. You should only see the issue when updating to 2610 or 2611 as we changed how updates were done that expose this bug and will be fixed for 2701.
+
+We have not validated that .NET 8 has the bug but just incase I have included some notes for each step on how to mitigate if you are missing .NET 8 and need it installed.
 
 ## Diagnosis
 
