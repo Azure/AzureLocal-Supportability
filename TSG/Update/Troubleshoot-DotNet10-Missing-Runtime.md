@@ -37,6 +37,10 @@ Use this guide when a required .NET 10 runtime is missing on an Azure Local node
 
 Investigation found the .NET Runtime target was removed after the second logon for updates from 10.0.6 through 10.0.11, and remained for tested updates ending at 10.0.12 through 10.0.15. Other runtime flavors are assumed to be affected because they release together, but were not independently tested. These results do not identify an Azure Local solution release range.
 
+During internal testing on which versions we found that all versions of .NET 10.0.10 and below were impacted. These versions correspond to Azure Local versions from 2604 to 2607. You should see the symptoms when updating from an earlier release to 2610 or 2611.
+
+We have not validated this but .NET 8 could be impacted as well. I will explain the small differences in each step below on how to handle that case.
+
 ## Diagnosis
 
 Run in elevated x64 PowerShell on the affected node:
@@ -55,11 +59,15 @@ Get-ClusterGroup -Name '*orch*'
 
 Confirm whether the component-required `.NETCore.App` or `AspNetCore.App` 10.0 runtime is listed. Record the service status and orchestrator group state and owner; include any failed start or restart error. If the service or cluster group is missing, stop and contact Microsoft Support because this indicates a broader issue.
 
+For .NET 8 you should only see that there is no .NET 8 runtimes installed.
+
 ## Recovery
 
 **[HIGH RISK]** Install only during an approved maintenance window, when no update is in progress, and with the package approved for this solution. Run on one affected node at a time.
 
 `Get-ASArtifactPath` resolves the latest `Microsoft.DotNet10.Runtime.Installer` package. List its executable installers and confirm they are the expected package contents:
+
+For .NET 8 you would use the 'Microsoft.DotNet8.Runtime.Installer' package name.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
