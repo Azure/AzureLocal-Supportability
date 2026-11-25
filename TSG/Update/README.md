@@ -37,9 +37,4 @@
 * [Update fails due to Arc Agent install failure (lockdown on azcmagent.log)](./Update-fails-due-to-Arc-Agent-install-failure.md)
 * [2604 | Previous CAU run status was canceled](./Previous-CAU-run-status-was-canceled.md)
 * [Live migration fails with "No mapping between account names and security IDs" (0x80070534)](./Live-migration-fails-with-No-mapping-between-account-names-and-security-IDs.md)
-
-## Runtime recovery inventory
-
-| Article type | Title | Applicable products | Supported versions | Owner | Highest action classification | Highest state-changing risk | Workload or maintenance impact | Metadata marker | Technical grade | Validation evidence | Fidelity level | Reproduction substrate | Automation readiness | Execution surface | Last validated |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| troubleshoot | [Troubleshoot a missing .NET 10 runtime](./Troubleshoot-DotNet10-Missing-Runtime.md) | Azure Local lifecycle management using .NET 10 | No Azure Local release range validated; tested .NET Runtime transitions removed through 10.0.11 and remained from 10.0.12; other flavors assumed, unverified | Microsoft Support / Azure Local administrator | state-changing | [HIGH RISK] | Elevated access, support approval, and maintenance window; shared runtime and management-operation impact | present | null | Static review only; live recovery and administrator-surface validation pending | L0 | none | manual | on-device | Not validated |
+* [Troubleshoot a missing .NET 10 runtime on Azure Local](./Troubleshoot-DotNet10-Missing-Runtime.md) — Type: troubleshoot; products: Azure Local lifecycle management using .NET 10; owner: Microsoft Support / Azure Local administrator; grade: null; automation: manual; last validated: not validated.
