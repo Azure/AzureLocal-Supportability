@@ -1,3 +1,23 @@
+<!-- tsg-metadata
+{
+  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "document_type": "troubleshoot",
+  "products": ["Azure Local"],
+  "detector": {
+    "type": "envchecker",
+    "signal": "AzStackHci_MOCStack_Network_Port"
+  },
+  "validation": {
+    "fidelity_level": "L0",
+    "technical_grade": null,
+    "reproduction_substrate": "vm",
+    "automation_status": "ready",
+    "last_validated": null,
+    "spec_ref": "AzStackHci_MOCStack_Network_Port"
+  }
+}
+-->
+
 # AzStackHci_MOCStack_Network_Port
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
@@ -11,18 +31,50 @@
   </tr>
   <tr>
     <th style="text-align:left;">Applicable Scenarios</th>
-    <td><strong>Deployment</strong></td>
+    <td><strong>Deployment</strong>, <strong>Add node</strong></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Validator</th>
+    <td><code>Invoke-AzStackHciMOCStackValidation</code>, test <code>Test-MOCStackNetworkPort</code></td>
+  </tr>
+  <tr>
+    <th style="text-align:left;">Environment Checker versions</th>
+    <td>10.2509 and earlier. Version 10.2510 and later don't run this check.</td>
   </tr>
 </table>
 
+## Table of contents
+
+- [Overview](#overview)
+- [When this check runs](#when-this-check-runs)
+- [Requirements](#requirements)
+- [Example failure from Environment Validator](#example-failure-from-environment-validator)
+- [What runs this check](#what-runs-this-check)
+- [Troubleshooting](#troubleshooting)
+- [Remediation](#remediation)
+- [Administrator detection surfaces](#administrator-detection-surfaces)
+- [Notes](#notes)
+- [Quick summary](#quick-summary)
+
 ## Overview
 
-This environment validator fails when the node that runs the MOCStack checks does not have outbound TCP connectivity on ports 80 and 443 to `internetbeacon.msedge.net`. The validator calls `Test-NetConnection` without an explicit target which uses that endpoint to probe generic internet reachability. If either port is blocked the check fails and deployment cannot proceed.
+This environment validator fails when a node being validated can't open an outbound TCP connection on port 443 or port 80 to `internetbeacon.msedge.net`. The validator calls `Test-NetConnection` without a target, and `Test-NetConnection` then uses `internetbeacon.msedge.net` as its default target to probe generic internet reachability. If either port fails on a node, the check fails for that node and deployment or add node can't continue.
 
 > **Notes**
 >
-> * This happens during the validation phase before the deployment begins.  
+> * This happens during the validation phase, before the deployment begins or before a node is added.  
 > * `internetbeacon.msedge.net` is used only by the connectivity probe behavior of `Test-NetConnection`. It is **not** listed among the required Azure Local service endpoints in Microsoft’s Firewall Requirements page for Azure Local: https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements
+
+### When this check runs
+
+* During deployment validation and add-node validation, in the **Azure Local MOC Stack** validation step.
+* On every node being validated. Each node gets its own result, named `MOCStack Network Port Requirement <node name>`.
+* Only when no WinHTTP proxy is configured on the node that runs the validation. If `netsh winhttp show advproxy` on that node shows a `Proxy` value, the check is skipped and reports no result. Registering the nodes with Azure Arc through a proxy server or through Arc gateway configures this proxy.
+* Only with Environment Checker (`AzStackHci.EnvironmentChecker`) version 10.2509 and earlier. Version 10.2510 and later skip this check, so it doesn't appear for deployments that use a newer Environment Checker. To see the installed version, run this on the node:
+
+```powershell
+Get-Module -Name AzStackHci.EnvironmentChecker -ListAvailable | Select-Object Name, Version
+```
 
 ## Requirements
 
@@ -73,180 +125,193 @@ Type 'ValidateMOCStack' of Role 'EnvironmentValidator' raised an exception: {
 
 `MOCStack mandatory network port is currently disabled`
 
-**Root cause:** Outbound TCP 80 or 443 to `internetbeacon.msedge.net` is blocked by a firewall that sits between the node and the internet. The probe cannot complete.
+`DisablePort` lists the ports that failed on that node, for example ` 443, 80,`.
+
+**Root cause:** The node can't complete a TCP connection to `internetbeacon.msedge.net` on port 443 or 80. The usual causes are:
+
+* A firewall between the node and the internet blocks outbound TCP 443 or 80 to this endpoint.
+* The node can't resolve `internetbeacon.msedge.net` in DNS.
+* A Windows Firewall rule or policy on the node itself blocks the connection.
+* Your network allows internet access only through a proxy server, but no WinHTTP proxy is configured on the node that runs validation.
 
 ## What runs this check
 
-The validation is implemented in the PowerShell module **AzStackHci.EnvironmentChecker**, within the helper file  
-**AzStackHciMOCStack/AzStackHci.MOCStack.Helpers.psm1**:  
-https://www.powershellgallery.com/packages/AzStackHci.EnvironmentChecker/1.2100.2531.331/Content/AzStackHciMOCStack%5CAzStackHci.MOCStack.Helpers.psm1
+The check is the function `Test-MOCStackNetworkPort` in the **AzStackHci.EnvironmentChecker** PowerShell module (file `AzStackHciMOCStack\AzStackHci.MOCStack.Helpers.psm1`). `Invoke-AzStackHciMOCStackValidation` runs it. The module is published on the PowerShell Gallery: https://www.powershellgallery.com/packages/AzStackHci.EnvironmentChecker
 
-The function `Test-MOCStackNetworkPort` performs the connectivity test by iterating the expected ports and calling `Test-NetConnection` without a destination, which triggers the reachability probe (commonly hitting `internetbeacon.msedge.net`).
+What the check does:
 
-``` Powershell
-function Test-MOCStackNetworkPort
-{
-    <#
-    .SYNOPSIS
-        Verify that the required network ports for MOCStack are open.
-    .DESCRIPTION
-        Verify that the required network ports for MOCStack are open.
-    .PARAMETER PsSession
-        Specify the PsSession(s) used to validation from.
-    .PARAMETER OperationType
-        Specify the Operation Type to target for MOCStack validation. e.g. Deployment, Update, etc
-    #>
-    [CmdletBinding()]
-    param (
+1. On the node that runs the validation, it reads the WinHTTP proxy setting (`netsh winhttp show advproxy`). If a proxy is set, it stops and reports no result.
+2. On each node being validated, it runs `Test-NetConnection -Port 443 -InformationLevel Quiet` and then the same command for port 80. With no `-ComputerName`, `Test-NetConnection` connects to `internetbeacon.msedge.net` (see [Test-NetConnection](https://learn.microsoft.com/en-us/powershell/module/nettcpip/test-netconnection)). It tries each port up to five times.
+3. If a port still fails, that node's result is `FAILURE`, with the detail `MOCStack mandatory network port is currently disabled.` and the failed ports in `DisablePort`. Otherwise the node's result is `SUCCESS`.
 
-        [Parameter(Mandatory = $true)]
-        [System.Management.Automation.Runspaces.PSSession[]]
-        $PsSession,
-
-        [Parameter(Mandatory = $false)]
-        [string[]]
-        $OperationType
-    )
-
-    try
-    {
-        $portList = '443','80'
-        Log-Info -Message ($VvsTxt.MOCStackPortInfo) -Type Info
-        $disabledPortMsg = ($VvsTxt.DisablePortMsg)
-
-        # Scriptblock to test network port on each server
-        $testPortSb = {
-            $AdditionalData = @()
-            $status = "Succeeded"
-            $errorMsg = $null
-            $hardwareType = $null
-            $expectedPortList = $args[0]
-            $failedPort = $null
-            $resourceMsg = $null
-
-            try
-            {
-                # Check each network port is enabled on the node
-                foreach ($port in $expectedPortList)
-                {
-                    # Added retry logic
-                    $retryCount = 0
-                    $tcpSucceeded = $false
-                    while (!$tcpSucceeded -and $retryCount -lt 5)
-                    {
-                        $tcpSucceeded = Test-NetConnection -Port $port -InformationLevel Quiet
-                        $retryCount ++
-                    }
-                    
-                    # Validate the TCP connection
-                    if($tcpSucceeded -ne $true)
-                    {
-                        $failedPort += " $port,"
-                        $status = "Failed"
-                    }
-                }
-                
-                # Check overall network port enable status
-                if ($status -eq 'Failed')
-                {
-                    $resourceMsg = "The network port validation for MOCStack requires $($failedPort) to be enabled."
-                    throw $args[1]
-                }
-            }
-            catch
-            {
-                $errorMsg = $_.Exception.Message
-                $resourceMsg = "Error occurred in Environment Validator MOCStack network port test."
-                $status = "Failed"
-            }
-            finally
-            {
-                $AdditionalData += New-Object -TypeName PsObject -Property @{
-                    HardwareType  = $hardwareType
-                    ExpectedEnablePort = $portList
-                    DisablePort = $failedPort
-                    Status    = $status
-                    Source    = $ENV:COMPUTERNAME
-                    Resource  = $resourceMsg
-                    Detail    = $errorMsg
-                }
-            }
-            return $AdditionalData
-        }
-
-        # Run scriptblock
-        $MOCStackPortResult = Invoke-Command -Session $PsSession -ScriptBlock $testPortSb -ArgumentList $portList, $disabledPortMsg
-        # build result
-        $now = [datetime]::UtcNow
-        $targetComputerName = if ($PsSession.PSComputerName) { $PsSession.PSComputerName } else { $ENV:COMPUTERNAME }
-        $aggregateStatus = if ($MOCStackPortResult.Status -contains 'Failed') { 'Failed' } else { 'Succeeded' }
-
-        $PortResult = New-Object -Type AzStackHciMOCStackPortTarget -Property @{
-            Name               = 'AzStackHci_MOCStack_Network_Port'
-            Title              = 'MOCStack Network Port Requirement'
-            Severity           = 'Critical'
-            Description        = 'Test to check MOCStack Network Port requirement is met'
-            Tags               =  $OperationType
-            Remediation        = 'Enable the mandatory network port required for MOCStack'
-            TargetResourceID   = $targetComputerName
-            TargetResourceName = $targetComputerName
-            TargetResourceType = $MOCStackPortResult.HardwareType | Get-Unique
-            Timestamp          = $now
-            Status             = $aggregateStatus
-            AdditionalData     = $MOCStackPortResult
-            HealthCheckSource  = $ENV:EnvChkrId
-            ExpectedEnablePort = $MOCStackPortResult.ExpectedEnablePort
-            DisablePort = $MOCStackPortResult.DisablePort
-        }
-        return $PortResult
-    }
-    catch
-    {
-        throw $_
-    }
-}
-```
+The check only opens a TCP connection. It doesn't send HTTP or HTTPS requests, and a failed ping doesn't affect it.
 
 ## Troubleshooting
 
 ### Manually test from the affected node
 
-Run these tests from an elevated PowerShell session on the node. If they fail, the blockage is outside the node and must be addressed on your firewall appliance.
+Run these tests in PowerShell on each node named in the failure. They make the same connection the check makes.
 
-```
+```powershell
 # Quick reachability tests
 Test-NetConnection -ComputerName internetbeacon.msedge.net -Port 443
 Test-NetConnection -ComputerName internetbeacon.msedge.net -Port 80
 ```
 
-If `TcpTestSucceeded` is false for either port continue with remediation.
+Read the result:
+
+| What you see | What it means | Next step |
+| --- | --- | --- |
+| `TcpTestSucceeded : True` for both ports | The node reaches the endpoint now. | Run the validation again. |
+| `TcpTestSucceeded : False` and `RemoteAddress` shows an address | The name resolves, but the TCP connection is blocked. | [Check the node's own firewall](#check-the-nodes-own-firewall), then your network firewall. |
+| A warning that name resolution failed, and no `RemoteAddress` | The node can't resolve `internetbeacon.msedge.net`. | [Fix name resolution](#if-the-node-cant-resolve-the-name). |
+
+A warning that a ping failed doesn't matter by itself. The check reads only the TCP result.
+
+### Check the node's own firewall
+
+This read-only block lists the Windows Firewall settings on the node that can block the check: each profile's default outbound action, and each enabled outbound block rule that covers TCP 80 or 443.
+
+```powershell
+# Read-only: list Windows Firewall settings on this node that can block the check
+$Endpoint = 'internetbeacon.msedge.net'
+$addresses = @(Resolve-DnsName -Name $Endpoint -ErrorAction Stop |
+    Where-Object { $_.IPAddress } | Select-Object -ExpandProperty IPAddress -Unique)
+"Endpoint addresses: $($addresses -join ', ')"
+Get-NetFirewallProfile | Select-Object Name, Enabled, DefaultOutboundAction
+Get-NetFirewallRule -Direction Outbound -Action Block -Enabled True -PolicyStore ActiveStore |
+    ForEach-Object {
+        $pf = $_ | Get-NetFirewallPortFilter
+        $remote = @(($_ | Get-NetFirewallAddressFilter).RemoteAddress)
+        $ports = @($pf.RemotePort)
+        $portMatch = ($ports -contains 'Any') -or ($ports -contains '80') -or ($ports -contains '443')
+        if ((@('TCP', 'Any') -contains "$($pf.Protocol)") -and $portMatch) {
+            $match = if (@($remote | Where-Object { $addresses -contains $_ }).Count -gt 0) { 'Endpoint address' }
+                     elseif ($remote -contains 'Any') { 'Any address' }
+                     else { 'Other addresses (check whether they include the endpoint)' }
+            [pscustomobject]@{
+                Rule          = $_.DisplayName
+                Name          = $_.Name
+                Source        = $_.PolicyStoreSourceType
+                RemotePort    = $ports -join ','
+                RemoteAddress = $remote -join ','
+                Match         = $match
+            }
+        }
+    }
+```
+
+Expected result on a node that isn't blocking the check: no profile shows `DefaultOutboundAction` `Block`, and no rule is listed with `Match` `Endpoint address` or `Any address`.
+
+* If a rule is listed with `Match` `Endpoint address`, see [If a firewall rule on the node blocks the connection](#if-a-firewall-rule-on-the-node-blocks-the-connection).
+* If a rule with `Any address` is listed, or a profile's `DefaultOutboundAction` is `Block`, your organization restricts outbound traffic on the node. Ask the owner of that rule or policy to allow TCP 80 and 443 to `internetbeacon.msedge.net`. Don't disable a broad rule to pass this check.
 
 ## Remediation
 
+Use the step that matches what you found in [Troubleshooting](#troubleshooting).
+
+### If your network firewall blocks the connection
+
 Allowlist `internetbeacon.msedge.net` on your network firewall appliance for outbound TCP 80 and TCP 443 from the Azure Local nodes or subnets that perform validation.
+
+**Changes:** Adds one outbound allow rule on your network firewall. Nothing changes on the nodes, and running workloads aren't affected.
 
 **Guidance**
 
 * Create FQDN based rules for `internetbeacon.msedge.net` on TCP 80 and TCP 443  
-* If the firewall does not support FQDN rules, allow the IP (13.107.4.52) that resolves at validation time, understanding that this can change  
+* If the firewall does not support FQDN rules, allow the IP (13.107.4.52) that resolves at validation time, understanding that this can change. `Resolve-DnsName -Name internetbeacon.msedge.net` shows the current addresses  
 * Scope the rule to the source subnet or specific node IPs that run the check  
 * Keep the rule active for the duration of validation. You can remove or tighten it afterward if your policy requires it
 
-**Re test**
+### If the node can't resolve the name
+
+Fix DNS on the nodes first. A node that can't resolve `internetbeacon.msedge.net` usually can't resolve other required endpoints either. See [Troubleshoot external DNS resolution](../Troubleshooting-DNS-External-DNS-Resolution.md).
+
+### If a firewall rule on the node blocks the connection
+
+Use this block only when [Check the node's own firewall](#check-the-nodes-own-firewall) listed a rule with `Match` `Endpoint address`. It disables only local rules that name an `internetbeacon.msedge.net` address for TCP 80 or 443. It changes nothing when a matching rule comes from Group Policy or another policy source, because those rules must be changed where they're defined. If someone added the rule on purpose, check with your security team first.
+
+**Changes:** Disables the matching local Windows Firewall outbound block rules on this node. Other rules, policy-managed rules, and the profile defaults don't change. To undo, run the `Enable-NetFirewallRule` command that the block prints for each rule.
+
+Paste and run the whole block at once. It stops at the first error, and it changes nothing if it can't read the endpoint addresses or the firewall rules.
+
+```powershell
+# Disable local outbound block rules that name an internetbeacon.msedge.net address on TCP 80 or 443
+& {
+    $ErrorActionPreference = 'Stop'
+    $Endpoint = 'internetbeacon.msedge.net'
+    $addresses = @(Resolve-DnsName -Name $Endpoint |
+        Where-Object { $_.IPAddress } | Select-Object -ExpandProperty IPAddress -Unique)
+    $targets = @(Get-NetFirewallRule -Direction Outbound -Action Block -Enabled True -PolicyStore ActiveStore |
+        Where-Object {
+            $pf = $_ | Get-NetFirewallPortFilter
+            $ports = @($pf.RemotePort)
+            $remote = @(($_ | Get-NetFirewallAddressFilter).RemoteAddress)
+            (@('TCP', 'Any') -contains "$($pf.Protocol)") -and
+            (($ports -contains 'Any') -or ($ports -contains '80') -or ($ports -contains '443')) -and
+            (@($remote | Where-Object { $addresses -contains $_ }).Count -gt 0)
+        })
+    $managed = @($targets | Where-Object { "$($_.PolicyStoreSourceType)" -ne 'Local' })
+    if ($targets.Count -eq 0) {
+        'No enabled outbound block rule on this node names an internetbeacon.msedge.net address. Nothing was changed.'
+    } elseif ($managed.Count -gt 0) {
+        'These rules come from Group Policy or another policy source: ' + ($managed.DisplayName -join '; ') +
+            '. Ask the policy owner to remove the block for this endpoint. Nothing was changed.'
+    } else {
+        foreach ($rule in $targets) {
+            Disable-NetFirewallRule -Name $rule.Name
+            "Disabled rule '$($rule.DisplayName)'. To undo: Enable-NetFirewallRule -Name '$($rule.Name)'"
+        }
+    }
+}
+```
+
+Expected result: one `Disabled rule` line for each rule that was blocking the endpoint. Then run the re-test below.
+
+### If your network requires a proxy server
+
+If your network allows internet access only through a proxy server, the nodes must be set up to use it, which you do when you register them with Azure Arc. See [Register Azure Local with Azure Arc without using Arc gateway](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-without-azure-arc-gateway). When a WinHTTP proxy is configured on the node that runs validation, this check is skipped. Don't open direct internet access only to pass this check.
+
+### Re test
 
 From the node run
 
-```
+```powershell
 Test-NetConnection -ComputerName internetbeacon.msedge.net -Port 443
 Test-NetConnection -ComputerName internetbeacon.msedge.net -Port 80
 ```
 
-Then run the Environment Validator again. The status for `AzStackHci_MOCStack_Network_Port` should change to `Succeeded`.
+Both should show `TcpTestSucceeded : True`. Then run the Environment Validator again, for example by retrying the deployment or add-node validation. The result for `AzStackHci_MOCStack_Network_Port` should change to `SUCCESS` for every node.
+
+To rerun only this check for the node you're signed in to, use this read-only block. It works only with Environment Checker 10.2509 and earlier, because later versions skip this check and return nothing.
+
+```powershell
+# Read-only: rerun only this check for this node (Environment Checker 10.2509 and earlier)
+$session = New-PSSession -ComputerName $env:COMPUTERNAME
+Invoke-AzStackHciMOCStackValidation -PsSession $session -OperationType Deployment -Include Test-MOCStackNetworkPort -PassThru |
+    Select-Object Name, TargetResourceName, Status, @{ Name = 'Detail'; Expression = { $_.AdditionalData.Detail } }
+Remove-PSSession -Session $session
+```
+
+Expected result: `Status` `SUCCESS` and an empty `Detail`. If both ports test `True` on every node but validation still reports this failure, collect the output of the tests above and the files listed under [Administrator detection surfaces](#administrator-detection-surfaces), and contact Microsoft Support.
+
+## Administrator detection surfaces
+
+| Surface | Status | Where to look |
+| --- | --- | --- |
+| PowerShell on a node | shown | `Test-NetConnection -ComputerName internetbeacon.msedge.net -Port 443` and `-Port 80` return `TcpTestSucceeded : False`. With Environment Checker 10.2509 and earlier, the rerun block in [Re test](#re-test) returns the result with `Status` `FAILURE` and the detail `MOCStack mandatory network port is currently disabled.` |
+| Azure portal | shown | Deployment or add-node validation fails, and the error details contain the text in [Example failure from Environment Validator](#example-failure-from-environment-validator), starting with `Type 'ValidateMOCStack' of Role 'EnvironmentValidator' raised an exception`. |
+| Windows event logs | shown | On the node that ran the validation: Event Viewer > Applications and Services Logs > **AzStackHciEnvironmentChecker**, source `AzStackHciEnvironmentChecker/Telemetry`, Event ID **17205**. There is one event per validated node. A failing node's event is a Warning whose message contains `"Name": "AzStackHci_MOCStack_Network_Port"`. |
+| Cluster logs (Get-ClusterLog) | not-evident | Not evident in the cluster logs. The check runs before deployment or before a node joins, and it writes nothing to the failover cluster. |
+| Failover Cluster Manager | not-evident | Not evident in Failover Cluster Manager. The check isn't a cluster role, resource, or node state. |
+| Windows Admin Center (standalone) | shown | On a connection to the node that ran the validation, the **Events** tool shows the same Event ID 17205 entry in the **AzStackHciEnvironmentChecker** log. |
+| Windows Admin Center in the Azure portal | shown | For add node, the **Events** tool on the node that ran the validation shows the same Event ID 17205 entry. Before deployment there's no Azure Local instance to open it from, so use one of the other surfaces. |
+| Component / tool log files | shown | When you run the validator yourself, it writes `AzStackHciEnvironmentChecker.log` and `AzStackHciEnvironmentReport.json` to `%USERPROFILE%\.AzStackHci` for the account that ran it, or to the folder you pass in `-OutputPath`. The log records the run, and the report lists each node's result with its `Status` and detail. |
 
 ## Notes
 
 * This validator checks generic internet reachability through `internetbeacon.msedge.net` using the default behavior of `Test-NetConnection`  
-* The requirement applies during validation before deployment  
+* The requirement applies during validation before deployment or add node, with Environment Checker 10.2509 and earlier, when no WinHTTP proxy is configured  
 * `internetbeacon.msedge.net` is not part of the documented Azure Local firewall allowlist for service endpoints: https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements  
 * Document any temporary firewall changes and remove them after validation if they are not needed for ongoing operations
 
@@ -255,3 +320,4 @@ Then run the Environment Validator again. The status for `AzStackHci_MOCStack_Ne
 * Symptom: `AzStackHci_MOCStack_Network_Port` failure blocks validation  
 * Cause: outbound TCP 80 or 443 to `internetbeacon.msedge.net` is not allowlisted on the firewall appliance  
 * Fix: allow TCP 80 and 443 to `internetbeacon.msedge.net` on the appliance and run validation again
+* Applies to: Environment Checker 10.2509 and earlier, without a WinHTTP proxy
