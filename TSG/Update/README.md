@@ -37,4 +37,4 @@
 * [Update fails due to Arc Agent install failure (lockdown on azcmagent.log)](./Update-fails-due-to-Arc-Agent-install-failure.md)
 * [2604 | Previous CAU run status was canceled](./Previous-CAU-run-status-was-canceled.md)
 * [Live migration fails with "No mapping between account names and security IDs" (0x80070534)](./Live-migration-fails-with-No-mapping-between-account-names-and-security-IDs.md)
-* [Troubleshoot a missing .NET 10 runtime on Azure Local](./Troubleshoot-DotNet10-Missing-Runtime.md) — Type: troubleshoot; products: Azure Local lifecycle management using .NET 10; owner: Microsoft Support / Azure Local administrator; grade: null; automation: manual; last validated: not validated.
+* [Troubleshoot a missing .NET 10 runtime on Azure Local](./Troubleshoot-DotNet10-Missing-Runtime.md)
