@@ -8,11 +8,11 @@
     "signal": "AzStackHci_MOCStack_Network_Port"
   },
   "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
+    "fidelity_level": "L4",
+    "technical_grade": "A",
     "reproduction_substrate": "vm",
-    "automation_status": "ready",
-    "last_validated": null,
+    "automation_status": "proven",
+    "last_validated": "2026-11-25",
     "spec_ref": "AzStackHci_MOCStack_Network_Port"
   }
 }
@@ -321,8 +321,8 @@ Expected result: `Status` `SUCCESS` and an empty `Detail`. If both ports test `T
 | Windows event logs | shown | On the node that ran the validation: Event Viewer > Applications and Services Logs > **AzStackHciEnvironmentChecker**, source `AzStackHciEnvironmentChecker/Telemetry`, Event ID **17205**. There is one event per validated node. A failing node's event is a Warning whose message contains `"Name": "AzStackHci_MOCStack_Network_Port"`. |
 | Cluster logs (Get-ClusterLog) | not-evident | Not evident in the cluster logs. The check runs before deployment or before a node joins, and it writes nothing to the failover cluster. |
 | Failover Cluster Manager | not-evident | Not evident in Failover Cluster Manager. The check isn't a cluster role, resource, or node state. |
-| Windows Admin Center (standalone) | shown | On a connection to the node that ran the validation, the **Events** tool shows the same Event ID 17205 entry in the **AzStackHciEnvironmentChecker** log. |
-| Windows Admin Center in the Azure portal | shown | For add node, the **Events** tool on the node that ran the validation shows the same Event ID 17205 entry. Before deployment there's no Azure Local instance to open it from, so use one of the other surfaces. |
+| Windows Admin Center (standalone) | shown | Inferred from the Windows event logs row: on a connection to the node that ran the validation, the **Events** tool reads the same **AzStackHciEnvironmentChecker** log, so it shows the same Event ID 17205 entry. The cluster **Alerts** don't list this failure, because it raises no Health Service fault. |
+| Windows Admin Center in the Azure portal | shown | Inferred from the Windows event logs row: where Windows Admin Center in the Azure portal can connect to the node that ran the validation, for example for add node on a deployed instance, its **Events** tool shows the same Event ID 17205 entry. Before deployment, use one of the other surfaces. |
 | Component / tool log files | shown | When you run the validator yourself, it writes `AzStackHciEnvironmentChecker.log` and `AzStackHciEnvironmentReport.json` to `%USERPROFILE%\.AzStackHci` for the account that ran it, or to the folder you pass in `-OutputPath`. The log records the run, and the report lists each node's result with its `Status` and detail. During deployment, the validation run is also logged in `C:\CloudDeployment\Logs\EnvironmentValidatorFull.<date>.log` on the node that runs the deployment. |
 
 ## Notes
