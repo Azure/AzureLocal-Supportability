@@ -20,7 +20,7 @@
 
 # Troubleshoot a missing .NET 10 runtime on Azure Local
 
-Use this guide when a required .NET 10 runtime is missing on an Azure Local node and an update or lifecycle-management component fails to start. This procedure supports x64 only.
+Use this guide when a required .NET 10 runtime is missing on an Azure Local node and an update or lifecycle-management component fails to start.
 
 ## Table of contents
 
@@ -33,11 +33,9 @@ Use this guide when a required .NET 10 runtime is missing on an Azure Local node
 ## Symptoms
 
 - The required x64 .NET 10 runtime is missing from the node.
-- `ECEAgent` is not running, or the orchestrator cluster group is not online or failed to start.
+- `ECEAgent` is not running, or HCI Orchestrator is not online or failed to start.
 
-Investigation found the .NET Runtime target was removed after the second logon for updates from 10.0.6 through 10.0.11, and remained for tested updates ending at 10.0.12 through 10.0.15. Other runtime flavors are assumed to be affected because they release together, but were not independently tested. These results do not identify an Azure Local solution release range.
-
-During internal testing on which versions we found that all versions of .NET 10.0.10 and below were impacted. These versions correspond to Azure Local versions from 2604 to 2607. You should see the symptoms when updating from an earlier release to 2610 or 2611.
+It was reported that .NET 10 was removed after there was second logon for updates from 10.0.6 to 10.0.15. During internal testing on which versions had the issue we found that all versions of .NET 10.0.10 and below were impacted. These versions are installed for  Azure Local versions from 2604 to 2607. Not all updates should see this issue as it only happens when you indicate during update that .NET 10 should delay cleanup until the next session logon by an administrtaor. This change came in for both 2610 or 2611.
 
 We have not validated this but .NET 8 could be impacted as well. I will explain the small differences in each step below on how to handle that case.
 
@@ -63,7 +61,7 @@ For .NET 8 you should only see that there is no .NET 8 runtimes installed.
 
 ## Recovery
 
-**[HIGH RISK]** Install only during an approved maintenance window, when no update is in progress, and with the package approved for this solution. Run on one affected node at a time.
+Run the recovery on the impacted nodes. Since all services are down you should not need a maintenance window since .NET does not require a restart and does not impact any services (since they are all failing to start).
 
 `Get-ASArtifactPath` resolves the latest `Microsoft.DotNet10.Runtime.Installer` package. List its executable installers and confirm they are the expected package contents:
 
