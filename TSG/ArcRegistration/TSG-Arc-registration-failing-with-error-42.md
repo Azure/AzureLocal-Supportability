@@ -9,7 +9,7 @@
     "technical_grade": "A",
     "reproduction_substrate": "vm",
     "automation_status": "proven",
-    "last_validated": "2026-11-24",
+    "last_validated": "2026-11-25",
     "spec_ref": "AzLocal_ArcRegistration_Error42"
   }
 }
@@ -451,24 +451,38 @@ service principal credential is placed on the node.
 
 **Keep this procedure's sign-in separate.** Open a new PowerShell session that
 you use only for this procedure, and run steps 1 to 4 in it. Every Azure
-PowerShell sign-in below uses `-Scope Process`, which keeps the sign-in in that
-process and does not save it to the user profile. If you use the Azure CLI,
+PowerShell sign-in below first runs `Disable-AzContextAutosave -Scope Process`
+and then signs in with `-Scope Process`. `-Scope Process` alone is not enough.
+Whether Azure PowerShell writes secrets and tokens to disk follows the context
+autosave setting, which is on by default
+([Azure contexts and sign-in credentials](https://learn.microsoft.com/powershell/azure/context-persistence)),
+not `-Scope Process`. With autosave on, a client secret sign-in on Windows saves
+the secret in `keystore.cache` in `%USERPROFILE%\.Azure`, and a device code
+sign-in saves its tokens in the shared token cache under
+`%LOCALAPPDATA%\.IdentityService` (other platforms use their own user locations);
+`Disconnect-AzAccount -Scope Process` removes neither.
+`Disable-AzContextAutosave -Scope Process` keeps contexts, tokens, and secrets in
+memory for the current PowerShell process only, and does not change the saved
+autosave setting that other sessions use. If you use the Azure CLI,
 first point it at a new, empty profile folder for this session, so that
 `az login` and `az logout` do not read or change the default Azure CLI profile,
 which all sessions of the user share:
 
 ```powershell
-$env:AZURE_CONFIG_DIR = Join-Path $env:TEMP ('arc42-az-' + [guid]::NewGuid())
+$env:AZURE_CONFIG_DIR = Join-Path ([System.IO.Path]::GetTempPath()) ('arc42-az-' + [guid]::NewGuid())
 ```
 
 **Changes:** sets an environment variable for the current PowerShell process
-only. The Azure CLI creates the folder when you sign in. Sign-ins saved earlier,
-in the user profile or the default Azure CLI profile, are not read or changed.
+only. The command works in Windows PowerShell 5.1 and in PowerShell 7 on Linux
+or macOS, where `$env:TEMP` is not set. The Azure CLI creates the folder when
+you sign in. Sign-ins saved earlier, in the user profile or the default Azure
+CLI profile, are not read or changed.
 
 For example, for a service principal whose certificate is in that machine's
 certificate store, replace the placeholders and run:
 
 ```powershell
+Disable-AzContextAutosave -Scope Process
 Connect-AzAccount -ServicePrincipal -ApplicationId '<application-id>' -CertificateThumbprint '<certificate-thumbprint>' -Tenant '<tenant-id>' -Scope Process
 ```
 
@@ -479,16 +493,18 @@ prompt for it instead; it keeps the secret as a `SecureString` and does not
 display it:
 
 ```powershell
+Disable-AzContextAutosave -Scope Process
 $credential = Get-Credential -UserName '<application-id>' -Message 'Enter the service principal client secret'
 Connect-AzAccount -ServicePrincipal -Credential $credential -Tenant '<tenant-id>' -Scope Process
 ```
 
-Without `-Scope Process`, Azure PowerShell saves a service principal's secret in
-`AzureRmContext.json` in the user profile (`%USERPROFILE%\.Azure`)
-([service principal sign-in](https://learn.microsoft.com/powershell/azure/authenticate-noninteractive#login-with-a-service-principal));
-with `-Scope Process`, the context is kept for the current process only and is
-not saved, whatever the context autosave setting
-([Azure PowerShell context objects](https://learn.microsoft.com/powershell/azure/context-persistence#save-azure-contexts-across-powershell-sessions)).
+Run `Disable-AzContextAutosave -Scope Process` first, as in this block. Without
+it, `Connect-AzAccount -ServicePrincipal -Credential` saves the client secret in
+`keystore.cache` in `%USERPROFILE%\.Azure` (Az.Accounts 2.10.4 and later) even
+with `-Scope Process`, and `Disconnect-AzAccount -Scope Process` and closing the
+session leave it there. In validation with Az.Accounts 5.5.3, the file still held
+the secret after the sign-out and when read from a new process; with the command
+run first, no `keystore.cache` was written and the sign-in still worked.
 For the Azure CLI, this procedure uses a certificate; to use a client secret, use
 the Azure PowerShell sign-in above instead.
 
@@ -496,13 +512,24 @@ An operator who mints the token instead signs in with device code, which needs a
 person to complete it in a browser:
 
 ```powershell
+Disable-AzContextAutosave -Scope Process
 Connect-AzAccount -Tenant '<tenant-id>' -UseDeviceAuthentication -Scope Process
 ```
 
-**Changes:** signs in to Azure PowerShell for the current PowerShell process
-only; nothing is saved to the user profile, and sign-ins saved earlier are not
-changed. A client secret entered at the `Get-Credential` prompt stays in the
-process, in `$credential` and the sign-in, until step 4. Step 4 signs out of it.
+**Changes:** `Disable-AzContextAutosave -Scope Process` turns off context
+autosave for the current PowerShell process only and prints a setting with `Mode`
+set to `Process`; the saved setting for the user, shown by
+`Get-AzContextAutosaveSetting -Scope CurrentUser`, is not changed. The sign-in
+then applies to that process only: its context, its tokens, and a service
+principal's client secret stay in memory and are not written to the user
+profile, and sign-ins saved earlier are not changed. Loading the Az.Accounts
+module can still create or update its own settings files in `%USERPROFILE%\.Azure`,
+which hold no credentials. A device code sign-in also sets the Azure PowerShell
+`EnableLoginByWam` setting to `false` for the current user, and that setting
+stays after the session ends; if the user relied on the default sign-in and wants
+it back, run `Update-AzConfig -EnableLoginByWam $true` afterward. A client secret
+entered at the `Get-Credential` prompt stays in the process, in `$credential` and
+the sign-in, until step 4. Step 4 signs out of it.
 It does not change the node or Azure resources.
 
 *Managed identity of another registered machine (no person, no stored secret).*
@@ -674,6 +701,7 @@ that you use only for this procedure, sign in as its managed identity, and
 continue with step 2 in the same session:
 
 ```powershell
+Disable-AzContextAutosave -Scope Process
 Connect-AzAccount -Identity -Scope Process
 ```
 
@@ -681,8 +709,9 @@ With the Azure CLI on that machine, set `AZURE_CONFIG_DIR` in that session as
 shown at the start of step 1, then use `az login --identity --allow-no-subscriptions`
 followed by the Azure CLI block in step 2.
 
-**Changes:** signs in for the current PowerShell process only; nothing is saved
-to the user profile. `az login --identity` saves the sign-in only in the
+**Changes:** turns off context autosave and signs in for the current PowerShell
+process only; no context or token is written to the user profile, and the saved
+autosave setting is not changed. `az login --identity` saves the sign-in only in the
 procedure's Azure CLI profile folder. Step 4 signs out of both and removes that
 folder.
 
@@ -864,18 +893,33 @@ this one while you wait.
    sign-in: sign-ins saved earlier, in the user profile or the default Azure CLI
    profile, stay as they were.
    - Azure PowerShell (managed identity, service principal, or operator account,
-     all signed in with `-Scope Process`): `Disconnect-AzAccount -Scope Process`,
-     or close the session. This removes the process's context for that sign-in,
-     including, for a service principal, the certificate thumbprint or the client
-     secret that `Get-Credential` supplied; because the sign-in used
-     `-Scope Process`, none of it was written to `%USERPROFILE%\.Azure`. A
-     certificate in the certificate store is not changed. Afterward,
-     `Get-AzContext` no longer shows the
+     signed in after `Disable-AzContextAutosave -Scope Process`, as in step 1):
+     `Disconnect-AzAccount -Scope Process`, or close the session. This removes
+     the process's context for that sign-in. Because autosave was turned off for
+     the process, its tokens and, for a service principal, the client secret
+     that `Get-Credential` supplied were kept only in that process's memory and
+     were not written to `%USERPROFILE%\.Azure` or `%LOCALAPPDATA%\.IdentityService`;
+     closing the session removes them. A certificate in the certificate store is
+     not changed. Afterward, `Get-AzContext` no longer shows the
      identity that this procedure used. Do not run `Disconnect-AzAccount` without
      `-Scope Process`: it removes all saved credentials and contexts of the
      account from the user profile, including ones that existed before this
      procedure
      ([Disconnect-AzAccount](https://learn.microsoft.com/en-us/powershell/module/az.accounts/disconnect-azaccount)).
+
+     If a sign-in ran without `Disable-AzContextAutosave -Scope Process` while
+     autosave was on for the user (the default; check with
+     `Get-AzContextAutosaveSetting -Scope CurrentUser`), a client secret sign-in
+     left the secret in `%USERPROFILE%\.Azure\keystore.cache`, and a device code
+     sign-in left the operator's tokens in the shared token cache under
+     `%LOCALAPPDATA%\.IdentityService`. Neither the sign-out above nor closing the
+     session removes them, and this article has no validated command that removes
+     only this procedure's entries. `Clear-AzContext` removes every saved context,
+     secret, and token of the user, not only this procedure's; run it only if
+     nothing else on that machine uses the user's saved Azure PowerShell sign-ins.
+     Otherwise, ask the administrator of the minting machine to remove the
+     entries. For a service principal, removing that client secret from the
+     application in Microsoft Entra ID makes the saved copy unusable.
    - Azure CLI (service principal or `az login --identity`): run this block in the
      same session. It signs out and deletes the procedure's profile folder only
      when `AZURE_CONFIG_DIR` names a folder that step 1 created; otherwise it
@@ -1100,7 +1144,7 @@ with Microsoft support. Also include:
 
 ## Validation status of this article
 
-Validated in a lab on 2026-11-23 and 2026-11-24 with Windows PowerShell 5.1 and
+Validated in a lab from 2026-11-23 to 2026-11-25 with Windows PowerShell 5.1 and
 Azure Connected Machine agent 1.70.03595.3521. The registration runs used
 disposable Windows Server 2022 test machines, not an Azure Local image, and
 throwaway resource groups; managed identity tokens were minted on a registered
@@ -1369,10 +1413,11 @@ the full bootstrap was not run.
   RBAC overview; it was not tested.
 - **Not validated:** device code sign-in (option 2, and the operator's
   `Connect-AzAccount -UseDeviceAuthentication` sign-in in option 1), which needs a
-  person; the service principal client secret sign-in with
-  `Connect-AzAccount -ServicePrincipal -Credential` (that a process-scoped sign-in
-  does not save its secret is based on the linked Azure PowerShell documentation;
-  the certificate sign-in was run, see the next bullet); service principal tokens
+  person; where a device code sign-in stores its tokens without
+  `Disable-AzContextAutosave -Scope Process`, and that it sets `EnableLoginByWam`
+  to `false`, are taken from the Az.Accounts source (`ConnectAzureRmAccount.cs`),
+  and `Update-AzConfig -EnableLoginByWam $true` was not run; the service principal client secret sign-in is covered by the
+  2026-11-25 bullet below; service principal tokens
   passed to registration (the service principal held no role); a token that Azure rejects because it expired (expiry was
   tested only against stubbed responses); the quota variant of cause 4 (the
   missing-role variant is covered by the managed identity run above); a real image
@@ -1410,7 +1455,9 @@ the full bootstrap was not run.
   file name, size, and time, was unchanged while signed in and after
   `Disconnect-AzAccount -Scope Process`, a new process had no saved context for the
   service principal, and the current context reverted to the context saved before
-  the test. The throwaway certificate was then removed from the store. With Azure
+  the test. The throwaway certificate was then removed from the store. That
+  sign-in ran without `Disable-AzContextAutosave -Scope Process`, which step 1 now
+  runs first; a certificate sign-in stores no secret. With Azure
   CLI 2.85.0 on a macOS workstation and a new `arc42-az-*` profile folder, `az login --service-principal`
   with a certificate and, separately, with a client secret signed in and issued a
   token. The service principal entry recorded the application ID, tenant, and the
@@ -1455,11 +1502,37 @@ the full bootstrap was not run.
   the loop followed the links and listed the same three assignments. The resource
   group, identities, and assignments were deleted afterward. These were not rerun
   with a managed identity of a registered machine.
+- **Client secret sign-in and context autosave, 2026-11-25:** on the registered
+  Azure Local node (Windows PowerShell 5.1, Az.Accounts 5.5.3), in the new profile
+  of a throwaway local account with context autosave on for the user (the
+  default), a throwaway service principal with a client secret and no role
+  assignment signed in with
+  `Connect-AzAccount -ServicePrincipal -Credential -Tenant -Scope Process` and
+  issued an ARM token. Without `Disable-AzContextAutosave -Scope Process`, the
+  sign-in wrote `keystore.cache` (502 bytes) to `%USERPROFILE%\.Azure`; after
+  `Disconnect-AzAccount -Scope Process`, and again in a new process, the
+  decrypted file still held the application ID and the client secret. The file
+  was then deleted. With `Disable-AzContextAutosave -Scope Process` run first,
+  the command printed `Mode` `Process`, the sign-in and token request worked, no
+  `keystore.cache` was written, the folder listing (file name, size, and time)
+  did not change from before the sign-in to after the sign-out, a new process had
+  no context for the service principal, and `Get-AzContextAutosaveSetting -Scope CurrentUser`
+  still returned `CurrentUser`. In both runs, loading Az.Accounts created its own
+  settings files in `%USERPROFILE%\.Azure`, with no credentials, and the
+  service principal sign-in wrote nothing to `%LOCALAPPDATA%\.IdentityService`.
+  The account, its profile, and the service principal were deleted afterward.
+  The `AZURE_CONFIG_DIR` line in step 1 was run in PowerShell 7.5 on macOS, where
+  `$env:TEMP` is not set: the earlier form stopped with `Cannot bind argument to
+  parameter 'Path' because it is null` and did not set the variable, and the
+  current form set an `arc42-az-*` folder under the temporary folder, which the
+  step 4 Azure CLI cleanup block then removed. The current form was not run in
+  Windows PowerShell 5.1 or after a real Azure CLI sign-in.
 
 ## Revision history
 
 | Date | Summary |
 | --- | --- |
+| 2026-11-25 | Every Azure PowerShell sign-in in section 3 now runs `Disable-AzContextAutosave -Scope Process` first. `-Scope Process` alone does not stop Azure PowerShell from saving a client secret in `keystore.cache` or device code tokens in the shared token cache, and `Disconnect-AzAccount -Scope Process` does not remove them; section 3 now says so, names those locations, notes that a device code sign-in sets `EnableLoginByWam` to `false` for the user, and step 4 explains what to do if a sign-in ran without the command. The `AZURE_CONFIG_DIR` line now uses the system temporary folder, so it also works in PowerShell 7 on Linux and macOS, where `$env:TEMP` is not set. |
 | 2026-11-24 | The section 1 module block and its rollback now install from the repository in `$Repository`, which defaults to the PowerShell Gallery and can name an approved internal repository. Before it changes anything, the module block confirms that the repository is registered and has 4.0.2, when it must be installed, and every version it would remove, so the rollback can restore them; otherwise it stops with `No changes were made`. The rollback confirms the exact version with `Find-Module` and stops with `Nothing was installed` if it is missing. Section 1 lists the PowerShell Gallery download hosts that must be reachable. Section 3 adds a client secret sign-in that prompts with `Get-Credential` instead of placing the secret in script text, and step 4 states what each sign-out removes, clears `$credential`, deletes a certificate file copied only for this procedure, and keeps Azure CLI telemetry from recreating the procedure's profile folder. |
 | 2026-11-24 | Section 3 now skips the temporary **Azure Connected Machine Onboarding** assignment only when the identity's roles together grant every action of that role, not just `Microsoft.HybridCompute/machines/write`; it lists those actions and adds a read-only check that prints `COVERED`, `MISSING`, or `LOOKUP-FAILED`. Every Azure PowerShell sign-in now uses `-Scope Process` in a session used only for this procedure, and the Azure CLI uses a separate profile folder that step 4 removes, so cleanup no longer touches sign-ins saved earlier; step 4 warns against running `Disconnect-AzAccount` without `-Scope Process`. For a 403, the status code table, section 4, and step 4 now say that the fix is the permission, policy, or quota, and that the retry needs a fresh sign-in and token when the earlier one was cleared or is near expiry. |
 | 2026-11-24 | The status code table now sends only 403, `RequestDisallowedByPolicy`, and quota errors to section 4; a 429 is throttling (wait for the `Retry-After` interval, then retry), a 5xx is a transient service failure (retry later, check Azure Service Health, contact support if it persists), and other statuses go to support. Section 4 no longer states that any non-401 response means the token was accepted. The section 3 role lookup now prints `EXISTS`, `NONE`, or `LOOKUP-FAILED`, and the assignment is created only after `NONE`, so a failed lookup no longer looks like a missing assignment. Section 3 adds a read-only listing of the identity's roles at the resource group, including inherited ones, and states that deleting the temporary assignment removes only that assignment's grant, not access from other roles. |
