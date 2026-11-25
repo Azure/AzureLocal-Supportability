@@ -733,8 +733,21 @@ preceding guards and inventories are required in the same run.
                             $n -is [Management.Automation.Language.HashtableAst] }, $true)
                     if (@($parseErrors).Count -gt 0 -or -not $table) { throw }
                     $data = @{}
+                    $fileKeys = 'RootModule', 'ModuleToProcess', 'NestedModules', 'RequiredAssemblies', 'ScriptsToProcess',
+                        'TypesToProcess', 'FormatsToProcess', 'FileList', 'RequiredModules', 'ModuleList'
                     foreach ($pair in $table.KeyValuePairs) {
-                        $data[[string]$pair.Item1.Value] = @($pair.Item2.FindAll({ param($n) $n -is [Management.Automation.Language.StringConstantExpressionAst] -or
+                        $key = [string]$pair.Item1.Value
+                        # A file field whose value is built by an expression (joined strings, -f, a method call, or a
+                        # string that embeds anything other than $env:NAME) cannot be resolved without running it, so it stops the block.
+                        if ($fileKeys -contains $key -and @($pair.Item2.FindAll({ param($n)
+                                    ($n -is [Management.Automation.Language.BinaryExpressionAst] -and $n.Operator -in 'Plus', 'Format', 'Join') -or
+                                    $n -is [Management.Automation.Language.InvokeMemberExpressionAst] -or $n -is [Management.Automation.Language.SubExpressionAst] -or
+                                    ($n -is [Management.Automation.Language.ExpandableStringExpressionAst] -and @($n.NestedExpressions | Where-Object {
+                                            -not ($_ -is [Management.Automation.Language.VariableExpressionAst] -and $_.VariablePath.DriveName -eq 'env') }).Count -gt 0) }, $true)).Count -gt 0) {
+                            $data[$key] = @('$computed-path')
+                            continue
+                        }
+                        $data[$key] = @($pair.Item2.FindAll({ param($n) $n -is [Management.Automation.Language.StringConstantExpressionAst] -or
                                 $n -is [Management.Automation.Language.ExpandableStringExpressionAst] }, $true) | ForEach-Object { $_.Value })
                     }
                 }
