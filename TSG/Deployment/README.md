@@ -10,3 +10,4 @@
 * [24H2 Deployment or ScaleOut failure at EncryptClusterSharedVolumes of AzureStackBitlocker](./Deployment-or-ScaleOut-failure-at-EncryptClusterSharedVolumes-of-AzureStackBitlocker.md)
 * [How To: Redo Local Availability Zones (LAZ) on a SAN Cluster](./HowTo-Deployment-RedoLocalAvailabilityZones.md)
 * [Troubleshooting MSI Does Not Have Access to Subscription](../EnvironmentValidator/Troubleshooting-MSI-Does-Not-Have-Access-To-Subscription.md)
+* [Reset Stale iSCSI State Before Retrying Node Configuration](../Troubleshoot-iSCSI-ResetStaleStateBeforeRetryingNodeConfiguration.md)

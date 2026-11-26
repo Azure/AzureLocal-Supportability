@@ -26,8 +26,12 @@ Clear the trustedHost entries on each node of the cluster, run the following scr
 
 ```PowerShell
 Write-Host "Clearing TrustedHosts setting on $ENV:COMPUTERNAME";
-Clear-Item -Path WSMan:\localhost\Client\TrustedHosts;
-# Accept the prompt;
+$current = (Get-Item WSMan:\localhost\Client\TrustedHosts -ErrorAction Stop).Value;
+if ($current -eq '*') {
+    Clear-Item -Path WSMan:\localhost\Client\TrustedHosts -Force -ErrorAction Stop;
+} else {
+    Write-Host "TrustedHosts setting on $ENV:COMPUTERNAME is '$current', not '*'. Leaving it unchanged.";
+}
 ```
 
 Verify the setting 
