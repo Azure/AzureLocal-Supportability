@@ -37,7 +37,7 @@ Sample output:
 ```
 Name                                         OwnerNode State
 ----                                         --------- -----
-Azure Stack HCI Update Service Cluster Group v-Host2   Online
+Azure Stack HCI Update Service Cluster Group Node02    Online
 ```
 
 In a PowerShell session on that node, you can then check for update service crashes in the Application log with the specified message. The presence of a matching event found indicates the issue.
@@ -128,7 +128,7 @@ Sample output:
 ```
 Name                                         OwnerNode State
 ----                                         --------- -----
-Azure Stack HCI Update Service Cluster Group v-Host2   Online
+Azure Stack HCI Update Service Cluster Group Node02    Online
 ```
 
 If the state is not `Online`, start the service using: 

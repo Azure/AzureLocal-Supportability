@@ -96,8 +96,8 @@ Sample expected output:
 ```Output
 PSComputerName LongPathsEnabled
 -------------- ----------------
-v-Host2                       1
-v-Host1                       1
+Node02                        1
+Node01                        1
 ```
 
 If any node has a setting of 0, this should be set to 1 using the following command.

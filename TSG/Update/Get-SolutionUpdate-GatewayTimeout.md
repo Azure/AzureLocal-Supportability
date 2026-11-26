@@ -38,11 +38,11 @@ Get-ClusterGroup "Azure Stack HCI Update Service Cluster Group"
 
 Sample output:
 ```
-[v-host1]: PS C:\> Get-ClusterGroup "Azure Stack HCI Update Service Cluster Group"
+[node01]: PS C:\> Get-ClusterGroup "Azure Stack HCI Update Service Cluster Group"
 
 Name                                         OwnerNode State
 ----                                         --------- -----
-Azure Stack HCI Update Service Cluster Group v-Host1   Online
+Azure Stack HCI Update Service Cluster Group Node01    Online
 ```
 
 Move the update service to a different node.
@@ -76,7 +76,7 @@ Get-SolutionUpdate | ft Version, State, UpdateStateProperties
 Sample output:
 ```
 
-[v-host1]: PS C:\> Get-SolutionUpdate | ? State -eq Installing | ft Version, State, UpdateStateProperties
+[node01]: PS C:\> Get-SolutionUpdate | ? State -eq Installing | ft Version, State, UpdateStateProperties
 
 Version           State UpdateStateProperties
 -------           ----- ---------------------

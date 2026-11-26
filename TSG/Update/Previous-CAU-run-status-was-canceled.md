@@ -81,7 +81,7 @@ if (-not $earliestRun) {
 Sample output is below. The first CAU run in this case contains the actual reason CAU failed the first time, while subsequent runs would just show the Canceled status.
 
 ```
-CAU run from 04/28/2026 00:20:05 failure: The latest cluster update status is 'PartiallyFailed'. The node 'ASRR1N35R12U01' failed to update. The error message is 'System.Management.Automation.RemoteException: The requested operation cannot be completed because a resource has locked status.'. Failed update list --
+CAU run from 04/28/2026 00:20:05 failure: The latest cluster update status is 'PartiallyFailed'. The node '<node name>' failed to update. The error message is 'System.Management.Automation.RemoteException: The requested operation cannot be completed because a resource has locked status.'. Failed update list --
 CAU run from 04/28/2026 01:56:33 failure: The latest cluster update status is 'Canceled'.
 ```
 

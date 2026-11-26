@@ -21,7 +21,7 @@ Sample output:
 ```
 Name                                         OwnerNode State
 ----                                         --------- -----
-Azure Stack HCI Update Service Cluster Group v-Host1   Online
+Azure Stack HCI Update Service Cluster Group Node01    Online
 ```
 
 Run the following commands to find events indicating that the update service was terminated due to exceeding the memory limit:
