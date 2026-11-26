@@ -16,7 +16,6 @@ Use text labels in addition to any visual styling. Do not use icons as the only 
 - [Complete action pattern](#complete-action-pattern)
 - [Expected output and validation](#expected-output-and-validation)
 - [Where this appears](#where-this-appears)
-- [Test automation metadata](#test-automation-metadata)
 - [Owner, impact, and handoff snippets](#owner-impact-and-handoff-snippets)
 - [Worked safe-action and rollout snippets](#worked-safe-action-and-rollout-snippets)
 - [Evidence, glossary, and validation snippets](#evidence-glossary-and-validation-snippets)
@@ -36,16 +35,22 @@ Article templates and finished articles should include exactly one HTML-comment 
 ````markdown
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "replace-me",
   "products": ["replace-me"],
-  "detector": {"type":"none","signal":null},
-  "validation": {"fidelity_level":"L0","technical_grade":null,"reproduction_substrate":"none","automation_status":"not-assessed","last_validated":null,"spec_ref":""}
+  "detector": {"type":"none","signal":null}
 }
 -->
 ````
 
-Validate the completed marker against [`tsg-metadata.schema.json`](./tsg-metadata.schema.json). Keep `validation.technical_grade` as JSON `null` until TSG-FORGE produces `A`, `B`, `C`, or `F` with report or spec evidence. When `detector.type` is `none`, keep `detector.signal` as JSON `null`. When an author selects a real detector, such as `envchecker`, `eventlog`, or `command`, they must set both `detector.type` and `detector.signal` together.
+Validate the completed marker against [`tsg-metadata.schema.json`](./tsg-metadata.schema.json). The marker records discovery metadata only: document type, applicable products, and detector. Keep validation records, such as test runs, grades, and lab details, out of the article and its marker; describe validation in the pull request instead. When `detector.type` is `none`, keep `detector.signal` as JSON `null`. When an author selects a real detector, such as `envchecker`, `eventlog`, or `command`, they must set both `detector.type` and `detector.signal` together.
+
+| Field | Values | Meaning |
+| --- | --- | --- |
+| `document_type` | deep-dive, how-to, overview, reference, troubleshoot | Use the token that matches the article template filename. Do not use display names such as Deep Dive or How To inside the JSON marker. |
+| `detector.type` | command, control-plane, envchecker, eventlog, feature, manual, none, portal, registry, service, telemetry | Use `none` only when the article has no detector. When using `none`, `detector.signal` must be JSON `null`. |
+
+Record the execution surface (on-device, mixed, cloud-diagnostic, cloud-control, or thin) in the article body, not in the marker.
 
 ---
 
@@ -265,56 +270,6 @@ Use this table to document administrator detection surfaces. Use only these stat
 
 ---
 
-## Test automation metadata
-
-Use this block when a troubleshooting guide (TSG) has been linted or live-tested by TSG-FORGE. Keep customer identifiers, cluster names, IP addresses, subscription IDs, and tenant-specific values out of public files.
-
-````markdown
-## Test automation metadata
-
-```json
-{
-  "schema": "azure-local-supportability/tsg-metadata/v1",
-  "document_type": "troubleshoot",
-  "products": ["Azure Local"],
-  "detector": {"type":"none","signal":null},
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "not-assessed",
-    "last_validated": null,
-    "spec_ref": ""
-  }
-}
-```
-````
-
-Use these compact rubrics when filling the schema fields and companion evidence. Record execution surface, loop steps, report links, and evidence in the article body, PR description, or companion spec rather than adding out-of-schema fields to the marker.
-
-| Field | Values | Meaning |
-| --- | --- | --- |
-| `document_type` | deep-dive, how-to, overview, reference, troubleshoot | Use the token that matches the article template filename. Do not use display names such as Deep Dive or How To inside the JSON marker. |
-| `detector.type` | command, control-plane, envchecker, eventlog, feature, manual, none, portal, registry, service, telemetry | Use `none` only when the article has no detector. When using `none`, `detector.signal` must be JSON `null`. |
-| `fidelity_level` | L0, L1, L2, L3, L4 | L0 means static lint or persona review only. L1 means read-only diagnostics were run. L2 means a faithful detector, proxy, or synthetic input was tested. L3 means the real mechanism was tested on a scratch or isolated object. L4 means the full genuine inject, detect, mitigate, and revalidate loop passed. |
-| `technical_grade` | null, A, B, C, F | This is the authoritative technical grade field. Use JSON `null` until TSG-FORGE produces A, B, C, or F with report or spec evidence. |
-| `automation_status` | not-assessed, scaffold, ready, proven, blocked, manual | Test readiness. Use not-assessed before review, scaffold when planned but not implemented, ready when automation exists but is not proven, proven when it has passed with evidence, blocked when automation cannot proceed yet, and manual when a human must verify. |
-| `execution_surface` | on-device, mixed, cloud-diagnostic, cloud-control, thin | Runtime location. This is separate from `automation_status`: on-device runs on a node, mixed uses node plus cloud checks, cloud-diagnostic depends on cloud telemetry, cloud-control changes connected Azure state, and thin has no executable diagnostic or action. |
-
-```markdown
-## Validation evidence
-
-| Field | Value |
-| --- | --- |
-| Execution surface | <on-device, mixed, cloud-diagnostic, cloud-control, or thin> |
-| TSG-FORGE report | <report path or PR link> |
-| Companion spec | <spec path or empty if not applicable> |
-| Loop evidence | <baseline, inject, detect, mitigate, and revalidate results, or not applicable> |
-| Freshness | <validation date, report timestamp, or reason freshness is not applicable> |
-```
-
----
-
 ## Owner, impact, and handoff snippets
 
 Use this compact set when the article needs a decision owner, customer context, workload impact, or a handoff boundary.
@@ -413,14 +368,9 @@ Use this section to make escalation and validation repeatable.
 | Term | Meaning |
 | --- | --- |
 | TSG | Troubleshooting guide. |
-| TSG-FORGE | The template and troubleshooting-guide validation harness used to lint, grade, and, when applicable, live-test a guide. |
 | Detector | The source that proves the issue exists, such as envchecker, eventlog, command, service, feature, registry, telemetry, manual, or control-plane. |
 | envchecker | An Environment Validator detector that reads Azure Local validator results. |
-| Fidelity level | How deeply the TSG was tested, from L0 static review to L4 full inject, detect, mitigate, and revalidate. See the Test automation metadata rubric above for the full L0 to L4 definitions. |
-| Technical grade | The authoritative `validation.technical_grade` value from TSG-FORGE: JSON `null` before grading, then A, B, C, or F with report or spec evidence. |
-| Automation status | The readiness of test automation, such as not-assessed, scaffold, ready, proven, blocked, or manual. This is not the same as execution surface. |
-| Execution surface | Where the diagnostic or action runs, such as on-device, mixed, cloud-diagnostic, cloud-control, or thin. This is not the same as automation status. |
-| Reproduction substrate | The environment where the issue can be reproduced, such as vm, hardware, either, or none. |
+| Execution surface | Where the diagnostic or action runs, such as on-device, mixed, cloud-diagnostic, cloud-control, or thin. |
 | VM | Virtual machine. |
 | OEM | Original equipment manufacturer. |
 | SI | System integrator. |
@@ -430,24 +380,6 @@ Use this section to make escalation and validation repeatable.
 | Stop condition | A specific result that means the reader must not continue with the action. |
 | Not evident | The surface was checked or considered, and the issue is not visible there. |
 | Absent | The surface has not been characterized yet. Treat this as a draft work item for troubleshooting content. |
-
-### Validation command
-
-Record the command, grade, report path, and any deterministic review output before publishing.
-
-```console
-python3 <path-to-tsg-forge>/harness.py --lint --tsg <article-file>
-python3 <path-to-tsg-pr-review>/scripts/lint_tsg.py <article-file>
-```
-
-```markdown
-## Validation record
-
-| Check | Command | Result | Report path or output |
-| --- | --- | --- | --- |
-| TSG-FORGE lint | `python3 <path-to-tsg-forge>/harness.py --lint --tsg <article-file>` | <A, B, C, F, or not run> | <report path> |
-| Deterministic PR lint | `python3 <path-to-tsg-pr-review>/scripts/lint_tsg.py <article-file>` | <zero findings, or finding count> | <output path or pasted JSON> |
-```
 
 ---
 
