@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "overview",
   "products": ["Azure Local"],
   "detector": {
     "type": "none",
     "signal": null
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "not-assessed",
-    "last_validated": "2026-11-02",
-    "spec_ref": ""
   }
 }
 -->

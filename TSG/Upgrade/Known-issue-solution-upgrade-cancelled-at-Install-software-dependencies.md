@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "portal",
     "signal": "Azure Local resource > Deployments > Prepare cluster upgrade > Install software dependencies shows Cancelled during a solution upgrade."
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "manual",
-    "last_validated": "2026-10-22",
-    "spec_ref": ""
   }
 }
 -->

@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "envchecker",
     "signal": "Invoke-AzStackHciVSRDriftDetectionValidation"
-  },
-  "validation": {
-    "fidelity_level": "L1",
-    "technical_grade": null,
-    "reproduction_substrate": "hardware",
-    "automation_status": "not-assessed",
-    "last_validated": "2026-11-06",
-    "spec_ref": ""
   }
 }
 -->

@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "command",
     "signal": "Get-Module -Name AzStackHci.EnvironmentChecker -ListAvailable | Where-Object {$_.Path -like \"*$($_.Version)*\"}"
-  },
-  "validation": {
-    "fidelity_level": "L4",
-    "technical_grade": "A",
-    "reproduction_substrate": "hardware",
-    "automation_status": "proven",
-    "last_validated": "2026-11-20",
-    "spec_ref": "AzStackHci_EnvironmentChecker_ModuleVersions"
   }
 }
 -->

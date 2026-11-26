@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "how-to",
   "products": ["Azure Local"],
   "detector": {
     "type": "command",
     "signal": "Run C:\\Program Files\\PowerShell\\7\\pwsh.exe in a fresh process and check $PSVersionTable.PSVersion.ToString()."
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "manual",
-    "last_validated": "2026-10-22",
-    "spec_ref": ""
   }
 }
 -->

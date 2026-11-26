@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local HCI"],
   "detector": {
     "type": "command",
     "signal": "Compare Get-IscsiTargetPortal, Get-IscsiSession, and Get-IscsiConnection with the intended node configuration; verify stored state using iscsicli ListPersistentTargets and ListTargetPortals"
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "hardware",
-    "automation_status": "not-assessed",
-    "last_validated": null,
-    "spec_ref": ""
   }
 }
 -->

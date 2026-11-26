@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "command",
     "signal": "ValidateClusterWitness imports Az.Storage and then Az.Accounts; when an older Az.Accounts is already loaded in the session, Az.Storage raises: This module requires Az.Accounts version <version>. An earlier version of Az.Accounts is imported in the current PowerShell session. Recreate with Import-Module Az.Accounts, then Import-Module Az.Storage, in a new session."
-  },
-  "validation": {
-    "fidelity_level": "L4",
-    "technical_grade": "A",
-    "reproduction_substrate": "vm",
-    "automation_status": "proven",
-    "last_validated": "2026-11-25",
-    "spec_ref": "KnownIssue_AzAccounts_ValidatedRecipeMismatch"
   }
 }
 -->

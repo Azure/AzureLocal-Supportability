@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "envchecker",
     "signal": "Azure_Kubernetes_Service_Azure_Arc|Azure_Kubernetes_Service_Cluster_connect"
-  },
-  "validation": {
-    "fidelity_level": "L2",
-    "technical_grade": "A",
-    "reproduction_substrate": "vm",
-    "automation_status": "proven",
-    "last_validated": "2026-09-18",
-    "spec_ref": "Azure_Kubernetes_Service_Cluster_connect"
   }
 }
 -->

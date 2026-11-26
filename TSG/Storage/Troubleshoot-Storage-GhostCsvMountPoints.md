@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "command",
     "signal": "Get-ChildItem"
-  },
-  "validation": {
-    "fidelity_level": "L3",
-    "technical_grade": null,
-    "reproduction_substrate": "either",
-    "automation_status": "ready",
-    "last_validated": "2026-11-18",
-    "spec_ref": "AzLocal_Storage_GhostCsvMountPoints"
   }
 }
 -->

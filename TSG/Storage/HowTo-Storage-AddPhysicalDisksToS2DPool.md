@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "how-to",
   "products": ["Azure Local"],
   "detector": {
     "type": "command",
     "signal": "Add-PhysicalDisk"
-  },
-  "validation": {
-    "fidelity_level": "L3",
-    "technical_grade": null,
-    "reproduction_substrate": "either",
-    "automation_status": "ready",
-    "last_validated": "2026-08-17",
-    "spec_ref": "AzLocal_Storage_AddPhysicalDisksToS2DPool"
   }
 }
 -->

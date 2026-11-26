@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "envchecker",
     "signal": "Invoke-AzStackHciConnectivityValidation external endpoint failure"
-  },
-  "validation": {
-    "fidelity_level": "L2",
-    "technical_grade": "A",
-    "reproduction_substrate": "vm",
-    "automation_status": "proven",
-    "last_validated": "2026-09-30",
-    "spec_ref": "AzStackHci_Connectivity_ExternalConnectivityFailures"
   }
 }
 -->
