@@ -23,7 +23,7 @@
 | Date | Version | Summary |
 | --- | --- | --- |
 | 2026-09-24 | 2.1 | Aligned the article with the current validator scope, cmdlet output, and public repository format. |
-| 2026-09-18 | 2.0 | Added the publication contract, safe cloud-deployment recovery boundaries, and refreshed live validation evidence. |
+| 2026-09-18 | 2.0 | Added the publication contract and safe cloud-deployment recovery boundaries. |
 
 # AzStackHci_Subscription_State
 

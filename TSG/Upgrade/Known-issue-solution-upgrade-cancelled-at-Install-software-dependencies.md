@@ -49,7 +49,7 @@ Use the current status of the existing deployment, not an older notification. If
 
 ## Where this appears
 
-The screenshots document the reported cancellation and recovery sequence. This article has received static review only; the other administrator surfaces below have not been characterized and remain publication-validation gaps. `absent` does not mean that the issue cannot appear on that surface.
+The screenshots document the reported cancellation and recovery sequence. The other administrator surfaces below have not been characterized. `absent` does not mean that the issue cannot appear on that surface.
 
 ## Cause
 

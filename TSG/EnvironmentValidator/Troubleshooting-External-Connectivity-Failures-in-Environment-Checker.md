@@ -33,7 +33,7 @@
 | Date | Version | Summary |
 | --- | --- | --- |
 | 2026-09-30 | 3.0 | Modernized the public article and added emitted-target examples for the highest current fleet failure families. |
-| 2026-09-17 | 2.0 | Added current diagnosis, verification, evidence collection, and live-validation guidance. |
+| 2026-09-17 | 2.0 | Added current diagnosis, verification, and evidence collection guidance. |
 
 # AzStackHci_Connectivity_ExternalConnectivityFailures
 

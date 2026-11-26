@@ -23,7 +23,7 @@
 | Date | Version | Summary |
 | --- | --- | --- |
 | 2026-09-24 | 2.1 | Added cloud-aware result names, current severity, WebSocket requirements, and GitHub-compatible metadata. |
-| 2026-09-18 | 2.0 | Added the publication contract, source-exact cloud endpoint guidance, and refreshed live validation evidence. |
+| 2026-09-18 | 2.0 | Added the publication contract and source-exact cloud endpoint guidance. |
 
 # Azure_Kubernetes_Service_Cluster_connect
 

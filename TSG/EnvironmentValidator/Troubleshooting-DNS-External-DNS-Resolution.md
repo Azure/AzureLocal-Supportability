@@ -26,7 +26,6 @@
 | Date | Description |
 | --- | --- |
 | 2026-09-24 | Added connected-cloud target mapping, complete Environment Checker log roots, guarded proxy rollback, and GitHub-compatible metadata. |
-| 2026-09-18 | Revalidated the live DNS failure and recovery loop and synchronized the standalone PR with the current publication design. |
 | 2026-09-17 | Retrofitted mandatory publication metadata, audience scope, revision history, and source-article layout without changing the technical procedure. |
 
 # AzStackHci_DNS_ExternalDnsResolution

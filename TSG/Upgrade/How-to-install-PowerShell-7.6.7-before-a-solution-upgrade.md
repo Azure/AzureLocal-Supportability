@@ -30,7 +30,7 @@ This guide describes **optional preinstallation** of PowerShell **7.6.7** on **e
 
 If the upgrade is already cancelled at that step, **manual installation is not required**: the dependency step has already installed PowerShell. Select **Resume deployment** as described in [Known issue: solution upgrade cancelled at Install software dependencies](./Known-issue-solution-upgrade-cancelled-at-Install-software-dependencies.md).
 
-This is not a general PowerShell downgrade procedure or guidance for unrelated upgrade failures. The cancellation and recovery are documented in the linked known-issue article; this port has received static review only.
+This is not a general PowerShell downgrade procedure or guidance for unrelated upgrade failures. The cancellation and recovery are documented in the linked known-issue article.
 
 ## Before you begin
 

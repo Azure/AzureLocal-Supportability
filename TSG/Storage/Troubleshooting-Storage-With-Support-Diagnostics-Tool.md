@@ -94,7 +94,7 @@ Use this article as a reference for the cmdlet parameters, supported `-Include` 
 
 - Repairing storage health, retiring disks, restarting the Health Service, or changing cluster resource parameters.
 - Deciding whether a `CanPool=False` disk should be added to the pool. Use the general decision-tree router in [Troubleshoot physical disks not claimed after insertion (`CanPool=False`)](./Troubleshoot-Storage-PhysicalDiskCanPoolFalse.md).
-- Repairing persistent disk verification stuck behind a wedged Health Service. That scenario is delegated to the dedicated `AzLocal_Storage_PhysicalDiskVerificationStuck` validation spec and its public guidance, not to this reference article.
+- Repairing persistent disk verification stuck behind a wedged Health Service. That scenario is covered by [Troubleshoot physical disks stuck in verification](./Troubleshoot-Storage-PhysicalDiskVerificationStuck.md), not by this reference article.
 
 > [!IMPORTANT]
 > The commands in this article are diagnostic. If the diagnostic output recommends a state-changing command, do not run that command from this reference alone. Open the specific linked troubleshooting guide for that finding, confirm its safety gates, and capture a fresh backup of the evidence first.
@@ -233,7 +233,7 @@ Under the hood, `-PhysicalExtentCheck` calls `Get-AzsSupportStoragePhysicalExten
 
 - Non-active extents found: a virtual disk object plus `Extents`, `UniqueDisks`, and `Disks` details.
 - No non-active extents found on a healthy virtual disk: the additional section is empty.
-- No physical disks present to enumerate, for example on a nested or VM-based cluster: the check reports `No PNP device with class DiskDrive found on <cluster>` and returns no extent details. This is expected on virtualized substrates and does not indicate a virtual disk fault. This exact message was observed on a nested VM cluster during validation.
+- No physical disks present to enumerate, for example on a nested or VM-based cluster: the check reports `No PNP device with class DiskDrive found on <cluster>` and returns no extent details. This is expected on virtualized substrates and does not indicate a virtual disk fault.
 
 ## Where this appears
 

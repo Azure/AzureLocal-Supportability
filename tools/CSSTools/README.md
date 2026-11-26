@@ -34,7 +34,6 @@ not install the tool.
 - [Basic commands](#basic-commands)
 - [Release notes and references](#release-notes-and-references)
 - [Support and feedback](#support-and-feedback)
-- [Documentation status](#documentation-status)
 
 ## Install and update
 
@@ -179,13 +178,3 @@ guidance, and involve Microsoft Support where required.
 - [Public tool documentation](https://learn.microsoft.com/en-us/azure/azure-local/manage/support-tools)
 - [Tool questions or feedback](https://learn.microsoft.com/en-us/azure/azure-local/manage/support-tools#questions-or-feedback)
 - [Get support for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/manage/get-support)
-
-## Documentation status
-
-Command examples were checked against public Microsoft Learn guidance and the
-version 1.2609.30.1 command references. Validation is static only (L0); no commands
-were exercised against an Azure Local environment, and no technical grade has been established.
-
-| Article | Type | Applicable products | Owner | Validation grade | Automation readiness | Last validation |
-| --- | --- | --- | --- | --- | --- | --- |
-| This README | Overview | Azure Local (hyperconverged) | Repository maintainers | Not graded | Not assessed | 2026-11-02 (L0) |

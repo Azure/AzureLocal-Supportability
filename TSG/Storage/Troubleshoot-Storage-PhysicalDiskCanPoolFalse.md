@@ -27,7 +27,6 @@
 - [Rollback](#rollback)
 - [Escalation and evidence package](#escalation-and-evidence-package)
 - [Prevention and monitoring](#prevention-and-monitoring)
-- [Future test automation metadata](#future-test-automation-metadata)
 - [Related documentation](#related-documentation)
 
 ## Article metadata
@@ -562,23 +561,6 @@ Also collect:
 - Avoid reusing disks from prior deployments without confirming they are wiped of stale pool metadata.
 - Record serial, slot, firmware, and node mapping before and after each physical disk change.
 - Watch `Get-StorageJob`, `Get-HealthFault`, and pool allocated size after manual add until the cluster settles.
-
-## Future test automation metadata
-
-| Field | Value |
-| --- | --- |
-| Detector type | `command` |
-| Detector signal | `Get-PhysicalDisk` with `CanPool` and `CannotPoolReason` |
-| Inject strategy | VM-first scratch VHD slices for offline, read-only, insufficient-capacity, and stale-metadata behavior; hardware fallback only for OEM compliance, removable media, and physical disk health cases |
-| Mitigation selector | Branch-specific command markers: `Set-Disk`, `Reset-PhysicalDisk`, `Add-PhysicalDisk`, and Support Diagnostics read-only collection |
-| Safety floor | No reset unless the disk is confirmed outside every active non-primordial pool and intended to be wiped |
-| Rollback check | Re-run `Get-PhysicalDisk`, `Get-StoragePool`, `Get-VirtualDisk`, `Get-StorageJob`, and `Get-HealthFault` |
-| Reproduction substrate | `either`, VM first with hardware fallback |
-| Fidelity level | `L1`, live read-only validation complete for the observed reasons |
-| Technical grade | JSON `null` until TSG-FORGE live evidence completes |
-| Automation status | `ready` |
-| Spec reference | `AzLocal_Storage_PhysicalDiskCanPoolFalseGeneral` |
-| Last validated | `2026-08-17`, live-observed reasons `In a Pool` and `Insufficient Capacity` on a nested Storage Spaces Direct lab cluster |
 
 ## Related documentation
 

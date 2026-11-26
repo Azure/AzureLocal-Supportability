@@ -20,7 +20,6 @@
 | Applicability | Azure CLI core drift, with or without extension drift; the remediation path requires `Remediate-AzCli` and access to the recipe's installation sources. Extension-only drift does not use this remediation path. |
 | Severity | Inspect the severity returned by each check; severity can vary by release. |
 | Execution surface | on-device |
-| Validation | Diagnostic commands and module import exercised on a physical x64 lab node (OS build 26100, Windows PowerShell 5.1) on 2026-11-06. The full drift validator returned 20 successful checks, including CLI core and four extensions; CLI inventory selected the x64 path. Remediation, failure detection, the x86 fallback on a live installation, and health-fault clearing remain untested. |
 
 Do not infer applicability to disconnected, disaggregated, or multi-rack
 deployments. If required commands or installation sources are unavailable,
@@ -245,8 +244,6 @@ guidance for other extension findings.
 | Component / tool log files | absent | The validator and remediation log locations need validation on a supported release. |
 
 `absent` denotes an uncharacterized surface, not proof that no signal exists.
-These gaps and the untested commands require maintainer validation before
-publication.
 
 ## Related documentation
 

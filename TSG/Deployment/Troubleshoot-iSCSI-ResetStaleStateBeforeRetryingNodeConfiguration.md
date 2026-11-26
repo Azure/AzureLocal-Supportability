@@ -30,13 +30,11 @@
 | AuthoringSource | AI-Generated, Human-Reviewed |
 | SourceIncidentIDs | N/A |
 | SourceArtifacts | _Command sources include Microsoft Learn and iscsicli built-in help._ |
-| RevisionHistory | 2026-09-04, v1.0, Initial creation; 2026-09-24, v1.1, Commands verified on hardware; 2026-09-28, v1.2, Clarified reset safety and recovery checks; 2026-09-29, v1.3, Focused title and error triage; 2026-10-02, v1.4, Added TCP source diagnostics and explicit removal-error handling |
+| RevisionHistory | 2026-09-04, v1.0, Initial creation; 2026-09-28, v1.2, Clarified reset safety and recovery checks; 2026-09-29, v1.3, Focused title and error triage; 2026-10-02, v1.4, Added TCP source diagnostics and explicit removal-error handling |
 | ConfidenceScore | 80 |
 | CSS_PG_Author | N/A |
 | PG_Reviewer | N/A |
 | ReviewDate | N/A |
-
-The hidden metadata records static-only validation (L0) of this repository copy, not a complete live failure-and-recovery test. No technical grade, automation assessment, or qualifying live validation date has been established.
 -->
 ## Section 1 - Error Codes
 

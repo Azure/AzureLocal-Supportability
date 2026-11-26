@@ -27,7 +27,7 @@
 
 | Date | Version | Summary |
 | --- | --- | --- |
-| 2026-09-28 | 1.0 | Published the live-validated diagnosis and recovery procedure for culture-related false missing-module results. |
+| 2026-09-28 | 1.0 | Published the diagnosis and recovery procedure for culture-related false missing-module results. |
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr><th style="text-align:left; width:180px;">Component</th><td><strong>Azure Local Environment Validator - OS image recipe validation</strong></td></tr>
