@@ -145,7 +145,10 @@ Windows can show the consequence of a stalled path:
 
 Collect a bounded, synchronized Windows timeline from every node:
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
 ```powershell
+& {
 $Cluster = Get-Cluster -ErrorAction Stop
 $Nodes = @(Get-ClusterNode -ErrorAction Stop | Sort-Object Name)
 $EvidenceRoot = Join-Path $env:SystemDrive (
@@ -188,6 +191,7 @@ $ClusterEvents | Sort-Object TimeCreated |
     Export-Csv -NoTypeInformation -Path (Join-Path $EvidenceRoot 'cluster-events.csv')
 $SmbRdmaEvents | Sort-Object TimeCreated |
     Export-Csv -NoTypeInformation -Path (Join-Path $EvidenceRoot 'smb-rdma-events.csv')
+}
 ```
 
 The decisive correlation is a common UTC interval that includes both:
@@ -673,7 +677,10 @@ Stop if the evidence directory cannot be created or the transcript cannot start.
 
 **Action type:** [READ-ONLY]
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
+
 ```powershell
+. {
 $StorageIntents = @(Get-NetIntent -ClusterName $Cluster.Name -ErrorAction Stop |
     Where-Object { $_.IsStorageIntentSet })
 
@@ -732,6 +739,7 @@ foreach ($Property in @($CurrentAdapterOverride.PSObject.Properties | Sort-Objec
     ) -ErrorAction Stop
 
 $ExplicitAdapterOverrides
+}
 ```
 
 Expected result: the current non-default adapter overrides are saved before any mutation.
@@ -969,7 +977,10 @@ Save all output under `$EvidenceRoot`. Stop on any deviation.
 
 The following inventory prevents friendly-name drift or a similarly named resource from becoming the mutation target.
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
+
 ```powershell
+. {
 $CsvInventory = @(Get-ClusterSharedVolume -ErrorAction Stop |
     Sort-Object Name |
     ForEach-Object {
@@ -1212,6 +1223,7 @@ Get-FileHash -Algorithm SHA256 -LiteralPath @(
     ) -ErrorAction Stop
 
 Set-ChangePhase -Phase BaselineSealed
+}
 ```
 
 Expected result: one sealed inventory records every CSV, the pool, MOC, the appliance VM, all clustered VMs, any non-CSV manual-attach virtual disk and exact clustered resource, and both transport values.
@@ -1790,7 +1802,10 @@ The workload owner must stop applications and shut down each customer VM through
 
 Verify that every clustered VM except the sealed appliance VM is `Off`:
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
+
 ```powershell
+. {
 $ControlPlaneVmId = "$($ResourceManifest.ControlPlaneVm.VmId)"
 $ExpectedVmIdentityPairs = @($ResourceManifest.ClusteredVms |
     ForEach-Object {
@@ -1859,6 +1874,7 @@ if (@($CustomerVmState | Where-Object State -ne 'Off').Count -gt 0) {
 }
 
 Set-ChangePhase -Phase WorkloadsOff
+}
 ```
 
 Retry behavior: do not repeatedly issue shutdown requests. Re-read the VM state, then return control to the workload owner if a VM does not stop.
@@ -1900,7 +1916,10 @@ $ControlPlaneState
 
 Action:
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
 ```powershell
+& {
 $ControlPlaneGroup = @(Get-ClusterGroup -ErrorAction Stop |
     Where-Object {
         "$($_.Id)" -eq "$($ControlPlaneEntry.GroupId)" -and
@@ -1956,6 +1975,7 @@ catch {
             }
         }
 }
+}
 ```
 
 Verification:
@@ -1996,7 +2016,10 @@ Rollback before the next step: start the sealed cluster group and verify the VM 
 **Action type:** State-changing  
 **Risk:** [HIGH RISK]
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
+
 ```powershell
+. {
 $Moc = $ResourceManifest.Moc
 $MocResource = @(Get-ClusterResource | Where-Object {
     "$($_.Id)" -eq "$($Moc.Id)" -and "$($_.Name)" -eq "$($Moc.Name)"
@@ -2033,6 +2056,7 @@ if ("$($MocResource.State)" -ne 'Offline') {
 }
 
 Set-ChangePhase -Phase PlatformOff
+}
 ```
 
 Retry behavior: do not repeat `Stop-ClusterResource` while the resource is `Pending`. Wait for the command timeout, re-read state, and stop on failure.
@@ -2149,7 +2173,10 @@ The helper catches provider text because a CSV operation can report `Generic fai
 **Action type:** State-changing  
 **Risk:** [HIGH RISK]
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
+
 ```powershell
+. {
 $WorkloadCsvs = @($ResourceManifest.Csvs | Where-Object Role -eq 'Workload')
 $InfrastructureCsv = @($ResourceManifest.Csvs | Where-Object Role -eq 'Infrastructure')
 
@@ -2165,6 +2192,7 @@ if (@(Get-ClusterSharedVolume | Where-Object State -ne 'Offline').Count -gt 0) {
 }
 
 Set-ChangePhase -Phase CsvsOff
+}
 ```
 
 Expected result: every CSV is `Offline`.
@@ -2178,7 +2206,10 @@ Rollback: online the infrastructure CSV first, then workload CSVs, using the res
 **Action type:** State-changing  
 **Risk:** [HIGH RISK]
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
+
 ```powershell
+. {
 $Pool = $ResourceManifest.Pool
 $PoolResource = @(Get-ClusterResource | Where-Object {
     "$($_.Id)" -eq "$($Pool.Id)" -and "$($_.Name)" -eq "$($Pool.Name)"
@@ -2215,6 +2246,7 @@ if ("$($PoolResource.State)" -ne 'Offline') {
 }
 
 Set-ChangePhase -Phase PoolOff
+}
 ```
 
 Expected result: the exact recorded `Storage Pool` cluster resource is `Offline`.
@@ -2600,7 +2632,10 @@ Rollback: repeat this entire guide with the original transport value after the c
 
 **Action type:** [READ-ONLY]
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
 ```powershell
+& {
 $Deadline = (Get-Date).AddMinutes(30)
 do {
     $IntentStatus = @(Get-NetIntentStatus -ClusterName $Cluster.Name `
@@ -2641,6 +2676,7 @@ Assert-AdapterOverrideReadback `
     -ExpectedTransportValue $DesiredTransportValue
 
 Set-ChangePhase -Phase IntentConverged
+}
 ```
 
 Expected result: every node reaches successful configuration and successful or completed provisioning with zero retry debt and no error.
@@ -2651,7 +2687,10 @@ Stop if the timeout expires. Do not call `Set-NetIntent` again. Collect the stat
 
 **Action type:** [READ-ONLY]
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
 ```powershell
+& {
 $PostChangeAdapterState = @(Invoke-Command -ComputerName $Nodes.Name `
     -ArgumentList ($AdapterNames -join ','), $DesiredTransportValue `
     -ScriptBlock {
@@ -2681,6 +2720,7 @@ if (@($PostChangeAdapterState | Where-Object {
 }
 
 Set-ChangePhase -Phase TargetReadbackVerified
+}
 ```
 
 Expected result: every storage adapter is `Up`, RDMA enabled, and configured for the desired transport.
@@ -2694,7 +2734,10 @@ This proves the desired adapter state, not active RDMA traffic. Active transport
 **Action type:** State-changing  
 **Risk:** [HIGH RISK]
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
 ```powershell
+& {
 $PoolResource = @(Get-ClusterResource | Where-Object {
     "$($_.Id)" -eq "$($Pool.Id)" -and "$($_.Name)" -eq "$($Pool.Name)"
 })
@@ -2728,6 +2771,7 @@ $PoolResource = Get-ClusterResource -Name "$($Pool.Name)"
 if ("$($PoolResource.State)" -ne 'Online') {
     throw "The Storage Pool resource did not return Online."
 }
+}
 ```
 
 Stop if the pool remains `Pending`, returns `Failed`, or another pool resource appears. Contact Microsoft Support before repair actions.
@@ -2741,7 +2785,10 @@ Some systems contain a separate non-CSV manual-attach virtual disk, such as a pe
 
 Do not guess its identity, create a replacement, format it, or run repair. If the resource was not uniquely recorded before the outage, stop and contact Microsoft Support.
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
 ```powershell
+& {
 foreach ($AuxiliaryRecord in $AuxiliaryVirtualDiskResources) {
     $VirtualDisk = @(Get-VirtualDisk -ErrorAction Stop | Where-Object {
         "$($_.UniqueId)" -eq "$($AuxiliaryRecord.VirtualDiskUniqueId)" -and
@@ -2821,6 +2868,7 @@ foreach ($AuxiliaryRecord in $AuxiliaryVirtualDiskResources) {
 }
 
 Set-ChangePhase -Phase PoolOnline
+}
 ```
 
 Expected result: every sealed auxiliary virtual disk and clustered resource resolves exactly once and returns to its original state. An empty sealed list is valid and makes no change.
@@ -2843,7 +2891,10 @@ Stop if it remains `Pending`, fails, or resolves to a different partition or mou
 **Action type:** State-changing  
 **Risk:** [HIGH RISK]
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
+
 ```powershell
+. {
 $MocResource = @(Get-ClusterResource | Where-Object {
     "$($_.Id)" -eq "$($Moc.Id)" -and "$($_.Name)" -eq "$($Moc.Name)"
 })
@@ -2969,6 +3020,7 @@ if (
         "before customer workload startup and contact Microsoft Support."
     )
 }
+}
 ```
 
 Verification:
@@ -2986,7 +3038,10 @@ Expected result: MOC and the appliance clustered role are `Online`, and the appl
 **Action type:** State-changing  
 **Risk:** [HIGH RISK]
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
 ```powershell
+& {
 foreach ($Csv in $WorkloadCsvs) {
     Set-SealedCsvState -CsvRecord $Csv -State Online
 }
@@ -2998,6 +3053,7 @@ if (@(Get-ClusterSharedVolume | Where-Object State -ne 'Online').Count -gt 0) {
 }
 
 Set-ChangePhase -Phase PlatformOnline
+}
 ```
 
 Expected result: every recorded CSV is `Online`.
@@ -3010,7 +3066,10 @@ Stop on the first CSV that does not return online. Do not continue to workload s
 
 Require all health conditions to remain continuously clean for at least five minutes. Restart the five-minute clock after any unhealthy sample.
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
 ```powershell
+& {
 $CleanSince = $null
 $Deadline = (Get-Date).AddMinutes(30)
 
@@ -3195,6 +3254,7 @@ if ($null -eq $CleanSince -or (Get-Date) -lt $CleanSince.AddMinutes(5)) {
 }
 
 Set-ChangePhase -Phase StorageHoldPassed
+}
 ```
 
 Stop if the clean hold cannot complete within 30 minutes. Do not start customer workloads.
@@ -3427,7 +3487,10 @@ After the workload owner completes application health probes, dependency checks,
 
 Do not create the attestation until the checks have actually passed. The final validation block rejects a missing, stale, incomplete, or failed attestation.
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
+
 ```powershell
+. {
 $ActiveValidationStartUtcPath = Join-Path $EvidenceRoot `
     "active-validation-$Operation-start-utc.txt"
 $ApplicationValidationPath = Join-Path $EvidenceRoot `
@@ -3702,11 +3765,15 @@ if (
 }
 
 Set-ChangePhase -Phase ActiveAssertionsPassed
+}
 ```
 
 If the session ends after `ActiveAssertionsPassed`, rerun the resume block and then run the following block. It reconstructs adapter coverage on every sample and does not depend on variables from the lost session.
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
 ```powershell
+& {
 function Test-ActiveRdmaState {
     $AdapterState = @(Invoke-Command -ComputerName $Nodes.Name `
         -ArgumentList ($AdapterNames -join ','), $DesiredTransportValue `
@@ -4291,6 +4358,7 @@ if (-not $PostHoldRdmaHealthy) {
 }
 
 Set-ChangePhase -Phase ActiveValidationPassed
+}
 ```
 
 If an active-validation terminal failure artifact exists, copy it into the support evidence set,
@@ -4315,7 +4383,10 @@ The block advances `ActiveAssertionsPassed` only after the exact automated check
 
 Then close the transcript and active-change pointer:
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
 ```powershell
+& {
 $CompletionState = Get-Content -LiteralPath (
     Join-Path $EvidenceRoot 'phase-state.json'
 ) -Raw | ConvertFrom-Json
@@ -4340,6 +4411,7 @@ if (Test-Path -LiteralPath $ActivePointer) {
     }
     Remove-Item -LiteralPath $ActivePointer -Force
 }
+}
 ```
 
 ## Rollback
@@ -4348,7 +4420,10 @@ Rollback is a deliberate operator and approver decision. It is not automatic.
 
 Before any rollback outage action, validate the sealed rollback direction and persist it as the active operation:
 
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
+
 ```powershell
+. {
 $RollbackState = Get-Content -LiteralPath (
     Join-Path $EvidenceRoot 'phase-state.json'
 ) -Raw | ConvertFrom-Json
@@ -4744,6 +4819,7 @@ if ($DesiredTransport -eq 'iWARP') {
 Set-ChangePhase -Phase RollbackApproved `
     -RollbackOriginPhase $RollbackOriginPhase `
     -ClearActiveValidationStart
+}
 ```
 
 1. Stop customer workloads and verify every customer VM is `Off`. Persist `WorkloadsOff`.
