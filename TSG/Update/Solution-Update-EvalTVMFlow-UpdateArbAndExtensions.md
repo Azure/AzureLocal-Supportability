@@ -60,6 +60,21 @@ Run this block in a new elevated Windows PowerShell 5.1 session on each node. It
 | `RESULT: NOT AFFECTED` | The versions of these three modules match the recipe on this node. Older versions do not cause this issue and do not need to be removed. | None on this node. If no node is affected and the update still fails with an error above, contact Microsoft support. |
 | `RESULT: UNKNOWN` | The required versions could not be read on this node. | Do not change modules on this node. Contact Microsoft support with the output. |
 
+# Where this failure appears
+
+The update error itself appears where the update reports its failure, as described in [Symptoms](#symptoms). The rows below describe how the cause, a version of `Az.Accounts`, `Az.Resources`, or `Az.ConnectedMachine` that is newer than the node's validated recipe, shows in each administrator tool before you start or resume the update.
+
+| Surface | Status | Evidence |
+| --- | --- | --- |
+| PowerShell on an Azure Local node | shown | [Issue Validation](#issue-validation) prints `RESULT: AFFECTED` and names each module version that is newer than the recipe. `Get-SolutionUpdateEnvironment -FullHealthCheckDetails` also returns the system health check result described in the next row. |
+| Azure portal | shown | Your Azure Local instance > **Settings** > **Updates** shows the system health check results. On each affected node, the check `Test PowerShell Module Version` (`AzStackHci_ValidatedRecipe_PowerShellModule_Version`) fails with severity Critical and a detail such as `Checking version of PS module 'Az.Accounts' on host '<node>'. Got '<installed version>' but expected less-than or equal to '<recipe version>' so it is invalid.`, with one such sentence for each module version that is newer than the recipe. To run the system health check again, run `Invoke-SolutionUpdatePrecheck -SystemHealth` on a node. |
+| Windows event logs | not-evident | No event names the newer module versions or the failed health check. Scope checked: the `AzStackHciEnvironmentChecker`, `Microsoft-AzureStack-*`, Health, Windows Update client, FailoverClustering, Application, and System event logs on the affected node, from the time the newer versions were installed until the system health check finished. High-volume trace channels and the event logs of a failed update run were not checked. |
+| Cluster logs (`Get-ClusterLog`) | not-evident | `Get-ClusterLog` from every node, for the period that the newer versions were installed, contains no entry for them. A module version is not a cluster resource. |
+| Windows Failover Cluster Manager | not-evident | No role, resource, or node changes state, and no FailoverClustering critical, error, or warning event is raised, while the newer versions are installed. |
+| Windows Admin Center (standalone host) | absent | Not characterized. No Health Service fault is raised, so the cluster's **Alerts** do not list it; the **Updates** tool was not checked. |
+| Windows Admin Center in the Azure portal | absent | Not characterized. |
+| Component / tool log files | shown | The system health check writes its results, including the failed `Test PowerShell Module Version` result for each affected node, to `C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\HealthCheck\System\HealthCheckResult.EnvironmentChecker.<timestamp>.json`. |
+
 # Cause
 
 There is an issue with Az.Accounts module versions 3.0.4 and up that causes it to write an error to $global:error which causes update flow to throw an exception and fail.
@@ -93,7 +108,7 @@ The block stops before changing anything, and prints `No changes were made`, whe
 - It is not running in an elevated Windows PowerShell 5.1 session, or an Azure PowerShell module is already loaded in the session.
 - The validated recipe cannot be read, does not list `Az.Accounts`, or lists an invalid or duplicated version.
 - A copy of `Az.Accounts`, or a copy that would be removed, is outside `C:\Program Files\WindowsPowerShell\Modules` or was not installed with `Install-Module`. Do not delete such a copy by hand; contact Microsoft support.
-- Another installed module in this session's module path needs a version that would be removed: an exact version (`RequiredVersion`) that would be removed, or a minimum (`ModuleVersion`) or maximum (`MaximumVersion`) version that no remaining version in `C:\Program Files\WindowsPowerShell\Modules` meets. The check reads the `RequiredModules`, `ModuleList`, and `NestedModules` entries of each module manifest without loading the module, and stops when a manifest that names one of these modules cannot be read or loads it by a path. It does not check modules in other users' `Documents` folders, or a module that enforces a version only inside its own script. `Uninstall-Module` is run with `-Force` because without it PowerShellGet refuses to remove any version that another module names as a dependency, whatever version that module needs; this check replaces that refusal with a version check.
+- Another installed module in this session's module path needs a version that would be removed: an exact version (`RequiredVersion`) that would be removed, or a minimum (`ModuleVersion`) or maximum (`MaximumVersion`) version that no remaining version in `C:\Program Files\WindowsPowerShell\Modules` meets. The check reads the `RequiredModules`, `ModuleList`, and `NestedModules` entries of each module manifest without loading the module. It stops when a manifest that names one of these modules cannot be read, or when an entry loads a file by path from a version that would be removed or by a path that cannot be resolved. A module's own files that its manifest lists by path, such as `ConnectedMachine.Autorest/Az.ConnectedMachine.psm1` in `Az.ConnectedMachine`, do not stop the block. It does not check modules in other users' `Documents` folders, or a module that enforces a version only inside its own script. `Uninstall-Module` is run with `-Force` because without it PowerShellGet refuses to remove any version that another module names as a dependency, whatever version that module needs; this check replaces that refusal with a version check.
 - A version that needs to be installed, or a version that would be removed, is not available in the repository in `$Repository`, so it could not be installed or restored from there.
 
 After it installs a version, the block reads the installed modules again and repeats the same checks, because `Install-Module` can also install a newer `Az.Accounts` as a dependency. If a check fails at that point, it stops with `The installed versions were kept and no versions were removed`. It prints `RESULT: CHANGED` only after it confirms that the recipe version of `Az.Accounts` is installed for all users and that no version newer than the recipe remains.
@@ -197,8 +212,17 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
                 foreach ($entry in @($data.RequiredModules) + @($data.ModuleList) + @($data.NestedModules)) {
                     if ($entry -is [string]) {
                         if ($removeNames -contains $entry) { $spec = @{ ModuleName = $entry } }
-                        elseif ($entry -match '[\\/]' -and @($removeNames | Where-Object { $entry -like "*$_*" }).Count) { $broken += "$($file.FullName) loads $entry by path"; continue }
-                        else { continue }
+                        elseif ($entry -match '[\\/]') {
+                            # A path is resolved from the manifest's folder. A module's own files do not stop the block;
+                            # a file in a version that would be removed, or a path that cannot be resolved, does.
+                            $target = $null
+                            try { $target = [IO.Path]::GetFullPath([IO.Path]::Combine($file.DirectoryName, [Environment]::ExpandEnvironmentVariables($entry))) } catch { $target = $null }
+                            if (-not $target -or $target.Contains('%')) { $broken += "$($file.FullName) loads $entry by a path that cannot be resolved"; continue }
+                            if (@($removeBases | Where-Object { $target -eq $_ -or $target.StartsWith($_.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) }).Count) {
+                                $broken += "$($file.FullName) loads $entry by path from a version that would be removed"
+                            }
+                            continue
+                        } else { continue }
                     } elseif ($entry -is [hashtable]) {
                         if ($removeNames -notcontains $entry.ModuleName) { continue }
                         $spec = $entry
