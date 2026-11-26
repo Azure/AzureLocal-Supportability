@@ -11,8 +11,8 @@ This folder contains the TSG's related to Environment Validators.
 * [Troubleshooting Secure Boot (Hardware Test Secure Boot)](./Troubleshooting-Hardware-Test-Secure-Boot.md)
 * [Troubleshooting Domain Membership (Software IsNotPartofDomain)](./Troubleshooting-Software-IsNotPartofDomain.md)
 * [Troubleshooting DNS Active Directory Domain Name Resolution](./Troubleshooting-DNS-ActiveDirectory-DomainName-Resolution.md)
-* [Troubleshooting Test PowerShell Module Version](./Troubleshooting-Test-PowerShell-Module-Version.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator; Validation grade: A (L4; full loop on the final text with the system health check run while the module was missing, 2026-11-24; seven of eight administrator surfaces characterized); Automation: proven; Last validated: 2026-11-24.
-* [Troubleshooting Azure CLI Drift Against the Validated Solution Recipe](./Troubleshooting-Azure-CLI-Drift-Using-VSR-Infra.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator; Validation grade: not established (L1, diagnostics exercised 2026-11-06); Automation: not-assessed; Last fully validated: not established.
+* [Troubleshooting Test PowerShell Module Version](./Troubleshooting-Test-PowerShell-Module-Version.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator.
+* [Troubleshooting Azure CLI Drift Against the Validated Solution Recipe](./Troubleshooting-Azure-CLI-Drift-Using-VSR-Infra.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator.
 * [Troubleshooting Module Versions](Troubleshooting-Module-Versions.md)
 * [Troubleshooting MSI Does Not Have Access to Subscription](Troubleshooting-MSI-Does-Not-Have-Access-To-Subscription.md)
 * [Troubleshooting SBE Health: Installed SBE Environment Variables Consistency](./Troubleshooting-SBEHealth-Test-Installed-SBE-Env-Vars.md)
@@ -29,8 +29,8 @@ This folder contains the TSG's related to Environment Validators.
 * [Troubleshooting Subscription State (AzStackHci_Subscription_State)](./Troubleshooting-AzStackHci_Subscription_State.md)
 * [Known Issue: High Disk Space Usage in TEMP](Known-Issue-High-Disk-Space-usage-in-TEMP.md)
 * [Known Issue: WinRM cannot process the configuration request](Known-Issue-WinRM-cannot-process-the-configuration-request.md)
-* [Known Issue: This module requires Az.Accounts version 5.3.0](Known-Issue-This-module-requires-Az-Accounts-version-5-3-0.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator; Validation grade: A (L4; the first cause ran as an automated loop on the final text with the system health check run while the state was present, 2026-11-24; both causes and the dependent-module stop ran live on 2026-11-23; seven of eight administrator surfaces characterized; Windows Admin Center not viewed); Automation: proven; Last validated: 2026-11-24.
-* [Known Issue: Az.Accounts Is Reported as Missing During Deployment Validation](Known-Issue-AzAccounts-False-Missing-During-Deployment-Validation.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator; Validation grade: A (L4); Automation: proven; Last validated: 2026-09-15.
+* [Known Issue: This module requires Az.Accounts version 5.3.0](Known-Issue-This-module-requires-Az-Accounts-version-5-3-0.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator.
+* [Known Issue: Az.Accounts Is Reported as Missing During Deployment Validation](Known-Issue-AzAccounts-False-Missing-During-Deployment-Validation.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator.
 * [Known Issue: Pre-Update Health Check fails with AllResults property error](Known-Issue-AllResults-property-error-during-Pre-Update-Health-Check.md)
 * [Known Issue: Test-Cluster Administrative Privileges Failure During Deployment](Known-Issue-Test-Cluster-Administrative-Privileges-Failure.md)
 * [Known Issue: Test-WdacEnablement Fails with Null-Reference Error During Upgrade Validation](Known-Issue-Test-WdacEnablement-Null-Reference.md)
