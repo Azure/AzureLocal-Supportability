@@ -1412,7 +1412,8 @@ release, open a support case instead.
    > [!NOTE]
    > On a nested or VM-based cluster, `Optimize-Volume -SlabConsolidate` reports
    > every purgable slab as pinned unmovable and returns 0 bytes to the pool even
-   > when real interior free space exists.
+   > when real interior free space exists. This is a limitation of virtualized
+   > storage, not a defect in the volume, and the pool footprint does not change.
 
 3. **Wait about 15 minutes** after consolidation completes. The capacity is
    returned to the pool by the **ReFS background unmap workitem**, which runs

@@ -194,6 +194,8 @@ Inspect the returned result for completion or errors, then run
 validator still reports core CLI drift. Treat any remaining extension failures
 separately as described under [Issue validation](#issue-validation).
 Do not repeatedly reinstall or upgrade `az` without investigating the failure.
+Remediation behavior for the x86 installation path is not characterized; if
+`Remediate-AzCli` reports anything other than success, stop and contact Microsoft Support.
 
 ## Rollback and escalation
 

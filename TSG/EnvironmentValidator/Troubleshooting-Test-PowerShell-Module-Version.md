@@ -295,13 +295,13 @@ and reinstalls modules whose versions differ from the recipe. It can affect more
 than the first module named in the validator result. For each module it repairs, it
 removes every installed version except the recipe version, older versions included,
 and whenever it repairs drift it also removes every `Az.Accounts` version except the
-recipe version. It removes those versions without checking whether other installed
+recipe version. For example, repairing a missing `ArcHci` also reinstalls its dependency
+modules and removes an older side-by-side `Az.Accounts` version that is not in the
+recipe. It removes those versions without checking whether other installed
 modules need them, so a module that needs one of them can fail to import afterward.
 It uninstalls before it reinstalls and has no rollback, so if the recipe version
 cannot be downloaded, a module whose only installed version was newer than the recipe
-can be left not installed at all. For example, repairing a missing `ArcHci` also
-reinstalls its dependency modules and removes an older side-by-side `Az.Accounts`
-version that is not in the recipe.
+can be left not installed at all.
 
 > [!WARNING]
 > There is no automatic rollback for this helper. Replacing a module that a
@@ -966,7 +966,9 @@ The manual alternative confirmed, before it changed anything, that every version
 it removed was available in `$ApprovedRepository`; if the recovery plan restores
 one, install that exact version from the same repository with `Install-Module`
 and `-RequiredVersion`. If that repository is not trusted on the node,
-`Install-Module` asks for confirmation, which a remote session cannot answer.
+`Install-Module` asks for confirmation, which a non-interactive remote session (for
+example `Invoke-Command`) cannot answer. Run the rollback in an interactive session, or
+add `-Force` only after confirming `$ApprovedRepository` is the approved source.
 
 ## Verify resolution
 
@@ -986,18 +988,18 @@ prove that a previously raised health fault has already cleared.
 
 ## Administrator detection surfaces
 
-These rows describe a recipe module missing from one node: the system health check was started
-with `Invoke-SolutionUpdatePrecheck -SystemHealth`, and each surface was checked while the module
-was missing, for about 15 minutes, before the module was repaired.
+These rows apply while one node is missing a recipe module and a system health check
+(`Invoke-SolutionUpdatePrecheck -SystemHealth`) runs during that time. The `not evident` rows
+cover about 15 minutes in which the module is missing, before it is repaired.
 
 | Surface | Status | Evidence or validation gap |
 | --- | --- | --- |
 | PowerShell on a node | shown | The validator result and `AdditionalData.Detail`; use the PASS/FAIL script above. A missing module reads `Failed to parse installed version of PS module '<name>' on host '<node>'. Got 'N/A'.` From any node, `Get-SolutionUpdateEnvironment -FullHealthCheckDetails` lists every node's result from the last system health check (block in [Symptoms](#symptoms)). |
-| Azure portal | shown | Inferred, not viewed in the portal: the system health check that ran while the module was missing recorded `Test PowerShell Module Version` as `FAILURE` for the affected node and `SUCCESS` for the others in the update service's health check record, which the Azure portal shows under your Azure Local instance > **Updates**. Source: `Get-SolutionUpdateEnvironment -FullHealthCheckDetails`. |
+| Azure portal | shown | A system health check that runs while the module is missing records `Test PowerShell Module Version` as `FAILURE` for the affected node and `SUCCESS` for the others in the update service's health check record, which the Azure portal shows under your Azure Local instance > **Updates**. Source: `Get-SolutionUpdateEnvironment -FullHealthCheckDetails`; the **Updates** page view itself is not characterized. |
 | Windows event logs | shown | Event Viewer > Applications and Services Logs > **AzStackHciEnvironmentChecker**, source `AzStackHciEnvironmentChecker/Telemetry`, Event ID **17205**. Each run writes one event per node whose JSON message has `"Name": "AzStackHci_ValidatedRecipe_PowerShellModule_Version"`; the failing node's event is a Warning with `"Status": 1`, passing nodes are Information with `"Status": 0`. |
 | Cluster logs (`Get-ClusterLog`) | not evident | `Get-ClusterLog -TimeSpan 15` from every node, covering the time the module was missing and a full system health check, contains no entry for this check, its title, or `Test-PSModules`. |
-| Windows Failover Cluster Manager | not evident | No node, role, or resource changed state compared with a snapshot taken just before the module was removed, and `Microsoft-Windows-FailoverClustering/Operational` recorded no Critical, Error, or Warning event in the same 15 minutes. The other cluster-tool events in that time were `Microsoft-Windows-FailoverClustering-NetFt/Operational` Event ID 57344 timer-skew warnings and `Microsoft-Windows-FailoverClustering-Manager/Admin` Event ID 4657 errors about a `Get-ClusterParameter` property named `CauResourceName`; neither concerns PowerShell modules. |
-| Windows Admin Center (standalone) | shown | Inferred, not viewed in Windows Admin Center: on a node connection, the **Events** tool reads the same **AzStackHciEnvironmentChecker** log, so it carries the Event ID 17205 entry described in the Windows event logs row. The cluster dashboard **Alerts** do not carry this failure: no new Health Service fault was raised while the module was missing (`Get-HealthFault` compared with the snapshot taken just before). The **Updates** tool was not checked. |
+| Windows Failover Cluster Manager | not evident | No node, role, or resource changes state compared with its state before the module goes missing, and `Microsoft-Windows-FailoverClustering/Operational` records no Critical, Error, or Warning event in the same 15 minutes. |
+| Windows Admin Center (standalone) | shown | On a node connection, the **Events** tool reads the same **AzStackHciEnvironmentChecker** log, so it carries the Event ID 17205 entry described in the Windows event logs row; the tool view itself is not characterized. The cluster dashboard **Alerts** do not carry this failure: `Get-HealthFault` shows no new Health Service fault while the module is missing. The **Updates** tool is not characterized. |
 | Windows Admin Center in the Azure portal | absent | Not characterized. |
 | Component / tool log files | shown | Each system health check writes `HealthCheckResult.EnvironmentChecker.<date-time>.json` to `C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\HealthCheck\System`. It lists this check as `FAILURE` for the affected node with the `Failed to parse installed version` detail. A validator run that you start yourself also writes `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log`; retain both for support. |
 

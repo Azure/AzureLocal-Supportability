@@ -493,9 +493,9 @@ Run `Disable-AzContextAutosave -Scope Process` first, as in this block. Without
 it, `Connect-AzAccount -ServicePrincipal -Credential` saves the client secret in
 `keystore.cache` in `%USERPROFILE%\.Azure` (Az.Accounts 2.10.4 and later) even
 with `-Scope Process`, and `Disconnect-AzAccount -Scope Process` and closing the
-session leave it there. With Az.Accounts 5.5.3, the file still holds the secret
-after the sign-out and when read from a new process; with the command run first,
-no `keystore.cache` is written and the sign-in still works.
+session leave it there. The secret also survives a new process; with
+`Disable-AzContextAutosave -Scope Process` run first, no `keystore.cache` is written
+and the sign-in still works.
 For the Azure CLI, this procedure uses a certificate; to use a client secret, use
 the Azure PowerShell sign-in above instead.
 
@@ -1082,9 +1082,9 @@ and the assignment name), the display name, the enforcement mode, and the policy
 definition or initiative ID. If an `az rest` call fails, the loop stops; treat the list as
 incomplete and run it again. Keep the first `url` value in single quotes so the
 shell does not expand `$filter`. Do not
-substitute `az policy assignment list --resource-group`: it lists only
+substitute `az policy assignment list --resource-group`: it can list only
 assignments made directly on the resource group, even with
-`--disable-scope-strict-match`. To find the denying assignment, match the
+`--disable-scope-strict-match`, so its output is not a reliable complete list. To find the denying assignment, match the
 `policyAssignment` `id` in the `RequestDisallowedByPolicy` message in
 `azcmagent.log` against the first column. The last column matches the message's
 `policyDefinition` `id`, or its `policySetDefinition` `id` when the assignment is
