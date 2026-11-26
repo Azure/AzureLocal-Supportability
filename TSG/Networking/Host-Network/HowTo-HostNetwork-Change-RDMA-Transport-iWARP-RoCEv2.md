@@ -1,19 +1,13 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "how-to",
-  "products": ["Azure Local"],
+  "products": [
+    "Azure Local"
+  ],
   "detector": {
     "type": "manual",
     "signal": "Planned Network ATC storage-intent change between iWARP and RoCEv2"
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": "A",
-    "reproduction_substrate": "none",
-    "automation_status": "manual",
-    "last_validated": "2026-10-01",
-    "spec_ref": ""
   }
 }
 -->
@@ -4799,9 +4793,7 @@ Escalate to:
 - The workload owner for application shutdown and startup.
 - Microsoft Support for Network ATC convergence failure, resource identity ambiguity, or any storage, MOC, appliance, CSV, or virtual-disk recovery failure.
 
-## Claims and validation evidence
-
-This guide is statically reviewed operational guidance. It has not been validated by performing a full bidirectional transport change on customer infrastructure.
+## Success criteria
 
 The procedure intentionally separates:
 

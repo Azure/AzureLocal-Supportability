@@ -37,9 +37,9 @@ For Network Environment Validator Resources, see [TSG/EnvironmentValidator/Netwo
 - [How To: Change the Storage RDMA Transport Between iWARP and RoCEv2](Host-Network/HowTo-HostNetwork-Change-RDMA-Transport-iWARP-RoCEv2.md)
 - [Troubleshoot: Merged Storage Cluster Networks block Update](Host-Network/Troubleshoot-ClusterNetworks-MergedStorageNetworksBlockUpdate.md)
 
-| Article | Type | Applicable products | Owner | Validation grade | Automation readiness | Last validation |
-| --- | --- | --- | --- | --- | --- | --- |
-| [Change the Storage RDMA Transport Between iWARP and RoCEv2](Host-Network/HowTo-HostNetwork-Change-RDMA-Transport-iWARP-RoCEv2.md) | How-To | Azure Local, hyperconverged | John Neemes (@joneemes_microsoft) | A (L0 static) | Manual | 2026-10-01 |
+| Article | Type | Applicable products | Owner |
+| --- | --- | --- | --- |
+| [Change the Storage RDMA Transport Between iWARP and RoCEv2](Host-Network/HowTo-HostNetwork-Change-RDMA-Transport-iWARP-RoCEv2.md) | How-to | Azure Local, hyperconverged | John Neemes (@joneemes_microsoft) |
 
 ### Diagnostics
 - [How to collect SDN or Networking related logs](Diagnostics/HowTo-Diagnostic-SendNetworkingLogs.md)
