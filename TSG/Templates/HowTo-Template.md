@@ -450,7 +450,7 @@ Use these definitions when completing the metadata marker. The marker records di
 | detector.type `feature` | An installed Windows feature state detects the condition. Set `detector.signal` to the feature name. |
 | detector.type `portal` or `manual` | A human checks a portal or manual surface. Set `detector.signal` to the exact blade, page, or manual check. |
 | detector.type `eventlog`, `service`, `registry`, `telemetry`, or `control-plane` | A specific event, service state, registry value, telemetry query, or Azure control-plane state detects the condition. Set `detector.signal` to the exact signal. |
-| Execution surface | Where an action runs: `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, or `thin`. |
+| Execution surface | Where an action runs: `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, or `thin`. Record it in the article body, not in the metadata marker. |
 
 ## Next steps
 

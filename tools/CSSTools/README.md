@@ -34,6 +34,7 @@ not install the tool.
 - [Basic commands](#basic-commands)
 - [Release notes and references](#release-notes-and-references)
 - [Support and feedback](#support-and-feedback)
+- [Documentation index](#documentation-index)
 
 ## Install and update
 
@@ -178,3 +179,9 @@ guidance, and involve Microsoft Support where required.
 - [Public tool documentation](https://learn.microsoft.com/en-us/azure/azure-local/manage/support-tools)
 - [Tool questions or feedback](https://learn.microsoft.com/en-us/azure/azure-local/manage/support-tools#questions-or-feedback)
 - [Get support for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/manage/get-support)
+
+## Documentation index
+
+| Article | Type | Applicable products | Owner |
+| --- | --- | --- | --- |
+| This README | Overview | Azure Local (hyperconverged) | Repository maintainers |

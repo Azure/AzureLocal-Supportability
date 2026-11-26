@@ -386,7 +386,7 @@ The schema link above is correct after copying this template to a component root
 | `detector.type` | `none` unless this reference has a detector |
 | `detector.signal` | Use JSON `null` when `detector.type` is `none`; when selecting a detector, set `detector.type` and `detector.signal` together. |
 
-Use the definitions below when completing metadata. Execution surface describes where a consumer runs the guidance, such as on-device, cloud, or mixed.
+Use the definitions below when completing metadata. Execution surface describes where a consumer runs the guidance, such as on-device, cloud, or mixed. Record it in the article body, not in the metadata marker.
 
 | Vocabulary | Values and meaning |
 | ---------- | ------------------ |

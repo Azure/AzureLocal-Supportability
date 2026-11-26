@@ -97,7 +97,7 @@ Use this handoff matrix for cross-component cases:
 
 ## Required Article Metadata
 
-Component README files should index every article and include its title, document type, link, applicable products, supported versions, Highest action classification, Highest state-changing risk, workload impact or downtime risk, owner or handoff, metadata-marker status, and execution surface.
+Component README files should index every article in a table with the columns Article (the title as a relative link), Type, Applicable products, and Owner.
 
 Each article that is created from an article template must contain one valid HTML-comment JSON marker that starts with the literal `<!-- tsg-metadata` label and follows schema `azure-local-supportability/tsg-metadata/v2`. Do not embed that article metadata marker in this component contribution guide. Instead, require article authors to copy the marker from [Markdown snippets](../Templates/Markdown-Snippets.md), validate it against the copied-file-relative [metadata schema](../Templates/tsg-metadata.schema.json), keep `products` explicit, and set placeholders only while drafting.
 
@@ -190,7 +190,7 @@ The repo is organized by major topic areas. Add new files to existing folders wh
 
 | Folder | Description | Required README entry |
 | --- | --- | --- |
-| `OutboundConnectivity/` | Proxy, DNS, firewall, and endpoint requirements for Azure Local connectivity. | Title, document type, link, applicable products, supported versions, Highest action classification, Highest state-changing risk, workload impact, owner, metadata-marker status, execution surface. |
+| `OutboundConnectivity/` | Proxy, DNS, firewall, and endpoint requirements for Azure Local connectivity. | Article, Type, Applicable products, Owner. |
 | `{FOLDER_1}/` | {FOLDER_1_DESCRIPTION} | {FOLDER_1_README_ENTRY_REQUIREMENT} |
 | `{FOLDER_2}/` | {FOLDER_2_DESCRIPTION} | {FOLDER_2_README_ENTRY_REQUIREMENT} |
 | `{FOLDER_3}/` | {FOLDER_3_DESCRIPTION} | {FOLDER_3_README_ENTRY_REQUIREMENT} |
@@ -203,7 +203,7 @@ A component contribution is not ready for review until every item below is true:
 
 - The copied component `CONTRIBUTING.md` links to the repository contribution guide as `../../CONTRIBUTING.md`.
 - The final file contains no `{curly brace}` placeholders and no authoring instruction comments.
-- The component README indexes every new or changed article with title, document type, link, applicable products, supported versions, Highest action classification, Highest state-changing risk, workload impact, owner, metadata-marker status, and execution surface.
+- The component README indexes every new or changed article with Article (the title as a relative link), Type, Applicable products, and Owner.
 - Every article uses the correct template and includes the required metadata marker from `../Templates/Markdown-Snippets.md` when it is an article template output.
 - Every applicable product, supported version, operation phase, topology, owner, and support boundary is explicit.
 - Every action uses [READ-ONLY] when no state changes or [LOW RISK], [MEDIUM RISK], or [HIGH RISK] when state may change, and includes pre-check, action, expected result/output, stop condition, rollback, and verification.

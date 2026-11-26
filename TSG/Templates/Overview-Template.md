@@ -151,13 +151,15 @@ Overview articles should avoid step-by-step repair flows. If an example action i
 | {Claim 1} | {Public Microsoft Learn link, source reference, or product documentation} | {Products and versions} | {YYYY-MM-DD} |
 | {Claim 2} | {Public Microsoft Learn link, source reference, or product documentation} | {Products and versions} | {YYYY-MM-DD} |
 
+"Last reviewed" is the date the claim's content was last reviewed against its evidence reference; it is not a validation record.
+
 ### Vocabulary
 
 Use these terms consistently.
 
 | Vocabulary | Allowed values | Meaning |
 | ---------- | -------------- | ------- |
-| **Execution surface** | `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, `thin` | Describes where diagnostics or actions run. |
+| **Execution surface** | `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, `thin` | Describes where diagnostics or actions run. Record it in the article body, not in the metadata marker. |
 | **Admin surface state** | `shown`, `not-evident`, `absent` | Use only when characterizing admin visibility. `shown` means the surface carries evidence. `not-evident` means checked and not visible there. `absent` means uncharacterized and not publish-ready. |
 
 ### Metadata marker
