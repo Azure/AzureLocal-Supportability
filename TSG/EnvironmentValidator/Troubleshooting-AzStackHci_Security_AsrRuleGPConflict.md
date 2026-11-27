@@ -202,14 +202,9 @@ $rows = @(Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_Regis
 if (-not $rows) { 'Clean: no Group Policy-managed ASR rules' } else { $rows | Select-Object ValueName, SOMID }
 ```
 
-Then re-run the pre-update health check so the validator re-evaluates cluster-wide, and confirm the health state:
+That query is the proof for each node.
 
-```powershell
-Invoke-SolutionUpdatePrecheck -SystemHealth
-Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate
-```
-
-Confirm `HealthState` is `Success` with a current `HealthCheckDate`, then re-read the Detail (Step 1). A healthy node reports `No Group Policy-managed ASR settings were found.`
+**Operator step: refresh the cluster's readiness result.** After every affected node shows the clean result, the cluster operator starts a system health check so the validator re-evaluates cluster-wide: run `Invoke-SolutionUpdatePrecheck -SystemHealth` on one node. It runs the full set of system health checks across the instance and replaces their stored results; it doesn't install anything, and it can take a while to finish. Check its state with `Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate`. Wait until `HealthState` is no longer `InProgress`, confirm that it's `Success` with a current `HealthCheckDate`, then re-read the Detail (Step 1). A healthy node reports `No Group Policy-managed ASR settings were found.`
 
 > **Note:** the Azure portal readiness view and the cluster-wide health-check result refresh only when a full health check or `Invoke-SolutionUpdatePrecheck` runs, not on a targeted per-node re-test, so confirm the fix on-node with the RSoP query above rather than waiting on the portal.
 
