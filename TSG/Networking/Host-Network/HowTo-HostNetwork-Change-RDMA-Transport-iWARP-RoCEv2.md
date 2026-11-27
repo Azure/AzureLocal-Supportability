@@ -4763,7 +4763,7 @@ if (Test-Path -LiteralPath $ActivePointer) {
 
 **Action type:** State-changing (evidence state only)
 
-Use this section only when the change is abandoned while the durable phase is still `Initialized`, `BaselineSealed`, or `WorkloadsOff`. In those phases the appliance VM, MOC, CSVs, storage pool, and Network ATC intent have not been changed. From `PlatformOff` onward, do not use this section: continue the forward change or use [Rollback](#rollback).
+Use this section only when the change is abandoned while the durable phase is still `Initialized`, `BaselineSealed`, or `WorkloadsOff`. In those phases the appliance VM, MOC, CSVs, storage pool, and Network ATC intent have not been changed. From `PlatformOff` onward, do not use this section. [Rollback](#rollback) starts only from `TargetReadbackVerified` or a later phase, so between `PlatformOff` and `TargetReadbackVerified` continue the forward change. If the forward change cannot continue in that window, stop and contact Microsoft Support; do not improvise a restore.
 
 **Stop here and confirm.** The change approver named in the change record decides to abandon the change. Done looks like: the decision is recorded in the change record, and the following block prints `CHANGE_ABANDONED`.
 
@@ -4788,8 +4788,8 @@ if (
     throw (
         "Abandon is allowed only from Forward/Initialized, BaselineSealed, " +
         "or WorkloadsOff. Current state is " +
-        "'$($AbandonState.Operation)/$AbandonPhase'. Continue the change or " +
-        "use Rollback."
+        "'$($AbandonState.Operation)/$AbandonPhase'. Continue the change, use " +
+        "Rollback from TargetReadbackVerified or later, or contact Microsoft Support."
     )
 }
 
