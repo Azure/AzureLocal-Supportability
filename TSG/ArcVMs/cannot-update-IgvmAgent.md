@@ -1,5 +1,5 @@
 # Symptoms    
-When updating your Azure Local instance to 2506 release, you encounter one of the following errors:
+When updating your Azure Local instance to the 2505 release, you encounter one of the following errors:
 
 ```
 Could not update IgvmAgent on physical node Exception: Unable to create a new version folder with in 10 tries.
