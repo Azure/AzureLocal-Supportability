@@ -124,7 +124,9 @@ Use the command-line checks in this guide as the authoritative go/no-go gates. O
 PFC protects the selected lossless priority from drops, but PFC alone does not provide fine-grained sender rate control. For RoCEv2, ECN-capable switches use a congestion-marking policy such as Weighted Random Early Detection (WRED) before queues overflow. The receiving endpoint returns a congestion notification, and the sending NIC reduces its rate. The endpoint behavior is commonly implemented by a mechanism such as Data Center Quantized Congestion Notification (DCQCN).
 
 > [!CAUTION]
-> Do not enable switch-side ECN or copy vendor tuning values without confirming that the NIC, driver, firmware, and switch configuration use one OEM-supported end-to-end profile. A switch cannot make a non-ECN-capable sender react to congestion. Engage the network team and OEM for the fabric and endpoint settings.
+> Do not enable switch-side ECN or copy vendor tuning values without confirming that the NIC, driver, firmware, and switch configuration use one OEM-supported end-to-end profile. Configure ECN at both ends or at neither. A switch cannot make a non-ECN-capable sender react to congestion, and a switch that applies an ECN marking threshold to packets that are not ECN-capable can drop them instead of marking them, which turns PFC pauses into packet loss. Some adapters keep endpoint congestion control in a driver registry setting that is off by default and not listed by `Get-NetAdapterAdvancedProperty`, so confirm the endpoint setting with the OEM. Engage the network team and OEM for the fabric and endpoint settings.
+
+To confirm that a switch is marking, use the per-queue ECN-marked packet counters on the storage ports. A global QoS summary is not a reliable indicator on every platform. For example, the `ECN Mode` field in Dell OS10 `show qos system` output can read `off` on a switch that is marking packets; use `show queuing statistics interface <port> wred` instead.
 
 See the existing [QoS policy configuration](../Top-Of-Rack-Switch/Reference-TOR-QOS-Policy-Configuration.md), [ECN reference](../Top-Of-Rack-Switch/Reference-TOR-Explicit-Congestion-Notification.md), and [RoCEv2 PFC troubleshooting guide](../Top-Of-Rack-Switch/Troubleshoot-TOR-LLDP-DCBX-PFC-RoCEv2.md). This guide does not duplicate vendor-specific switch configuration.
 
@@ -850,7 +852,7 @@ if ($BadNodes.Count -gt 0) {
 
 $SolutionUpdates = @(Get-SolutionUpdate -ErrorAction Stop)
 $ActiveSolutionUpdates = @($SolutionUpdates | Where-Object {
-    "$($_.State)" -in @('Downloading', 'Installing')
+    "$($_.State)" -in @('Downloading', 'Preparing', 'HealthChecking', 'Installing')
 })
 $ActiveUpdateRuns = @($SolutionUpdates | ForEach-Object {
     @($_ | Get-SolutionUpdateRun -ErrorAction Stop |
@@ -859,7 +861,8 @@ $ActiveUpdateRuns = @($SolutionUpdates | ForEach-Object {
 if ($ActiveSolutionUpdates.Count -gt 0 -or $ActiveUpdateRuns.Count -gt 0) {
     throw "An Azure Local solution update is active. Do not begin this change."
 }
-$ActiveCauRuns = @(Get-CauRun -ClusterName $Cluster.Name -ErrorAction Stop)
+$ActiveCauRuns = @(Get-CauRun -ClusterName $Cluster.Name -ErrorAction Stop |
+    Where-Object { "$_" -ne 'RunNotInProgress' })
 if ($ActiveCauRuns.Count -gt 0) {
     throw "A Cluster-Aware Updating run is active. Do not begin this change."
 }
@@ -2141,6 +2144,15 @@ function Set-SealedCsvState {
         [string]$State
     )
 
+    $Current = Get-VerifiedSealedCsv -CsvRecord $CsvRecord
+    if ("$($Current.Csv.State)" -eq $State) {
+        if ($State -eq 'Online') {
+            Get-VerifiedSealedCsv -CsvRecord $CsvRecord `
+                -RequireOnlineMetadata | Out-Null
+        }
+        return
+    }
+
     $Before = if ($State -eq 'Offline') {
         Get-VerifiedSealedCsv -CsvRecord $CsvRecord -RequireOnlineMetadata
     } else {
@@ -2166,7 +2178,7 @@ function Set-SealedCsvState {
 }
 ```
 
-The helper catches provider text because a CSV operation can report `Generic failure` after the requested state has already changed. The authoritative decision is the re-read state.
+The helper catches provider text because a CSV operation can report `Generic failure` after the requested state has already changed. The authoritative decision is the re-read state. If the sealed CSV is already in the requested state, the helper verifies its identity and makes no change, which keeps a resumed run or a rollback that starts with CSVs already offline from failing on the first CSV.
 
 ### Step 2: Offline workload CSVs, then the infrastructure CSV
 
@@ -2257,6 +2269,8 @@ Stop if any unrelated cluster resource changes state or the pool remains `Pendin
 
 ## Change the Network ATC transport
 
+Change the transport only through the Network ATC storage intent with `Set-NetIntent -AdapterPropertyOverrides`. Do not change `*NetworkDirectTechnology` directly with `Set-NetAdapterAdvancedProperty`. Network ATC treats a manual adapter change as drift and reverts it to the intent value within minutes, which can leave nodes on mixed transports.
+
 ### Step 1: Rebuild the complete adapter override and preview the one-property change
 
 **Action type:** [READ-ONLY]
@@ -2286,7 +2300,11 @@ function Assert-AdapterOverrideReadback {
         [System.Collections.IDictionary]$SealedOverrides,
 
         [Parameter(Mandatory)]
-        [int]$ExpectedTransportValue
+        [int]$ExpectedTransportValue,
+
+        # Pre-submission forward check only: the sealed intent may leave the
+        # transport at its default, so the live override may also omit it.
+        [switch]$AllowUnsetTransport
     )
 
     $DefaultOverride = New-NetIntentAdapterPropertyOverrides
@@ -2324,6 +2342,13 @@ function Assert-AdapterOverrideReadback {
         if ($ActualJson -ne $DefaultJson) {
             $ActualOverrides[$Property.Name] = $Property.Value
         }
+    }
+    if (
+        $AllowUnsetTransport -and
+        -not $SealedOverrides.Contains('NetworkDirectTechnology') -and
+        -not $ActualOverrides.Contains('NetworkDirectTechnology')
+    ) {
+        $ExpectedOverrides.Remove('NetworkDirectTechnology')
     }
 
     $ExpectedKeys = @($ExpectedOverrides.Keys | Sort-Object)
@@ -2370,7 +2395,7 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
     $PointOfNoReturnUpdates = @(Get-SolutionUpdate -ErrorAction Stop)
     $PointOfNoReturnActiveUpdates = @(
         $PointOfNoReturnUpdates | Where-Object {
-            "$($_.State)" -in @('Downloading', 'Installing')
+            "$($_.State)" -in @('Downloading', 'Preparing', 'HealthChecking', 'Installing')
         }
     )
     $PointOfNoReturnRuns = @($PointOfNoReturnUpdates | ForEach-Object {
@@ -2378,7 +2403,8 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
             Where-Object { "$($_.State)" -eq 'InProgress' })
     })
     $PointOfNoReturnCau = @(Get-CauRun -ClusterName $Cluster.Name `
-        -ErrorAction Stop)
+        -ErrorAction Stop |
+        Where-Object { "$_" -ne 'RunNotInProgress' })
     $PointOfNoReturnNodes = @(Get-ClusterNode -ErrorAction Stop)
     $PointOfNoReturnJobs = @(Get-StorageJob -ErrorAction Stop)
     $PointOfNoReturnFaults = @(Get-HealthFault -ErrorAction Stop)
@@ -2491,7 +2517,8 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
     Assert-AdapterOverrideReadback `
         -LiveOverride $PointOfNoReturnIntent[0].AdapterAdvancedParametersOverride `
         -SealedOverrides $ExplicitAdapterOverrides `
-        -ExpectedTransportValue $ExpectedCurrentTransportValue
+        -ExpectedTransportValue $ExpectedCurrentTransportValue `
+        -AllowUnsetTransport:($Operation -eq 'Forward')
     $PointOfNoReturnAdapters = @(Invoke-Command `
         -ComputerName $Nodes.Name `
         -ArgumentList ($AdapterNames -join ',') -ScriptBlock {
@@ -3078,13 +3105,14 @@ do {
     $NodesNow = @(Get-ClusterNode)
     $UpdatesNow = @(Get-SolutionUpdate -ErrorAction Stop)
     $ActiveSolutionUpdatesNow = @($UpdatesNow | Where-Object {
-        "$($_.State)" -in @('Downloading', 'Installing')
+        "$($_.State)" -in @('Downloading', 'Preparing', 'HealthChecking', 'Installing')
     })
     $ActiveUpdateRunsNow = @($UpdatesNow | ForEach-Object {
         @($_ | Get-SolutionUpdateRun -ErrorAction Stop |
             Where-Object { "$($_.State)" -eq 'InProgress' })
     })
-    $CauNow = @(Get-CauRun -ClusterName $Cluster.Name -ErrorAction Stop)
+    $CauNow = @(Get-CauRun -ClusterName $Cluster.Name -ErrorAction Stop |
+        Where-Object { "$_" -ne 'RunNotInProgress' })
     $QuorumNow = Get-ClusterQuorum -ErrorAction Stop
     $WitnessHealthyNow = $true
     if (-not [string]::IsNullOrWhiteSpace("$($QuorumNow.QuorumResource)")) {
@@ -4008,14 +4036,15 @@ do {
     $FinalHoldNodes = @(Get-ClusterNode -ErrorAction Stop)
     $FinalHoldUpdates = @(Get-SolutionUpdate -ErrorAction Stop)
     $FinalHoldActiveUpdates = @($FinalHoldUpdates | Where-Object {
-        "$($_.State)" -in @('Downloading', 'Installing')
+        "$($_.State)" -in @('Downloading', 'Preparing', 'HealthChecking', 'Installing')
     })
     $FinalHoldActiveUpdateRuns = @($FinalHoldUpdates | ForEach-Object {
         @($_ | Get-SolutionUpdateRun -ErrorAction Stop |
             Where-Object { "$($_.State)" -eq 'InProgress' })
     })
     $FinalHoldCau = @(Get-CauRun -ClusterName $Cluster.Name `
-        -ErrorAction Stop)
+        -ErrorAction Stop |
+        Where-Object { "$_" -ne 'RunNotInProgress' })
     $FinalHoldQuorum = Get-ClusterQuorum -ErrorAction Stop
     $FinalHoldWitnessHealthy = $true
     if (-not [string]::IsNullOrWhiteSpace(
@@ -4497,14 +4526,15 @@ $RollbackWorkloadsShouldBeOnline = (
 )
     $RollbackUpdates = @(Get-SolutionUpdate -ErrorAction Stop)
     $RollbackActiveUpdates = @($RollbackUpdates | Where-Object {
-        "$($_.State)" -in @('Downloading', 'Installing')
+        "$($_.State)" -in @('Downloading', 'Preparing', 'HealthChecking', 'Installing')
     })
     $RollbackUpdateRuns = @($RollbackUpdates | ForEach-Object {
         @($_ | Get-SolutionUpdateRun -ErrorAction Stop |
             Where-Object { "$($_.State)" -eq 'InProgress' })
     })
     $RollbackCau = @(Get-CauRun -ClusterName $Cluster.Name `
-        -ErrorAction Stop)
+        -ErrorAction Stop |
+        Where-Object { "$_" -ne 'RunNotInProgress' })
     $RollbackNodes = @(Get-ClusterNode -ErrorAction Stop)
     $RollbackHealthFaults = @(Get-HealthFault -ErrorAction Stop)
     $RollbackStorageJobs = @(Get-StorageJob -ErrorAction Stop)
