@@ -1699,7 +1699,7 @@ Re-run any function-definition block needed by the next phase, such as `Set-Seal
 | `PoolOnline` | Confirm storage health, then restore infrastructure CSV, MOC, and the appliance. |
 | `PlatformOnline` | Complete the continuous storage clean hold. |
 | `StorageHoldPassed` | Return workload startup to the application owner. |
-| `RollbackApproved` | Continue rollback quiescence. Do not resume the forward target. |
+| `RollbackApproved` | Continue rollback quiescence at [Rollback step 1](#rollback-step-1-shut-down-only-reviewed-and-confirmed-customer-vms), Part A. Do not reuse a shutdown list or confirmation that Part C refuses. Do not resume the forward target. |
 | `ActiveValidationStarted` | Continue representative load and capture the application-owner attestation. Do not replace the sealed start time. |
 | `ActiveAssertionsPassed` | Complete the final event review and continuous clean hold. |
 | `ActiveValidationPassed` | Close the transcript and active pointer. |
@@ -4400,7 +4400,7 @@ Success requires:
 - Network ATC remains successful and completed on every node.
 - Every storage adapter remains on the desired transport with RDMA enabled.
 - SBL connections report both client and server RDMA capability.
-- Every selected SBL connection is RDMA-capable, has at least one current channel, does not report `Failed`, and has `FailureCount` equal to zero.
+- Every SBL connection on every node is selected, is RDMA-capable, has at least one current channel, does not report `Failed`, and has `FailureCount` equal to zero. A healthy RDMA cluster normally meets this: every SBL connection between every pair of nodes is selected with all channels current and a zero failure count, so an unselected connection or any nonzero failure count is a real finding, not noise.
 - Representative storage activity completes without storage, cluster, or network faults.
 - The pool, virtual disks, CSVs, MOC, appliance VM, and customer workloads remain healthy.
 
@@ -4852,15 +4852,378 @@ Set-ChangePhase -Phase RollbackApproved `
 }
 ```
 
-1. Stop customer workloads and verify every customer VM is `Off`. Persist `WorkloadsOff`.
-2. Stop the appliance VM and MOC resource. Persist `PlatformOff`.
-3. Offline workload CSVs, then the infrastructure CSV. Persist `CsvsOff`.
-4. Offline the exact recorded Storage Pool resource. Persist `PoolOff`.
-5. Re-run [Change the Network ATC transport](#change-the-network-atc-transport). Its mutation and readback use the persisted rollback transport, not the original forward target.
-6. Re-run [Restore the platform in dependency order](#restore-the-platform-in-dependency-order).
-7. Complete the continuous five-minute clean hold.
-8. Return workload startup to the application owner.
-9. Re-run [Validate active RDMA under representative load](#validate-active-rdma-under-representative-load). The automated assertions validate the persisted rollback transport before advancing the checkpoint.
+After the rollback direction is persisted, complete the rollback steps in order.
+
+### Rollback step 1: Shut down only reviewed and confirmed customer VMs
+
+**Action type:** State-changing  
+**Risk:** [HIGH RISK]  
+**Owner:** Workload owner, with the cluster administrator
+
+A rollback that starts after customer workloads were returned to the application owner must shut those VMs down again. There is no less disruptive path in this procedure. Rollback re-runs the same quiesce sequence as the forward change: every workload CSV and the clustered Storage Pool go offline, and every node changes transport together because a mixed-transport storage fabric is not supported. Every customer VM stores its configuration and virtual disks on those CSVs, so live migration or draining a node does not help: there is no node or volume left online to move the VM to. Saving VM state is not an alternative either, because saved-state files are also on the CSVs and this procedure rejects `Saved` VMs.
+
+If the rollback starts before workloads were returned to the application owner, the customer VMs are still `Off`. The list in Part A then contains no VM to stop. Skip Parts B and C and go to Part D.
+
+> [!WARNING]
+> Part C shuts down running customer VMs. A shutdown interrupts every application in those VMs until the application owner starts them again after the rollback completes. Never stop a VM that is not on the reviewed and confirmed list, and never use `-TurnOff`, `-Force`, save state, or pause.
+
+**Plan for:** an application outage for every VM on the list from Part C until the application owner restarts it after [Return workload startup to the application owner](#return-workload-startup-to-the-application-owner). Each graceful guest shutdown can take several minutes.
+
+The preferred path is still the forward-path model: the workload owner shuts each VM down through its normal guest operating-system process. Parts B and C exist for the case where the workload owner approves the cluster administrator shutting down specific VMs on the owner's behalf.
+
+#### Part A: List the VMs that would be shut down
+
+This block is read-only. It resolves every sealed customer VM by cluster group identity and VM Id, shows its name, host, and state, and saves the reviewed list with a SHA-256 hash. `WillStop` is `True` for each VM that is `Running`.
+
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
+
+```powershell
+. {
+$ShutdownPhaseState = Get-Content -LiteralPath (
+    Join-Path $EvidenceRoot 'phase-state.json'
+) -Raw | ConvertFrom-Json
+if (
+    "$($ShutdownPhaseState.Operation)" -ne 'Rollback' -or
+    "$($ShutdownPhaseState.Phase)" -ne 'RollbackApproved'
+) {
+    throw "The VM shutdown list can be built only in the Rollback/RollbackApproved phase."
+}
+
+$ShutdownControlPlaneVmId = "$($ResourceManifest.ControlPlaneVm.VmId)"
+$ShutdownExpectedPairs = @($ResourceManifest.ClusteredVms | ForEach-Object {
+    "$($_.GroupId)|$($_.GroupName)|$($_.VmId)"
+})
+$ShutdownVmGroups = @(Get-ClusterGroup -ErrorAction Stop |
+    Where-Object { "$($_.GroupType)" -eq 'VirtualMachine' })
+$ShutdownCurrentPairs = @(foreach ($Group in $ShutdownVmGroups) {
+    $VmResources = @($Group | Get-ClusterResource -ErrorAction Stop |
+        Where-Object { "$($_.ResourceType)" -eq 'Virtual Machine' })
+    if ($VmResources.Count -ne 1) {
+        throw "Expected one Virtual Machine resource in '$($Group.Name)'."
+    }
+    $VmIdParameters = @(Get-ClusterParameter -InputObject $VmResources[0] `
+        -Name VmId -ErrorAction Stop)
+    if ($VmIdParameters.Count -ne 1) {
+        throw "Expected one VmId parameter in '$($Group.Name)'."
+    }
+    "$($Group.Id)|$($Group.Name)|$($VmIdParameters[0].Value)"
+})
+if (
+    $ShutdownCurrentPairs.Count -ne $ShutdownExpectedPairs.Count -or
+    @($ShutdownExpectedPairs | Where-Object {
+        $_ -notin $ShutdownCurrentPairs
+    }).Count -gt 0 -or
+    @($ShutdownCurrentPairs | Where-Object {
+        $_ -notin $ShutdownExpectedPairs
+    }).Count -gt 0
+) {
+    throw (
+        "Current clustered VM identities do not match the sealed inventory. " +
+        "Stop and reconcile with the workload owner before any shutdown."
+    )
+}
+
+$VmShutdownRows = @(foreach ($Entry in @($ResourceManifest.ClusteredVms |
+    Where-Object { "$($_.VmId)" -ne $ShutdownControlPlaneVmId })) {
+    $Group = @($ShutdownVmGroups | Where-Object {
+        "$($_.Id)" -eq "$($Entry.GroupId)" -and
+        "$($_.Name)" -eq "$($Entry.GroupName)"
+    })
+    if ($Group.Count -ne 1) {
+        throw "A sealed customer VM group no longer resolves uniquely."
+    }
+    $VmHost = "$($Group[0].OwnerNode)"
+    $Vm = @(Invoke-Command -ComputerName $VmHost `
+        -ArgumentList "$($Entry.VmId)" -ScriptBlock {
+            param($VmId)
+            Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
+                Select-Object VMId, Name, State
+        } -ErrorAction Stop)
+    if ($Vm.Count -ne 1 -or "$($Vm[0].VMId)" -ne "$($Entry.VmId)") {
+        throw "A sealed customer VM no longer resolves uniquely by VmId."
+    }
+    [pscustomobject]@{
+        VmName = "$($Vm[0].Name)"
+        Host = $VmHost
+        State = "$($Vm[0].State)"
+        WillStop = ("$($Vm[0].State)" -eq 'Running')
+        VmId = "$($Vm[0].VMId)"
+        GroupId = "$($Group[0].Id)"
+        GroupName = "$($Group[0].Name)"
+    }
+})
+$VmShutdownRows | Format-Table VmName, Host, State, WillStop, VmId -AutoSize
+
+$UnexpectedVmStates = @($VmShutdownRows | Where-Object {
+    $_.State -notin @('Running', 'Off')
+})
+if ($UnexpectedVmStates.Count -gt 0) {
+    throw (
+        "At least one customer VM is neither Running nor Off. Return it to " +
+        "the workload owner. Do not force, save, or pause it."
+    )
+}
+
+$VmShutdownListPath = Join-Path $EvidenceRoot 'rollback-vm-shutdown-list.json'
+[pscustomobject]@{
+    ChangeId = $ChangeId
+    CreatedUtc = (Get-Date).ToUniversalTime().ToString('o')
+    PhaseUpdatedUtc = "$($ShutdownPhaseState.UpdatedUtc)"
+    Vms = $VmShutdownRows
+} | ConvertTo-Json -Depth 4 |
+    Set-Content -LiteralPath $VmShutdownListPath -ErrorAction Stop
+$VmShutdownListSha256 = (Get-FileHash -LiteralPath $VmShutdownListPath `
+    -Algorithm SHA256 -ErrorAction Stop).Hash
+
+$VmsToStop = @($VmShutdownRows | Where-Object WillStop)
+"VMs that would be shut down: $($VmsToStop.Count)"
+"Reviewed list: $VmShutdownListPath"
+"ListSha256: $VmShutdownListSha256"
+}
+```
+
+If `VMs that would be shut down` is `0`, skip Parts B and C and go to Part D.
+
+#### Part B: Stop here and confirm the exact list
+
+**Stop here and confirm.** Do not continue until the workload owner has reviewed the VMs that Part A listed with `WillStop` set to `True`, by name, host, and VM Id, and has agreed that each of those VMs can be shut down now. Nothing has been stopped yet.
+
+- If the workload owner agrees to every listed VM, record the confirmation for the whole reviewed list, or list each approved VM Id.
+- If the workload owner does not agree to a VM, do not run Part C. The workload owner either shuts that VM down through its guest operating system, after which you run Part A again, or the rollback stops here.
+- If anything changes before Part C runs, such as a VM starting, stopping, or moving to another host, run Part A again and get a new confirmation. A new list has a new hash, and Part C refuses an old confirmation.
+
+Record the confirmation. Replace each placeholder value with the real value before you run the block. The block refuses placeholders, a hash that does not match the saved list, and an approved VM set that differs from the VMs Part A marked `WillStop`.
+
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
+```powershell
+& {
+# The ListSha256 value printed by Part A.
+$ConfirmedListSha256 = '<ListSha256 from Part A>'
+# The name of the workload owner who approved the shutdown.
+$ConfirmedBy = '<workload owner name>'
+# Set to $true only when the owner approved every listed WillStop VM.
+$ConfirmAllListedVms = $false
+# Otherwise, list every approved VM Id from Part A, for example
+# @('<VmId 1>', '<VmId 2>').
+$ConfirmedVmIds = @()
+
+$VmShutdownListPath = Join-Path $EvidenceRoot 'rollback-vm-shutdown-list.json'
+$CurrentListSha256 = (Get-FileHash -LiteralPath $VmShutdownListPath `
+    -Algorithm SHA256 -ErrorAction Stop).Hash
+if ($ConfirmedListSha256 -ne $CurrentListSha256) {
+    throw "The confirmed hash does not match the saved list. Run Part A again and review the new list."
+}
+if (
+    [string]::IsNullOrWhiteSpace($ConfirmedBy) -or
+    $ConfirmedBy -match '[<>]'
+) {
+    throw "Record the name of the workload owner who approved the shutdown."
+}
+
+$SavedList = Get-Content -LiteralPath $VmShutdownListPath -Raw |
+    ConvertFrom-Json
+$ListedStopIds = @(@($SavedList.Vms) | Where-Object { $_.WillStop } |
+    ForEach-Object { "$($_.VmId)".ToLowerInvariant() } | Sort-Object -Unique)
+if ($ConfirmAllListedVms) {
+    $ApprovedIds = $ListedStopIds
+    $ConfirmationMode = 'WholeReviewedList'
+} else {
+    $ApprovedIds = @($ConfirmedVmIds | ForEach-Object {
+        "$_".Trim().ToLowerInvariant()
+    } | Sort-Object -Unique)
+    $ConfirmationMode = 'PerVm'
+}
+if (
+    $ListedStopIds.Count -lt 1 -or
+    $ApprovedIds.Count -ne $ListedStopIds.Count -or
+    @($ListedStopIds | Where-Object { $_ -notin $ApprovedIds }).Count -gt 0 -or
+    @($ApprovedIds | Where-Object { $_ -notin $ListedStopIds }).Count -gt 0
+) {
+    throw (
+        "The approved VM set must equal the VMs that Part A marked WillStop. " +
+        "If the owner did not approve a VM, do not run Part C."
+    )
+}
+
+[pscustomobject]@{
+    ChangeId = $ChangeId
+    ListSha256 = $CurrentListSha256
+    ConfirmedBy = $ConfirmedBy
+    ConfirmationMode = $ConfirmationMode
+    ConfirmedVmIds = $ApprovedIds
+    ConfirmedUtc = (Get-Date).ToUniversalTime().ToString('o')
+} | ConvertTo-Json -Depth 3 |
+    Set-Content -LiteralPath (
+        Join-Path $EvidenceRoot 'rollback-vm-shutdown-confirmation.json'
+    ) -ErrorAction Stop
+"Confirmed $($ApprovedIds.Count) VM(s) by $ConfirmedBy ($ConfirmationMode)."
+}
+```
+
+#### Part C: Shut down the confirmed VMs
+
+This block acts only on the saved and confirmed list. Before it stops anything, it refuses if the list or the confirmation is missing, if the list changed after it was hashed, if the confirmation does not match the list, if the list is more than 30 minutes old, if the rollback phase changed, or if any VM's group, host, VM Id, name, or state no longer matches the list. It then re-checks each VM by VM Id on its host immediately before it requests a graceful guest shutdown.
+
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
+```powershell
+& {
+$VmShutdownListPath = Join-Path $EvidenceRoot 'rollback-vm-shutdown-list.json'
+$VmShutdownConfirmationPath = Join-Path $EvidenceRoot `
+    'rollback-vm-shutdown-confirmation.json'
+if (
+    -not (Test-Path -LiteralPath $VmShutdownListPath) -or
+    -not (Test-Path -LiteralPath $VmShutdownConfirmationPath)
+) {
+    throw "The reviewed list or its confirmation is missing. Run Parts A and B."
+}
+
+$StopListSha256 = (Get-FileHash -LiteralPath $VmShutdownListPath `
+    -Algorithm SHA256 -ErrorAction Stop).Hash
+$StopList = Get-Content -LiteralPath $VmShutdownListPath -Raw |
+    ConvertFrom-Json
+$StopConfirmation = Get-Content -LiteralPath $VmShutdownConfirmationPath -Raw |
+    ConvertFrom-Json
+$StopPhaseState = Get-Content -LiteralPath (
+    Join-Path $EvidenceRoot 'phase-state.json'
+) -Raw | ConvertFrom-Json
+
+if ($StopList.CreatedUtc -is [datetime]) {
+    $ListCreatedUtc = $StopList.CreatedUtc.ToUniversalTime()
+} else {
+    $ListCreatedUtc = [datetime]::Parse(
+        "$($StopList.CreatedUtc)",
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::RoundtripKind
+    ).ToUniversalTime()
+}
+$ListAge = (Get-Date).ToUniversalTime() - $ListCreatedUtc
+if (
+    "$($StopPhaseState.Operation)" -ne 'Rollback' -or
+    "$($StopPhaseState.Phase)" -ne 'RollbackApproved' -or
+    "$($StopPhaseState.UpdatedUtc)" -ne "$($StopList.PhaseUpdatedUtc)" -or
+    "$($StopList.ChangeId)" -ne $ChangeId -or
+    "$($StopConfirmation.ChangeId)" -ne $ChangeId -or
+    "$($StopConfirmation.ListSha256)" -ne $StopListSha256 -or
+    $ListAge.TotalMinutes -lt 0 -or
+    $ListAge.TotalMinutes -gt 30
+) {
+    throw (
+        "The reviewed list is stale, changed, or not confirmed for this " +
+        "rollback. Run Part A again and get a new confirmation."
+    )
+}
+
+$ListedVms = @($StopList.Vms)
+$StopIds = @($ListedVms | Where-Object { $_.WillStop } |
+    ForEach-Object { "$($_.VmId)".ToLowerInvariant() } | Sort-Object -Unique)
+$ConfirmedStopIds = @(@($StopConfirmation.ConfirmedVmIds) |
+    ForEach-Object { "$_".ToLowerInvariant() } | Sort-Object -Unique)
+if (
+    $StopIds.Count -lt 1 -or
+    $ConfirmedStopIds.Count -ne $StopIds.Count -or
+    @($StopIds | Where-Object { $_ -notin $ConfirmedStopIds }).Count -gt 0
+) {
+    throw "The confirmation does not cover exactly the listed VMs. Run Part B again."
+}
+
+$ControlPlaneVmIdForStop = "$($ResourceManifest.ControlPlaneVm.VmId)"
+$SealedCustomerIds = @($ResourceManifest.ClusteredVms | Where-Object {
+    "$($_.VmId)" -ne $ControlPlaneVmIdForStop
+} | ForEach-Object { "$($_.VmId)".ToLowerInvariant() } | Sort-Object -Unique)
+$ListedIds = @($ListedVms | ForEach-Object {
+    "$($_.VmId)".ToLowerInvariant()
+} | Sort-Object -Unique)
+if (
+    $ListedIds.Count -ne $ListedVms.Count -or
+    $ListedIds.Count -ne $SealedCustomerIds.Count -or
+    @($SealedCustomerIds | Where-Object { $_ -notin $ListedIds }).Count -gt 0
+) {
+    throw "The reviewed list no longer covers exactly the sealed customer VMs."
+}
+
+$StopVmGroups = @(Get-ClusterGroup -ErrorAction Stop |
+    Where-Object { "$($_.GroupType)" -eq 'VirtualMachine' })
+foreach ($Listed in $ListedVms) {
+    $Group = @($StopVmGroups | Where-Object {
+        "$($_.Id)" -eq "$($Listed.GroupId)" -and
+        "$($_.Name)" -eq "$($Listed.GroupName)"
+    })
+    if ($Group.Count -ne 1 -or "$($Group[0].OwnerNode)" -ne "$($Listed.Host)") {
+        throw "VM '$($Listed.VmName)' moved or no longer resolves. Run Part A again."
+    }
+    $Current = @(Invoke-Command -ComputerName "$($Listed.Host)" `
+        -ArgumentList "$($Listed.VmId)" -ScriptBlock {
+            param($VmId)
+            Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
+                Select-Object VMId, Name, State
+        } -ErrorAction Stop)
+    $ExpectedState = if ($Listed.WillStop) { 'Running' } else { 'Off' }
+    if (
+        $Current.Count -ne 1 -or
+        "$($Current[0].VMId)" -ne "$($Listed.VmId)" -or
+        "$($Current[0].Name)" -ne "$($Listed.VmName)" -or
+        "$($Current[0].State)" -ne $ExpectedState
+    ) {
+        throw "VM '$($Listed.VmName)' no longer matches the reviewed list. Run Part A again."
+    }
+}
+
+foreach ($Listed in @($ListedVms | Where-Object { $_.WillStop })) {
+    try {
+        Invoke-Command -ComputerName "$($Listed.Host)" `
+            -ArgumentList "$($Listed.VmId)", "$($Listed.VmName)" -ScriptBlock {
+                param($VmId, $VmName)
+                $Vm = Get-VM -Id ([guid]$VmId) -ErrorAction Stop
+                if ("$($Vm.VMId)" -ne $VmId -or "$($Vm.Name)" -ne $VmName) {
+                    throw "VM identity changed immediately before shutdown."
+                }
+                if ("$($Vm.State)" -ne 'Running') {
+                    throw "VM state changed immediately before shutdown."
+                }
+                # Without -TurnOff, -Save, or -Force, Stop-VM requests guest OS shutdown.
+                Stop-VM -VM $Vm -ErrorAction Stop
+            } -ErrorAction Stop
+    }
+    catch {
+        Write-MutationFailureEvidence `
+            -OperationName "stop-customer-vm-$($Listed.VmId)" `
+            -MutationError $_ `
+            -StopGuidance (
+                "Customer VM '$($Listed.VmName)' did not stop gracefully. " +
+                'Do not force it off. Stop and return it to the workload owner.'
+            ) `
+            -ReadAuthoritativeState {
+                Invoke-Command -ComputerName "$($Listed.Host)" `
+                    -ArgumentList "$($Listed.VmId)" -ScriptBlock {
+                        param($VmId)
+                        Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
+                            Select-Object VMId, Name, State
+                    } -ErrorAction Stop
+            }
+    }
+    "Stopped '$($Listed.VmName)' on '$($Listed.Host)'."
+}
+}
+```
+
+Retry behavior: do not re-run Part C after a failure. Re-read VM state with Part A, return any VM that did not stop to the workload owner, and get a new confirmation before any further shutdown.
+
+#### Part D: Verify every customer VM is Off and persist `WorkloadsOff`
+
+Run the verification block in [Step 1: Gracefully shut down customer VMs](#step-1-gracefully-shut-down-customer-vms). It confirms that every customer VM is `Off` and persists `WorkloadsOff` for the rollback.
+
+### Rollback step 2: Complete the rollback sequence
+
+1. Stop the appliance VM and MOC resource. Persist `PlatformOff`.
+2. Offline workload CSVs, then the infrastructure CSV. Persist `CsvsOff`.
+3. Offline the exact recorded Storage Pool resource. Persist `PoolOff`.
+4. Re-run [Change the Network ATC transport](#change-the-network-atc-transport). Its mutation and readback use the persisted rollback transport, not the original forward target.
+5. Re-run [Restore the platform in dependency order](#restore-the-platform-in-dependency-order).
+6. Complete the continuous five-minute clean hold.
+7. Return workload startup to the application owner.
+8. Re-run [Validate active RDMA under representative load](#validate-active-rdma-under-representative-load). The automated assertions validate the persisted rollback transport before advancing the checkpoint.
 
 If the target was iWARP, keep the built-in iWARP firewall rule enabled until RoCEv2 rollback and full platform recovery are verified. Do not delete or recreate the built-in rule as part of rollback.
 
@@ -4874,7 +5237,7 @@ If the target was iWARP, keep the built-in iWARP firewall rule enabled until RoC
 | Pool, virtual disk, or CSV does not recover | Stop. Do not run repair, recreate resources, or disable Storage Spaces Direct. Contact Microsoft Support. |
 | MOC or appliance VM does not recover | Stop before customer workload startup. Collect cluster and VM state and contact Microsoft Support. |
 | RDMA capability is absent after recovery | Stop workload expansion. Reconfirm adapter transport, Network ATC, firewall for iWARP, and fabric readiness for RoCEv2. |
-| A selected SBL connection has no current channels, reports `Failed`, has a nonzero `FailureCount`, or is not RDMA-capable | Treat the desired transport as unverified. Collect SBL connection, adapter, intent, and network evidence before proceeding. |
+| An SBL connection is not selected, has no current channels, reports `Failed`, has a nonzero `FailureCount`, or is not RDMA-capable | Treat the desired transport as unverified. Collect SBL connection, adapter, intent, and network evidence before proceeding. |
 | RoCEv2 shows drops or pause storms | Stop the validation load. Engage the network team and OEM to verify PFC, ETS, ECN/WRED, and endpoint congestion response. |
 
 ## Evidence and escalation package
