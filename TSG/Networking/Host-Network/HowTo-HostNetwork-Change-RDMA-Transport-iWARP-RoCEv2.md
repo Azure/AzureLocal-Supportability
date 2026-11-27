@@ -1399,8 +1399,11 @@ if ("$($PhaseState.Phase)" -eq 'Initialized') {
         "before the platform is quiesced' to finish cleanup."
     )
 } else {
-    $ExpectedHashes = @(Get-Content -LiteralPath `
-        (Join-Path $EvidenceRoot 'baseline-hashes.json') -Raw | ConvertFrom-Json)
+    # Parse first, then enumerate: Windows PowerShell 5.1 ConvertFrom-Json
+    # emits a JSON array as one pipeline object.
+    $ParsedHashes = Get-Content -LiteralPath `
+        (Join-Path $EvidenceRoot 'baseline-hashes.json') -Raw | ConvertFrom-Json
+    $ExpectedHashes = @($ParsedHashes | ForEach-Object { $_ })
     foreach ($FileName in @('network-atc-baseline.json', 'resource-manifest.json')) {
         $Expected = @($ExpectedHashes | Where-Object {
             (Split-Path -Path "$($_.Path)" -Leaf) -eq $FileName
@@ -2443,11 +2446,15 @@ if ([string]::IsNullOrWhiteSpace($ApprovedBy) -or $ApprovedBy -match '[<>]') {
     throw "Record the name of the change approver who approved the point of no return."
 }
 
-$PonrSealedHash = @(Get-Content -LiteralPath (
+# Parse first, then enumerate: Windows PowerShell 5.1 ConvertFrom-Json
+# emits a JSON array as one pipeline object.
+$PonrParsedHashes = Get-Content -LiteralPath (
     Join-Path $EvidenceRoot 'baseline-hashes.json'
-) -Raw -ErrorAction Stop | ConvertFrom-Json | Where-Object {
-    (Split-Path -Path "$($_.Path)" -Leaf) -eq 'resource-manifest.json'
-})
+) -Raw -ErrorAction Stop | ConvertFrom-Json
+$PonrSealedHash = @(@($PonrParsedHashes | ForEach-Object { $_ }) |
+    Where-Object {
+        (Split-Path -Path "$($_.Path)" -Leaf) -eq 'resource-manifest.json'
+    })
 $PonrManifestHash = Get-FileHash -Algorithm SHA256 -LiteralPath (
     Join-Path $EvidenceRoot 'resource-manifest.json'
 ) -ErrorAction Stop
@@ -2492,11 +2499,15 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
     }
     $PonrApproval = Get-Content -LiteralPath $PonrApprovalPath -Raw `
         -ErrorAction Stop | ConvertFrom-Json
-    $PonrSealedHash = @(Get-Content -LiteralPath (
+    # Parse first, then enumerate: Windows PowerShell 5.1 ConvertFrom-Json
+    # emits a JSON array as one pipeline object.
+    $PonrParsedHashes = Get-Content -LiteralPath (
         Join-Path $EvidenceRoot 'baseline-hashes.json'
-    ) -Raw -ErrorAction Stop | ConvertFrom-Json | Where-Object {
-        (Split-Path -Path "$($_.Path)" -Leaf) -eq 'resource-manifest.json'
-    })
+    ) -Raw -ErrorAction Stop | ConvertFrom-Json
+    $PonrSealedHash = @(@($PonrParsedHashes | ForEach-Object { $_ }) |
+        Where-Object {
+            (Split-Path -Path "$($_.Path)" -Leaf) -eq 'resource-manifest.json'
+        })
     $PonrManifestHash = Get-FileHash -Algorithm SHA256 -LiteralPath (
         Join-Path $EvidenceRoot 'resource-manifest.json'
     ) -ErrorAction Stop
@@ -3514,11 +3525,15 @@ before it uses the baseline states.
 
 ```powershell
 & {
-$StartupSealedHash = @(Get-Content -LiteralPath (
+# Parse first, then enumerate: Windows PowerShell 5.1 ConvertFrom-Json
+# emits a JSON array as one pipeline object.
+$StartupParsedHashes = Get-Content -LiteralPath (
     Join-Path $EvidenceRoot 'baseline-hashes.json'
-) -Raw | ConvertFrom-Json | Where-Object {
-    (Split-Path -Path "$($_.Path)" -Leaf) -eq 'resource-manifest.json'
-})
+) -Raw -ErrorAction Stop | ConvertFrom-Json
+$StartupSealedHash = @(@($StartupParsedHashes | ForEach-Object { $_ }) |
+    Where-Object {
+        (Split-Path -Path "$($_.Path)" -Leaf) -eq 'resource-manifest.json'
+    })
 $StartupManifestHash = Get-FileHash -Algorithm SHA256 -LiteralPath (
     Join-Path $EvidenceRoot 'resource-manifest.json'
 ) -ErrorAction Stop
