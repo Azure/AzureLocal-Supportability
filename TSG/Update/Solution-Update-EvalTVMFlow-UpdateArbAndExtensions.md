@@ -108,7 +108,7 @@ The block stops before changing anything, and prints `No changes were made`, whe
 - It is not running in an elevated Windows PowerShell 5.1 session, or an Azure PowerShell module is already loaded in the session.
 - The validated recipe cannot be read, does not list `Az.Accounts`, or lists an invalid or duplicated version.
 - A copy of `Az.Accounts`, or a copy that would be removed, is outside `C:\Program Files\WindowsPowerShell\Modules` or was not installed with `Install-Module`. Do not delete such a copy by hand; contact Microsoft support.
-- Another installed module in this session's module path needs a version that would be removed: an exact version (`RequiredVersion`) that would be removed, or a minimum (`ModuleVersion`) or maximum (`MaximumVersion`) version that no remaining version in `C:\Program Files\WindowsPowerShell\Modules` meets. The check reads the `RequiredModules`, `ModuleList`, and `NestedModules` entries of each module manifest without loading the module. It stops when a manifest that names one of these modules cannot be read, or when an entry loads a file by path from a version that would be removed or by a path that cannot be resolved. A module's own files that its manifest lists by path, such as `ConnectedMachine.Autorest/Az.ConnectedMachine.psm1` in `Az.ConnectedMachine`, do not stop the block. It does not check modules in other users' `Documents` folders, or a module that enforces a version only inside its own script. `Uninstall-Module` is run with `-Force` because without it PowerShellGet refuses to remove any version that another module names as a dependency, whatever version that module needs; this check replaces that refusal with a version check.
+- Another installed module in this session's module path still needs a version that would be removed, or loads a file from one. The block lists the installed modules in a separate PowerShell process, so nothing is loaded into this session, and reads each module manifest. It stops when a `RequiredModules`, `ModuleList`, or `NestedModules` entry needs an exact version (`RequiredVersion`) that would be removed, or a minimum (`ModuleVersion`) or maximum (`MaximumVersion`, including a wildcard such as `5.*`) version that no remaining version in `C:\Program Files\WindowsPowerShell\Modules` meets, or when a manifest that needs one of these modules cannot be read. It also stops when an entry in `RootModule` (`ModuleToProcess`), `NestedModules`, `RequiredAssemblies`, `ScriptsToProcess`, `TypesToProcess`, `FormatsToProcess`, `FileList`, `RequiredModules`, or `ModuleList`, including the `ModuleName` of a module specification, resolves from the manifest's folder into a version folder that would be removed, whatever name the path contains (for example `..\5.5.4\Accounts.psm1`), or is a path that leads out of the manifest's folder and cannot be resolved. A module's own files that its manifest lists by path, such as `ConnectedMachine.Autorest/Az.ConnectedMachine.psm1` in `Az.ConnectedMachine`, do not stop the block. It does not check modules in other users' `Documents` folders, or a module that enforces a version only inside its own script. `Uninstall-Module` is run with `-Force` because without it PowerShellGet refuses to remove any version that another module names as a dependency, whatever version that module needs; this check replaces that refusal with a version check.
 - A version that needs to be installed, or a version that would be removed, is not available in the repository in `$Repository`, so it could not be installed or restored from there.
 
 After it installs a version, the block reads the installed modules again and repeats the same checks, because `Install-Module` can also install a newer `Az.Accounts` as a dependency. If a check fails at that point, it stops with `The installed versions were kept and no versions were removed`. It prints `RESULT: CHANGED` only after it confirms that the recipe version of `Az.Accounts` is installed for all users and that no version newer than the recipe remains.
@@ -161,6 +161,189 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
     $full = { param([version]$v) [version]::new($v.Major, $v.Minor, [math]::Max($v.Build, 0), [math]::Max($v.Revision, 0)) }
     $allUsersRoot = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'
     $isAllUsers = { param($m) $m.ModuleBase -eq (Join-Path (Join-Path $allUsersRoot $m.Name) ([string]$m.Version)) }
+    function Get-DependentCandidate {
+        # Modules in this session's module path. Windows PowerShell 5.1 can import a module that another module's
+        # NestedModules entry names with a version while it lists modules, and keep its files locked by that process.
+        # So the modules are listed in a separate PowerShell process (a job), which returns only plain values, and
+        # nothing is loaded into this session. The job must finish and end with $end; if it does not, the block stops.
+        param([string]$Outcome)
+        $end = 'End of the module list.'
+        $job = $null
+        $listed = @()
+        try {
+            $job = Start-Job -ArgumentList $env:PSModulePath, $end -ScriptBlock {
+                param([string]$ModulePath, [string]$End)
+                $env:PSModulePath = $ModulePath
+                $ErrorActionPreference = 'Continue'
+                @(Get-Module -ListAvailable) | ForEach-Object {
+                    [pscustomobject]@{ Name = $_.Name; Version = [string]$_.Version; Path = $_.Path; ModuleBase = $_.ModuleBase; Guid = [string]$_.Guid
+                        RequiredModules = @($_.RequiredModules | ForEach-Object { [string]$_.Name }); ModuleList = @($_.ModuleList | ForEach-Object { [string]$_.Name }) }
+                }
+                $End
+            }
+            # Errors that Get-Module reports for single modules are expected, as above, so they are not shown here.
+            $listed = @(Receive-Job -Job $job -Wait -AutoRemoveJob -ErrorAction SilentlyContinue)
+        } catch { $listed = @() }
+        if (-not $job -or $job.State -ne 'Completed' -or $listed.Count -lt 2 -or $listed[-1] -ne $end) {
+            throw "The installed modules could not be listed in a separate PowerShell process. Contact Microsoft support. $Outcome"
+        }
+        @($listed[0..($listed.Count - 2)] | ForEach-Object {
+                [pscustomobject]@{ Name = $_.Name; Version = $_.Version -as [version]; Path = $_.Path; ModuleBase = $_.ModuleBase; Guid = $_.Guid -as [guid]
+                    RequiredModules = @($_.RequiredModules | ForEach-Object { [pscustomobject]@{ Name = $_ } })
+                    ModuleList = @($_.ModuleList | ForEach-Object { [pscustomobject]@{ Name = $_ } }) }
+            } | Sort-Object Path -Unique)
+    }
+    function Get-UnmetDependent {
+        # Lists installed modules whose manifest needs a version of $ModuleName that is not kept: RequiredVersion
+        # is an exact version, ModuleVersion a minimum, and MaximumVersion a maximum. The manifest file is read
+        # because Get-Module reports an exact RequiredModules version as a minimum. Versions are compared as
+        # PowerShell compares them when it loads a module. RequiredModules, ModuleList, and NestedModules entries that name
+        # the module are read; a NestedModules entry that gives only the name needs no particular version. A requirement
+        # that cannot be read is reported as unmet.
+        # ExcludePath lists the module folders that are removed in the same change, so they need nothing.
+        param([string]$ModuleName, [version[]]$KeptVersion, [object[]]$Modules, [string[]]$ExcludePath = @())
+        foreach ($d in $Modules) {
+            if ($d.Name -eq $ModuleName -or $ExcludePath -contains $d.ModuleBase) { continue }
+            # An entry given as a path names the module by its folder or file name; it is read too, so that the path check stops on it.
+            $pathPattern = "(^|[\\/])$([regex]::Escape($ModuleName))([\\/]|\.(psd1|psm1|dll)$|$)"
+            $listed = @(@($d.RequiredModules) + @($d.ModuleList) | Where-Object { $_ -and ($_.Name -eq $ModuleName -or
+                    ($_.Name -match '[\\/]|\.(psd1|psm1|dll)$' -and $_.Name -match $pathPattern)) }).Count -gt 0
+            # A NestedModules entry that names the module with a version is a requirement too: PowerShell loads it from the
+            # module path, and the module fails to import when no installed version meets it. Get-Module does not list such
+            # an entry, so a manifest whose text names the module is read as well, and a manifest whose text cannot be read is
+            # reported. NestedModules entries that give a path are checked by Get-RemovedFileReference.
+            $mentioned = $false
+            if (-not $listed -and $d.Path -like '*.psd1') {
+                try { $mentioned = [IO.File]::ReadAllText($d.Path) -match "(?<![\w.-])$([regex]::Escape($ModuleName))(?![\w-])" } catch { $mentioned = $true }
+            }
+            if (-not ($listed -or $mentioned)) { continue }
+            try {
+                try { $data = Import-PowerShellDataFile -LiteralPath $d.Path -ErrorAction Stop }
+                catch {
+                    if ($listed) { throw }
+                    # A manifest that chooses a value with an expression, such as an if on $PSEdition, is not a data file. Without
+                    # running it, each module specification that names the module, in any branch, is read from the parsed text.
+                    $ast = [Management.Automation.Language.Parser]::ParseFile($d.Path, [ref]$null, [ref]$null)
+                    $data = @{ NestedModules = @($ast.FindAll({ param($n) $n -is [Management.Automation.Language.HashtableAst] -and
+                                @($n.KeyValuePairs | Where-Object { "$($_.Item1.Value)" -eq 'ModuleName' -and $_.Item2.Extent.Text.Trim('''"') -eq $ModuleName }).Count -gt 0 }, $true) |
+                            ForEach-Object { $_.SafeGetValue() }) }
+                }
+                $named = $false
+                $nestedEntries = @(@($data.NestedModules) | Where-Object { $_ -and ([Microsoft.PowerShell.Commands.ModuleSpecification]::new($_)).Name -eq $ModuleName })
+                foreach ($entry in @(@(@($data.RequiredModules) + @($data.ModuleList) | Where-Object { $_ }) + $nestedEntries)) {
+                    $s = [Microsoft.PowerShell.Commands.ModuleSpecification]::new($entry)
+                    # A requirement given as a path to a module file or folder can pin any version, so it is not checked here.
+                    if ($s.Name -match '[\\/]|\.(psd1|psm1|dll)$') { throw "A module is required by a file path: $($s.Name)" }
+                    if ($s.Name -ne $ModuleName) { continue }
+                    $named = $true
+                    # A GUID in the requirement is met only by a kept version whose remaining all-users copy has that GUID.
+                    # A copy in a user's folder, or a version that is not installed yet, does not show the GUID of that copy.
+                    $candidates = $KeptVersion
+                    if ($s.Guid) {
+                        $sharedRoot = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'
+                        $guidVersions = @($Modules | Where-Object { $_.Name -eq $ModuleName -and $_.Guid -eq $s.Guid -and $ExcludePath -notcontains $_.ModuleBase -and
+                                (Split-Path -Parent (Split-Path -Parent $_.ModuleBase)) -eq $sharedRoot } | ForEach-Object { $_.Version })
+                        $candidates = @($KeptVersion | Where-Object { $guidVersions -contains $_ })
+                    }
+                    if ($s.RequiredVersion) {
+                        $ok = $candidates -contains $s.RequiredVersion
+                        $needs = "exactly $($s.RequiredVersion)"
+                    } elseif ($s.Version -or $s.MaximumVersion) {
+                        $max = $null
+                        if ($s.MaximumVersion) { $max = [version]($s.MaximumVersion -replace '\*', '999999999') }
+                        $ok = @($candidates | Where-Object { (-not $s.Version -or $_ -ge $s.Version) -and (-not $max -or $_ -le $max) }).Count -gt 0
+                        $range = @()
+                        if ($s.Version) { $range += "$($s.Version) or later" }
+                        if ($s.MaximumVersion) { $range += "at most $($s.MaximumVersion)" }
+                        $needs = $range -join ' and '
+                    } else { continue }
+                    if ($s.Guid) { $needs += " with GUID $($s.Guid)" }
+                    if (-not $ok) { [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Needs = "$ModuleName $needs" } }
+                }
+                # A manifest that only mentions the module, for example in its description, needs nothing.
+                if (-not $named -and $listed) { throw "$ModuleName is required in a form that this check does not read." }
+            } catch {
+                [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Needs = "a $ModuleName version that could not be read from $($d.Path)" }
+            }
+        }
+    }
+    function Get-RemovedFileReference {
+        # Lists every remaining module whose manifest loads a file from a module folder that is removed in the same change,
+        # including other versions of the module being changed and modules in users' folders. ExcludePath lists the removed
+        # folders; only modules in those folders are skipped. It reads RootModule (ModuleToProcess), NestedModules,
+        # RequiredAssemblies, ScriptsToProcess, TypesToProcess, FormatsToProcess, FileList, RequiredModules, and ModuleList,
+        # and resolves each entry from that manifest's folder. An entry inside that folder is fine. An entry that cannot be
+        # resolved, and could lead out of that folder ('..', a full path, or an environment variable), is reported as well.
+        # To stay fast, a manifest is read only when its text names a removed folder or has such a path.
+        param([object[]]$Modules, [string[]]$ExcludePath = @())
+        $sep = [IO.Path]::DirectorySeparatorChar
+        $removed = @($ExcludePath | Where-Object { $_ } | ForEach-Object { [IO.Path]::GetFullPath(($_ -replace '[\\/]', $sep)).TrimEnd($sep) })
+        if ($removed.Count -eq 0) { return }
+        $hint = (@($removed | ForEach-Object { [regex]::Escape((Split-Path -Leaf $_)) }) +
+            @('\.\.', '[%$~]', '(?<![A-Za-z0-9])[A-Za-z]:[\\/]', '[''"]\s*[\\/]')) -join '|'
+        $envPattern = [regex]::new('\$\{?env:(\w+)\}?', 'IgnoreCase')
+        $isUnder = { param([string]$Path) @($removed | Where-Object { $Path.Equals($_, [StringComparison]::OrdinalIgnoreCase) -or
+                $Path.StartsWith($_ + $sep, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 }
+        foreach ($d in $Modules) {
+            if ($d.Path -notlike '*.psd1') { continue }
+            $base = [IO.Path]::GetFullPath(([string]$d.ModuleBase -replace '[\\/]', $sep)).TrimEnd($sep)
+            if (& $isUnder $base) { continue }
+            try {
+                if ([IO.File]::ReadAllText($d.Path) -notmatch $hint) { continue }
+                try { $data = Import-PowerShellDataFile -LiteralPath $d.Path -ErrorAction Stop }
+                catch {
+                    # A manifest that picks a value with code, such as an if on $PSEdition, cannot be read as data. Its text is
+                    # parsed instead, without running it, and every string in a field below counts, in whichever branch it is.
+                    $parseErrors = $null
+                    $table = [Management.Automation.Language.Parser]::ParseFile($d.Path, [ref]$null, [ref]$parseErrors).Find({ param($n)
+                            $n -is [Management.Automation.Language.HashtableAst] }, $true)
+                    if (@($parseErrors).Count -gt 0 -or -not $table) { throw }
+                    $data = @{}
+                    $fileKeys = 'RootModule', 'ModuleToProcess', 'NestedModules', 'RequiredAssemblies', 'ScriptsToProcess',
+                        'TypesToProcess', 'FormatsToProcess', 'FileList', 'RequiredModules', 'ModuleList'
+                    foreach ($pair in $table.KeyValuePairs) {
+                        $key = [string]$pair.Item1.Value
+                        # A file field whose value is built by an expression (joined strings, -f, a method call, or a
+                        # string that embeds anything other than $env:NAME) cannot be resolved without running it, so it stops the block.
+                        if ($fileKeys -contains $key -and @($pair.Item2.FindAll({ param($n)
+                                    ($n -is [Management.Automation.Language.BinaryExpressionAst] -and $n.Operator -in 'Plus', 'Format', 'Join') -or
+                                    $n -is [Management.Automation.Language.InvokeMemberExpressionAst] -or $n -is [Management.Automation.Language.SubExpressionAst] -or
+                                    ($n -is [Management.Automation.Language.ExpandableStringExpressionAst] -and @($n.NestedExpressions | Where-Object {
+                                            -not ($_ -is [Management.Automation.Language.VariableExpressionAst] -and $_.VariablePath.DriveName -eq 'env') }).Count -gt 0) }, $true)).Count -gt 0) {
+                            $data[$key] = @('$computed-path')
+                            continue
+                        }
+                        $data[$key] = @($pair.Item2.FindAll({ param($n) $n -is [Management.Automation.Language.StringConstantExpressionAst] -or
+                                $n -is [Management.Automation.Language.ExpandableStringExpressionAst] }, $true) | ForEach-Object { $_.Value })
+                    }
+                }
+            } catch {
+                [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Reference = "a file that could not be read from $($d.Path)" }
+                continue
+            }
+            $refs = @(foreach ($key in 'RootModule', 'ModuleToProcess', 'NestedModules', 'RequiredAssemblies', 'ScriptsToProcess',
+                    'TypesToProcess', 'FormatsToProcess', 'FileList', 'RequiredModules', 'ModuleList') {
+                foreach ($e in @($data[$key])) { if ($e -is [hashtable]) { [string]$e.ModuleName } elseif ($e) { [string]$e } }
+            })
+            foreach ($ref in @($refs | Where-Object { $_ })) {
+                $leaves = $ref -match '\.\.|[%$]|^\s*([\\/]|[A-Za-z]:)'
+                # Environment variables are expanded in both forms, $env:NAME and %NAME%.
+                $expanded = $envPattern.Replace(($ref -replace '[\\/]', $sep), [Text.RegularExpressions.MatchEvaluator] { param($m)
+                        $v = [Environment]::GetEnvironmentVariable($m.Groups[1].Value); if ($null -eq $v) { $m.Value } else { $v } })
+                $expanded = [Environment]::ExpandEnvironmentVariables($expanded)
+                $full = $null
+                # Another variable, an environment variable that is not set, or a short (8.3) name on such a path cannot be resolved here.
+                if ($expanded -notmatch '[%$]' -and -not ($leaves -and $expanded -match '~')) {
+                    try { $full = [IO.Path]::GetFullPath([IO.Path]::Combine($base, $expanded)).TrimEnd($sep) } catch { $full = $null }
+                }
+                if ($null -eq $full) {
+                    if ($leaves) { [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Reference = "$ref, a path that cannot be resolved" } }
+                } elseif (& $isUnder $full) {
+                    [pscustomobject]@{ Name = $d.Name; Version = $d.Version; Reference = $full }
+                }
+            }
+        }
+    }
 
     $getPlan = {
         param([string]$Outcome)
@@ -185,60 +368,20 @@ Leave `$Repository` set to `'PSGallery'` unless your organization requires an ap
                 (($unmanaged | ForEach-Object { "$($_.Name) $($_.Version) at $($_.ModuleBase)" }) -join '; ') + ". Do not delete them by hand; contact Microsoft support. $Outcome")
         }
 
-        # Every remaining module that names a module version that would be removed must still find a version it accepts.
+        # Every remaining module must still find a version that it accepts of each module whose newer versions would be
+        # removed, and must not load a file from a version folder that would be removed.
         $removeBases = @($remove | ForEach-Object { $_.ModuleBase })
         $removeNames = @($remove | ForEach-Object { $_.Name } | Sort-Object -Unique)
-        $broken = @()
         if ($removeNames.Count) {
-            $remainingOf = { param($n)
-                @($available | Where-Object { $_.Name -eq $n -and (& $isAllUsers $_) -and $removeBases -notcontains $_.ModuleBase } | ForEach-Object { [version]$_.Version }) +
-                @($install | Where-Object { $_.Name -eq $n } | ForEach-Object { $_.Version })
+            $modules = @(Get-DependentCandidate -Outcome $Outcome)
+            $broken = @(@(foreach ($n in $removeNames) {
+                    $kept = @(@($available | Where-Object { $_.Name -eq $n -and (& $isAllUsers $_) -and $removeBases -notcontains $_.ModuleBase } | ForEach-Object { [version]$_.Version }) +
+                        @($install | Where-Object { $_.Name -eq $n } | ForEach-Object { [version]$_.Version }))
+                    Get-UnmetDependent -ModuleName $n -KeptVersion $kept -Modules $modules -ExcludePath $removeBases | ForEach-Object { "$($_.Name) $($_.Version) needs $($_.Needs)" }
+                }) + @(Get-RemovedFileReference -Modules $modules -ExcludePath $removeBases | ForEach-Object { "$($_.Name) $($_.Version) loads $($_.Reference)" }))
+            if ($broken.Count) {
+                throw ('Removing the newer versions would break these modules: ' + ($broken -join '; ') + ". Contact Microsoft support. $Outcome")
             }
-            try {
-                $manifests = @(foreach ($root in @($env:PSModulePath -split [IO.Path]::PathSeparator | Where-Object { $_ -and (Test-Path -LiteralPath $_) })) {
-                    foreach ($dir in @(Get-ChildItem -LiteralPath $root -Directory)) {
-                        @(Get-ChildItem -LiteralPath $dir.FullName -Filter "$($dir.Name).psd1" -File) +
-                            @(Get-ChildItem -LiteralPath $dir.FullName -Directory | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Filter "$($dir.Name).psd1" -File })
-                    }
-                })
-            } catch {
-                throw "The installed modules could not be listed: $($_.Exception.Message) $Outcome"
-            }
-            foreach ($file in $manifests) {
-                if ($removeBases -contains $file.DirectoryName) { continue }
-                $text = Get-Content -LiteralPath $file.FullName -Raw
-                if (-not @($removeNames | Where-Object { $text -like "*$_*" }).Count) { continue }
-                try { $data = Import-PowerShellDataFile -LiteralPath $file.FullName } catch { $broken += "$($file.FullName) cannot be read"; continue }
-                foreach ($entry in @($data.RequiredModules) + @($data.ModuleList) + @($data.NestedModules)) {
-                    if ($entry -is [string]) {
-                        if ($removeNames -contains $entry) { $spec = @{ ModuleName = $entry } }
-                        elseif ($entry -match '[\\/]') {
-                            # A path is resolved from the manifest's folder. A module's own files do not stop the block;
-                            # a file in a version that would be removed, or a path that cannot be resolved, does.
-                            $target = $null
-                            try { $target = [IO.Path]::GetFullPath([IO.Path]::Combine($file.DirectoryName, [Environment]::ExpandEnvironmentVariables($entry))) } catch { $target = $null }
-                            if (-not $target -or $target.Contains('%')) { $broken += "$($file.FullName) loads $entry by a path that cannot be resolved"; continue }
-                            if (@($removeBases | Where-Object { $target -eq $_ -or $target.StartsWith($_.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) }).Count) {
-                                $broken += "$($file.FullName) loads $entry by path from a version that would be removed"
-                            }
-                            continue
-                        } else { continue }
-                    } elseif ($entry -is [hashtable]) {
-                        if ($removeNames -notcontains $entry.ModuleName) { continue }
-                        $spec = $entry
-                    } else { continue }
-                    $ok = @(& $remainingOf $spec.ModuleName | Where-Object {
-                        $v = $_
-                        (-not $spec.RequiredVersion -or ($spec.RequiredVersion -as [version]) -eq $v) -and
-                        (-not $spec.ModuleVersion -or (($min = $spec.ModuleVersion -as [version]) -and $v -ge $min)) -and
-                        (-not $spec.MaximumVersion -or (($max = $spec.MaximumVersion -as [version]) -and $v -le $max))
-                    }).Count
-                    if (-not $ok) { $broken += "$($file.FullName) needs $($spec.ModuleName) $($spec.RequiredVersion)$($spec.ModuleVersion)$($spec.MaximumVersion)" }
-                }
-            }
-        }
-        if ($broken.Count) {
-            throw ('Removing the newer versions would break these modules: ' + ($broken -join '; ') + ". Contact Microsoft support. $Outcome")
         }
 
         # Rollback restores removed versions from $Repository, so it must have them and every version to install.
@@ -309,9 +452,14 @@ Expected result: `RESULT: CHANGED` or `RESULT: NO CHANGE NEEDED`. Any other endi
 
 ## Rollback
 
-To restore a version that Step 1 removed, take the name and version from its `REMOVING:` line, put them in the block below, and run it in an elevated Windows PowerShell 5.1 session on the same node. Set `$Repository` to the same repository that you used in Step 1. The block first confirms with `Find-Module` that this exact version is available in that repository; if it is not, it stops without installing anything.
+Use this block in one of two cases:
 
-**Changes:** installs that module version for all users from `$Repository`, together with the dependencies that version declares, which can include a newer `Az.Accounts`. It does not remove other versions. Restoring a version that Step 1 removed can bring this error back, so restore it only after the update completes and only if you need it for other work.
+- **Step 1 stopped after a `REMOVING:` line.** Leave the update stopped. Restore each version that the message lists as removed, then contact Microsoft support. Do not resume the update.
+- **The update completed, and you need a version that Step 1 removed for other work.** This is optional. A restored version that is newer than the recipe can bring this error back, so run [Issue Validation](#issue-validation) before the next update.
+
+Take the name and version from the `REMOVING:` line, put them in the block below, and run it in an elevated Windows PowerShell 5.1 session on the same node. Set `$Repository` to the same repository that you used in Step 1. The block first confirms with `Find-Module` that this exact version is available in that repository; if it is not, it stops without installing anything.
+
+**Changes:** installs that module version for all users from `$Repository`, together with the dependencies that version declares, which can include a newer `Az.Accounts`. It does not remove other versions.
 
 **Paste or run the whole block at once, not line by line.**
 
