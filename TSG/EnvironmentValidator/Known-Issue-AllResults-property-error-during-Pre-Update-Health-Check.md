@@ -121,7 +121,9 @@ Invoke-SolutionUpdatePrecheck -SystemHealth
 Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate
 ```
 
-Confirm that `HealthState` is `Success` or `InProgress` (not `Failure`).
+Wait until `HealthState` is no longer `InProgress`, then confirm that it is `Success` with a current
+`HealthCheckDate`. `InProgress` means the new health check has not finished, so it does not show
+that the fix worked. Run Step 4 only after the check has finished.
 
 
 ### Step 4: Verify the validator now passes
