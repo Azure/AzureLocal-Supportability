@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local", "Storage Spaces Direct"],
   "detector": {
     "type": "command",
     "signal": "Get-PhysicalDisk | Select-Object DeviceId,FriendlyName,SerialNumber,UniqueId,HealthStatus,OperationalStatus,Usage,CanPool,CannotPoolReason"
-  },
-  "validation": {
-    "fidelity_level": "L1",
-    "technical_grade": null,
-    "reproduction_substrate": "either",
-    "automation_status": "ready",
-    "last_validated": "2026-09-08",
-    "spec_ref": "AzLocal_Storage_PhysicalDiskVerificationStuck"
   }
 }
 -->

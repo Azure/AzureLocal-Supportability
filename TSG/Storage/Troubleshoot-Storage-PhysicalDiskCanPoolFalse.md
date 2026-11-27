@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local", "Storage Spaces Direct"],
   "detector": {
     "type": "command",
     "signal": "Get-PhysicalDisk | Select-Object DeviceId,FriendlyName,SerialNumber,UniqueId,HealthStatus,OperationalStatus,Usage,CanPool,CannotPoolReason"
-  },
-  "validation": {
-    "fidelity_level": "L1",
-    "technical_grade": null,
-    "reproduction_substrate": "either",
-    "automation_status": "ready",
-    "last_validated": "2026-08-17",
-    "spec_ref": "AzLocal_Storage_PhysicalDiskCanPoolFalseGeneral"
   }
 }
 -->
@@ -35,7 +27,6 @@
 - [Rollback](#rollback)
 - [Escalation and evidence package](#escalation-and-evidence-package)
 - [Prevention and monitoring](#prevention-and-monitoring)
-- [Future test automation metadata](#future-test-automation-metadata)
 - [Related documentation](#related-documentation)
 
 ## Article metadata
@@ -64,7 +55,7 @@
 | Downtime or workload risk | None for diagnosis. No node drain, reboot, or live migration is required, so VMs stay online. Disk state changes, manual pool add, firmware updates, and destructive reset carry maintenance risk. A manual pool add starts background rebalance I/O that can run for minutes to hours depending on data volume. |
 | Escalate immediately if | Cluster quorum is at risk, a virtual disk is detached or degraded, the disk may contain data, the model or firmware is not vendor-approved, or verification stays stuck after the normal wait of about 10 to 15 minutes. |
 
-`CanPool=False` is not automatically a fault. It can be an expected transitional state while Health Service verifies a disk, or it can mean the disk is already in a pool. This guide is the general decision-tree router for all documented `CannotPoolReason` values. It delegates the persistent Health Service verification-stuck branch to the dedicated `AzLocal_Storage_PhysicalDiskVerificationStuck` TSG and PR 333 ownership path.
+`CanPool=False` is not automatically a fault. It can be an expected transitional state while Health Service verifies a disk, or it can mean the disk is already in a pool. This guide is the general decision-tree router for all documented `CannotPoolReason` values. It delegates the persistent Health Service verification-stuck branch to [Troubleshoot physical disks stuck in verification](./Troubleshoot-Storage-PhysicalDiskVerificationStuck.md).
 
 > [!NOTE]
 > Scope: this is a storage disk-eligibility issue. It is not a networking or fabric problem, and it is not an OEM hardware or firmware problem unless `CannotPoolReason` is `Hardware Not Compliant` or `Firmware Not Compliant`. If you own networking only, hand this to the storage or cluster administrator.
@@ -85,7 +76,7 @@ CanPool          : False
 CannotPoolReason : <documented reason>
 ```
 
-This guide does not repair a wedged Health Service provider configuration. If `CannotPoolReason` is `Verification In Progress` or `Verification Failed` and the status does not clear after the normal wait of about 10 to 15 minutes, stop this guide and use the dedicated Health Service verification-stuck TSG from PR 333 or spec `AzLocal_Storage_PhysicalDiskVerificationStuck`.
+This guide does not repair a wedged Health Service provider configuration. If `CannotPoolReason` is `Verification In Progress` or `Verification Failed` and the status does not clear after the normal wait of about 10 to 15 minutes, stop this guide and use [Troubleshoot physical disks stuck in verification](./Troubleshoot-Storage-PhysicalDiskVerificationStuck.md).
 
 ## Terms
 
@@ -244,7 +235,7 @@ Get-VirtualDisk                      | Format-Table FriendlyName, HealthStatus, 
 ```
 
 > [!WARNING]
-> Do not reset or manually add disks while verification is still in progress or failed. If `Verification In Progress` or `Verification Failed` remains unchanged after the normal wait of about 10 to 15 minutes and the disk is clean, supported, online, and symmetric, stop this decision tree and use the dedicated Health Service verification-stuck guide, [Troubleshoot physical disks stuck in verification (`CanPool=False`)](./Troubleshoot-Storage-PhysicalDiskVerificationStuck.md) (spec `AzLocal_Storage_PhysicalDiskVerificationStuck`), which owns Health resource, SDDC Group, and provider-list repair. If that guide is not yet present in your copy of this repo, engage Microsoft Support (CSS) for the Health Service / SDDC provider-list repair rather than editing the `Providers` cluster parameter yourself.
+> Do not reset or manually add disks while verification is still in progress or failed. If `Verification In Progress` or `Verification Failed` remains unchanged after the normal wait of about 10 to 15 minutes and the disk is clean, supported, online, and symmetric, stop this decision tree and use the dedicated Health Service verification-stuck guide, [Troubleshoot physical disks stuck in verification (`CanPool=False`)](./Troubleshoot-Storage-PhysicalDiskVerificationStuck.md), which owns Health resource, SDDC Group, and provider-list repair. If that guide is not yet present in your copy of this repo, engage Microsoft Support (CSS) for the Health Service / SDDC provider-list repair rather than editing the `Providers` cluster parameter yourself.
 
 ### Step 2e: Resolve `Hardware Not Compliant` or `Firmware Not Compliant`
 
@@ -570,23 +561,6 @@ Also collect:
 - Avoid reusing disks from prior deployments without confirming they are wiped of stale pool metadata.
 - Record serial, slot, firmware, and node mapping before and after each physical disk change.
 - Watch `Get-StorageJob`, `Get-HealthFault`, and pool allocated size after manual add until the cluster settles.
-
-## Future test automation metadata
-
-| Field | Value |
-| --- | --- |
-| Detector type | `command` |
-| Detector signal | `Get-PhysicalDisk` with `CanPool` and `CannotPoolReason` |
-| Inject strategy | VM-first scratch VHD slices for offline, read-only, insufficient-capacity, and stale-metadata behavior; hardware fallback only for OEM compliance, removable media, and physical disk health cases |
-| Mitigation selector | Branch-specific command markers: `Set-Disk`, `Reset-PhysicalDisk`, `Add-PhysicalDisk`, and Support Diagnostics read-only collection |
-| Safety floor | No reset unless the disk is confirmed outside every active non-primordial pool and intended to be wiped |
-| Rollback check | Re-run `Get-PhysicalDisk`, `Get-StoragePool`, `Get-VirtualDisk`, `Get-StorageJob`, and `Get-HealthFault` |
-| Reproduction substrate | `either`, VM first with hardware fallback |
-| Fidelity level | `L1`, live read-only validation complete for the observed reasons |
-| Technical grade | JSON `null` until TSG-FORGE live evidence completes |
-| Automation status | `ready` |
-| Spec reference | `AzLocal_Storage_PhysicalDiskCanPoolFalseGeneral` |
-| Last validated | `2026-08-17`, live-observed reasons `In a Pool` and `Insufficient Capacity` on a nested Storage Spaces Direct lab cluster |
 
 ## Related documentation
 

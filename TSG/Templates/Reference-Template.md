@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "reference",
   "products": ["replace-me"],
   "detector": {
     "type": "none",
     "signal": null
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "not-assessed",
-    "last_validated": null,
-    "spec_ref": ""
   }
 }
 -->
@@ -36,7 +28,7 @@ Style and publishing rules:
 
 Metadata marker:
 - Keep exactly one tsg-metadata HTML comment in each generated article.
-- Before publishing, replace products. If you select a detector, update detector.type and detector.signal together, then update validation fields if TSG-FORGE validation has run.
+- Before publishing, replace products. If you select a detector, update detector.type and detector.signal together.
 -->
 
 # {Title}
@@ -174,7 +166,7 @@ Update this table of contents if you rename, add, or remove sections.
 - [Examples](#examples)
 - [Validation](#validation)
 - [Configuration comparison](#configuration-comparison)
-- [Future automation metadata](#future-automation-metadata)
+- [Metadata marker](#metadata-marker)
 - [Related documentation](#related-documentation)
 
 ## Configuration reference
@@ -380,36 +372,26 @@ Validation command:
 | State-changing risk label | {Not applicable, [LOW RISK], [MEDIUM RISK], or [HIGH RISK]} | {Not applicable, [LOW RISK], [MEDIUM RISK], or [HIGH RISK]} | {Not applicable, [LOW RISK], [MEDIUM RISK], or [HIGH RISK]} |
 | Validation | {How to validate} | {How to validate} | {How to validate} |
 
-## Future automation metadata
+## Metadata marker
 
-Keep the `tsg-metadata` marker at the top of the generated article. Validate it against the [metadata JSON Schema](../Templates/tsg-metadata.schema.json) before publishing, then update these fields so future tooling can route, validate, and automate the reference without changing the article type.
+Keep the `tsg-metadata` marker at the top of the generated article. Validate it against the [metadata JSON Schema](../Templates/tsg-metadata.schema.json) before publishing, then update these fields so readers and tooling can find and route the reference without changing the article type. The marker records discovery metadata only: document type, applicable products, and detector. Keep validation records, such as test runs, grades, and lab details, out of the article and its marker.
 
 The schema link above is correct after copying this template to a component root folder, for example `TSG/Storage/Reference-Example.md`. If the article is copied into a nested topic folder, add one `../` for each extra folder level, for example `../../Templates/tsg-metadata.schema.json` from `TSG/Storage/Topic/Reference-Example.md`.
 
 | Metadata field | Required value |
 | -------------- | -------------- |
-| `schema` | `azure-local-supportability/tsg-metadata/v1` |
+| `schema` | `azure-local-supportability/tsg-metadata/v2` |
 | `document_type` | `reference` |
 | `products` | {Replace `replace-me` with explicit applicable products} |
-| `detector.type` | `none` unless this reference has an automation detector |
+| `detector.type` | `none` unless this reference has a detector |
 | `detector.signal` | Use JSON `null` when `detector.type` is `none`; when selecting a detector, set `detector.type` and `detector.signal` together. |
-| `validation.fidelity_level` | `L0` until live or static validation proves a higher fidelity level |
-| `validation.technical_grade` | JSON `null` until TSG-FORGE produces authoritative grade `A`, `B`, `C`, or `F` with report or spec evidence |
-| `validation.reproduction_substrate` | `none` unless validation requires `vm`, `hardware`, or `either` |
-| `validation.automation_status` | `not-assessed`, `scaffold`, `ready`, `proven`, `blocked`, or `manual` |
-| `validation.last_validated` | `null` or a date in `YYYY-MM-DD` format |
-| `validation.spec_ref` | {Path to the validation spec, or an empty string} |
 
-Use the definitions below when completing metadata. Keep execution surface separate from automation status: execution surface describes where a consumer runs the guidance, such as on-device, cloud, or mixed. Automation status describes how ready the automation is.
+Use the definitions below when completing metadata. Execution surface describes where a consumer runs the guidance, such as on-device, cloud, or mixed. Record it in the article body, not in the metadata marker.
 
 | Vocabulary | Values and meaning |
 | ---------- | ------------------ |
-| Fidelity level | `L0`: static lint and persona review only. `L1`: read-only commands or checks were validated. `L2`: faithful proxy or data-source validation was exercised. `L3`: scratch-object or isolated reproduction was exercised. `L4`: full inject, detect, mitigate, and revalidate loop was proven. |
-| Technical grade | `validation.technical_grade` is the authoritative technical grade. Use JSON `null` until TSG-FORGE produces `A`, `B`, `C`, or `F` with report or spec evidence. |
-| Reproduction substrate | `none`: no live substrate. `vm`: disposable virtual or nested environment. `hardware`: physical lab hardware. `either`: either VM or hardware can reproduce the validation. |
-| Automation status | `not-assessed`: no automation assessment yet. `scaffold`: metadata or helpers exist but are incomplete. `ready`: automation is designed and ready to run. `proven`: automation has been validated and has evidence. `blocked`: automation cannot proceed until a dependency is removed. `manual`: human validation is required. |
 | Detector type and signal | Allowed detector types are `command`, `control-plane`, `envchecker`, `eventlog`, `feature`, `manual`, `none`, `portal`, `registry`, `service`, and `telemetry`. `none` with `signal` set to JSON `null` means no detector. If the article uses a detector, choose the detector type and set `signal` to the command, event, telemetry table, portal location, or other observable signal together. |
-| Execution surface | This is separate from `validation.automation_status`. Use `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, or `thin`. `thin` means prose-only reference content with no executable diagnostic or action. |
+| Execution surface | Use `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, or `thin`. `thin` means prose-only reference content with no executable diagnostic or action. |
 | Admin surface state, if used | Use `shown`, `not-evident`, or `absent`. `not-evident` means the surface was checked and the issue is not expected there. `absent` means the surface is uncharacterized and is not publish-ready. |
 
 ## Related documentation

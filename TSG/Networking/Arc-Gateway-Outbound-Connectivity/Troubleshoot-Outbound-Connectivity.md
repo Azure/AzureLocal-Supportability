@@ -71,8 +71,6 @@ The module supplements built-in readiness checks with:
 > [!NOTE]
 > This article documents **AzStackHci.DiagnosticSettings 0.7.0** and connectivity output schema **1.2**. See [Key parameter changes from previous versions](#key-parameter-changes-from-previous-versions) for changes affecting earlier examples.
 
-**Validation scope:** Reviewed against the installed 0.7.0 module source, with static PowerShell checks and synthetic result-handling tests. The procedures have not been validated on a live Azure Local cluster as part of this article revision.
-
 ### Install and run connectivity tests
 
 1. **[READ-ONLY] Check the PowerShell version and installed modules.** Expect PowerShell `5.1` with edition `Desktop`, and note whether Environment Validator is installed. Risk is not applicable to this inventory check.
@@ -602,20 +600,12 @@ If the failure persists, open a support request through the Azure portal. Provid
 
 <!-- tsg-metadata
 {
-    "schema": "azure-local-supportability/tsg-metadata/v1",
+    "schema": "azure-local-supportability/tsg-metadata/v2",
     "document_type": "troubleshoot",
     "products": ["Azure Local - connected hyperconverged deployments", "Azure Local - connected disaggregated deployments"],
     "detector": {
         "type": "command",
         "signal": "Test-AzureLocalConnectivity: ResultCategory and RedirectDisposition; cluster node Collected and Error"
-    },
-    "validation": {
-        "fidelity_level": "L0",
-        "technical_grade": null,
-        "reproduction_substrate": "none",
-        "automation_status": "not-assessed",
-        "last_validated": "2026-09-28",
-        "spec_ref": ""
     }
 }
 -->

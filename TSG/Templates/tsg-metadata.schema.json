@@ -2,18 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/Azure/AzureLocal-Supportability/main/TSG/Templates/tsg-metadata.schema.json",
   "title": "Azure Local Supportability TSG metadata",
+  "description": "Discovery metadata for an Azure Local Supportability article: document type, applicable products, and detector. Validation records, such as test runs, grades, and lab details, are not part of this marker.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema",
     "document_type",
     "products",
-    "detector",
-    "validation"
+    "detector"
   ],
   "properties": {
     "schema": {
-      "const": "azure-local-supportability/tsg-metadata/v1"
+      "const": "azure-local-supportability/tsg-metadata/v2"
     },
     "document_type": {
       "description": "Public article template type.",
@@ -30,7 +30,8 @@
       "minItems": 1,
       "items": {
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "pattern": "\\S"
       }
     },
     "detector": {
@@ -60,7 +61,8 @@
             "properties": {
               "signal": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "pattern": "\\S"
               }
             }
           }
@@ -91,128 +93,6 @@
           ]
         }
       }
-    },
-    "validation": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "fidelity_level",
-        "technical_grade",
-        "reproduction_substrate",
-        "automation_status",
-        "last_validated",
-        "spec_ref"
-      ],
-      "properties": {
-        "fidelity_level": {
-          "description": "Validation depth from static review (L0) to a full live loop (L4).",
-          "enum": [
-            "L0",
-            "L1",
-            "L2",
-            "L3",
-            "L4"
-          ]
-        },
-        "technical_grade": {
-          "description": "TSG-FORGE technical grade, or null until graded.",
-          "oneOf": [
-            {
-              "type": "null"
-            },
-            {
-              "enum": [
-                "A",
-                "B",
-                "C",
-                "F"
-              ]
-            }
-          ]
-        },
-        "reproduction_substrate": {
-          "description": "Lab substrate required to reproduce the validation.",
-          "enum": [
-            "either",
-            "hardware",
-            "none",
-            "vm"
-          ]
-        },
-        "automation_status": {
-          "description": "Lifecycle state of the validation automation.",
-          "enum": [
-            "blocked",
-            "manual",
-            "not-assessed",
-            "proven",
-            "ready",
-            "scaffold"
-          ]
-        },
-        "last_validated": {
-          "description": "ISO date of the latest qualifying validation, or null.",
-          "oneOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "string",
-              "format": "date"
-            }
-          ]
-        },
-        "spec_ref": {
-          "description": "Internal TSG-FORGE specification or report reference.",
-          "type": "string"
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "automation_status": {
-                "const": "proven"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "fidelity_level": {
-                "enum": [
-                  "L1",
-                  "L2",
-                  "L3",
-                  "L4"
-                ]
-              },
-              "technical_grade": {
-                "enum": [
-                  "A",
-                  "B",
-                  "C",
-                  "F"
-                ]
-              },
-              "reproduction_substrate": {
-                "enum": [
-                  "vm",
-                  "hardware",
-                  "either"
-                ]
-              },
-              "last_validated": {
-                "type": "string",
-                "format": "date"
-              },
-              "spec_ref": {
-                "type": "string",
-                "minLength": 1
-              }
-            }
-          }
-        }
-      ]
     }
   }
 }

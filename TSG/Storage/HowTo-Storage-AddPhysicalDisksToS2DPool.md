@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "how-to",
   "products": ["Azure Local"],
   "detector": {
     "type": "command",
     "signal": "Add-PhysicalDisk"
-  },
-  "validation": {
-    "fidelity_level": "L3",
-    "technical_grade": null,
-    "reproduction_substrate": "either",
-    "automation_status": "ready",
-    "last_validated": "2026-08-17",
-    "spec_ref": "AzLocal_Storage_AddPhysicalDisksToS2DPool"
   }
 }
 -->
@@ -37,7 +29,7 @@
 
 ## At a Glance
 
-**Bottom line:** Insert the same number of supported disks into each node, then let Storage Spaces Direct (S2D) claim them. On a healthy cluster, S2D automatically claims eligible disks within a few minutes (about 3 minutes in lab validation). Confirm the pool grew, then verify health. Volume expansion, if it is needed at all, waits until storage jobs finish.
+**Bottom line:** Insert the same number of supported disks into each node, then let Storage Spaces Direct (S2D) claim them. On a healthy cluster, S2D automatically claims eligible disks within a few minutes. Confirm the pool grew, then verify health. Volume expansion, if it is needed at all, waits until storage jobs finish.
 
 - **Impact:** Online capacity expansion. Running VMs stay online; no downtime or live migration is expected. Background redistribution jobs may add storage latency until they settle.
 - **Owner:** The cluster storage administrator runs the procedure. Involve the hardware OEM for disk seating, supported models, and firmware. Escalate to Microsoft CSS if disks stay `CanPool=False` or the pool is unhealthy.
@@ -242,7 +234,7 @@ Expected result:
 
 ### Step 3: Wait for Automatic Pooling
 
-Storage Spaces Direct normally claims eligible disks and adds them to the pool automatically. Allow roughly 5 to 10 minutes for this to happen; in lab validation S2D claimed an eligible disk in about 3 minutes. Only move to the manual step below if the disks still report `CanPool=True` after that window.
+Storage Spaces Direct normally claims eligible disks and adds them to the pool automatically. Allow roughly 5 to 10 minutes for this to happen. Only move to the manual step below if the disks still report `CanPool=True` after that window.
 
 ```powershell
 # Look for unclaimed eligible disks

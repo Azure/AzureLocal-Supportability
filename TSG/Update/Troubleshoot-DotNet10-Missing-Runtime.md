@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local lifecycle management using .NET 10"],
   "detector": {
     "type": "command",
     "signal": "dotnet.exe --list-runtimes; Get-Service ECEAgent; Get-ClusterGroup *orch*"
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "manual",
-    "last_validated": null,
-    "spec_ref": ""
   }
 }
 -->

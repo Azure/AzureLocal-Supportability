@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "how-to",
   "products": ["replace-me"],
   "detector": {
     "type": "none",
     "signal": null
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "not-assessed",
-    "last_validated": null,
-    "spec_ref": ""
   }
 }
 -->
@@ -212,9 +204,8 @@ Do not proceed unless every row below is satisfied.
 - [Troubleshooting](#troubleshooting)
 - [Handoff and escalation package](#handoff-and-escalation-package)
 - [Evidence to collect](#evidence-to-collect)
-- [Claims and validation evidence](#claims-and-validation-evidence)
+- [Claims and evidence](#claims-and-evidence)
 - [Metadata vocabulary](#metadata-vocabulary)
-- [Future test automation metadata](#future-test-automation-metadata)
 - [Next steps](#next-steps)
 - [References](#references)
 
@@ -438,18 +429,18 @@ Collect enough evidence for support, audit, or PR review without exposing secret
 | {Evidence item 1} | {Command, portal page, event log, component log, or public tool.} | {Values to redact.} | {How this confirms success or explains failure.} |
 | {Evidence item 2} | {Command, portal page, event log, component log, or public tool.} | {Values to redact.} | {How this confirms success or explains failure.} |
 
-## Claims and validation evidence
+## Claims and evidence
 
-Use this table for mechanism statements, version requirements, safety claims, and rollback claims. Do not publish a technical claim without a source or validation status.
+Use this table for mechanism statements, version requirements, safety claims, and rollback claims. Do not publish a technical claim without a source. Record test runs and other validation in the pull request description, not in the article.
 
-| Claim | Source or evidence | Tested status | Failure mode covered | Rollback proof |
-| --- | --- | --- | --- | --- |
-| {Technical claim 1} | {Public Microsoft documentation, command output, lab validation, or product source summary that supports the claim.} | {Not tested, static-reviewed, read-only validated, lab validated, or customer validated.} | {What can go wrong if the claim is false or incomplete.} | {How rollback was tested or why rollback is not available.} |
-| {Technical claim 2} | {Public Microsoft documentation, command output, lab validation, or product source summary that supports the claim.} | {Not tested, static-reviewed, read-only validated, lab validated, or customer validated.} | {What can go wrong if the claim is false or incomplete.} | {How rollback was tested or why rollback is not available.} |
+| Claim | Source or evidence | Failure mode covered | Rollback |
+| --- | --- | --- | --- |
+| {Technical claim 1} | {Public Microsoft documentation, command output, or product source summary that supports the claim.} | {What can go wrong if the claim is false or incomplete.} | {How rollback restores the prior state, or why rollback is not available.} |
+| {Technical claim 2} | {Public Microsoft documentation, command output, or product source summary that supports the claim.} | {What can go wrong if the claim is false or incomplete.} | {How rollback restores the prior state, or why rollback is not available.} |
 
 ## Metadata vocabulary
 
-Use these definitions when completing the metadata marker or the future test automation table. The public schema is [tsg-metadata.schema.json](../Templates/tsg-metadata.schema.json) for articles copied into a component folder under `TSG/<Component>/`. If the article is copied into a deeper folder, adjust the relative path so the link still reaches `TSG/Templates/tsg-metadata.schema.json`.
+Use these definitions when completing the metadata marker. The marker records discovery metadata only: document type, applicable products, and detector. Keep validation records, such as test runs, grades, and lab details, out of the article and its marker. The public schema is [tsg-metadata.schema.json](../Templates/tsg-metadata.schema.json) for articles copied into a component folder under `TSG/<Component>/`. If the article is copied into a deeper folder, adjust the relative path so the link still reaches `TSG/Templates/tsg-metadata.schema.json`.
 
 | Field or value | Definition |
 | --- | --- |
@@ -459,43 +450,7 @@ Use these definitions when completing the metadata marker or the future test aut
 | detector.type `feature` | An installed Windows feature state detects the condition. Set `detector.signal` to the feature name. |
 | detector.type `portal` or `manual` | A human checks a portal or manual surface. Set `detector.signal` to the exact blade, page, or manual check. |
 | detector.type `eventlog`, `service`, `registry`, `telemetry`, or `control-plane` | A specific event, service state, registry value, telemetry query, or Azure control-plane state detects the condition. Set `detector.signal` to the exact signal. |
-| fidelity level `L0` | Static review only. No live command or detector proof. |
-| fidelity level `L1` | Read-only commands or verification steps were run and returned the claimed shape. |
-| fidelity level `L2` | The detection signal and reversible remediation direction were validated with a safe proxy or synthetic input. |
-| fidelity level `L3` | The real failure pattern was validated on an isolated scratch object or disposable target. |
-| fidelity level `L4` | Full inject, detect, mitigate, and revalidate loop was proven end to end on a safe lab substrate. |
-| technical_grade `null`, `A`, `B`, `C`, or `F` | Use JSON `null` until a TSG-FORGE grade exists. Use `A`, `B`, `C`, or `F` only when a grading artifact records that grade. This is separate from `fidelity_level`. |
-| safe injectability `none` | No safe inject is known. Keep fidelity at L0 or L1 unless read-only validation exists. |
-| safe injectability `proxy` | A safe substitute input exercises the same decision logic without causing the real failure. |
-| safe injectability `scratch object` | A temporary object, such as a test resource or file, carries the failure and can be deleted. |
-| safe injectability `reversible lab-only change` | A lab change can be undone and is not suitable for customer production. |
-| safe injectability `destructive` | The action is not safely reversible. Do not use it for live validation without explicit approval and a disposable target. |
-| automation_status `not-assessed` | No automation assessment has been performed. |
-| automation_status `scaffold` | Metadata exists, but the detector or automation is not ready to run. |
-| automation_status `ready` | Automation is defined and ready to run, but not yet proven. |
-| automation_status `proven` | Automation has passed validation and cites evidence. |
-| automation_status `blocked` | Automation is blocked by safety, access, substrate, or product limitations. |
-| automation_status `manual` | Validation remains manual by design. |
-| Execution surface | Where an action runs: `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, or `thin`. Do not put execution-surface values in `automation_status`. |
-
-## Future test automation metadata
-
-Complete this section so TSG-FORGE or another validation harness can evaluate this How-To later.
-
-| Field | Required author input |
-| --- | --- |
-| Metadata schema | Link to [tsg-metadata.schema.json](../Templates/tsg-metadata.schema.json). Adjust the relative path if the article is copied into a deeper folder. |
-| Automation candidate | {yes, no, or partial. Explain why.} |
-| detector.type | {Choose the exact JSON detector type: none, command, control-plane, envchecker, eventlog, feature, manual, portal, registry, service, or telemetry. Use the adjacent explanation columns or notes for plain-language validation-surface details.} |
-| Automation status | {Choose one: not-assessed, scaffold, ready, proven, blocked, or manual. Do not use execution-surface values here.} |
-| Technical grade | {Use null until graded, or A, B, C, or F after a TSG-FORGE grading artifact exists.} |
-| Safe injectability | {none, proxy, scratch object, reversible lab-only change, or destructive.} |
-| Rollback automation | {How rollback could be automated and what state it restores.} |
-| Reproduction substrate | {Choose one: none, vm, hardware, or either. Use none with automation_status manual when validation is intentionally manual.} |
-| Target fidelity level | {L0, L1, L2, L3, or L4.} |
-| validation.last_validated | {Use JSON null until validation has run. After validation, use the ISO date in YYYY-MM-DD format and cite the report, spec, or evidence.} |
-| Validation history | {Date, build, substrate, result, and evidence link when available.} |
-| Spec reference | {Path to future companion spec, if one exists.} |
+| Execution surface | Where an action runs: `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, or `thin`. Record it in the article body, not in the metadata marker. |
 
 ## Next steps
 

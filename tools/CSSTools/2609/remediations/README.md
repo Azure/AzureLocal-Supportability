@@ -48,8 +48,8 @@ node they are invoked on and return a `RemediationObject` describing the outcome
 | [SetSmbServerEventLogPublisher](./SetSmbServerEventLogPublisher.md) | Sets the SMBServer Event Log publisher Enabled registry value on the local node. |
 | [UnlockAzureLocalAccounts](./UnlockAzureLocalAccounts.md) | Remediates a specified Azure Local account by ensuring it exists, is not disabled, is a member of the correct groups, and is not locked. |
 
-Documentation status for the new 1.2609.30.2 reference:
+Article details for the new 1.2609.30.2 reference:
 
-| Article | Type | Applicable products | Owner | Validation grade | Automation readiness | Last validation |
-| --- | --- | --- | --- | --- | --- | --- |
-| [SetSmbServerEventLogPublisher](./SetSmbServerEventLogPublisher.md) | Reference | Azure Local (24H2) | Repository maintainers | Not graded | Not assessed | 2026-11-02 (L0) |
+| Article | Type | Applicable products | Owner |
+| --- | --- | --- | --- |
+| [SetSmbServerEventLogPublisher](./SetSmbServerEventLogPublisher.md) | Reference | Azure Local (24H2) | Repository maintainers |

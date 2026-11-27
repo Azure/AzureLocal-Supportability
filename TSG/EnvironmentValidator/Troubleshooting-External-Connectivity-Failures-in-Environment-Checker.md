@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "envchecker",
     "signal": "Invoke-AzStackHciConnectivityValidation external endpoint failure"
-  },
-  "validation": {
-    "fidelity_level": "L2",
-    "technical_grade": "A",
-    "reproduction_substrate": "vm",
-    "automation_status": "proven",
-    "last_validated": "2026-09-30",
-    "spec_ref": "AzStackHci_Connectivity_ExternalConnectivityFailures"
   }
 }
 -->
@@ -41,7 +33,7 @@
 | Date | Version | Summary |
 | --- | --- | --- |
 | 2026-09-30 | 3.0 | Modernized the public article and added emitted-target examples for the highest current fleet failure families. |
-| 2026-09-17 | 2.0 | Added current diagnosis, verification, evidence collection, and live-validation guidance. |
+| 2026-09-17 | 2.0 | Added current diagnosis, verification, and evidence collection guidance. |
 
 # AzStackHci_Connectivity_ExternalConnectivityFailures
 

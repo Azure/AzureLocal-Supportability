@@ -5,7 +5,7 @@ This is a public repository for all of Azure Local Troubleshooting guides (TSGs)
 ## Table of contents
 
 - [PR review guidelines and checklists](#pr-review-guidelines-and-checklists)
-- [Applicability and automation metadata](#applicability-and-automation-metadata)
+- [Article metadata](#article-metadata)
 - [Language assistance guidelines](#language-assistance-guidelines)
 - [PowerShell code guidelines](#powershell-code-guidelines)
 - [Link guidelines](#link-guidelines)
@@ -43,7 +43,7 @@ Format each review comment with:
   - [ ] Version-specific information is clearly indicated
   - [ ] Prerequisites are accurate and complete
   - [ ] Applicable Azure Local products, deployment modes, and supported versions are explicit
-  - [ ] Claims identify their evidence source and validation status
+  - [ ] Claims identify their evidence source
 
 - **Formatting and Structure**
   - [ ] Follows consistent markdown formatting for commands vs. outputs
@@ -59,7 +59,8 @@ Format each review comment with:
   - [ ] Links follow the guidelines (no version references in URLs)
   - [ ] Images are properly placed in an images/ subfolder
   - [ ] Every action states the expected result and a stop condition for unexpected output
-  - [ ] The `azure-local-supportability/tsg-metadata/v1` marker is present and current
+  - [ ] The `azure-local-supportability/tsg-metadata/v2` marker is present, current, and carries discovery metadata only
+  - [ ] The article carries no validation records, such as test runs, grades, lab environments, or automation readiness
 
 #### Troubleshooting Guide (TSG) Checklist
 - [ ] Clear symptoms description at the beginning
@@ -97,61 +98,27 @@ Use the administrator-surface states consistently:
 - [ ] Default values clearly indicated
 - [ ] Supported values, constraints, applicability, and validation methods are explicit
 
-## Applicability and automation metadata
+## Article metadata
 
 Every article template carries one hidden JSON marker with schema
-`azure-local-supportability/tsg-metadata/v1`. Preserve it when creating an article and replace
+`azure-local-supportability/tsg-metadata/v2`. Preserve it when creating an article and replace
 its placeholders. The authoritative allowed values are in
-[`tsg-metadata.schema.json`](../TSG/Templates/tsg-metadata.schema.json). The marker records:
+[`tsg-metadata.schema.json`](../TSG/Templates/tsg-metadata.schema.json). The marker records
+discovery metadata only:
 
 - Document type and applicable products
 - Detector type and signal
-- Validation fidelity level
-- Technical grade, or `null` until TSG-FORGE produces one
-- Reproduction substrate
-- Automation status
-- Last validation date and internal specification reference
 
 Do not place customer names, cluster names, subscription IDs, IP addresses, credentials, or other
 environment-specific identifiers in this marker.
 
-Use these fidelity values consistently:
-
-| Level | Evidence required |
-| --- | --- |
-| L0 | Static structure, safety, and persona review only |
-| L1 | Every diagnostic command exercised read-only |
-| L2 | The real detector and remediation direction exercised with a safe proxy |
-| L3 | The real failure and remediation exercised on an isolated scratch object |
-| L4 | Full baseline, inject, detect, mitigate, and revalidate loop exercised live |
-
-Technical grade records the TSG outcome, not the cluster outcome:
-
-| Grade | Meaning |
-| --- | --- |
-| `null` | No TSG-FORGE technical grade has been established |
-| A | The article is complete for its type, safety gates are present, metadata is valid, links resolve, and lint is clean |
-| B | Usable, but non-blocking gaps remain, such as missing optional evidence or a documented false-positive warning |
-| C | Incomplete validation, fallback-only validation, missing required routing metadata, or unclear automation readiness |
-| F | A structural, safety, metadata, or command defect that must block publishing |
-
-Validation depth (static-only through a full live inject-detect-mitigate loop) is recorded
-separately in `fidelity_level` (L0 to L4), not in the grade.
-
-Automation status is separate from execution surface:
-
-| Status | Meaning |
-| --- | --- |
-| `not-assessed` | No automation assessment has been completed |
-| `scaffold` | Metadata exists, but executable automation is incomplete |
-| `ready` | Automation is implemented and awaiting a qualifying live run |
-| `proven` | Automation completed its declared validation loop |
-| `blocked` | A named safety, access, or substrate requirement prevents the run |
-| `manual` | The verification surface requires an operator |
+Validation records, such as test runs, grades, lab or reproduction environments, automation
+readiness, and validation dates, do not belong in the marker or the article. Ask the author to
+describe validation in the pull request instead, and flag article text that records how or where
+the article itself was tested.
 
 Execution surface describes where steps run. Use `on-device`, `mixed`, `cloud-diagnostic`,
-`cloud-control`, or `thin`. `manual` is an automation status, not an execution surface. Do not
-store execution-surface values in `validation.automation_status`.
+`cloud-control`, or `thin`, and record it in the article body when the template asks for it.
 
 ## Language Assistance Guidelines
 When reviewing or suggesting language improvements (in order of importance):
@@ -202,5 +169,5 @@ Get-Service -Name "NonExistentService"
 - Most new MD files should follow naming convention: <Type>-<Topic>-<Specifics>.md
 - Most new MD files should use one of the templates provided
 - The component README.md inventory must be updated with the article type, applicable products,
-  owner, validation grade, automation readiness, and last validation date
+  and owner
 - Place images in an images/ subfolder within the relevant component

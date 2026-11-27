@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["replace-me"],
   "detector": {
     "type": "none",
     "signal": null
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "not-assessed",
-    "last_validated": null,
-    "spec_ref": ""
   }
 }
 -->
@@ -37,7 +29,7 @@ Use this template for Azure Local troubleshooting guides. Replace all placeholde
 - [Verification](#verification)
 - [Escalation and evidence package](#escalation-and-evidence-package)
 - [Prevention and monitoring](#prevention-and-monitoring)
-- [Future test automation metadata](#future-test-automation-metadata)
+- [Detector metadata](#detector-metadata)
 - [Related documentation](#related-documentation)
 
 ## Article metadata
@@ -244,28 +236,18 @@ Use prevention guidance to reduce recurrence without blaming the person who oper
 - {Version, firmware, policy, or configuration guidance that reduces recurrence}
 - {Owner and cadence for review}
 
-## Future test automation metadata
+## Detector metadata
 
-Complete this section so the TSG can be graded and improved by TSG-FORGE later. Keep the metadata marker aligned with the canonical [TSG metadata JSON Schema](../Templates/tsg-metadata.schema.json).
+Keep the metadata marker aligned with the canonical [TSG metadata JSON Schema](../Templates/tsg-metadata.schema.json). The marker records discovery metadata only: document type, applicable products, and detector. Keep validation records, such as test runs, grades, and lab details, out of the article and its marker.
 
 | Field | Value |
 | --- | --- |
 | Detector type | {none, envchecker, eventlog, command, service, feature, registry, telemetry, manual, portal, or control-plane} |
 | Detector signal | {Cmdlet, Event ID, telemetry query, portal path, log path, or JSON null when Detector type is none} |
-| Inject strategy | {Reversible inject, proxy inject, scratch object, read-only validation, manual validation, or not safe to inject} |
-| Mitigation selector | {Marker, section, command, portal action, or manual procedure that identifies the mitigation block} |
-| Safety floor | {Minimum free space, quorum, redundancy, recovery material, or other floor that prevents harm} |
-| Rollback check | {Command or surface proving rollback restored prior state} |
-| Reproduction substrate | {vm, hardware, either, or none} |
-| Fidelity level | {L0, L1, L2, L3, or L4} |
-| Technical grade | {JSON null until TSG-FORGE produces A, B, C, or F from report or spec evidence} |
-| Automation status | {not-assessed, scaffold, ready, proven, blocked, or manual} |
-| Spec reference | {Path to companion spec, if one exists} |
-| Last validated | {JSON null until validation exists, then YYYY-MM-DD} |
 
-When `Detector type` is `none`, set `detector.signal` in the metadata marker to JSON `null`. When you select any other detector type, set both `detector.type` and `detector.signal` together. Set `validation.technical_grade` to JSON `null` until TSG-FORGE report or spec evidence produces A, B, C, or F.
+When `Detector type` is `none`, set `detector.signal` in the metadata marker to JSON `null`. When you select any other detector type, set both `detector.type` and `detector.signal` together.
 
-Execution surface and automation status are different fields. Execution surface describes where the article can run and must use on-device, mixed, cloud-diagnostic, cloud-control, or thin. Automation status describes the TSG-FORGE readiness of the test harness and must use not-assessed, scaffold, ready, proven, blocked, or manual.
+Execution surface, recorded in [Article metadata](#article-metadata), describes where the article can run and must use on-device, mixed, cloud-diagnostic, cloud-control, or thin.
 
 | Metadata value | Meaning |
 | --- | --- |
@@ -279,24 +261,6 @@ Execution surface and automation status are different fields. Execution surface 
 | Execution surface `cloud-diagnostic` | The article depends on cloud or telemetry diagnostics and is not runnable only on the node. |
 | Execution surface `cloud-control` | The article changes or verifies Azure control-plane state, such as portal or ARM state. |
 | Execution surface `thin` | The article has context only and no executable diagnostic or mitigation path yet. |
-| Inject strategy `reversible inject` | The harness creates a real bad state and can restore the prior state automatically. |
-| Inject strategy `proxy inject` | The harness feeds controlled input to the real detector without causing the unsafe production failure. |
-| Inject strategy `scratch object` | The harness tests with an isolated temporary object, such as a test VM, test file, or scratch resource. |
-| Inject strategy `read-only validation` or `manual validation` | The harness validates diagnostics only, or a human must verify the state. |
-| Inject strategy `not safe to inject` | No safe or reversible inject exists for this issue. Validate diagnostics only and set automation_status to blocked or manual until a safe proof path exists. |
-| Fidelity `L0` | Static lint, metadata, and persona review only. |
-| Fidelity `L1` | Read-only diagnostic commands were validated. |
-| Fidelity `L2` | A safe proxy or synthetic data source exercised the detector or decision logic. |
-| Fidelity `L3` | An isolated scratch object exercised the failure and recovery path. |
-| Fidelity `L4` | Full live loop was proven: inject, detect, mitigate, revalidate, and clean up. |
-| Technical grade `null` | No TSG-FORGE technical grade has been produced yet. |
-| Technical grade `A`, `B`, `C`, or `F` | Authoritative technical grade from TSG-FORGE report or companion spec evidence. Do not invent a separate grade vocabulary. |
-| Automation `not-assessed` | No automation review has been performed. |
-| Automation `scaffold` | Metadata exists, but runnable automation is incomplete. |
-| Automation `ready` | Automation is ready to run but not yet proven. |
-| Automation `proven` | Automation has run and passed at the stated fidelity. |
-| Automation `blocked` | Automation is designed but blocked by safety, access, or substrate limits. |
-| Automation `manual` | The article intentionally requires human validation rather than automation. |
 
 ## Related documentation
 

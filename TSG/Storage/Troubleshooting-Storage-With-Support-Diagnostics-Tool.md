@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "reference",
   "products": ["Azure Local"],
   "detector": {
     "type": "command",
     "signal": "Start-AzsSupportStorageDiagnostic"
-  },
-  "validation": {
-    "fidelity_level": "L1",
-    "technical_grade": null,
-    "reproduction_substrate": "either",
-    "automation_status": "ready",
-    "last_validated": "2026-08-17",
-    "spec_ref": "AzLocal_Storage_SupportStorageDiagnostic"
   }
 }
 -->
@@ -102,7 +94,7 @@ Use this article as a reference for the cmdlet parameters, supported `-Include` 
 
 - Repairing storage health, retiring disks, restarting the Health Service, or changing cluster resource parameters.
 - Deciding whether a `CanPool=False` disk should be added to the pool. Use the general decision-tree router in [Troubleshoot physical disks not claimed after insertion (`CanPool=False`)](./Troubleshoot-Storage-PhysicalDiskCanPoolFalse.md).
-- Repairing persistent disk verification stuck behind a wedged Health Service. That scenario is delegated to the dedicated `AzLocal_Storage_PhysicalDiskVerificationStuck` validation spec and its public guidance, not to this reference article.
+- Repairing persistent disk verification stuck behind a wedged Health Service. That scenario is covered by [Troubleshoot physical disks stuck in verification](./Troubleshoot-Storage-PhysicalDiskVerificationStuck.md), not by this reference article.
 
 > [!IMPORTANT]
 > The commands in this article are diagnostic. If the diagnostic output recommends a state-changing command, do not run that command from this reference alone. Open the specific linked troubleshooting guide for that finding, confirm its safety gates, and capture a fresh backup of the evidence first.
@@ -241,7 +233,7 @@ Under the hood, `-PhysicalExtentCheck` calls `Get-AzsSupportStoragePhysicalExten
 
 - Non-active extents found: a virtual disk object plus `Extents`, `UniqueDisks`, and `Disks` details.
 - No non-active extents found on a healthy virtual disk: the additional section is empty.
-- No physical disks present to enumerate, for example on a nested or VM-based cluster: the check reports `No PNP device with class DiskDrive found on <cluster>` and returns no extent details. This is expected on virtualized substrates and does not indicate a virtual disk fault. This exact message was observed on a nested VM cluster during validation.
+- No physical disks present to enumerate, for example on a nested or VM-based cluster: the check reports `No PNP device with class DiskDrive found on <cluster>` and returns no extent details. This is expected on virtualized substrates and does not indicate a virtual disk fault.
 
 ## Where this appears
 
@@ -331,7 +323,7 @@ Use the diagnostic result to route the next action. Do not treat this reference 
 | Diagnostic evidence | Route |
 |---------------------|-------|
 | `CanPool=False` or a `CannotPoolReason` value | Start with [Troubleshoot physical disks not claimed after insertion (`CanPool=False`)](./Troubleshoot-Storage-PhysicalDiskCanPoolFalse.md). That guide remains the general decision-tree router. |
-| Persistent `Verification in progress` or `Verification failed` that does not clear, especially with Health Service provider evidence | Use the dedicated PhysicalDiskVerificationStuck guidance tracked by spec `AzLocal_Storage_PhysicalDiskVerificationStuck`. This reference intentionally does not repair Health Service provider configuration. |
+| Persistent `Verification in progress` or `Verification failed` that does not clear, especially with Health Service provider evidence | Use [Troubleshoot physical disks stuck in verification](./Troubleshoot-Storage-PhysicalDiskVerificationStuck.md). This reference intentionally does not repair Health Service provider configuration. |
 | `FirmwareDrift`, `Support Components Change`, or `Support Components Missing` | Capture disk model, firmware, serial number, and the Supported Components output. The Supported Components output names the expected supported model and firmware set, so use it as the comparison baseline, then hand off to the OEM or vendor support path and confirm the target firmware version against the OEM qualified-firmware list. |
 | `Storage Node View Differs` or `Storage Enclosure Check` FAIL | A physical disk or enclosure is seen inconsistently across nodes. This can be a storage fabric, cabling, SAS or enclosure, or node network visibility problem, so capture the check output and involve the fabric, network, or hardware owner alongside the downstream storage TSG. |
 | `Storage Job Check`, `Virtual Disk Check`, `Dirty Count`, or `Disk Health Check` | Preserve output and transcript, then select the downstream storage TSG for that exact check and confirm its safety gates before any state-changing action. |

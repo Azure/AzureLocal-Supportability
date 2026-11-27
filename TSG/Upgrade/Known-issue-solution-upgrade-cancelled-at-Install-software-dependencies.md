@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "portal",
     "signal": "Azure Local resource > Deployments > Prepare cluster upgrade > Install software dependencies shows Cancelled during a solution upgrade."
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "manual",
-    "last_validated": "2026-10-22",
-    "spec_ref": ""
   }
 }
 -->
@@ -57,7 +49,7 @@ Use the current status of the existing deployment, not an older notification. If
 
 ## Where this appears
 
-The screenshots document the reported cancellation and recovery sequence. This article has received static review only; the other administrator surfaces below have not been characterized and remain publication-validation gaps. `absent` does not mean that the issue cannot appear on that surface.
+The screenshots document the reported cancellation and recovery sequence. The other administrator surfaces below have not been characterized. `absent` does not mean that the issue cannot appear on that surface.
 
 ## Cause
 

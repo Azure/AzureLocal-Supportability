@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "overview",
   "products": ["replace-me"],
   "detector": {
     "type": "none",
     "signal": null
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "not-assessed",
-    "last_validated": null,
-    "spec_ref": ""
   }
 }
 -->
@@ -47,7 +39,7 @@ Complete this card before writing the body. It gives skimmers, account teams, an
 - [2. Scope and applicability](#2-scope-and-applicability)
 - [3. Architecture and key concepts](#3-architecture-and-key-concepts)
 - [4. Operational boundaries and risks](#4-operational-boundaries-and-risks)
-- [5. Claims and validation](#5-claims-and-validation)
+- [5. Claims and evidence](#5-claims-and-evidence)
 - [6. Frequently asked questions](#6-frequently-asked-questions)
 - [7. Additional resources](#7-additional-resources)
 - [8. Before publishing checklist](#8-before-publishing-checklist)
@@ -150,43 +142,35 @@ Overview articles should avoid step-by-step repair flows. If an example action i
 | **Rollback verification** | {How to confirm the rollback restored the prior safe state before resuming.} |
 | **Verification** | {How to confirm the environment is healthy after the action.} |
 
-## 5. Claims and validation
+## 5. Claims and evidence
 
-{List the claims a reader may rely on. Include a source or validation reference for each testable claim. Do not make operationally important claims without a reference.}
+{List the claims a reader may rely on. Include a source reference for each testable claim. Do not make operationally important claims without a reference. Record test runs and other validation in the pull request description, not in the article.}
 
-| Claim | Evidence or validation reference | Applicable products or supported versions | Validation status | Last reviewed |
-| ----- | -------------------------------- | ----------------------------------------- | ----------------- | ------------- |
-| {Claim 1} | {Public Microsoft Learn link, lab validation note, source reference, or product documentation} | {Products and versions} | {Not assessed, doc-backed, lab-validated, field-validated} | {YYYY-MM-DD} |
-| {Claim 2} | {Public Microsoft Learn link, lab validation note, source reference, or product documentation} | {Products and versions} | {Not assessed, doc-backed, lab-validated, field-validated} | {YYYY-MM-DD} |
+| Claim | Evidence reference | Applicable products or supported versions | Last reviewed |
+| ----- | ------------------ | ----------------------------------------- | ------------- |
+| {Claim 1} | {Public Microsoft Learn link, source reference, or product documentation} | {Products and versions} | {YYYY-MM-DD} |
+| {Claim 2} | {Public Microsoft Learn link, source reference, or product documentation} | {Products and versions} | {YYYY-MM-DD} |
 
-### Validation vocabulary
+"Last reviewed" is the date the claim's content was last reviewed against its evidence reference; it is not a validation record.
 
-Use these terms consistently. The claim status describes evidence for one statement, the fidelity level describes how deeply the article was validated, and a technical grade belongs in a separate grade report or component index.
+### Vocabulary
+
+Use these terms consistently.
 
 | Vocabulary | Allowed values | Meaning |
 | ---------- | -------------- | ------- |
-| **Claim validation status** | `Not assessed`, `doc-backed`, `lab-validated`, `field-validated` | `Not assessed` means no evidence yet. `doc-backed` means a public Microsoft source supports the claim. `lab-validated` means the claim was tested in a lab for the stated products and versions. `field-validated` means support or deployment evidence confirms the claim for the stated scope. |
-| **Fidelity level** | `L0`, `L1`, `L2`, `L3`, `L4` | `L0` is static review only. `L1` validates read-only diagnostics. `L2` validates a safe proxy or synthetic signal. `L3` validates a scratch-object failure and fix. `L4` validates a full inject, detect, mitigate, and revalidate loop. |
-| **Automation status** | `not-assessed`, `scaffold`, `ready`, `proven`, `blocked`, `manual` | `not-assessed` means no automation review. `scaffold` means metadata exists but automation is incomplete. `ready` means the automation path is designed but not proven. `proven` means automation was validated. `blocked` means automation cannot proceed until a stated dependency is resolved. `manual` means the article intentionally requires human execution or review. |
-| **Execution surface** | `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, `thin` | Describes where diagnostics or actions run. Keep this distinct from `automation_status`, which describes readiness rather than location. |
+| **Execution surface** | `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, `thin` | Describes where diagnostics or actions run. Record it in the article body, not in the metadata marker. |
 | **Admin surface state** | `shown`, `not-evident`, `absent` | Use only when characterizing admin visibility. `shown` means the surface carries evidence. `not-evident` means checked and not visible there. `absent` means uncharacterized and not publish-ready. |
-| **Technical grade** | JSON `null`, `A`, `B`, `C`, or `F` | Use `validation.technical_grade` as the authoritative grade field. Keep it as JSON `null` until TSG-FORGE produces `A`, `B`, `C`, or `F`, then cite the report or spec evidence that produced the grade. |
 
-### Future automation metadata
+### Metadata marker
 
-Keep the metadata marker at the top of this file. When creating a real article, update the marker before publication and validate it against the [TSG metadata schema](../Templates/tsg-metadata.schema.json). This schema link is correct for an article copied to a component root such as `TSG/<Component>/`; for each deeper topic folder, add one `../` segment, for example `../../Templates/tsg-metadata.schema.json` from `TSG/<Component>/<Topic>/`.
+Keep the metadata marker at the top of this file. The marker records discovery metadata only: document type, applicable products, and detector. Keep validation records, such as test runs, grades, and lab details, out of the article and its marker. When creating a real article, update the marker before publication and validate it against the [TSG metadata schema](../Templates/tsg-metadata.schema.json). This schema link is correct for an article copied to a component root such as `TSG/<Component>/`; for each deeper topic folder, add one `../` segment, for example `../../Templates/tsg-metadata.schema.json` from `TSG/<Component>/<Topic>/`.
 
 | Metadata field | Author prompt |
 | -------------- | ------------- |
 | **document_type** | Keep `overview` for this template. |
 | **products** | Replace `replace-me` with explicit product names. |
 | **detector.type and detector.signal** | Keep `type` as `none` and `signal` as JSON `null` for purely conceptual content. If the article gains a detection signal, set both fields together, reassess whether it is still an overview, and use only schema detector types. |
-| **validation.fidelity_level** | Use `L0` unless this overview has been validated by a stronger documented process. See the fidelity rubric in this section. |
-| **validation.technical_grade** | Keep JSON `null` until TSG-FORGE produces `A`, `B`, `C`, or `F`. This is the authoritative technical grade for component indexes and validation reports. |
-| **validation.reproduction_substrate** | Use `none` for a conceptual overview unless a validation companion proves a `vm`, `hardware`, or `either` substrate path. |
-| **validation.automation_status** | Use `not-assessed` until a TSG-FORGE or converter review assesses automation readiness. Allowed values are `not-assessed`, `scaffold`, `ready`, `proven`, `blocked`, and `manual`. |
-| **validation.last_validated** | Keep JSON `null` until a dated validation event exists, then use an ISO date such as `YYYY-MM-DD`. |
-| **validation.spec_ref** | Link a public or repository-local validation companion only when one exists and is appropriate for public use. |
 
 ## 6. Frequently asked questions
 
@@ -245,5 +229,5 @@ Use this checklist before opening a pull request. It prevents the reusable templ
 | **Plain-language opening** | {Confirm the first 100 words define the topic, expand acronyms, and state why the reader should care.} |
 | **Public-link hygiene** | {Use public Microsoft links only. Remove internal work-item, wiki, Kusto, or engineering links from the public article.} |
 | **Applicability** | {Confirm applicable products, supported versions, environment assumptions, rollout repeatability, and OEM or partner boundaries are explicit.} |
-| **Claims** | {Confirm every testable or operationally important claim has an evidence or validation reference.} |
+| **Claims** | {Confirm every testable or operationally important claim has an evidence reference.} |
 | **Actions, if any** | {Confirm any state-changing example has risk, privilege, workload or maintenance gate, pre-check, action, expected output, stop condition and escalation target, rollback, expected rollback output, rollback verification, and final verification.} |

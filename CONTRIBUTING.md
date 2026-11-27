@@ -65,10 +65,10 @@ Don't see a component? [See all components](./README.md#table-of-contents)
 1. **Copy the template** from Step 1
 2. **Replace placeholders** (marked with `{curly braces}`)
 3. **Declare applicability**: products, deployment modes, versions, and exclusions
-4. **Complete the hidden metadata marker**: detector, fidelity, substrate, and automation status
+4. **Complete the hidden metadata marker**: document type, applicable products, and detector
 5. **Test all code examples**: they must be safe for production
 6. **Save with correct naming**: `<Type>-<Topic>-<Specifics>.md`
-7. **Update the component README.md** with validation and automation fields
+7. **Update the component README.md** inventory with the article type, applicable products, and owner
 8. **Submit a pull request** with evidence for every tested claim
 
 Reference [Markdown Snippets](./TSG/Templates/Markdown-Snippets.md) for helpful formatting tips, diagrams, and more.
@@ -105,51 +105,24 @@ what the article applies to and what it does not apply to. Consider Azure Local 
 disconnected deployments, disaggregated deployments, multi-rack deployments, and any feature-specific
 requirements. Do not infer applicability from a similar product or older release.
 
-### TSG automation metadata
+### TSG metadata
 
 Every article created from a template includes one hidden
-`azure-local-supportability/tsg-metadata/v1` JSON marker. Fill it in and keep it valid JSON. The
+`azure-local-supportability/tsg-metadata/v2` JSON marker. Fill it in and keep it valid JSON. The
 authoritative allowed values are in
-[`tsg-metadata.schema.json`](./TSG/Templates/tsg-metadata.schema.json). The marker must identify:
+[`tsg-metadata.schema.json`](./TSG/Templates/tsg-metadata.schema.json). The marker records
+discovery metadata only:
 
 - Document type
 - Applicable products
 - Detector type and signal
-- Validation fidelity level, from L0 through L4
-- Technical grade, or `null` until TSG-FORGE produces one
-- Reproduction substrate
-- Automation status
-- Last validation date and the internal test specification reference, when available
 
-Use `null` for a validation date that has not been established. Never add customer or lab
-identifiers to tracked metadata.
+Do not add validation records, such as test runs, grades, lab environments, or automation
+readiness, to the marker or the article. Describe validation in the pull request instead. Never add
+customer or lab identifiers to tracked metadata.
 
-Use the same fidelity scale for every article:
-
-| Level | Evidence required |
-| --- | --- |
-| L0 | Static structure, safety, and persona review only |
-| L1 | Diagnostic commands exercised read-only |
-| L2 | Real detector and remediation direction exercised with a safe proxy |
-| L3 | Real failure and remediation exercised on an isolated scratch object |
-| L4 | Full baseline, inject, detect, mitigate, and revalidate loop exercised live |
-
-Technical grade records the TSG outcome:
-
-| Grade | Meaning |
-| --- | --- |
-| `null` | No TSG-FORGE technical grade has been established |
-| A | The article is complete for its type, safety gates are present, metadata is valid, links resolve, and lint is clean |
-| B | Usable, but non-blocking gaps remain, such as missing optional evidence or a documented false-positive warning |
-| C | Incomplete validation, fallback-only validation, missing required routing metadata, or unclear automation readiness |
-| F | A structural, safety, metadata, or command defect that must block publishing |
-
-Validation depth (static-only through a full live inject-detect-mitigate loop) is recorded
-separately in `fidelity_level` (L0 to L4), not in the grade.
-
-Use `not-assessed`, `scaffold`, `ready`, `proven`, `blocked`, or `manual` for automation status.
-Record `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, or `thin` separately as the
-execution surface. `manual` is an automation status, not an execution surface.
+Record `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, or `thin` as the execution
+surface in the article body when the template asks for it.
 
 ### Evidence required in a pull request
 
@@ -159,10 +132,8 @@ Include the following in the pull request description:
 2. Commands or procedures exercised, with the environment class and product build
 3. Expected and observed results
 4. Rollback or cleanup result
-5. Remaining automation blockers
 
-Maintainers run the TSG-FORGE persona and live-validation workflow. A static pass alone does not
-prove that a remediation restores a cluster.
+A static pass alone does not prove that a remediation restores a cluster.
 
 For administrator detection surfaces, use `shown`, `not-evident`, or `absent`. A
 `not-evident` claim requires an authoritative check with a stated scope, time window, or freshness

@@ -1,17 +1,9 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
-  "detector": {"type": "manual", "signal": "Bootstrap Arc registration error 42"},
-  "validation": {
-    "fidelity_level": "L3",
-    "technical_grade": "A",
-    "reproduction_substrate": "vm",
-    "automation_status": "proven",
-    "last_validated": "2026-11-25",
-    "spec_ref": "AzLocal_ArcRegistration_Error42"
-  }
+  "detector": {"type": "manual", "signal": "Bootstrap Arc registration error 42"}
 }
 -->
 
@@ -27,7 +19,6 @@
 - [3. ARM access token is passed incorrectly](#3-arm-access-token-is-passed-incorrectly)
 - [4. Permissions, policy, or quota (HTTP 403 or a policy or quota error)](#4-permissions-policy-or-quota-http-403-or-a-policy-or-quota-error)
 - [When to contact Microsoft support](#when-to-contact-microsoft-support)
-- [Validation status of this article](#validation-status-of-this-article)
 - [Revision history](#revision-history)
 
 ## Symptoms
@@ -104,7 +95,7 @@ for release support status. The module requirement remains a per-node recipe che
 
 - **PowerShell on the node:** The initialization command reports bootstrap failure and `ArcAgentConnectionException`; `Get-ArcBootstrapStatus` reads the bootstrap status without retrying registration.
 - **Azure portal:** Check the intended resource group under **Azure Arc > Machines** for the expected machine. When resource creation fails, the machine does not appear there; absence alone does not identify a token problem. Check the subscription, resource group, filters, and permissions before concluding it was not created.
-- **Windows event logs:** Not characterized; validation did not establish whether this failure is recorded in any Windows event log. Use the PowerShell status above and the log files below instead; bootstrap diagnostics are Event Tracing for Windows (ETW) trace files named `Microsoft-AzureStack-Bootstrap-Diagnostics-EventSource-<timestamp>.etl` in the bootstrap logs directory.
+- **Windows event logs:** Not characterized; it is not established whether this failure is recorded in any Windows event log. Use the PowerShell status above and the log files below instead; bootstrap diagnostics are Event Tracing for Windows (ETW) trace files named `Microsoft-AzureStack-Bootstrap-Diagnostics-EventSource-<timestamp>.etl` in the bootstrap logs directory.
 - **Windows Admin Center (standalone host):** If an existing connection to the server is available, use its **PowerShell** tool to run `Get-ArcBootstrapStatus`; read the same bootstrap status rather than interpreting an unrelated server-health alert as error 42.
 - **Component / tool log files:** The agent's `%ProgramData%\AzureConnectedMachineAgent\Log\azcmagent.log` records each connection attempt, including the `AZCM0042` and status code lines shown above; `himds.log` records heartbeat and identity activity ([agent log locations](https://learn.microsoft.com/en-us/azure/azure-arc/servers/agent-overview#windows-agent-installation-details)). The bootstrap logs directory `%SystemRoot%\System32\Bootstrap\Logs` holds the `.etl` trace files, `arcInstallLog-<timestamp>.txt`, and `setup.log`; setup logs describe installation, not necessarily the registration failure. Match timestamps to the failed attempt and remove tokens or other secrets before sharing diagnostics.
 
@@ -502,9 +493,9 @@ Run `Disable-AzContextAutosave -Scope Process` first, as in this block. Without
 it, `Connect-AzAccount -ServicePrincipal -Credential` saves the client secret in
 `keystore.cache` in `%USERPROFILE%\.Azure` (Az.Accounts 2.10.4 and later) even
 with `-Scope Process`, and `Disconnect-AzAccount -Scope Process` and closing the
-session leave it there. In validation with Az.Accounts 5.5.3, the file still held
-the secret after the sign-out and when read from a new process; with the command
-run first, no `keystore.cache` was written and the sign-in still worked.
+session leave it there. The secret also survives a new process; with
+`Disable-AzContextAutosave -Scope Process` run first, no `keystore.cache` is written
+and the sign-in still works.
 For the Azure CLI, this procedure uses a certificate; to use a client secret, use
 the Azure PowerShell sign-in above instead.
 
@@ -677,8 +668,8 @@ registration, the identity can still register machines. The token itself remains
 still use any other access the identity has. Adding or removing an assignment can
 take several minutes to take effect
 ([Azure RBAC troubleshooting](https://learn.microsoft.com/en-us/azure/role-based-access-control/troubleshooting));
-in validation, a new assignment took about 20 minutes, and retries before then
-still failed with 403.
+a new assignment can take about 20 minutes, and retries before then still fail
+with 403.
 
 **Remove the assignment on every exit.** From the moment the create command prints
 an ID until that assignment is deleted, every way out of this procedure includes
@@ -689,9 +680,9 @@ and continue right away, or have the subscription owner run
 then clear the token as in step 4. Run it only for the ID that the create command
 printed; if the check printed an existing assignment, delete nothing.
 
-In validation, this role alone let the token register a machine with the agent's
-connect command. The initialization command was not validated with this identity.
-If its retry reports a 403, stop: do not grant this identity any other role or a
+This role alone lets the token register a machine with the agent's connect
+command. It is not established whether the initialization command needs more with
+this identity. If its retry reports a 403, stop: do not grant this identity any other role or a
 broader scope. If you created an assignment, remove it with the delete command
 above, then mint the token from a service principal or operator account that
 already holds the roles in the permissions article, or use device code (option 2).
@@ -738,7 +729,10 @@ context, or display the token. The conversion is compatible with Windows
 PowerShell 5.1. It stops if the token is from a different tenant. For a user
 account or service principal, sign in again with `-Tenant '<tenant-id>'` (or
 `--tenant` with the Azure CLI) as in step 1; a managed identity works only when
-its machine is registered in the same tenant as the failing node.
+its machine is registered in the same tenant as the failing node. With a managed
+identity, `Get-AzAccessToken -TenantId` for another tenant returns a token from the
+identity's own tenant while it reports the requested tenant in `TenantId`, which is
+why the block checks the tenant of the current sign-in instead.
 
 **Paste or run each token block whole, not line by line.** Each block runs as
 one unit, so a failed check stops everything after it and leaves `$token` empty.
@@ -842,8 +836,8 @@ deliver it through the channel your automation already uses to run commands on
 the node, and start the initialization while at least 10 minutes remain; if
 delayed, repeat step 2. Pass the token as a variable or as an argument, for
 example with `Invoke-Command -ArgumentList $token`, never as text inside a
-script: Azure Local nodes can have PowerShell script block logging turned on
-(it was on in validation), which records the text of every script that runs.
+script: Azure Local nodes can have PowerShell script block logging turned on,
+which records the text of every script that runs.
 Do not write the token to a file, print, export, or transcribe it, or include it
 in a ticket. After the initialization attempt, whether or not it succeeded, clear
 the token and sign out as described in step 4. If the token came from a managed
@@ -913,7 +907,7 @@ this one while you wait.
      left the secret in `%USERPROFILE%\.Azure\keystore.cache`, and a device code
      sign-in left the operator's tokens in the shared token cache under
      `%LOCALAPPDATA%\.IdentityService`. Neither the sign-out above nor closing the
-     session removes them, and this article has no validated command that removes
+     session removes them, and this article has no command that removes
      only this procedure's entries. `Clear-AzContext` removes every saved context,
      secret, and token of the user, not only this procedure's; run it only if
      nothing else on that machine uses the user's saved Azure PowerShell sign-ins.
@@ -961,9 +955,8 @@ this one while you wait.
      recreate the folder a few seconds later with only a `logs\telemetry.log`
      file, which holds no credentials. Afterward, `az account show`
      uses the default Azure CLI profile again, which this procedure did not
-     change. In validation with a managed identity, the Azure CLI did not create
-     a token cache file (`msal_token_cache.bin`) in the procedure's profile
-     folder at any point.
+     change. With a managed identity, the Azure CLI does not create a token cache
+     file (`msal_token_cache.bin`) in the procedure's profile folder.
 4. If you copied or exported a certificate file with its private key (a `.pem`
    or `.pfx` file) to the minting machine only for this procedure, delete it now,
    for example with `Remove-Item -LiteralPath '<path-to-certificate.pem>'`, and
@@ -1089,9 +1082,9 @@ and the assignment name), the display name, the enforcement mode, and the policy
 definition or initiative ID. If an `az rest` call fails, the loop stops; treat the list as
 incomplete and run it again. Keep the first `url` value in single quotes so the
 shell does not expand `$filter`. Do not
-substitute `az policy assignment list --resource-group`: in validation it listed
-only assignments made directly on the resource group, even with
-`--disable-scope-strict-match`. To find the denying assignment, match the
+substitute `az policy assignment list --resource-group`: it can list only
+assignments made directly on the resource group, even with
+`--disable-scope-strict-match`, so its output is not a reliable complete list. To find the denying assignment, match the
 `policyAssignment` `id` in the `RequestDisallowedByPolicy` message in
 `azcmagent.log` against the first column. The last column matches the message's
 `policyDefinition` `id`, or its `policySetDefinition` `id` when the assignment is
@@ -1142,392 +1135,6 @@ with Microsoft support. Also include:
 > tokens. Before you attach any file or paste output into a ticket, review it and
 > remove tokens and other secrets. Never include the value of `$token`.
 
-## Validation status of this article
-
-Validated in a lab from 2026-11-23 to 2026-11-25 with Windows PowerShell 5.1 and
-Azure Connected Machine agent 1.70.03595.3521. The registration runs used
-disposable Windows Server 2022 test machines, not an Azure Local image, and
-throwaway resource groups; managed identity tokens were minted on a registered
-Azure Local node. In
-each run, the article's blocks, in their form at the time of that run, ran
-unchanged except for their placeholders. Many blocks changed after earlier runs;
-where a bullet describes an earlier form, it says so and names what was checked
-for the current form. The agent's connect
-command was run directly in place of the initialization command that wraps it;
-the full bootstrap was not run.
-
-- **Token cause (sections 2 and 3, option 1):** with Az.Accounts 5.5.3, the
-  unconverted token reproduced exit code 42 with `AZCM0042` and
-  `status code 401` (`InvalidAuthenticationToken`), and no machine was created.
-  The section 3 Azure PowerShell token block produced a plain-text token, and the
-  same connect succeeded (machine `Connected`, provisioning `Succeeded`).
-  In that run, which predates the `-Scope Process` sign-in in step 1, a bare
-  `Disconnect-AzAccount` then removed the saved sign-in. With Az.Accounts 4.0.2,
-  the same block used the plain-text token as is, and the connect succeeded. In a
-  second run, the 401 was reproduced again, then the section 3 Azure CLI block
-  minted the token off the node (PowerShell 7.5 with Azure CLI 2.85.0 on a separate
-  workstation, signed in as an existing operator account), the token was passed to
-  the node through the remote execution channel, and the connect succeeded
-  (machine `Connected`, provisioning `Succeeded`). These runs used the earlier
-  token blocks, which passed `-TenantId` or `--tenant` and were not yet single
-  statements, and sign-ins made before step 1 used a process-scoped Azure
-  PowerShell sign-in and a separate Azure CLI profile folder. The current blocks and sign-ins were checked as
-  described in the bullets below; no registration was repeated with them.
-- **Token block stop conditions:** against stubbed token responses in Windows
-  PowerShell 5.1, the Azure PowerShell block stopped on a token with 10 minutes or
-  less remaining, an expired token, a missing expiry, a tenant mismatch, an
-  unexpected token type, and the text `System.Security.SecureString`, and left
-  `$token` empty each time. The Azure CLI block stopped on 10 minutes or less
-  remaining, an expired token, a missing `expires_on`, a tenant mismatch, an empty
-  token, and a failed `az` call. Both stopped when `<tenant-id>` was not replaced.
-  These cases ran against the earlier blocks, which passed the tenant parameter
-  and were not yet single statements. Against stubbed responses, the current
-  blocks were rerun only for an unreplaced placeholder, a matching tenant, and a
-  mismatched tenant (see the bullet on blocks pasted line by line); the expiry,
-  type, and empty-token cases were not rerun with them.
-- **Module block (section 1):** with no image recipe, the block printed
-  `UNKNOWN-STOP` and changed nothing. With a staged recipe file that requires
-  4.0.2 in the older format without a package type, it installed 4.0.2, printed
-  `ARC42-REMOVING` for 5.5.3, removed it, and printed `REQUIRES-4.0.2`; a rerun
-  changed nothing. This passed with PowerShellGet 1.0.0.1 and 2.2.5. A loaded newer
-  version, a newer version copied in by hand, a recipe requiring 4.0.3, and a
-  package type other than `PowerShellModule` each stopped without changing modules.
-  A recipe requiring 5.5.3 printed `KEEP-MODULES`. The rollback command, in its
-  earlier one-line form (`Install-Module` from the PowerShell Gallery, without the
-  repository and `Find-Module` checks), restored 5.5.3. This run used an earlier
-  form of the block, before the repository, copy-location, and stop-order checks
-  described below. Earlier, on a deployed node of solution 12.2701.1004.15 whose real recipe
-  requires 5.5.3, the block printed `KEEP-MODULES` and changed no modules.
-- **Dependent-module guard (section 1):** on Windows PowerShell 5.1 with
-  PowerShellGet 1.0.0.1 and the staged 4.0.2 recipe, `Az.Storage` 9.6.1 was
-  installed from the PowerShell Gallery; its manifest declares Az.Accounts 5.4.0
-  under `ModuleList`, and installing it added Az.Accounts 5.5.5 beside 5.5.3. The
-  block printed `ARC42-DEPENDENT` for `Az.Storage` and stopped with
-  `No changes were made`; the module inventory was identical before and after.
-  After `Az.Storage` was uninstalled, the block printed `ARC42-REMOVING` for 5.5.3
-  and 5.5.5, installed 4.0.2, and printed `REQUIRES-4.0.2`, leaving only 4.0.2.
-  The rollback command, in its earlier one-line form, run for each printed
-  version, restored 5.5.3 and 5.5.5. The current rollback block was not run live.
-  With mocked module inventories in PowerShell 7.5, the guard also stopped for a
-  `RequiredModules` entry, a required version, and an unreadable version, and
-  continued for a maximum-only or lower requirement.
-- **Module block stop order (section 1), 2026-11-24:** the check for newer copies
-  not installed with `Install-Module` now runs before 4.0.2 is installed. With
-  mocked module cmdlets in PowerShell 7.5, the block stopped with
-  `No changes were made` and no install or uninstall call for a hand-placed newer
-  copy while 4.0.2 was missing (the earlier order installed 4.0.2 first), for a
-  loaded newer version, and for another module that pins an exact newer
-  Az.Accounts version under `ModuleList` or `RequiredModules`. It continued for a
-  lower minimum, a maximum-only entry, and the normal path, and printed
-  `KEEP-MODULES` without changes for a 5.x recipe. In Windows PowerShell 5.1 and
-  PowerShell 7.5, an exact `ModuleList` pin is read with an empty `Version` and the
-  pinned `RequiredVersion`, which the guard reads first. On the registered Azure
-  Local node described below, whose recipe requires 5.5.3, the revised block printed
-  `KEEP-MODULES` and the module inventory was unchanged. The 4.0.2 path was not
-  rerun live after this change.
-- **Module block copy check and post-change message (section 1), revised
-  2026-11-24:** the check for newer copies now compares each newer copy's folder
-  with the location that `Install-Module` recorded, so a copy with the same version
-  as an installed one, or a copy outside the all-users module folder, also stops
-  the block before any change. With mocked module cmdlets in PowerShell 7.5, the
-  block stopped with `No changes were made` and no install or uninstall call for a
-  hand-placed copy with the same version as an installed one (with and without
-  4.0.2 already present) and for a copy installed for the current user only; the
-  earlier cases above still stopped or continued as before. When an uninstall
-  failed or a newer copy remained after removal, the block stopped with
-  `Post-change verification failed` and named whether it installed 4.0.2 and the
-  versions it had uninstalled. On the registered Azure Local node described below
-  (Windows PowerShell 5.1, recipe requiring 5.5.3), the revised block printed
-  `KEEP-MODULES`, the module inventory was unchanged, and, read without changes,
-  the location recorded by `Install-Module` matched the folder of each installed
-  Az.Accounts copy. The 4.0.2 path was not rerun live after this change.
-- **Policy listing columns (section 4), revised 2026-11-24:** with Azure CLI
-  2.85.0, the revised loop ran read-only against an existing resource group and
-  printed one line per assignment with four columns: the assignment ID, display
-  name, enforcement mode, and policy definition or initiative ID. The last segment
-  of each ID matched the assignment name. With a test-only `$top=1`, the loop
-  followed `nextLink` and printed the same lines. The `RequestDisallowedByPolicy`
-  message recorded in the cause 4 run lists the assignment's display name under
-  `name` and its full ID under `id`.
-- **Cause 4:** an Azure Policy assignment that denies Azure Arc machine resources
-  in the target resource group reproduced exit code 42 with `AZCM0042` and
-  `httpStatusCode:403` (`RequestDisallowedByPolicy`). After the assignment was
-  removed, the retry connected. Separately, against a throwaway resource group
-  with the same deny assignment, the section 4 commands, in their form before the
-  policy listing was changed to follow `nextLink`, ran unchanged except for
-  their placeholders, in bash and in PowerShell with Azure CLI 2.85.0. They
-  returned `Registered`, the required roles, and the deny assignment together with
-  assignments inherited from the subscription and a management group.
-  `az policy assignment list --resource-group`, with or without
-  `--disable-scope-strict-match`, returned only the resource group's own
-  assignment.
-- **Managed identity token source (section 3, step 1), 2026-11-24:** on a
-  registered node of an Azure Local instance (solution 12.2701.1004.15, Windows
-  PowerShell 5.1, Az.Accounts 5.5.3, Azure CLI 2.90.0), `Connect-AzAccount -Identity -Scope Process`
-  and `az login --identity --allow-no-subscriptions` signed in as the node's
-  system-assigned identity, and the section 3 Azure PowerShell and Azure CLI blocks,
-  in their earlier form that passed the tenant parameter, ran unchanged except for
-  the tenant placeholder. Each produced a plain-text
-  token whose tenant matched; the Azure PowerShell token, served from the node's
-  token cache, had about 3 hours left of its 24-hour lifetime. Script block logging
-  was turned on by policy on that node. In an earlier run, a token from the same
-  identity, passed to a disposable Windows Server 2022 machine, failed the agent's
-  connect command with exit code 42, `AZCM0042`, and a 403 while the identity had
-  no role; after **Azure Connected Machine Onboarding** was granted on the
-  throwaway resource group only, retries at 3 and 11 minutes still returned 403,
-  and the retry at about 20 minutes connected (machine created by the identity).
-  On a disposable machine before and after the agent was installed, but before it
-  connected, the managed identity sign-in failed (no endpoint, then
-  `service_unavailable`), which confirms that the failing node cannot use its own
-  identity. The section 3 `az resource show`, `az role assignment create`, and
-  `az role assignment delete` commands, in their form before the existing-assignment
-  check was added, ran unchanged except for their placeholders against a throwaway
-  resource group, and the assignment list was empty afterward.
-- **Token request without a tenant parameter (section 3, step 2), revised
-  2026-11-24:** on the same registered node, after `Connect-AzAccount -Identity -Scope Process`
-  and, separately, `az login --identity --allow-no-subscriptions`, the revised
-  Azure PowerShell and Azure CLI blocks, which no longer pass `-TenantId` or
-  `--tenant`, ran unchanged except for the tenant placeholder, in the form before
-  they became single statements. Each produced a
-  plain-text token whose tenant matched the node's registration tenant, with about
-  11 and 8 hours left. With the managed identity, `az account get-access-token --tenant`
-  for another tenant failed with `For managed identity account, getting access token for non-current tenants is not supported`,
-  and `Get-AzAccessToken -TenantId` for another tenant returned a token from the
-  identity's own tenant while reporting the requested tenant in `TenantId`, which
-  is why the blocks check the tenant of the current sign-in instead. On a
-  workstation signed in with a user account, the revised Azure CLI block produced a
-  token for the matching tenant, stopped on a tenant mismatch, and stopped when
-  `<tenant-id>` was not replaced. That a token minted before the role assignment is
-  removed loses the permission that the assignment granted once the removal takes
-  effect, while access through other role assignments remains, is based on the
-  Azure RBAC documentation linked in section 3; it was not tested.
-- **Token cleanup (section 3, step 4), 2026-11-24:** on the same registered node
-  (Windows PowerShell 5.1, Az.Accounts 5.5.3, Azure CLI 2.90.0, script block
-  logging on), after `Connect-AzAccount -Identity -Scope Process` and the Azure
-  PowerShell token block, the token was passed as an argument into a loopback
-  session created with `New-PSSession`; `Remove-PSSession` closed it. The step 4
-  variable cleanup, in its earlier form, which did not yet remove `$credential`,
-  then printed `Token variable cleared`, and after
-  `Disconnect-AzAccount -Scope Process`, `Get-AzContext` returned nothing. After
-  `az login --identity --allow-no-subscriptions` and the Azure CLI token block, run
-  with a separate, empty Azure CLI profile folder, `az logout` succeeded and
-  `az account show` reported `Please run 'az login' to setup account.` That folder
-  never contained `msal_token_cache.bin`; after `az logout` it contained
-  `azureProfile.json` and `msal_http_cache.bin`, whose contents were not inspected.
-  The user profile's `.azure` folder was only listed, before and after, and was
-  unchanged. The token blocks in this run were in their form before they became
-  single statements, and step 4 then ran `az logout` alone; the current Azure CLI
-  cleanup block, which also deletes the profile folder, is covered in the sign-in
-  isolation bullet and the repository and service principal bullet below. The current variable cleanup, run locally in PowerShell 7.5 with dummy
-  values, printed `Token and credential variables cleared`, also when none of the
-  variables existed. The instruction to remove the role assignment on every exit after it is
-  created is procedural; the delete command itself was validated in the role grant
-  run below.
-- **Sign-in isolation and role coverage (section 3, steps 1 and 4), revised
-  2026-11-24:** on the same registered node (Windows PowerShell 5.1, Az.Accounts
-  5.5.3 with context autosave on, one saved context already present), a separate
-  PowerShell process ran `Connect-AzAccount -Identity -Scope Process`, then
-  `Disconnect-AzAccount -Scope Process`, which removed the managed identity
-  context from that process. A new session still listed the same one saved
-  context, and the user profile's `.Azure` and `.IdentityService` folders, listed
-  by file name, size, and time only, were unchanged. In Az.Accounts 5.5.3,
-  `-Scope` is available in every `Connect-AzAccount` parameter set, including the
-  service principal certificate, device code, and managed identity sets, and in
-  every `Disconnect-AzAccount` parameter set; in this run, only the managed
-  identity sign-in was run (the service principal certificate sign-in was run
-  later; see the repository and service principal bullet). In another separate
-  process, the step 1 line set `AZURE_CONFIG_DIR`
-  to a folder that did not exist yet; `az login --identity --allow-no-subscriptions`
-  created it and signed in, and the step 4 cleanup block, in its first form,
-  before it turned off telemetry and before it stopped when the folder could not
-  be deleted, printed
-  `Procedure Azure CLI profile removed`, deleted the folder, and cleared the
-  variable. Run with `AZURE_CONFIG_DIR` unset, or set to the default `.azure`
-  folder, the block printed that nothing was removed and the folder remained. The
-  default Azure CLI profile folder was listed the same way before and after and was
-  unchanged. With Azure CLI 2.85.0, `az role definition list` returned the same 11
-  **Azure Connected Machine Onboarding** actions that the role definition article
-  lists. The section 3 coverage block, run read-only, printed `MISSING` with the
-  three write and extension actions for a user-assigned identity that holds only a
-  monitoring role, `COVERED` for an operator account that holds **Owner** and
-  **Contributor** roles, and `LOOKUP-FAILED` for a malformed subscription ID, the
-  same whether run as a file or piped into a new Bash shell. With `az` replaced by a
-  Bash function, it printed `COVERED` for **Owner**, **Contributor**, and the
-  Onboarding role; `MISSING` for **Azure Connected Machine Resource Administrator**
-  alone (the four `Microsoft.GuestConfiguration` and `Microsoft.Insights` actions),
-  for a custom role with only `Microsoft.HybridCompute/machines/write`, and for a
-  wildcard custom role whose `notActions` excluded `machines/read`; `COVERED` when
-  another role supplied the missing actions; and `LOOKUP-FAILED` for each failed
-  lookup. No role assignment was created or deleted, and no machine was registered.
-  Repeating the sign-in and token steps after a fixed 403 is procedural and was
-  not rerun.
-- **Blocks pasted line by line (sections 1 and 3), 2026-11-24:** when PSReadLine
-  reads a paste as keystrokes, PowerShell runs each top-level statement as soon as
-  it is complete, and a `throw` ends only that statement. To reproduce this, each
-  block was split into its top-level statements, which were run one at a time in
-  the same session, continuing after each error. In the earlier form of the
-  section 1 block, the recipe check was separate from the statement that changes
-  modules. With mocked module cmdlets in PowerShell 7.5, a run with no recipe, or
-  with a recipe requiring 3.0.5, printed `UNKNOWN-STOP`, then installed 4.0.2,
-  removed 5.5.3, and printed `REQUIRES-4.0.2`. The section 1 block is now a single
-  statement. Run that way, it printed only `UNKNOWN-STOP`, made no install or
-  uninstall call, and left the session's `$ErrorActionPreference` unchanged.
-  Recipes requiring 4.0.2 and 5.5.3 still printed `REQUIRES-4.0.2` and
-  `KEEP-MODULES`, run whole or line by line, and the 15 mocked cases above gave the
-  same results as before. On the registered Azure Local node described above
-  (Windows PowerShell 5.1, PSReadLine 2.0.0, recipe requiring 5.5.3), the revised
-  block, run as one input, printed `KEEP-MODULES` and left the module inventory
-  unchanged. Run line by line on that node, with `Install-Module` and
-  `Uninstall-Module` replaced by functions that only recorded calls, and with the
-  recipe read redirected to a missing file or to a recipe requiring 3.0.5, the
-  earlier block printed `UNKNOWN-STOP` and then went on to the 4.0.2 checks: it
-  printed `ARC42-DEPENDENT` for the node's other Az modules and stopped there. The
-  revised block printed only `UNKNOWN-STOP`. Neither made a module call, and the
-  inventory was unchanged. The earlier section 3 token blocks, run line by line
-  with `<tenant-id>` not replaced, still requested a token after the placeholder
-  stop. Each token block is now a single dot-sourced statement. Against stubbed
-  token responses, the revised blocks requested no token in that case. With a
-  matching tenant they left `$token` set in the session, cleared `$t` or `$r`, and
-  restored the session's `$ErrorActionPreference`, run whole or line by line.
-- **Automation status:** remains `proven` because the documented token fix
-  (section 3, option 1) and policy fix (remove the denying assignment, then
-  retry) each connected the machine live, including with a token minted off the
-  node. The sign-in that produces the token is supplied by an operator, by
-  automation that holds a pre-provisioned identity, or, without a person, by the
-  managed identity of a registered machine that was granted the role ahead of time;
-  see the automation boundary in section 3.
-- **Status code routing, role lookup outcomes, and inherited roles (sections 3
-  and 4), 2026-11-24:** the section 3 lookup block now prints `EXISTS`, `NONE`, or
-  `LOOKUP-FAILED`. With `az` replaced by a Bash function, it printed `EXISTS` with
-  the ID for a successful call that returned one, `NONE` for a successful empty
-  call, and `LOOKUP-FAILED` for a failed call, both when run as a block and when
-  pasted into a new Bash shell. With Azure CLI 2.85.0, read-only against an
-  existing user-assigned identity and its resource group, the block printed `NONE`
-  for that identity, `LOOKUP-FAILED` for a malformed subscription ID, and `NONE`
-  for a resource group that does not exist; the inherited-roles listing printed the
-  identity's one role and its scope. No role assignment was created or deleted in
-  this run. The routing of 429 and 5xx responses follows the linked Azure Resource
-  Manager throttling and Service Health documentation; neither response was
-  reproduced. That deleting the temporary assignment leaves access from other
-  assignments in place follows from the additive role model in the linked Azure
-  RBAC overview; it was not tested.
-- **Not validated:** device code sign-in (option 2, and the operator's
-  `Connect-AzAccount -UseDeviceAuthentication` sign-in in option 1), which needs a
-  person; where a device code sign-in stores its tokens without
-  `Disable-AzContextAutosave -Scope Process`, and that it sets `EnableLoginByWam`
-  to `false`, are taken from the Az.Accounts source (`ConnectAzureRmAccount.cs`),
-  and `Update-AzConfig -EnableLoginByWam $true` was not run; the service principal client secret sign-in is covered by the
-  2026-11-25 bullet below; service principal tokens
-  passed to registration (the service principal held no role); a token that Azure rejects because it expired (expiry was
-  tested only against stubbed responses); the quota variant of cause 4 (the
-  missing-role variant is covered by the managed identity run above); a real image
-  whose recipe requires 4.0.2 (none was available, so a staged recipe file stood
-  in); and the full bootstrap command on an unregistered Azure Local machine,
-  including whether it needs roles beyond **Azure Connected Machine Onboarding**
-  when the token comes from a managed identity. No unregistered Azure Local machine
-  was available for that run. The section 4 object ID lookups for a service
-  principal (`az ad sp show`) and a user (`az ad signed-in-user show`) were not run;
-  the managed identity lookup (`az resource show`) and the role list command were.
-  The Windows event logs were not characterized for this failure: in one run of the agent's connect command on a test machine, a query of the Application and System logs for the 10 minutes up to and including the failed attempt, filtered to the Arc agent's providers, returned only event IDs 348 (Azure Arc Proxy) and 148 (Azure Hybrid Instance Metadata Service), whose messages were not read, and no other log and no run of the full bootstrap on an Azure Local image were checked.
-- **Repository choice and service principal cleanup (sections 1 and 3),
-  2026-11-24:** with mocked module and repository cmdlets in PowerShell 7.5, the
-  section 1 block, on the 4.0.2 path, stopped with `No changes were made` and made
-  no `Install-Module` or `Uninstall-Module` call when a version it would remove, or
-  4.0.2 when it had to be installed, was not in the repository, and when the
-  repository was not registered. It used an internal repository name for every
-  repository command when `$Repository` was set to one, did not query the
-  repository when 4.0.2 was already present and only newer versions were checked,
-  and made no repository call for a 5.x recipe. The 15 earlier mocked cases gave
-  the same output, errors, and module changes as before. The rollback block, with
-  mocked cmdlets, installed from the PowerShell Gallery by default, used an
-  internal repository name when `$Repository` was set to one, and stopped with
-  `Nothing was installed` when the exact version was not found, when the
-  repository was not registered, or when the placeholder was not replaced. On the
-  registered Azure Local node (Windows PowerShell 5.1, PowerShellGet 2.2.5, recipe
-  requiring 5.5.3), the revised block, run as one input, printed `KEEP-MODULES`, and
-  the module inventory was identical before and after; `Find-Module -RequiredVersion`
-  found 4.0.2, 5.5.1, and 5.5.3 in the PowerShell Gallery. The 4.0.2 path and the
-  rollback were not run against a real repository after this change. A throwaway
-  service principal with no role assignment was created in a lab tenant for the
-  sign-in checks and deleted afterward. On that node, with context autosave on for
-  the user, `Connect-AzAccount -ServicePrincipal -CertificateThumbprint -Scope Process`
-  signed in and issued an ARM token; the user profile's `.Azure` folder, listed by
-  file name, size, and time, was unchanged while signed in and after
-  `Disconnect-AzAccount -Scope Process`, a new process had no saved context for the
-  service principal, and the current context reverted to the context saved before
-  the test. The throwaway certificate was then removed from the store. That
-  sign-in ran without `Disable-AzContextAutosave -Scope Process`, which step 1 now
-  runs first; a certificate sign-in stores no secret. With Azure
-  CLI 2.85.0 on a macOS workstation and a new `arc42-az-*` profile folder, `az login --service-principal`
-  with a certificate and, separately, with a client secret signed in and issued a
-  token. The service principal entry recorded the application ID, tenant, and the
-  certificate file's path (not its content) for the certificate, and the client
-  secret for the secret; the token cache file was in the same folder. The step 4
-  cleanup block printed `Procedure Azure CLI profile removed` and deleted the
-  folder, and the certificate file stayed where it was. In the first run, the
-  telemetry upload that followed `az logout` recreated the folder within seconds,
-  holding only `logs/telemetry.log`; with telemetry turned off for `az logout`, as
-  the block now does, the folder was still absent 45 seconds later in both runs.
-  On Windows, the Azure CLI encrypts these files and names them differently
-  ([MSAL-based Azure CLI](https://learn.microsoft.com/cli/azure/msal-based-azure-cli));
-  the Windows file names were not observed. After this run, the Azure CLI cleanup
-  block was changed to stop with an error and keep `AZURE_CONFIG_DIR` when the
-  folder cannot be deleted completely. That form was run only locally, in
-  PowerShell 7.5 on macOS against a dummy profile folder without a sign-in: it
-  printed `Procedure Azure CLI profile removed` and removed the folder and the
-  variable; with a file that could not be deleted, it stopped with the
-  `Could not delete` error and kept the folder and the variable, and a rerun after
-  the file could be deleted removed both; with the variable unset, it changed
-  nothing. It was not rerun on Windows or after a real sign-in. The section 1
-  block was also changed after this run to count 4.0.2 as present only when it is
-  in the all-users module folder. With mocked module and repository cmdlets in
-  PowerShell 7.5, the 26 mocked module and rollback cases described above (the 15
-  earlier cases and the 11 added in this run) gave the same
-  results, and with 4.0.2 installed only for the current user, the block installed
-  4.0.2 for all users before it removed 5.5.3, where the earlier form removed 5.5.3
-  without installing it. This change was not run on a node.
-- **Role grant and policy listing, revised 2026-11-24:** with Azure CLI 2.85.0
-  against a throwaway resource group and two throwaway user-assigned identities,
-  the section 3 role commands ran unchanged except for their placeholders. For an
-  identity without the role, the `az role assignment list` check printed nothing,
-  `az role assignment create` printed the new assignment ID, the check then printed
-  that same ID, and `az role assignment delete --ids` removed it. For an identity
-  whose assignment was created beforehand to stand in for other automation, the
-  check printed that assignment's ID, so the procedure created and deleted nothing,
-  and that assignment remained. The section 4 policy loop, with its earlier
-  columns, listed the three assignments that apply to the resource group in one
-  page. To confirm that it
-  follows `nextLink`, it was also run with a test-only `$top=1` added to the first
-  URL: a single `az rest` call then returned one assignment and a `nextLink`, and
-  the loop followed the links and listed the same three assignments. The resource
-  group, identities, and assignments were deleted afterward. These were not rerun
-  with a managed identity of a registered machine.
-- **Client secret sign-in and context autosave, 2026-11-25:** on the registered
-  Azure Local node (Windows PowerShell 5.1, Az.Accounts 5.5.3), in the new profile
-  of a throwaway local account with context autosave on for the user (the
-  default), a throwaway service principal with a client secret and no role
-  assignment signed in with
-  `Connect-AzAccount -ServicePrincipal -Credential -Tenant -Scope Process` and
-  issued an ARM token. Without `Disable-AzContextAutosave -Scope Process`, the
-  sign-in wrote `keystore.cache` (502 bytes) to `%USERPROFILE%\.Azure`; after
-  `Disconnect-AzAccount -Scope Process`, and again in a new process, the
-  decrypted file still held the application ID and the client secret. The file
-  was then deleted. With `Disable-AzContextAutosave -Scope Process` run first,
-  the command printed `Mode` `Process`, the sign-in and token request worked, no
-  `keystore.cache` was written, the folder listing (file name, size, and time)
-  did not change from before the sign-in to after the sign-out, a new process had
-  no context for the service principal, and `Get-AzContextAutosaveSetting -Scope CurrentUser`
-  still returned `CurrentUser`. In both runs, loading Az.Accounts created its own
-  settings files in `%USERPROFILE%\.Azure`, with no credentials, and the
-  service principal sign-in wrote nothing to `%LOCALAPPDATA%\.IdentityService`.
-  The account, its profile, and the service principal were deleted afterward.
-  The `AZURE_CONFIG_DIR` line in step 1 was run in PowerShell 7.5 on macOS, where
-  `$env:TEMP` is not set: the earlier form stopped with `Cannot bind argument to
-  parameter 'Path' because it is null` and did not set the variable, and the
-  current form set an `arc42-az-*` folder under the temporary folder, which the
-  step 4 Azure CLI cleanup block then removed. The current form was not run in
-  Windows PowerShell 5.1 or after a real Azure CLI sign-in.
-
 ## Revision history
 
 | Date | Summary |
@@ -1545,4 +1152,4 @@ the full bootstrap was not run.
 | 2026-11-24 | The 429 and 5xx rows now say that a retry with a token is a new attempt: repeat section 3, option 1, steps 1 to 3 after waiting, to get a fresh token and, if needed, the temporary role assignment again, then clean up again. |
 | 2026-11-24 | The Azure CLI cleanup block now stops with an error and keeps `AZURE_CONFIG_DIR` when the procedure's profile folder cannot be deleted completely, so it reports success only after the folder is gone and the cleanup can be run again. |
 | 2026-11-24 | The section 1 block now counts Az.Accounts 4.0.2 as present only when it is in the all-users module folder, so a copy installed only for the current user no longer lets it remove the shared newer versions; in that case it installs 4.0.2 for all users first. |
-| 2026-11-24 | The **Windows event logs** entry under "Where this problem appears" no longer states that the Application and System logs do not record this failure, which validation did not establish; it now marks that surface as not characterized and points to the PowerShell status and the bootstrap and agent log files. The validation status now states which earlier form of each sign-in, token, cleanup, and rollback block was run, and what was checked for the current form. |
+| 2026-11-24 | The **Windows event logs** entry under "Where this problem appears" no longer states that the Application and System logs do not record this failure; it now marks that surface as not characterized and points to the PowerShell status and the bootstrap and agent log files. |
