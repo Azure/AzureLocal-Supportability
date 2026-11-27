@@ -82,9 +82,16 @@ The same record is on the Windows event log as Event ID 17205 in `AzStackHciEnvi
 
 ```powershell
 $asrKey = 'Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules'
-Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicySetting' -ErrorAction Stop |
+$rows = @(Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicySetting' -ErrorAction Stop |
     Where-Object { $_.RegistryKey -eq $asrKey } |
-    Select-Object ValueName, SOMID
+    Select-Object ValueName, SOMID)
+if ($rows.Count -gt 0) {
+    $rows
+    Write-Output 'ASR_GP_RULES_FOUND'
+}
+else {
+    Write-Output 'ASR_GP_RULES_NONE'
+}
 ```
 
 > **Why this query does not use `-Filter`.** A WQL filter treats the backslash as an
@@ -94,7 +101,12 @@ Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicyS
 > Retrieving the class and matching `RegistryKey` in PowerShell avoids the escaping problem,
 > and `-ErrorAction Stop` makes a genuine RSoP failure visible instead of silent.
 
-Each `ValueName` is an ASR rule GUID and each `SOMID` is the Group Policy scope that applied it (an Active Directory distinguished name for a domain GPO, or `Local` for a local group policy). No rows means no Group Policy-managed ASR on that node.
+Each `ValueName` is an ASR rule GUID and each `SOMID` is the Group Policy scope that applied it (an Active Directory distinguished name for a domain GPO, or `Local` for a local group policy). The last line gives the result:
+
+- `ASR_GP_RULES_FOUND`: the node has Group Policy-managed ASR rules (listed above it). Continue with step 3.
+- `ASR_GP_RULES_NONE`: the node has no Group Policy-managed ASR rules.
+
+If the query stops with an error instead, the node's RSoP could not be read. That is not a clean result: resolve the RSoP error before you rely on this check.
 
 ### 2. What it looks like: example failure signatures
 
