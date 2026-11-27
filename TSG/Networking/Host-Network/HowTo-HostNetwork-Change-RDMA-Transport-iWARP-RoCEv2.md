@@ -53,6 +53,34 @@
   </tr>
 </table>
 
+## Table of contents
+
+- [At a glance](#at-a-glance)
+- [Find where to start](#find-where-to-start)
+- [Scope and support boundary](#scope-and-support-boundary)
+- [Where to observe this change](#where-to-observe-this-change)
+- [Transport requirements](#transport-requirements)
+- [Prerequisites](#prerequisites)
+- [Change-control checkpoints](#change-control-checkpoints)
+- [Glossary](#glossary)
+- [Prepare variables and evidence storage](#prepare-variables-and-evidence-storage)
+- [Capture and seal the current configuration](#capture-and-seal-the-current-configuration)
+- [Seal storage and platform resource identities](#seal-storage-and-platform-resource-identities)
+- [Resume safely after a PowerShell, remoting, or operator-session loss](#resume-safely-after-a-powershell-remoting-or-operator-session-loss)
+- [Quiesce workloads and the platform](#quiesce-workloads-and-the-platform)
+- [Offline CSVs and the Storage Spaces Direct pool](#offline-csvs-and-the-storage-spaces-direct-pool)
+- [Change the Network ATC transport](#change-the-network-atc-transport)
+- [Restore the platform in dependency order](#restore-the-platform-in-dependency-order)
+- [Hold a clean platform state](#hold-a-clean-platform-state)
+- [Return workload startup to the application owner](#return-workload-startup-to-the-application-owner)
+- [Validate active RDMA under representative load](#validate-active-rdma-under-representative-load)
+- [Abandon the change before the platform is quiesced](#abandon-the-change-before-the-platform-is-quiesced)
+- [Rollback](#rollback)
+- [Troubleshooting and stop conditions](#troubleshooting-and-stop-conditions)
+- [Evidence and escalation package](#evidence-and-escalation-package)
+- [Success criteria](#success-criteria)
+- [References](#references)
+
 ## At a glance
 
 > [!WARNING]
@@ -74,6 +102,20 @@ The safe dependency order is:
 12. Validate the target transport under an approved representative workload.
 
 Rollback uses the same quiesce and recovery sequence with the original transport as the target.
+
+## Find where to start
+
+This guide is long. Use this table to go straight to the section that matches your situation.
+
+| If you are here because | Go to |
+| --- | --- |
+| You are starting a new change | Read [Scope and support boundary](#scope-and-support-boundary), [Prerequisites](#prerequisites), and [Change-control checkpoints](#change-control-checkpoints), then begin at [Prepare variables and evidence storage](#prepare-variables-and-evidence-storage). |
+| Your PowerShell session, remoting session, or operator hand-off was interrupted | [Resume safely after a PowerShell, remoting, or operator-session loss](#resume-safely-after-a-powershell-remoting-or-operator-session-loss). Its table maps each recorded phase to the next action. |
+| You want to stop the change and the recorded phase is still `Initialized`, `BaselineSealed`, or `WorkloadsOff` | [Abandon the change before the platform is quiesced](#abandon-the-change-before-the-platform-is-quiesced). From `PlatformOff` onward, do not abandon. |
+| The change approver decided to roll back and the recorded phase is `TargetReadbackVerified` through `ActiveValidationPassed` | [Rollback](#rollback). If the phase is already `RollbackApproved`, resume as the phase table directs. Between `PlatformOff` and `TargetReadbackVerified`, continue the forward change or contact Microsoft Support. |
+| A check, gate, or recovery step failed, or you need to escalate | [Troubleshooting and stop conditions](#troubleshooting-and-stop-conditions) and [Evidence and escalation package](#evidence-and-escalation-package). |
+
+**Find your current phase.** If you do not know where the change stopped, run the block at the start of [Resume safely after a PowerShell, remoting, or operator-session loss](#resume-safely-after-a-powershell-remoting-or-operator-session-loss). It loads the recorded phase from `phase-state.json` and prints it, and it does not change cluster state. Then follow the row for that phase in the table that comes after the block.
 
 ## Scope and support boundary
 
