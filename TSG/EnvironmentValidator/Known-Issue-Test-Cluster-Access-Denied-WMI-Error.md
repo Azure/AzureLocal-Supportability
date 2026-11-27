@@ -83,7 +83,9 @@ foreach ($node in $nodes) {
 }
 ```
 
-If all nodes resolve successfully, DNS is not the cause. Contact Microsoft Support for further assistance.
+If all nodes resolve successfully, DNS is not the cause. The same error messages also appear in
+[Known Issue: Test-Cluster Administrative Privileges Failure During Deployment](Known-Issue-Test-Cluster-Administrative-Privileges-Failure.md),
+so check that article next. If neither applies, contact Microsoft Support.
 
 ### Step 2: Register DNS on each affected node
 
@@ -115,10 +117,15 @@ foreach ($node in $affectedNodes) {
         Write-Host "[FIXED]   $fqdn -> $($result.IPAddress -join ', ')" -ForegroundColor Green
     }
     else {
-        Write-Host "[MISSING] $fqdn - see Step 4" -ForegroundColor Red
+        Write-Host "[MISSING] $fqdn - still missing, do not resume yet" -ForegroundColor Red
     }
 }
 ```
+
+If a record is still missing, do not resume the deployment: cluster validation fails again. Ask the
+Active Directory or DNS administrator to check why the node cannot register its record in the
+zone, for example the zone's secure dynamic update setting or the permissions on an existing
+record for that name. When Step 3 shows every record, continue with Step 4.
 
 ### Step 4: Resume deployment
 
