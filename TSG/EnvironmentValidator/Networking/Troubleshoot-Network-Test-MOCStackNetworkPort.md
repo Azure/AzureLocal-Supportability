@@ -179,7 +179,11 @@ $rules = @(Get-NetFirewallRule -PolicyStore ActiveStore |
         $pf = $_ | Get-NetFirewallPortFilter
         $remote = @(($_ | Get-NetFirewallAddressFilter).RemoteAddress)
         $ports = @($pf.RemotePort)
-        $portMatch = ($ports -contains 'Any') -or ($ports -contains '80') -or ($ports -contains '443')
+        $portMatch = @($ports | Where-Object {
+            $_ -eq 'Any' -or $_ -eq '80' -or $_ -eq '443' -or
+            ($_ -match '^(\d+)-(\d+)$' -and ((([int]$Matches[1] -le 80) -and ([int]$Matches[2] -ge 80)) -or
+                (([int]$Matches[1] -le 443) -and ([int]$Matches[2] -ge 443))))
+        }).Count -gt 0
         if ((@('TCP', 'Any') -contains "$($pf.Protocol)") -and $portMatch) {
             $match = if (@($remote | Where-Object { $addresses -contains $_ }).Count -gt 0) { 'Endpoint address' }
                      elseif ($remote -contains 'Any') { 'Any address' }
@@ -257,8 +261,12 @@ Paste and run the whole block at once. It stops at the first error, and it chang
             $pf = $_ | Get-NetFirewallPortFilter
             $ports = @($pf.RemotePort)
             $remote = @(($_ | Get-NetFirewallAddressFilter).RemoteAddress)
-            (@('TCP', 'Any') -contains "$($pf.Protocol)") -and
-            (($ports -contains 'Any') -or ($ports -contains '80') -or ($ports -contains '443')) -and
+            $portMatch = @($ports | Where-Object {
+                $_ -eq 'Any' -or $_ -eq '80' -or $_ -eq '443' -or
+                ($_ -match '^(\d+)-(\d+)$' -and ((([int]$Matches[1] -le 80) -and ([int]$Matches[2] -ge 80)) -or
+                    (([int]$Matches[1] -le 443) -and ([int]$Matches[2] -ge 443))))
+            }).Count -gt 0
+            (@('TCP', 'Any') -contains "$($pf.Protocol)") -and $portMatch -and
             (@($remote | Where-Object { $addresses -contains $_ }).Count -gt 0)
         })
     $managed = @($targets | Where-Object { "$($_.PolicyStoreSourceType)" -ne 'Local' })
@@ -331,6 +339,6 @@ Expected result: `Status` `SUCCESS` and an empty `Detail`. If both ports test `T
 ## Quick summary
 
 * Symptom: `AzStackHci_MOCStack_Network_Port` failure blocks validation  
-* Cause: outbound TCP 80 or 443 to `internetbeacon.msedge.net` is not allowlisted on the firewall appliance  
-* Fix: allow TCP 80 and 443 to `internetbeacon.msedge.net` on the appliance and run validation again
+* Cause: the node can't open outbound TCP 80 or 443 to `internetbeacon.msedge.net`, most often because a network firewall blocks it. DNS failures and Windows Firewall rules on the node fail the same way  
+* Fix: allow TCP 80 and 443 to `internetbeacon.msedge.net` on the firewall, or fix the DNS or node rule you found, and run validation again
 * Applies to: Environment Checker 10.2509 and earlier, without a WinHTTP proxy
