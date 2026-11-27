@@ -694,6 +694,8 @@ if ($StorageIntents.Count -ne 1) {
 
 $StorageIntent = $StorageIntents[0]
 $AdapterNames = @($StorageIntent.NetAdapterNamesAsList | ForEach-Object {
+    "$_" -split ','
+} | ForEach-Object {
     "$_".Trim()
 } | Where-Object { $_ })
 
@@ -1109,6 +1111,17 @@ if ($ControlPlaneVms.Count -ne 1) {
     throw "Expected exactly one clustered appliance VM on the infrastructure CSV. Stop and engage Microsoft Support."
 }
 
+$UnsupportedBaselineVms = @($ClusteredVms | Where-Object {
+    "$($_.VmState)" -notin @('Running', 'Off')
+})
+if ($UnsupportedBaselineVms.Count -gt 0) {
+    $UnsupportedBaselineVms | Format-Table GroupName, VmName, VmState
+    throw (
+        "Every clustered VM must be Running or Off before sealing. Ask the " +
+        "workload owner to start or shut down each listed VM, then seal again."
+    )
+}
+
 $VirtualDisks = @(Get-VirtualDisk -ErrorAction Stop)
 $ManualAttachVirtualDisks = @($VirtualDisks | Where-Object {
     [bool]$_.IsManualAttach
@@ -1237,7 +1250,7 @@ Set-ChangePhase -Phase BaselineSealed
 
 Expected result: one sealed inventory records every CSV, the pool, MOC, the appliance VM, all clustered VMs, any non-CSV manual-attach virtual disk and exact clustered resource, and both transport values.
 
-Stop if any identity is ambiguous. Do not select the appliance VM or infrastructure CSV from a display name alone.
+Stop if any identity is ambiguous. Do not select the appliance VM or infrastructure CSV from a display name alone. Stop if any clustered VM is in a state other than `Running` or `Off`, such as `Saved` or `Paused`. The sealed baseline state is the state that each customer VM returns to after the change.
 
 ## Resume safely after a PowerShell, remoting, or operator-session loss
 
@@ -1379,6 +1392,11 @@ if ("$($PhaseState.Phase)" -eq 'Initialized') {
     Write-Warning (
         "Only the Initialized checkpoint exists. Re-run every baseline and " +
         "identity-sealing block before any state-changing step."
+    )
+} elseif ("$($PhaseState.Phase)" -eq 'Abandoned') {
+    Write-Warning (
+        "The change was abandoned. Run only the block in 'Abandon the change " +
+        "before the platform is quiesced' to finish cleanup."
     )
 } else {
     $ExpectedHashes = @(Get-Content -LiteralPath `
@@ -2514,6 +2532,8 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
     }
     $PointOfNoReturnIntentAdapters = @(
         $PointOfNoReturnIntent[0].NetAdapterNamesAsList | ForEach-Object {
+            "$_" -split ','
+        } | ForEach-Object {
             "$_".Trim().ToUpperInvariant()
         } | Where-Object { $_ } | Sort-Object -Unique
     )
@@ -2661,6 +2681,7 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
     $LiveIntentAdapters = @()
     if ($LiveIntent.Count -eq 1) {
         $LiveIntentAdapters = @($LiveIntent[0].NetAdapterNamesAsList |
+            ForEach-Object { "$_" -split ',' } |
             ForEach-Object { "$_".Trim().ToUpperInvariant() } |
             Where-Object { $_ } | Sort-Object -Unique)
     }
@@ -3150,6 +3171,7 @@ Require all health conditions to remain continuously clean for at least five min
 ```powershell
 & {
 $CleanSince = $null
+$HoldPassed = $false
 $Deadline = (Get-Date).AddMinutes(30)
 
 do {
@@ -3321,17 +3343,19 @@ do {
         if ($null -eq $CleanSince) {
             $CleanSince = Get-Date
         }
+        # Finish only on a full clean sample taken at or after five minutes.
+        if ((Get-Date) -ge $CleanSince.AddMinutes(5)) {
+            $HoldPassed = $true
+            break
+        }
     } else {
         $CleanSince = $null
     }
 
     Start-Sleep -Seconds 30
-} while (
-    ((Get-Date) -lt $Deadline) -and
-    ($null -eq $CleanSince -or (Get-Date) -lt $CleanSince.AddMinutes(5))
-)
+} while ((Get-Date) -lt $Deadline)
 
-if ($null -eq $CleanSince -or (Get-Date) -lt $CleanSince.AddMinutes(5)) {
+if (-not $HoldPassed) {
     throw "The platform did not maintain a continuous five-minute clean hold."
 }
 
@@ -4197,6 +4221,7 @@ try {
 
 # Require a final continuous five-minute clean hold
 $FinalCleanSince = $null
+$FinalHoldPassed = $false
 $FinalDeadline = (Get-Date).AddMinutes(30)
 do {
     try {
@@ -4432,6 +4457,11 @@ do {
         if ($null -eq $FinalCleanSince) {
             $FinalCleanSince = Get-Date
         }
+        # Finish only on a full clean sample taken at or after five minutes.
+        if ((Get-Date) -ge $FinalCleanSince.AddMinutes(5)) {
+            $FinalHoldPassed = $true
+            break
+        }
     } else {
         $FinalHoldFailureJson = [pscustomobject]@{
             ObservedUtc = (Get-Date).ToUniversalTime().ToString('o')
@@ -4517,16 +4547,9 @@ do {
     }
 
     Start-Sleep -Seconds 30
-} while (
-    ((Get-Date) -lt $FinalDeadline) -and
-    ($null -eq $FinalCleanSince -or
-        (Get-Date) -lt $FinalCleanSince.AddMinutes(5))
-)
+} while ((Get-Date) -lt $FinalDeadline)
 
-if (
-    $null -eq $FinalCleanSince -or
-    (Get-Date) -lt $FinalCleanSince.AddMinutes(5)
-) {
+if (-not $FinalHoldPassed) {
     $FinalHoldTimeoutJson = [pscustomobject]@{
         ObservedUtc = (Get-Date).ToUniversalTime().ToString('o')
         Phase = $FinalHoldPhase
