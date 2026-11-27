@@ -149,7 +149,14 @@ Run the [Issue Validation](#issue-validation) script again on the same node, or 
 
 If `OlderThanOneDay` is still more than `0`, run the mitigation script again and read its red `Unable to remove` lines. Repeat [Issue Validation](#issue-validation) and [Mitigation Details](#mitigation-details) on each remaining node.
 
-If the folders build up again after later updates, the cluster is still on a build without the fix. Repeat these steps after each update until the cluster runs a build with the fix.
+If the folders build up again after later updates, first check whether the cluster runs a build with the fix. Builds with the fix create the `AzStackHci.EnvironmentChecker.NugetsForUpdate` folder directly in `C:\Users\HCIOrchestrator\AppData\Local\Temp` on the node where the Azure Stack HCI Orchestrator Service runs the update checks, and earlier builds never create it. After an update, run this on each node; it returns `True` on a node that has the folder:
+
+```PowerShell
+Test-Path -LiteralPath 'C:\Users\HCIOrchestrator\AppData\Local\Temp\AzStackHci.EnvironmentChecker.NugetsForUpdate'
+```
+
+- If it returns `False` on every node, the cluster is on a build without the fix. Repeat these steps after each update until the cluster runs a build with the fix.
+- If it returns `True` on any node, the cluster is on a build with the fix. Folders left from earlier updates can stay on the other nodes until you remove them once with these steps. New random-named folders that are more than one day old on a node that has the `AzStackHci.EnvironmentChecker.NugetsForUpdate` folder, or new folders that come back on every node after each update, are not expected. Do not keep repeating the cleanup; see [When to contact Microsoft support](#when-to-contact-microsoft-support).
 
 ## When to contact Microsoft support
 
@@ -158,6 +165,6 @@ Contact Microsoft support if any of these happen:
 - The same folder still cannot be removed after you run the script again later.
 - `OlderThanOneDay` is still more than `0` after the mitigation script reports no errors.
 - `InspectionErrors` stays above `0` when you run Issue Validation again from an elevated session.
-- New random-named folders keep appearing after updates on a build that has the `AzStackHci.EnvironmentChecker.NugetsForUpdate` folder.
+- On a build with the fix (a node has the `AzStackHci.EnvironmentChecker.NugetsForUpdate` folder), new random-named folders more than one day old appear on a node that has that folder, or new folders come back on every node after each update.
 
 Include the Issue Validation output from before and after the mitigation, the mitigation script output, and the solution version from `Get-SolutionUpdateEnvironment`.
