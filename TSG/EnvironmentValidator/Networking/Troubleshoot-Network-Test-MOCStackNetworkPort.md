@@ -164,48 +164,58 @@ The check tries each port up to five times before it reports a failure. If a tes
 
 ### Check the node's own firewall
 
-This read-only block lists the Windows Firewall settings on the node that can block the check: each profile's default outbound action, and each enabled outbound block rule that covers TCP 80 or 443.
+This read-only block lists the Windows Firewall settings on the node that can block the check: each profile's default outbound action, and each enabled outbound block rule that covers TCP 80 or 443. You don't need an elevated session for it.
 
 ```powershell
 # Read-only: list Windows Firewall settings on this node that can block the check
-$Endpoint = 'internetbeacon.msedge.net'
-$addresses = @(Resolve-DnsName -Name $Endpoint -ErrorAction SilentlyContinue |
-    Where-Object { $_.IPAddress } | Select-Object -ExpandProperty IPAddress -Unique)
-"Endpoint addresses: $($addresses -join ', ')"
-Get-NetFirewallProfile -PolicyStore ActiveStore | Format-Table Name, Enabled, DefaultOutboundAction
-$rules = @(Get-NetFirewallRule -PolicyStore ActiveStore |
-    Where-Object { "$($_.Direction)" -eq 'Outbound' -and "$($_.Action)" -eq 'Block' -and "$($_.Enabled)" -eq 'True' } |
-    ForEach-Object {
-        $pf = $_ | Get-NetFirewallPortFilter
-        $remote = @(($_ | Get-NetFirewallAddressFilter).RemoteAddress)
-        $ports = @($pf.RemotePort)
-        $portMatch = @($ports | Where-Object {
-            $_ -eq 'Any' -or $_ -eq '80' -or $_ -eq '443' -or
-            ($_ -match '^(\d+)-(\d+)$' -and ((([int]$Matches[1] -le 80) -and ([int]$Matches[2] -ge 80)) -or
-                (([int]$Matches[1] -le 443) -and ([int]$Matches[2] -ge 443))))
-        }).Count -gt 0
-        if ((@('TCP', 'Any') -contains "$($pf.Protocol)") -and $portMatch) {
-            $match = if (@($remote | Where-Object { $addresses -contains $_ }).Count -gt 0) { 'Endpoint address' }
-                     elseif ($remote -contains 'Any') { 'Any address' }
-                     else { 'Other addresses (check whether they include the endpoint)' }
-            [pscustomobject]@{
-                Rule          = $_.DisplayName
-                Name          = $_.Name
-                Source        = $_.PolicyStoreSourceType
-                RemotePort    = $ports -join ','
-                RemoteAddress = $remote -join ','
-                Match         = $match
+& {
+    $Endpoint = 'internetbeacon.msedge.net'
+    $addresses = @(Resolve-DnsName -Name $Endpoint -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress } | Select-Object -ExpandProperty IPAddress -Unique)
+    "Endpoint addresses: $($addresses -join ', ')"
+    Get-NetFirewallProfile -PolicyStore ActiveStore | Format-Table Name, Enabled, DefaultOutboundAction
+    $portParts = { param($Ports) @($Ports | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+    $rules = @(Get-NetFirewallRule -PolicyStore ActiveStore |
+        Where-Object { "$($_.Direction)" -eq 'Outbound' -and "$($_.Action)" -eq 'Block' -and "$($_.Enabled)" -eq 'True' } |
+        ForEach-Object {
+            $pf = $_ | Get-NetFirewallPortFilter
+            $remote = @(($_ | Get-NetFirewallAddressFilter).RemoteAddress)
+            $ports = @(& $portParts $pf.RemotePort)
+            $portMatch = @($ports | Where-Object {
+                $_ -eq 'Any' -or $_ -eq '80' -or $_ -eq '443' -or
+                ($_ -match '^(\d+)-(\d+)$' -and ((([int]$Matches[1] -le 80) -and ([int]$Matches[2] -ge 80)) -or
+                    (([int]$Matches[1] -le 443) -and ([int]$Matches[2] -ge 443))))
+            }).Count -gt 0
+            if ((@('TCP', '6', 'Any') -contains "$($pf.Protocol)") -and $portMatch) {
+                $endpointOnly = (@('TCP', '6') -contains "$($pf.Protocol)") -and
+                    @($ports | Where-Object { @('80', '443') -notcontains $_ }).Count -eq 0 -and
+                    $remote.Count -gt 0 -and @($remote | Where-Object { $addresses -notcontains $_ }).Count -eq 0
+                $match = if (@($remote | Where-Object { $addresses -contains $_ }).Count -gt 0) {
+                             if ($endpointOnly) { 'Endpoint only' } else { 'Endpoint and other traffic' }
+                         }
+                         elseif ($remote -contains 'Any') { 'Any address' }
+                         else { 'Other addresses (check whether they include the endpoint)' }
+                [pscustomobject]@{
+                    Rule          = $_.DisplayName
+                    Name          = $_.Name
+                    Source        = $_.PolicyStoreSourceType
+                    Protocol      = $pf.Protocol
+                    RemotePort    = $ports -join ','
+                    RemoteAddress = $remote -join ','
+                    Match         = $match
+                }
             }
-        }
-    })
-if ($rules.Count -gt 0) { $rules | Format-List } else { 'No enabled outbound block rule on this node covers TCP 80 or 443.' }
+        })
+    if ($rules.Count -gt 0) { $rules | Format-List } else { 'No enabled outbound block rule on this node covers TCP 80 or 443.' }
+}
 ```
 
 Expected result on a node that isn't blocking the check: an address after `Endpoint addresses:`, no profile with `DefaultOutboundAction` `Block`, and the line `No enabled outbound block rule on this node covers TCP 80 or 443.`
 
 * If nothing follows `Endpoint addresses:`, the node can't resolve the name, so the list can't show which rules match the endpoint. Go to [If the node can't resolve the name](#if-the-node-cant-resolve-the-name) first.
 
-* If a rule is listed with `Match` `Endpoint address`, see [If a firewall rule on the node blocks the connection](#if-a-firewall-rule-on-the-node-blocks-the-connection).
+* If a rule is listed with `Match` `Endpoint only`, the rule blocks only `internetbeacon.msedge.net` addresses on TCP 80 or 443. See [If a firewall rule on the node blocks the connection](#if-a-firewall-rule-on-the-node-blocks-the-connection).
+* If a rule is listed with `Match` `Endpoint and other traffic`, the rule also blocks other addresses, other ports, or other protocols. Don't disable it, because that also removes its other restrictions. Ask the rule's owner to remove the `internetbeacon.msedge.net` addresses from it or to narrow it. Windows Firewall applies block rules before allow rules, so adding an allow rule doesn't get around it.
 * If a rule with `Any address` is listed, or a profile's `DefaultOutboundAction` is `Block`, your organization restricts outbound traffic on the node. Ask the owner of that rule or policy to allow TCP 80 and 443 to `internetbeacon.msedge.net`. Don't disable a broad rule to pass this check.
 
 ## Remediation
@@ -233,16 +243,23 @@ Then run the tests in [Manually test from the affected node](#manually-test-from
 
 ### If a firewall rule on the node blocks the connection
 
-Use this block only when [Check the node's own firewall](#check-the-nodes-own-firewall) listed a rule with `Match` `Endpoint address`. It disables only local rules that name an `internetbeacon.msedge.net` address for TCP 80 or 443. It changes nothing when a matching rule comes from Group Policy or another policy source, because those rules must be changed where they're defined. If someone added the rule on purpose, check with your security team first.
+Use this block only when [Check the node's own firewall](#check-the-nodes-own-firewall) listed a rule with `Match` `Endpoint only`. It disables a rule only when the rule's whole scope is `internetbeacon.msedge.net` addresses on TCP 80 or 443, so disabling it removes no other restriction. It changes nothing when any matching rule is broader than that, or when a matching rule comes from Group Policy or another policy source, and it lists those rules so you can take them to their owner. If someone added the rule on purpose, check with your security team first.
 
-**Changes:** Disables the matching local Windows Firewall outbound block rules on this node. Other rules, policy-managed rules, and the profile defaults don't change. To undo, run the `Enable-NetFirewallRule` command that the block prints for each rule.
+Run the block in an elevated PowerShell session (**Run as administrator**). Changing Windows Firewall rules needs administrator rights, and the block stops without changing anything if the session isn't elevated.
+
+**Changes:** Disables the local Windows Firewall outbound block rules on this node whose only scope is `internetbeacon.msedge.net` on TCP 80 or 443. Broader rules, policy-managed rules, other rules, and the profile defaults don't change. To undo, run the `Enable-NetFirewallRule` command that the block prints for each rule.
 
 Paste and run the whole block at once. It stops at the first error, and it changes nothing if it can't resolve the endpoint or read the firewall rules.
 
 ```powershell
-# Disable local outbound block rules that name an internetbeacon.msedge.net address on TCP 80 or 443
+# Disable local outbound block rules whose only scope is internetbeacon.msedge.net on TCP 80 or 443
 & {
     $ErrorActionPreference = 'Stop'
+    $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        'This session is not elevated, so nothing was changed. Open PowerShell with Run as administrator, then run this block again.'
+        return
+    }
     $Endpoint = 'internetbeacon.msedge.net'
     $addresses = @()
     foreach ($try in 1..3) {
@@ -255,30 +272,44 @@ Paste and run the whole block at once. It stops at the first error, and it chang
         "This node can't resolve $Endpoint, so nothing was changed. Fix name resolution first, then run this block again."
         return
     }
-    $targets = @(Get-NetFirewallRule -PolicyStore ActiveStore |
+    $portParts = { param($Ports) @($Ports | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+    $matching = @(Get-NetFirewallRule -PolicyStore ActiveStore |
         Where-Object { "$($_.Direction)" -eq 'Outbound' -and "$($_.Action)" -eq 'Block' -and "$($_.Enabled)" -eq 'True' } |
-        Where-Object {
+        ForEach-Object {
             $pf = $_ | Get-NetFirewallPortFilter
-            $ports = @($pf.RemotePort)
+            $ports = @(& $portParts $pf.RemotePort)
             $remote = @(($_ | Get-NetFirewallAddressFilter).RemoteAddress)
             $portMatch = @($ports | Where-Object {
                 $_ -eq 'Any' -or $_ -eq '80' -or $_ -eq '443' -or
                 ($_ -match '^(\d+)-(\d+)$' -and ((([int]$Matches[1] -le 80) -and ([int]$Matches[2] -ge 80)) -or
                     (([int]$Matches[1] -le 443) -and ([int]$Matches[2] -ge 443))))
             }).Count -gt 0
-            (@('TCP', 'Any') -contains "$($pf.Protocol)") -and $portMatch -and
-            (@($remote | Where-Object { $addresses -contains $_ }).Count -gt 0)
+            if ((@('TCP', '6', 'Any') -contains "$($pf.Protocol)") -and $portMatch -and
+                (@($remote | Where-Object { $addresses -contains $_ }).Count -gt 0)) {
+                [pscustomobject]@{
+                    Rule         = $_
+                    EndpointOnly = (@('TCP', '6') -contains "$($pf.Protocol)") -and
+                        @($ports | Where-Object { @('80', '443') -notcontains $_ }).Count -eq 0 -and
+                        @($remote | Where-Object { $addresses -notcontains $_ }).Count -eq 0
+                }
+            }
         })
-    $managed = @($targets | Where-Object { "$($_.PolicyStoreSourceType)" -ne 'Local' })
-    if ($targets.Count -eq 0) {
+    $broad = @($matching | Where-Object { -not $_.EndpointOnly })
+    $managed = @($matching | Where-Object { $_.EndpointOnly -and "$($_.Rule.PolicyStoreSourceType)" -ne 'Local' })
+    if ($matching.Count -eq 0) {
         'No enabled outbound block rule on this node names an internetbeacon.msedge.net address. Nothing was changed.'
-    } elseif ($managed.Count -gt 0) {
-        'These rules come from Group Policy or another policy source: ' + ($managed.DisplayName -join '; ') +
-            '. Ask the policy owner to remove the block for this endpoint. Nothing was changed.'
+    } elseif ($broad.Count -gt 0 -or $managed.Count -gt 0) {
+        foreach ($m in $broad) {
+            "Not changed: '$($m.Rule.DisplayName)' also blocks other addresses, ports, or protocols. Don't disable it. Ask its owner to remove the $Endpoint addresses from it or to narrow it."
+        }
+        foreach ($m in $managed) {
+            "Not changed: '$($m.Rule.DisplayName)' comes from Group Policy or another policy source. Ask the policy owner to remove the block for this endpoint."
+        }
+        'Nothing was changed. Resolve the rules above with their owners, then run this block again.'
     } else {
-        foreach ($rule in $targets) {
-            Disable-NetFirewallRule -Name $rule.Name
-            "Disabled rule '$($rule.DisplayName)'. To undo: Enable-NetFirewallRule -Name '$($rule.Name)'"
+        foreach ($m in $matching) {
+            Disable-NetFirewallRule -Name $m.Rule.Name
+            "Disabled rule '$($m.Rule.DisplayName)'. To undo: Enable-NetFirewallRule -Name '$($m.Rule.Name)'"
         }
     }
 }
@@ -286,14 +317,19 @@ Paste and run the whole block at once. It stops at the first error, and it chang
 
 Expected result: one `Disabled rule` line for each rule that was blocking the endpoint. Then run the re-test below.
 
+* If the block prints `Not changed:` lines, no rule was changed. Take each listed rule to its owner, then run the block again.
 * If the block prints `This node can't resolve internetbeacon.msedge.net, so nothing was changed`, go to [If the node can't resolve the name](#if-the-node-cant-resolve-the-name), and run the block again once `Resolve-DnsName -Name internetbeacon.msedge.net` returns addresses.
 * If the block stops with any other error, nothing after that point ran. Read the error, and if a rule was already disabled, its `Disabled rule` line shows the command that undoes it.
 
 ### If your network requires a proxy server
 
-If your network allows internet access only through a proxy server, the nodes must be set up to use it, which you do when you register them with Azure Arc. See [Register Azure Local with Azure Arc without using Arc gateway](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-without-azure-arc-gateway). When a WinHTTP proxy is configured on the node that runs validation, this check is skipped. Don't open direct internet access only to pass this check.
+If your network allows internet access only through a proxy server, the nodes must be set up to use it, which you do when you register them with Azure Arc. See [Register Azure Local with Azure Arc without using Arc gateway](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-without-azure-arc-gateway). When a WinHTTP proxy is configured on the node that runs validation, this check is skipped. Don't open direct internet access only to pass this check. To verify, see [After you configure a proxy server](#after-you-configure-a-proxy-server).
 
 ### Re test
+
+Use the verification that matches the fix you made.
+
+#### After a firewall or DNS fix
 
 From the node run
 
@@ -304,7 +340,7 @@ Test-NetConnection -ComputerName internetbeacon.msedge.net -Port 80
 
 Both should show `TcpTestSucceeded : True`. Then run the Environment Validator again, for example by retrying the deployment or add-node validation. The result for `AzStackHci_MOCStack_Network_Port` should change to `SUCCESS` for every node.
 
-To rerun only this check for the node you're signed in to, use this read-only block. It works only with Environment Checker 10.2509 and earlier. Later versions skip this check: they print `No tests to run.` and return an empty row.
+To rerun only this check for the node you're signed in to, use this read-only block in an elevated PowerShell session (**Run as administrator**), because it opens a PowerShell remoting session to the node. It works only with Environment Checker 10.2509 and earlier. Later versions skip this check: they print `No tests to run.` and return an empty row.
 
 ```powershell
 # Read-only: rerun only this check for this node (Environment Checker 10.2509 and earlier)
@@ -315,6 +351,20 @@ Remove-PSSession -Session $session
 ```
 
 Expected result: `Status` `SUCCESS` and an empty `Detail`. If both ports test `True` on every node but validation still reports this failure, collect the output of the tests above and the files listed under [Administrator detection surfaces](#administrator-detection-surfaces), and contact Microsoft Support.
+
+#### After you configure a proxy server
+
+On a network that allows internet access only through a proxy server, the `Test-NetConnection` tests above still show `TcpTestSucceeded : False`, because `Test-NetConnection` connects directly and doesn't use the proxy. That result is expected, so don't open direct internet access to make it pass.
+
+Instead, on the node that runs the validation, confirm that the WinHTTP proxy is set. This command is read-only:
+
+```powershell
+netsh winhttp show advproxy
+```
+
+Expected result: the output includes a `"Proxy"` value with your proxy server. If it doesn't, the proxy isn't configured on this node, and the check still runs. Go back to [If your network requires a proxy server](#if-your-network-requires-a-proxy-server).
+
+Then run the Environment Validator again. Because the check is skipped when a WinHTTP proxy is set, `AzStackHci_MOCStack_Network_Port` no longer appears in the results: it reports neither `SUCCESS` nor `FAILURE`, and the rerun block above returns no result for it. If the proxy is shown but validation still reports this failure, collect the output of `netsh winhttp show advproxy` and the files listed under [Administrator detection surfaces](#administrator-detection-surfaces), and contact Microsoft Support.
 
 ## Administrator detection surfaces
 
