@@ -66,14 +66,17 @@ To confirm the scenario that you are encountering is the issue documented in thi
 ```PowerShell
 $tempPath = 'C:\Users\HCIOrchestrator\AppData\Local\Temp'
 $randomFileNameRegex = '^[a-z0-9]{8}\.[a-z0-9]{3}$'
-$leftoverFolders = @(Get-ChildItem -Path $tempPath -Recurse -Filter 'AzStackHci.EnvironmentChecker.*' -Directory -ErrorAction SilentlyContinue |
-    ForEach-Object { Get-Item -LiteralPath (Split-Path -Path $_.FullName -Parent) } |
+$inspectionErrors = [System.Collections.ArrayList]::new()
+$leftoverFolders = @(Get-ChildItem -LiteralPath $tempPath -Recurse -Filter 'AzStackHci.EnvironmentChecker.*' -Directory -ErrorAction SilentlyContinue -ErrorVariable +inspectionErrors |
+    ForEach-Object { Get-Item -LiteralPath (Split-Path -Path $_.FullName -Parent) -ErrorAction SilentlyContinue -ErrorVariable +inspectionErrors } |
     Where-Object { $_.Name -match $randomFileNameRegex } |
     Sort-Object -Property FullName -Unique)
 $olderThanOneDay = @($leftoverFolders | Where-Object { ((Get-Date) - $_.LastWriteTime).TotalDays -ge 1 })
-$removableBytes = ($olderThanOneDay | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Recurse -File -Force -ErrorAction SilentlyContinue } | Measure-Object -Property Length -Sum).Sum
+$removableBytes = ($olderThanOneDay | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Recurse -File -Force -ErrorAction SilentlyContinue -ErrorVariable +inspectionErrors } | Measure-Object -Property Length -Sum).Sum
 [pscustomobject]@{
     Node              = $env:COMPUTERNAME
+    InspectionErrors  = $inspectionErrors.Count
+    FirstError        = if ($inspectionErrors.Count -gt 0) { $inspectionErrors[0].Exception.Message } else { '' }
     LeftoverFolders   = $leftoverFolders.Count
     OlderThanOneDay   = $olderThanOneDay.Count
     RemovableSizeGB   = [math]::Round(($removableBytes / 1GB), 2)
@@ -83,8 +86,9 @@ $removableBytes = ($olderThanOneDay | ForEach-Object { Get-ChildItem -LiteralPat
 
 The script counts only the leftover folders that [Mitigation Details](#mitigation-details) can remove: random-named folders that contain an `AzStackHci.EnvironmentChecker.*` folder. It does not count the `AzStackHci.EnvironmentChecker.NugetsForUpdate` folder. It changes nothing.
 
+- If `InspectionErrors` is more than `0`, the script could not read everything under TEMP, so the counts below can be too low. Do not use them to decide that the issue is absent or fixed. `FirstError` shows the first problem, for example access denied or a path that does not exist. Run the script again from an elevated session. If `FirstError` says the TEMP path does not exist, this node has no `HCIOrchestrator` TEMP folder and the issue is not present. Otherwise, if the errors persist, see [When to contact Microsoft support](#when-to-contact-microsoft-support).
 - If `OlderThanOneDay` is more than `0`, this issue is present on the node. `RemovableSizeGB` is the space that the mitigation frees. Note it and `SystemDriveFreeGB`, and continue with [Mitigation Details](#mitigation-details) on this node.
-- If `OlderThanOneDay` is `0` and `LeftoverFolders` is `0`, this issue is not present on the node. Do not continue.
+- If `InspectionErrors` is `0`, `OlderThanOneDay` is `0`, and `LeftoverFolders` is `0`, this issue is not present on the node. Do not continue.
 - If `OlderThanOneDay` is `0` but `LeftoverFolders` is more than `0`, the folders were changed in the last day and a running update can still be using them. Do not remove them now; run the script again tomorrow.
 
 ## Mitigation Details
@@ -139,6 +143,7 @@ This is the same rule that current builds use to remove these folders automatica
 
 Run the [Issue Validation](#issue-validation) script again on the same node, or on every node with `Invoke-Command` as described there.
 
+- `InspectionErrors` is `0`.
 - `OlderThanOneDay` is `0`.
 - `SystemDriveFreeGB` is higher than before, by about the `RemovableSizeGB` value that you noted.
 
@@ -152,6 +157,7 @@ Contact Microsoft support if any of these happen:
 
 - The same folder still cannot be removed after you run the script again later.
 - `OlderThanOneDay` is still more than `0` after the mitigation script reports no errors.
+- `InspectionErrors` stays above `0` when you run Issue Validation again from an elevated session.
 - New random-named folders keep appearing after updates on a build that has the `AzStackHci.EnvironmentChecker.NugetsForUpdate` folder.
 
 Include the Issue Validation output from before and after the mitigation, the mitigation script output, and the solution version from `Get-SolutionUpdateEnvironment`.
