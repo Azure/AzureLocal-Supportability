@@ -239,7 +239,7 @@ Use these checkpoints in the customer communication plan. Record the named decis
 | Readiness review | At least one business day before the outage | OEM support, fabric evidence, workload plan, baseline health, and rollback evidence are complete. | Any unknown support status, unhealthy cluster, missing owner, or incomplete evidence. | Change approver |
 | Workload outage accepted | Start of window | Application owners confirm shutdown can begin and identify validation contacts. | A critical workload cannot stop or its owner is unavailable. | Workload owner |
 | Platform quiesced | After customer VMs, appliance, MOC, CSVs, and pool are offline | Every sealed object is in the expected offline state. | Identity drift, unexpected resource transition, or incomplete shutdown. | Cluster administrator |
-| Point of no return | Immediately before `Set-NetIntent` | The full offline state is verified and the rollback transport and fabric remain available. | Any disagreement between the sealed manifest and live state. | Change approver and cluster administrator |
+| Point of no return | Immediately before `Set-NetIntent` | The full offline state is verified, the rollback transport and fabric remain available, and the change approver's approval is recorded (`POINT_OF_NO_RETURN_APPROVED`). | Any disagreement between the sealed manifest and live state. | Change approver and cluster administrator |
 | Transport accepted | After Network ATC convergence | Every node converged once, and every storage adapter reads back the target transport. | Timeout, retry debt, Network ATC error, mixed transport, or adapter failure. | Cluster administrator and network lead |
 | Service restoration | After platform recovery and first five-minute clean hold | Pool, virtual disks, CSVs, MOC, appliance, and Network ATC remain clean. | Any storage, cluster, or management-plane fault. | Cluster administrator |
 | Customer validation | After application startup and representative load | Application checks, active RDMA checks, Windows events, and fabric counters remain clean. | Application error, TCP fallback, RDMA-session loss, new cluster or CSV event, pause storm, or drop increase. | Workload owner, network lead, and change approver |
@@ -1718,7 +1718,7 @@ Re-run any function-definition block needed by the next phase, such as `Set-Seal
 | `WorkloadsOff` | Confirm customer VMs remain `Off`, then quiesce the appliance and MOC. |
 | `PlatformOff` | Confirm appliance and MOC state, then offline CSVs. |
 | `CsvsOff` | Confirm every CSV is `Offline`, then offline the sealed pool. |
-| `PoolOff` | Confirm pool and CSV state, then build and preview the Network ATC override. |
+| `PoolOff` | Confirm pool and CSV state, then build and preview the Network ATC override. Record the point-of-no-return approval before you submit. |
 | `IntentSubmissionPending` | Inspect the live intent override and status. Do not resubmit. If acceptance cannot be proven, stop and contact Microsoft Support. |
 | `IntentSubmitted` | Query Network ATC status. Do not resubmit. |
 | `IntentConverged` | Verify every adapter has the persisted desired transport while storage remains offline. |
@@ -2419,11 +2419,104 @@ Stop if any other property is missing or changed.
 **Action type:** State-changing  
 **Risk:** [HIGH RISK]
 
+**Stop here and confirm.** Submitting the intent change is the point of no return: after it, the cluster cannot return to the source transport without a full rollback outage. Do not continue until the change approver named in the change record has reviewed the override preview from Step 1 and the offline state, and has approved submitting the change. Done looks like: the approver has approved, and the following recording block prints `POINT_OF_NO_RETURN_APPROVED`.
+
+Record the approval. Replace the placeholder with the approver's name before you run the block. The block refuses a placeholder, any checkpoint other than `PoolOff`, and a resource manifest that no longer matches its sealed hash. The record is bound to the current checkpoint and sealed manifest hash, and the submit block refuses to run without a matching record.
+
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
+```powershell
+& {
+# The name of the change approver who approved crossing the point of no return.
+$ApprovedBy = '<change approver name>'
+
+$PonrState = Get-Content -LiteralPath (
+    Join-Path $EvidenceRoot 'phase-state.json'
+) -Raw -ErrorAction Stop | ConvertFrom-Json
+if (
+    "$($PonrState.Phase)" -ne 'PoolOff' -or
+    "$($PonrState.Operation)" -ne $Operation
+) {
+    throw "Record the point-of-no-return approval only at the PoolOff checkpoint of the current operation."
+}
+if ([string]::IsNullOrWhiteSpace($ApprovedBy) -or $ApprovedBy -match '[<>]') {
+    throw "Record the name of the change approver who approved the point of no return."
+}
+
+$PonrSealedHash = @(Get-Content -LiteralPath (
+    Join-Path $EvidenceRoot 'baseline-hashes.json'
+) -Raw -ErrorAction Stop | ConvertFrom-Json | Where-Object {
+    (Split-Path -Path "$($_.Path)" -Leaf) -eq 'resource-manifest.json'
+})
+$PonrManifestHash = Get-FileHash -Algorithm SHA256 -LiteralPath (
+    Join-Path $EvidenceRoot 'resource-manifest.json'
+) -ErrorAction Stop
+if (
+    $PonrSealedHash.Count -ne 1 -or
+    "$($PonrManifestHash.Hash)" -ne "$($PonrSealedHash[0].Hash)"
+) {
+    throw "Integrity check failed for 'resource-manifest.json'. Stop and recover the original evidence package."
+}
+
+[pscustomobject]@{
+    ChangeId = $ChangeId
+    Operation = $Operation
+    PhaseUpdatedUtc = "$($PonrState.UpdatedUtc)"
+    ManifestSha256 = "$($PonrManifestHash.Hash)"
+    DesiredTransport = $DesiredTransport
+    DesiredTransportValue = [int]$DesiredTransportValue
+    ApprovedBy = $ApprovedBy
+    ApprovedUtc = (Get-Date).ToUniversalTime().ToString('o')
+} | ConvertTo-Json -Depth 3 |
+    Set-Content -LiteralPath (
+        Join-Path $EvidenceRoot "point-of-no-return-approval-$Operation.json"
+    ) -ErrorAction Stop
+'POINT_OF_NO_RETURN_APPROVED'
+}
+```
+
+Then submit the change. The submit block refuses to run unless the recorded approval matches the current checkpoint, operation, desired transport, and sealed manifest hash.
+
 ```powershell
 $SubmissionState = Get-Content -LiteralPath (
     Join-Path $EvidenceRoot 'phase-state.json'
 ) -Raw | ConvertFrom-Json
 if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
+    $PonrApprovalPath = Join-Path $EvidenceRoot `
+        "point-of-no-return-approval-$Operation.json"
+    if (-not (Test-Path -LiteralPath $PonrApprovalPath)) {
+        throw (
+            "The point-of-no-return approval is missing. Record it before " +
+            "submitting the intent change."
+        )
+    }
+    $PonrApproval = Get-Content -LiteralPath $PonrApprovalPath -Raw `
+        -ErrorAction Stop | ConvertFrom-Json
+    $PonrSealedHash = @(Get-Content -LiteralPath (
+        Join-Path $EvidenceRoot 'baseline-hashes.json'
+    ) -Raw -ErrorAction Stop | ConvertFrom-Json | Where-Object {
+        (Split-Path -Path "$($_.Path)" -Leaf) -eq 'resource-manifest.json'
+    })
+    $PonrManifestHash = Get-FileHash -Algorithm SHA256 -LiteralPath (
+        Join-Path $EvidenceRoot 'resource-manifest.json'
+    ) -ErrorAction Stop
+    if (
+        $PonrSealedHash.Count -ne 1 -or
+        "$($PonrManifestHash.Hash)" -ne "$($PonrSealedHash[0].Hash)" -or
+        "$($PonrApproval.ManifestSha256)" -ne "$($PonrSealedHash[0].Hash)" -or
+        "$($PonrApproval.ChangeId)" -ne $ChangeId -or
+        "$($PonrApproval.Operation)" -ne $Operation -or
+        "$($PonrApproval.PhaseUpdatedUtc)" -ne "$($SubmissionState.UpdatedUtc)" -or
+        "$($PonrApproval.DesiredTransport)" -ne $DesiredTransport -or
+        [int]$PonrApproval.DesiredTransportValue -ne [int]$DesiredTransportValue -or
+        [string]::IsNullOrWhiteSpace("$($PonrApproval.ApprovedBy)")
+    ) {
+        throw (
+            "The point-of-no-return approval does not match the current " +
+            "checkpoint, operation, transport, or sealed manifest. Record a " +
+            "new approval before submitting."
+        )
+    }
     $PointOfNoReturnUpdates = @(Get-SolutionUpdate -ErrorAction Stop)
     $PointOfNoReturnActiveUpdates = @(
         $PointOfNoReturnUpdates | Where-Object {
