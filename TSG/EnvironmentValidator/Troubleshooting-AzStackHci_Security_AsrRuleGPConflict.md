@@ -82,15 +82,20 @@ The same record is on the Windows event log as Event ID 17205 in `AzStackHciEnvi
 
 ```powershell
 $asrKey = 'Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules'
-$rows = @(Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicySetting' -ErrorAction Stop |
-    Where-Object { $_.RegistryKey -eq $asrKey } |
-    Select-Object ValueName, SOMID)
-if ($rows.Count -gt 0) {
-    $rows
-    Write-Output 'ASR_GP_RULES_FOUND'
-}
-else {
-    Write-Output 'ASR_GP_RULES_NONE'
+try {
+    $rows = $null
+    $rows = @(Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicySetting' -ErrorAction Stop |
+        Where-Object { $_.RegistryKey -eq $asrKey } |
+        Select-Object ValueName, SOMID)
+    if ($rows.Count -gt 0) {
+        $rows
+        Write-Output 'ASR_GP_RULES_FOUND'
+    }
+    else {
+        Write-Output 'ASR_GP_RULES_NONE'
+    }
+} catch {
+    Write-Output "ASR_GP_RULES_ERROR: $($_.Exception.Message)"
 }
 ```
 
@@ -105,8 +110,7 @@ Each `ValueName` is an ASR rule GUID and each `SOMID` is the Group Policy scope 
 
 - `ASR_GP_RULES_FOUND`: the node has Group Policy-managed ASR rules (listed above it). Continue with step 3.
 - `ASR_GP_RULES_NONE`: the node has no Group Policy-managed ASR rules.
-
-If the query stops with an error instead, the node's RSoP could not be read. That is not a clean result: resolve the RSoP error before you rely on this check.
+- `ASR_GP_RULES_ERROR`: the node's RSoP could not be read (the error follows the marker). That is not a clean result: resolve the RSoP error, then run the check again.
 
 ### 2. What it looks like: example failure signatures
 
@@ -183,7 +187,7 @@ Remove the Attack Surface Reduction configuration from **every Group Policy scop
    gpupdate /force /target:computer
    ```
 
-   Re-run the RSoP query from Step 1 and confirm it returns no rows under the ASR key.
+   Re-run the RSoP query from Step 1 and confirm the last line is `ASR_GP_RULES_NONE`. `ASR_GP_RULES_ERROR` means the check did not run.
 
 Let the Azure Local security baseline (OSConfig) manage Defender ASR rather than configuring ASR through Group Policy on these nodes. See [Manage the Azure Local security baseline](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-baseline) and the [Azure Local security features overview](https://learn.microsoft.com/azure/azure-local/concepts/security-features) for how the baseline governs Defender and Attack Surface Reduction.
 
@@ -197,12 +201,17 @@ On each remediated node, confirm the RSoP no longer carries a Group Policy-manag
 
 ```powershell
 $asrKey = 'Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules'
-$rows = @(Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicySetting' -ErrorAction Stop |
-    Where-Object { $_.RegistryKey -eq $asrKey })
-if (-not $rows) { 'Clean: no Group Policy-managed ASR rules' } else { $rows | Select-Object ValueName, SOMID }
+try {
+    $rows = $null
+    $rows = @(Get-CimInstance -Namespace 'root\rsop\computer' -ClassName 'RSOP_RegistryPolicySetting' -ErrorAction Stop |
+        Where-Object { $_.RegistryKey -eq $asrKey })
+    if (-not $rows) { 'Clean: no Group Policy-managed ASR rules' } else { $rows | Select-Object ValueName, SOMID }
+} catch {
+    "ASR_GP_RULES_ERROR: $($_.Exception.Message)"
+}
 ```
 
-That query is the proof for each node.
+That query is the proof for each node. `ASR_GP_RULES_ERROR` means the node's RSoP could not be read, so the node is not proven clean: resolve the error and run the query again.
 
 **Operator step: refresh the cluster's readiness result.** After every affected node shows the clean result, the cluster operator starts a system health check so the validator re-evaluates cluster-wide: run `Invoke-SolutionUpdatePrecheck -SystemHealth` on one node. It runs the full set of system health checks across the instance and replaces their stored results; it doesn't install anything, and it can take a while to finish. Check its state with `Get-SolutionUpdateEnvironment | Format-List HealthState, HealthCheckDate`. Wait until `HealthState` is no longer `InProgress`, confirm that it's `Success` with a current `HealthCheckDate`, then re-read the Detail (Step 1). A healthy node reports `No Group Policy-managed ASR settings were found.`
 
