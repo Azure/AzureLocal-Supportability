@@ -995,6 +995,9 @@ $CsvInventory = @(Get-ClusterSharedVolume -ErrorAction Stop |
         if ($CimResources.Count -ne 1) {
             throw "Expected one MSCluster resource for CSV '$($Csv.Name)'. Found $($CimResources.Count)."
         }
+        if ([string]::IsNullOrWhiteSpace("$($CimResources[0].Id)")) {
+            throw "CSV '$($Csv.Name)' has no usable cluster resource Id."
+        }
 
         $Info = @($Csv.SharedVolumeInfo) | Select-Object -First 1
         $Partition = $Info.Partition
@@ -1024,6 +1027,7 @@ $CsvInventory = @(Get-ClusterSharedVolume -ErrorAction Stop |
             PartitionName = "$($Partition.Name)"
             VirtualDiskUniqueId = "$($CsvVirtualDisk[0].UniqueId)"
             Role = $Role
+            CimId = "$($CimResources[0].Id)"
             CimType = "$($CimResources[0].Type)"
             CimOwnerGroup = "$($CimResources[0].OwnerGroup)"
         }
@@ -1801,9 +1805,7 @@ function Write-MutationFailureEvidence {
 **Risk:** [HIGH RISK]  
 **Owner:** Workload owner
 
-The workload owner must stop applications and shut down each customer VM through its normal guest operating-system process. Do not use `-TurnOff`, save state, pause, or terminate a VM as the normal path.
-
-Verify that every clustered VM except the sealed appliance VM is `Off`:
+**Operator action.** The workload owner must stop applications and shut down each customer VM through its normal guest operating-system process. Do not use `-TurnOff`, save state, pause, or terminate a VM as the normal path. Done looks like: the following check, which verifies that every clustered VM except the sealed appliance VM is `Off`, prints `WORKLOADS_OFF`.
 
 **Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
 
@@ -1877,6 +1879,7 @@ if (@($CustomerVmState | Where-Object State -ne 'Off').Count -gt 0) {
 }
 
 Set-ChangePhase -Phase WorkloadsOff
+'WORKLOADS_OFF'
 }
 ```
 
@@ -2087,6 +2090,7 @@ function Get-VerifiedSealedCsv {
         -ClassName MSCluster_Resource -Filter "Name='$EscapedName'" `
         -ErrorAction Stop |
         Where-Object {
+            "$($_.Id)" -eq "$($CsvRecord.CimId)" -and
             "$($_.Type)" -eq "$($CsvRecord.CimType)" -and
             "$($_.OwnerGroup)" -eq "$($CsvRecord.CimOwnerGroup)"
         })
@@ -2437,6 +2441,7 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
             $CimMatches = @(Get-CimInstance -Namespace root/MSCluster `
                 -ClassName MSCluster_Resource -Filter "Name='$EscapedName'" `
                 -ErrorAction Stop | Where-Object {
+                    "$($_.Id)" -eq "$($CsvRecord.CimId)" -and
                     "$($_.Type)" -eq "$($CsvRecord.CimType)" -and
                     "$($_.OwnerGroup)" -eq "$($CsvRecord.CimOwnerGroup)"
                 })
@@ -2496,6 +2501,26 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
         })
     if ($PointOfNoReturnIntent.Count -ne 1) {
         throw "The sealed storage intent no longer resolves uniquely."
+    }
+    $PointOfNoReturnIntentAdapters = @(
+        $PointOfNoReturnIntent[0].NetAdapterNamesAsList | ForEach-Object {
+            "$_".Trim().ToUpperInvariant()
+        } | Where-Object { $_ } | Sort-Object -Unique
+    )
+    $SealedIntentAdapters = @($AdapterNames | ForEach-Object {
+        "$_".Trim().ToUpperInvariant()
+    } | Sort-Object -Unique)
+    if (
+        -not [bool]$PointOfNoReturnIntent[0].IsStorageIntentSet -or
+        $PointOfNoReturnIntentAdapters.Count -ne $SealedIntentAdapters.Count -or
+        @($SealedIntentAdapters | Where-Object {
+            $_ -notin $PointOfNoReturnIntentAdapters
+        }).Count -gt 0
+    ) {
+        throw (
+            "The storage intent is no longer the storage intent or its adapter " +
+            "membership differs from the sealed adapter list. Do not submit."
+        )
     }
     $PointOfNoReturnIntentStatus = @(Get-NetIntentStatus `
         -ClusterName $Cluster.Name -Name "$($StorageIntent.IntentName)" `
@@ -2623,8 +2648,22 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
         $LiveAdapterOverride = $LiveIntent[0].AdapterAdvancedParametersOverride
         $LiveTransportValue = [int]$LiveAdapterOverride.NetworkDirectTechnology
     }
+    $LiveIntentAdapters = @()
+    if ($LiveIntent.Count -eq 1) {
+        $LiveIntentAdapters = @($LiveIntent[0].NetAdapterNamesAsList |
+            ForEach-Object { "$_".Trim().ToUpperInvariant() } |
+            Where-Object { $_ } | Sort-Object -Unique)
+    }
+    $SealedIntentAdapters = @($AdapterNames | ForEach-Object {
+        "$_".Trim().ToUpperInvariant()
+    } | Sort-Object -Unique)
     if (
         $LiveIntent.Count -ne 1 -or
+        -not [bool]$LiveIntent[0].IsStorageIntentSet -or
+        $LiveIntentAdapters.Count -ne $SealedIntentAdapters.Count -or
+        @($SealedIntentAdapters | Where-Object {
+            $_ -notin $LiveIntentAdapters
+        }).Count -gt 0 -or
         $LiveTransportValue -ne $DesiredTransportValue
     ) {
         throw (
@@ -2651,7 +2690,7 @@ Error handling:
 - Submit the change once.
 - Do not resubmit while any node is provisioning.
 - If the command returns an error after submission, query `Get-NetIntent` and `Get-NetIntentStatus` before deciding that the change was not accepted.
-- Stop if the intent identity changes or the requested override cannot be read back.
+- Stop if the intent identity or adapter membership changes or the requested override cannot be read back.
 
 Rollback: repeat this entire guide with the original transport value after the cluster is restored to a controlled quiesced state. Do not issue an automatic transport reversal while Network ATC is still converging.
 
@@ -3102,7 +3141,7 @@ $Deadline = (Get-Date).AddMinutes(30)
 
 do {
     $HealthFaultsNow = @(Get-HealthFault -ErrorAction Stop)
-    $NodesNow = @(Get-ClusterNode)
+    $NodesNow = @(Get-ClusterNode -ErrorAction Stop)
     $UpdatesNow = @(Get-SolutionUpdate -ErrorAction Stop)
     $ActiveSolutionUpdatesNow = @($UpdatesNow | Where-Object {
         "$($_.State)" -in @('Downloading', 'Preparing', 'HealthChecking', 'Installing')
@@ -3134,7 +3173,7 @@ do {
         (Get-VerifiedSealedCsv -CsvRecord $CsvRecord `
             -RequireOnlineMetadata).Csv
     })
-    $VirtualDisksNow = @(Get-VirtualDisk)
+    $VirtualDisksNow = @(Get-VirtualDisk -ErrorAction Stop)
     $ExpectedCsvNames = @($ResourceManifest.Csvs.Name |
         ForEach-Object { "$_".ToUpperInvariant() } | Sort-Object -Unique)
     $ActualCsvNames = @($AllCsvNow.Name |
@@ -3146,9 +3185,9 @@ do {
     $ActualVirtualDiskIds = @($VirtualDisksNow.UniqueId | Where-Object {
         -not [string]::IsNullOrWhiteSpace("$_")
     } | Sort-Object -Unique)
-    $JobsNow = @(Get-StorageJob)
+    $JobsNow = @(Get-StorageJob -ErrorAction Stop)
     $IntentNow = @(Get-NetIntentStatus -ClusterName $Cluster.Name `
-        -Name $StorageIntent.IntentName)
+        -Name $StorageIntent.IntentName -ErrorAction Stop)
     Assert-IntentStatusCoverage -Status $IntentNow `
         -ClusterNodes $Nodes -IntentName "$($StorageIntent.IntentName)"
     $MocNow = @(Get-ClusterResource -ErrorAction Stop | Where-Object {
@@ -3157,7 +3196,8 @@ do {
         "$($_.ResourceType)" -eq "$($Moc.ResourceType)" -and
         "$($_.OwnerGroup)" -eq "$($Moc.OwnerGroup)"
     })
-    $ControlPlaneNow = @(Get-ClusterGroup -Name "$($ControlPlaneEntry.GroupName)")
+    $ControlPlaneNow = @(Get-ClusterGroup `
+        -Name "$($ControlPlaneEntry.GroupName)" -ErrorAction Stop)
     $VmGroupsNow = @(Get-ClusterGroup -ErrorAction Stop |
         Where-Object { "$($_.GroupType)" -eq 'VirtualMachine' })
     $VmIdentityPairsNow = @(foreach ($Group in $VmGroupsNow) {
@@ -3237,6 +3277,7 @@ do {
         }).Count -eq 0 -and
         $MocNow.Count -eq 1 -and
         "$($MocNow[0].State)" -eq 'Online' -and
+        $ControlPlaneNow.Count -eq 1 -and
         @($ControlPlaneNow | Where-Object State -ne 'Online').Count -eq 0 -and
         $VmIdentityPairsNow.Count -eq $ExpectedVmIdentityPairs.Count -and
         @($ExpectedVmIdentityPairs | Where-Object {
@@ -3330,11 +3371,13 @@ if (
 }
 ```
 
-The application or VM owner decides the startup order and starts the customer workloads. The cluster administrator does not bulk-start VMs without workload-owner approval.
+**Operator action.** The application or VM owner decides the startup order and starts the customer workloads that were `Running` when the baseline was sealed. The cluster administrator does not bulk-start VMs without workload-owner approval, and nobody starts a VM that was `Off` at the baseline as part of this change. Done looks like: the following check prints `CUSTOMER_VMS_RESTORED`.
 
-After startup, verify every recorded customer VM by its sealed VM ID. Require the
-clustered VM group and Hyper-V VM to be running, and require both the `Heartbeat` and
-`Shutdown` integration services to exist, be enabled, and report `OK`:
+The check verifies every recorded customer VM by its sealed VM ID against its sealed
+baseline state. A VM that was `Running` at the baseline must have a running clustered
+VM group and Hyper-V VM, and both the `Heartbeat` and `Shutdown` integration services
+must exist, be enabled, and report `OK`. A VM that was `Off` at the baseline must still
+be `Off` with an offline clustered VM group:
 
 ```powershell
 $ResourceManifest = Get-Content -LiteralPath (
@@ -3343,8 +3386,36 @@ $ResourceManifest = Get-Content -LiteralPath (
 $CustomerVmEntries = @($ResourceManifest.ClusteredVms | Where-Object {
     "$($_.VmId)" -ne "$($ResourceManifest.ControlPlaneVm.VmId)"
 })
+$BaselineRunningVmEntries = @($CustomerVmEntries | Where-Object {
+    "$($_.VmState)" -eq 'Running'
+})
+$BaselineStoppedVmEntries = @($CustomerVmEntries | Where-Object {
+    "$($_.VmState)" -ne 'Running'
+})
 
-$VmIntegrationState = @($CustomerVmEntries | ForEach-Object {
+$BaselineStoppedVmState = @($BaselineStoppedVmEntries | ForEach-Object {
+    $Entry = $_
+    $Group = Get-ClusterGroup -Name "$($Entry.GroupName)" -ErrorAction Stop
+    $Vm = @(Invoke-Command -ComputerName "$($Group.OwnerNode)" `
+        -ArgumentList "$($Entry.VmId)" -ScriptBlock {
+            param($SealedVmId)
+            Get-VM -Id ([guid]$SealedVmId) -ErrorAction Stop |
+                Select-Object VMId, Name, State
+        } -ErrorAction Stop)
+    if ($Vm.Count -ne 1 -or "$($Vm[0].VMId)" -ne "$($Entry.VmId)") {
+        throw "A sealed customer VM no longer resolves uniquely by VmId."
+    }
+    [pscustomobject]@{
+        GroupName = "$($Entry.GroupName)"
+        GroupState = "$($Group.State)"
+        VmId = "$($Vm[0].VMId)"
+        VmName = "$($Vm[0].Name)"
+        VmState = "$($Vm[0].State)"
+        BaselineVmState = "$($Entry.VmState)"
+    }
+})
+
+$VmIntegrationState = @($BaselineRunningVmEntries | ForEach-Object {
     $Entry = $_
     $Group = Get-ClusterGroup -Name "$($Entry.GroupName)" -ErrorAction Stop
     $RemoteState = @(Invoke-Command -ComputerName "$($Group.OwnerNode)" `
@@ -3411,9 +3482,22 @@ $BadVmIntegrationState = @($VmIntegrationState | Where-Object {
     -not $_.Enabled -or
     $_.PrimaryStatus -ne 'OK'
 })
-if ($BadVmIntegrationState.Count -gt 0) {
-    throw "A customer VM or required Hyper-V integration service is not healthy."
+$BaselineStoppedVmState | Format-Table -AutoSize
+$BadBaselineStoppedVms = @($BaselineStoppedVmState | Where-Object {
+    $_.GroupState -ne 'Offline' -or $_.VmState -ne 'Off'
+})
+if (
+    $VmIntegrationState.Count -ne ($BaselineRunningVmEntries.Count * 2) -or
+    $BadVmIntegrationState.Count -gt 0 -or
+    $BaselineStoppedVmState.Count -ne $BaselineStoppedVmEntries.Count -or
+    $BadBaselineStoppedVms.Count -gt 0
+) {
+    throw (
+        "A customer VM does not match its sealed baseline state, or a " +
+        "required Hyper-V integration service is not healthy."
+    )
 }
+'CUSTOMER_VMS_RESTORED'
 ```
 
 The workload owner must also confirm:
@@ -3498,7 +3582,7 @@ if (Test-Path -LiteralPath $ActiveValidationStartUtcPath) {
 }
 ```
 
-After the workload owner completes application health probes, dependency checks, and representative transactions, have that owner approve the evidence and create the required attestation:
+**Stop here and confirm.** The workload owner decides whether application health probes, dependency checks, and representative transactions passed. Do not record the attestation until that owner approves the evidence. Done looks like: the owner has approved, and the following recording block prints `APPLICATION_VALIDATION_RECORDED`.
 
 ```powershell
 [pscustomobject]@{
@@ -3511,6 +3595,7 @@ After the workload owner completes application health probes, dependency checks,
     Set-Content -LiteralPath (
         Join-Path $EvidenceRoot "application-validation-$Operation.json"
     ) -ErrorAction Stop
+'APPLICATION_VALIDATION_RECORDED'
 ```
 
 Do not create the attestation until the checks have actually passed. The final validation block rejects a missing, stale, incomplete, or failed attestation.
@@ -3651,8 +3736,9 @@ if (
 # SBL peers are RDMA-capable after storage traffic resumes
 $SblConnections = @(Invoke-Command -ComputerName $Nodes.Name -ScriptBlock {
     foreach ($Connection in @(Get-SmbMultichannelConnection `
-        -SmbInstance SBL -ErrorAction Stop)) {
+        -SmbInstance SBL -IncludeNotSelected -ErrorAction Stop)) {
         $RequiredProperties = @(
+            'ClientInterfaceIndex',
             'ClientRdmaCapable',
             'ServerRdmaCapable',
             'Selected',
@@ -3678,18 +3764,39 @@ $SblConnections = @(Invoke-Command -ComputerName $Nodes.Name -ScriptBlock {
     }
 } -ErrorAction Stop)
 $SblConnections | Format-Table -AutoSize
-$BadSblConnections = @($SblConnections | Where-Object {
+$SelectedSblConnections = @($SblConnections | Where-Object {
+    [bool]$_.Selected
+})
+$BadSblConnections = @($SelectedSblConnections | Where-Object {
     -not $_.ClientRdmaCapable -or
     -not $_.ServerRdmaCapable -or
-    -not $_.Selected -or
     [int]$_.CurrentChannels -lt 1 -or
     [bool]$_.Failed -or
     [int]$_.FailureCount -ne 0
 })
+# Every RDMA-capable client interface and every RDMA-capable peer that SBL
+# lists, selected or not, must carry at least one selected, healthy RDMA
+# connection.
+$UncoveredSblInterfaces = @(@($SblConnections |
+    Where-Object { [bool]$_.ClientRdmaCapable } |
+    Group-Object -Property Node, ClientInterfaceIndex) + @($SblConnections |
+    Where-Object {
+        [bool]$_.ClientRdmaCapable -and [bool]$_.ServerRdmaCapable
+    } |
+    Group-Object -Property Node, ServerName) |
+    Where-Object {
+        @($_.Group | Where-Object {
+            [bool]$_.Selected -and
+            [bool]$_.ServerRdmaCapable -and
+            [int]$_.CurrentChannels -ge 1 -and
+            -not [bool]$_.Failed -and
+            [int]$_.FailureCount -eq 0
+        }).Count -eq 0
+    })
 $ExpectedSblNodes = @($Nodes.Name | ForEach-Object {
     "$_".Split('.')[0].ToUpperInvariant()
 })
-$ActualSblNodes = @($SblConnections.Node | ForEach-Object {
+$ActualSblNodes = @($SelectedSblConnections.Node | ForEach-Object {
     "$_".Split('.')[0].ToUpperInvariant()
 } | Sort-Object -Unique)
 $MissingSblNodes = @($ExpectedSblNodes | Where-Object {
@@ -3699,15 +3806,18 @@ $UnknownSblNodes = @($ActualSblNodes | Where-Object {
     $_ -notin $ExpectedSblNodes
 })
 if (
-    $SblConnections.Count -lt 1 -or
+    $SelectedSblConnections.Count -lt 1 -or
     $MissingSblNodes.Count -gt 0 -or
     $UnknownSblNodes.Count -gt 0 -or
-    $BadSblConnections.Count -gt 0
+    $BadSblConnections.Count -gt 0 -or
+    $UncoveredSblInterfaces.Count -gt 0
 ) {
+    $UncoveredSblInterfaces | Select-Object Name, Count | Format-Table -AutoSize
     throw (
-        "Every sealed node must report a selected, RDMA-capable active SBL " +
-        "connection with at least one current channel and no failed-channel " +
-        "state or failure count."
+        "Every sealed node, RDMA-capable SBL client interface, and RDMA-capable " +
+        "SBL server must carry a selected, RDMA-capable SBL connection with at least one " +
+        "current channel, and no selected connection may report a failed " +
+        "channel or a failure count."
     )
 }
 
@@ -3757,10 +3867,21 @@ $FinalCustomerVmGroups = @($ResourceManifest.ClusteredVms |
     Where-Object { "$($_.VmId)" -ne "$($ControlPlaneEntry.VmId)" } |
     ForEach-Object {
         $SealedVm = $_
-        @(Get-ClusterGroup | Where-Object {
+        $ExpectedGroupState = if ("$($SealedVm.VmState)" -eq 'Running') {
+            'Online'
+        } else {
+            'Offline'
+        }
+        @($CurrentClusteredVmGroups | Where-Object {
             "$($_.Id)" -eq "$($SealedVm.GroupId)" -and
             "$($_.Name)" -eq "$($SealedVm.GroupName)"
-        })
+        }) | ForEach-Object {
+            [pscustomobject]@{
+                Name = "$($_.Name)"
+                State = "$($_.State)"
+                ExpectedState = $ExpectedGroupState
+            }
+        }
     })
 
 if (
@@ -3787,7 +3908,9 @@ if (
         @($ResourceManifest.ClusteredVms |
             Where-Object { "$($_.VmId)" -ne "$($ControlPlaneEntry.VmId)" }).Count
     ) -or
-    @($FinalCustomerVmGroups | Where-Object State -ne 'Online').Count -gt 0
+    @($FinalCustomerVmGroups | Where-Object {
+        $_.State -ne $_.ExpectedState
+    }).Count -gt 0
 ) {
     throw "Final platform, storage, or workload state is not clean and complete."
 }
@@ -3858,8 +3981,9 @@ function Test-ActiveRdmaState {
     $SblConnections = @(Invoke-Command -ComputerName $Nodes.Name `
         -ScriptBlock {
             foreach ($Connection in @(Get-SmbMultichannelConnection `
-                -SmbInstance SBL -ErrorAction Stop)) {
+                -SmbInstance SBL -IncludeNotSelected -ErrorAction Stop)) {
                 $RequiredProperties = @(
+                    'ClientInterfaceIndex',
                     'ClientRdmaCapable',
                     'ServerRdmaCapable',
                     'Selected',
@@ -3879,7 +4003,9 @@ function Test-ActiveRdmaState {
                 }
                 $Connection | Select-Object `
                     @{Name='Node';Expression={$env:COMPUTERNAME}},
-                    ClientIpAddress, ServerIpAddress, ClientRdmaCapable,
+                    ServerName, ClientInterfaceIndex, ClientIpAddress,
+                    ServerIpAddress,
+                    ClientRdmaCapable,
                     ServerRdmaCapable, Selected, CurrentChannels,
                     MaxChannels, Failed, FailureCount
             }
@@ -3887,21 +4013,40 @@ function Test-ActiveRdmaState {
     $ExpectedSblNodes = @($Nodes.Name | ForEach-Object {
         "$_".Split('.')[0].ToUpperInvariant()
     })
-    $ActualSblNodes = @($SblConnections.Node | ForEach-Object {
+    $SelectedSblConnections = @($SblConnections | Where-Object {
+        [bool]$_.Selected
+    })
+    $ActualSblNodes = @($SelectedSblConnections.Node | ForEach-Object {
         "$_".Split('.')[0].ToUpperInvariant()
     } | Sort-Object -Unique)
+    $UncoveredSblInterfaces = @(@($SblConnections |
+        Where-Object { [bool]$_.ClientRdmaCapable } |
+        Group-Object -Property Node, ClientInterfaceIndex) + @($SblConnections |
+        Where-Object {
+            [bool]$_.ClientRdmaCapable -and [bool]$_.ServerRdmaCapable
+        } |
+        Group-Object -Property Node, ServerName) |
+        Where-Object {
+            @($_.Group | Where-Object {
+                [bool]$_.Selected -and
+                [bool]$_.ServerRdmaCapable -and
+                [int]$_.CurrentChannels -ge 1 -and
+                -not [bool]$_.Failed -and
+                [int]$_.FailureCount -eq 0
+            }).Count -eq 0
+        })
     $SblHealthy = (
-        $SblConnections.Count -gt 0 -and
+        $SelectedSblConnections.Count -gt 0 -and
+        $UncoveredSblInterfaces.Count -eq 0 -and
         @($ExpectedSblNodes | Where-Object {
             $_ -notin $ActualSblNodes
         }).Count -eq 0 -and
         @($ActualSblNodes | Where-Object {
             $_ -notin $ExpectedSblNodes
         }).Count -eq 0 -and
-        @($SblConnections | Where-Object {
+        @($SelectedSblConnections | Where-Object {
             -not $_.ClientRdmaCapable -or
             -not $_.ServerRdmaCapable -or
-            -not $_.Selected -or
             [int]$_.CurrentChannels -lt 1 -or
             [bool]$_.Failed -or
             [int]$_.FailureCount -ne 0
@@ -4134,10 +4279,16 @@ do {
         if ($HyperV.Count -ne 1) {
             throw "A sealed VM no longer resolves uniquely."
         }
+        $ExpectedRunning = (
+            "$($Entry.GroupId)" -eq "$($ControlPlaneEntry.GroupId)" -or
+            "$($Entry.VmState)" -eq 'Running'
+        )
         [pscustomobject]@{
             GroupName = "$($Entry.GroupName)"
             GroupState = "$($CurrentGroup[0].State)"
             VmState = "$($HyperV[0].State)"
+            ExpectedGroupState = if ($ExpectedRunning) { 'Online' } else { 'Offline' }
+            ExpectedVmState = if ($ExpectedRunning) { 'Running' } else { 'Off' }
         }
     })
     $FinalHoldIntent = @(Get-NetIntentStatus -ClusterName $Cluster.Name `
@@ -4229,9 +4380,10 @@ do {
         @($FinalHoldVmIdentityPairs | Where-Object {
             $_ -notin $ExpectedVmIdentityPairs
         }).Count -eq 0 -and
-        @($FinalHoldVmGroups | Where-Object State -ne 'Online').Count -eq 0 -and
+        $FinalHoldVmState.Count -eq @($ResourceManifest.ClusteredVms).Count -and
         @($FinalHoldVmState | Where-Object {
-            $_.GroupState -ne 'Online' -or $_.VmState -ne 'Running'
+            $_.GroupState -ne $_.ExpectedGroupState -or
+            $_.VmState -ne $_.ExpectedVmState
         }).Count -eq 0 -and
         @($FinalHoldIntent | Where-Object {
             "$($_.ConfigurationStatus)" -ne 'Success' -or
@@ -4290,7 +4442,8 @@ do {
             VmGroupStates = @($FinalHoldVmGroups |
                 ForEach-Object { "$($_.Name):$($_.State)" })
             VmStates = @($FinalHoldVmState | ForEach-Object {
-                "$($_.GroupName):$($_.GroupState):$($_.VmState)"
+                "$($_.GroupName):$($_.GroupState):$($_.VmState):" +
+                "expected $($_.ExpectedGroupState)/$($_.ExpectedVmState)"
             })
             IntentFailures = @($FinalHoldIntent | Where-Object {
                 "$($_.ConfigurationStatus)" -ne 'Success' -or
@@ -4400,9 +4553,9 @@ Success requires:
 - Network ATC remains successful and completed on every node.
 - Every storage adapter remains on the desired transport with RDMA enabled.
 - SBL connections report both client and server RDMA capability.
-- Every SBL connection on every node is selected, is RDMA-capable, has at least one current channel, does not report `Failed`, and has `FailureCount` equal to zero. A healthy RDMA cluster normally meets this: every SBL connection between every pair of nodes is selected with all channels current and a zero failure count, so an unselected connection or any nonzero failure count is a real finding, not noise.
+- The SBL query includes unselected candidate connections. Every selected SBL connection on every node is RDMA-capable on both ends, has at least one current channel, does not report `Failed`, and has `FailureCount` equal to zero. Every RDMA-capable client interface and every RDMA-capable server that SBL lists on every node has at least one such selected connection, so a storage interface or peer that SMB stopped selecting fails the check. Unselected candidates on non-RDMA interfaces, such as the management adapter, and the unselected TCP candidate that SMB lists alongside each selected RDMA path are expected and are not findings.
 - Representative storage activity completes without storage, cluster, or network faults.
-- The pool, virtual disks, CSVs, MOC, appliance VM, and customer workloads remain healthy.
+- The pool, virtual disks, CSVs, MOC, appliance VM, and customer workloads remain healthy. Every customer VM is back in its sealed baseline state: VMs that were `Running` are running, and VMs that were `Off` remain off.
 
 For iWARP, TCP port 5445 activity can corroborate the transport when traffic is active, but the absence of a visible socket in one sample does not prove failure.
 
@@ -4447,7 +4600,7 @@ if (Test-Path -LiteralPath $ActivePointer) {
 
 Rollback is a deliberate operator and approver decision. It is not automatic.
 
-Before any rollback outage action, validate the sealed rollback direction and persist it as the active operation:
+**Stop here and confirm.** Do not start a rollback until the change approver named in the change record has decided to roll back and the workload owner has accepted the additional outage. Done looks like: both decisions are recorded in the change record, and the following block, which validates the sealed rollback direction and persists it as the active operation, prints `ROLLBACK_APPROVED`.
 
 **Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
 
@@ -4517,8 +4670,11 @@ $RollbackCsvsShouldBeOnline = (
     )
 )
 $RollbackPlatformShouldBeOnline = $RollbackCsvsShouldBeOnline
-$RollbackWorkloadsShouldBeOnline = (
+# From the startup hand-off onward, each customer VM may be running or
+# already shut down by its owner. Rollback step 1 handles both.
+$RollbackWorkloadsMayBeOnline = (
     $RollbackOriginPhase -in @(
+        'StorageHoldPassed',
         'ActiveValidationStarted',
         'ActiveAssertionsPassed',
         'ActiveValidationPassed'
@@ -4571,6 +4727,7 @@ $RollbackWorkloadsShouldBeOnline = (
         $CimMatches = @(Get-CimInstance -Namespace root/MSCluster `
             -ClassName MSCluster_Resource -Filter "Name='$EscapedName'" `
             -ErrorAction Stop | Where-Object {
+                "$($_.Id)" -eq "$($CsvRecord.CimId)" -and
                 "$($_.Type)" -eq "$($CsvRecord.CimType)" -and
                 "$($_.OwnerGroup)" -eq "$($CsvRecord.CimOwnerGroup)"
             })
@@ -4691,19 +4848,10 @@ $RollbackWorkloadsShouldBeOnline = (
             }
         }
     )
-    $RollbackExpectedCustomerGroupState = if (
-        $RollbackWorkloadsShouldBeOnline
-    ) {
-        'Online'
+    $RollbackAllowedCustomerVmPairs = if ($RollbackWorkloadsMayBeOnline) {
+        @('Online|Running', 'Offline|Off')
     } else {
-        'Offline'
-    }
-    $RollbackExpectedCustomerVmState = if (
-        $RollbackWorkloadsShouldBeOnline
-    ) {
-        'Running'
-    } else {
-        'Off'
+        @('Offline|Off')
     }
     $RollbackIntent = @(Get-NetIntent -ClusterName $Cluster.Name `
         -ErrorAction Stop | Where-Object {
@@ -4774,9 +4922,13 @@ $RollbackWorkloadsShouldBeOnline = (
         @($RollbackVmIdentityPairs | Where-Object {
             $_ -notin $ExpectedVmIdentityPairs
         }).Count -gt 0 -or
+        $RollbackCustomerVmState.Count -ne @($ResourceManifest.ClusteredVms |
+            Where-Object {
+                "$($_.GroupId)" -ne "$($ControlPlaneEntry.GroupId)"
+            }).Count -or
         @($RollbackCustomerVmState | Where-Object {
-            $_.GroupState -ne $RollbackExpectedCustomerGroupState -or
-            $_.VmState -ne $RollbackExpectedCustomerVmState
+            "$($_.GroupState)|$($_.VmState)" -notin
+                $RollbackAllowedCustomerVmPairs
         }).Count -gt 0 -or
         (
             $RollbackPoolShouldBeOnline -and
@@ -4849,6 +5001,7 @@ if ($DesiredTransport -eq 'iWARP') {
 Set-ChangePhase -Phase RollbackApproved `
     -RollbackOriginPhase $RollbackOriginPhase `
     -ClearActiveValidationStart
+'ROLLBACK_APPROVED'
 }
 ```
 
@@ -4986,7 +5139,7 @@ If `VMs that would be shut down` is `0`, skip Parts B and C and go to Part D.
 
 #### Part B: Stop here and confirm the exact list
 
-**Stop here and confirm.** Do not continue until the workload owner has reviewed the VMs that Part A listed with `WillStop` set to `True`, by name, host, and VM Id, and has agreed that each of those VMs can be shut down now. Nothing has been stopped yet.
+**Stop here and confirm.** Do not continue until the workload owner has reviewed the VMs that Part A listed with `WillStop` set to `True`, by name, host, and VM Id, and has agreed that each of those VMs can be shut down now. Nothing has been stopped yet. Done looks like: the recording block below prints `VM_SHUTDOWN_CONFIRMED`.
 
 - If the workload owner agrees to every listed VM, record the confirmation for the whole reviewed list, or list each approved VM Id.
 - If the workload owner does not agree to a VM, do not run Part C. The workload owner either shuts that VM down through its guest operating system, after which you run Part A again, or the rollback stops here.
@@ -5058,6 +5211,7 @@ if (
         Join-Path $EvidenceRoot 'rollback-vm-shutdown-confirmation.json'
     ) -ErrorAction Stop
 "Confirmed $($ApprovedIds.Count) VM(s) by $ConfirmedBy ($ConfirmationMode)."
+'VM_SHUTDOWN_CONFIRMED'
 }
 ```
 
@@ -5237,7 +5391,7 @@ If the target was iWARP, keep the built-in iWARP firewall rule enabled until RoC
 | Pool, virtual disk, or CSV does not recover | Stop. Do not run repair, recreate resources, or disable Storage Spaces Direct. Contact Microsoft Support. |
 | MOC or appliance VM does not recover | Stop before customer workload startup. Collect cluster and VM state and contact Microsoft Support. |
 | RDMA capability is absent after recovery | Stop workload expansion. Reconfirm adapter transport, Network ATC, firewall for iWARP, and fabric readiness for RoCEv2. |
-| An SBL connection is not selected, has no current channels, reports `Failed`, has a nonzero `FailureCount`, or is not RDMA-capable | Treat the desired transport as unverified. Collect SBL connection, adapter, intent, and network evidence before proceeding. |
+| An RDMA-capable SBL client interface or server has no selected connection, or a selected SBL connection has no current channels, reports `Failed`, has a nonzero `FailureCount`, or is not RDMA-capable | Treat the desired transport as unverified. Collect SBL connection, adapter, intent, and network evidence before proceeding. |
 | RoCEv2 shows drops or pause storms | Stop the validation load. Engage the network team and OEM to verify PFC, ETS, ECN/WRED, and endpoint congestion response. |
 
 ## Evidence and escalation package
