@@ -1874,7 +1874,7 @@ function Write-MutationFailureEvidence {
 **Risk:** [HIGH RISK]  
 **Owner:** Workload owner
 
-**Operator action.** The workload owner must stop applications and shut down each customer VM through its normal guest operating-system process. Do not use `-TurnOff`, save state, pause, or terminate a VM as the normal path. Done looks like: the following check, which verifies that every clustered VM except the sealed appliance VM is `Off`, prints `WORKLOADS_OFF`.
+**Operator action.** The workload owner must stop applications and shut down each customer VM from inside that VM's guest operating system, through its normal shutdown process. This is done on each VM, not on the cluster node. Do not use `-TurnOff`, save state, pause, or terminate a VM as the normal path. Done looks like: the following check, which verifies that every clustered VM except the sealed appliance VM is `Off`, prints `WORKLOADS_OFF`.
 
 **Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
 
@@ -3554,7 +3554,7 @@ if (
 }
 ```
 
-**Operator action.** The application or VM owner decides the startup order and starts the customer workloads that were `Running` when the baseline was sealed. The cluster administrator does not bulk-start VMs without workload-owner approval, and nobody starts a VM that was `Off` at the baseline as part of this change. Done looks like: the following check prints `CUSTOMER_VMS_RESTORED`.
+**Operator action.** The application or VM owner decides the startup order and starts the customer workloads that were `Running` when the baseline was sealed, from their own management machine through their normal startup process, not from this session on the cluster node. The cluster administrator does not bulk-start VMs without workload-owner approval, and nobody starts a VM that was `Off` at the baseline as part of this change. Done looks like: the following check prints `CUSTOMER_VMS_RESTORED`.
 
 The check verifies every recorded customer VM by its sealed VM ID against its sealed
 baseline state. A VM that was `Running` at the baseline must have a running clustered
@@ -5099,7 +5099,7 @@ Use this section only when the change is abandoned while the durable phase is st
 
 **Stop here and confirm.** The change approver named in the change record decides to abandon the change. Done looks like: the decision is recorded in the change record, and the following block prints `CHANGE_ABANDONED`.
 
-**Operator action.** If the phase is `WorkloadsOff`, the workload owner starts the customer VMs that were `Running` when the baseline was sealed, through the normal startup process, and leaves VMs that were `Off` at the baseline off. Done looks like: the following block prints `CHANGE_ABANDONED`.
+**Operator action.** If the phase is `WorkloadsOff`, the workload owner starts the customer VMs that were `Running` when the baseline was sealed, from their own management machine through their normal startup process, not from this session on the cluster node, and leaves VMs that were `Off` at the baseline off. Done looks like: the following block prints `CHANGE_ABANDONED`.
 
 The block refuses any other phase. For `BaselineSealed` and `WorkloadsOff`, it first proves that every storage adapter still has the sealed source transport, that the sealed pool, MOC, every sealed CSV, and the appliance group are online, and that every customer VM is back in its sealed baseline state. It then persists `Abandoned`, stops the transcript, and removes only this operation's active pointer. It keeps the evidence directory.
 
