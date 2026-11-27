@@ -179,7 +179,7 @@ This read-only block lists the Windows Firewall settings on the node that can bl
         "Endpoint addresses: $($addresses -join ', ')"
         Get-NetFirewallProfile -PolicyStore ActiveStore | Format-Table Name, Enabled, DefaultOutboundAction
         $portParts = { param($Ports) @($Ports | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
-        $rules = @(Get-NetFirewallRule -PolicyStore ActiveStore |
+        $rules = @(Get-NetFirewallRule -PolicyStore ActiveStore -TracePolicyStore |
             Where-Object { "$($_.Direction)" -eq 'Outbound' -and "$($_.Action)" -eq 'Block' -and "$($_.Enabled)" -eq 'True' } |
             ForEach-Object {
                 $pf = $_ | Get-NetFirewallPortFilter
@@ -283,7 +283,7 @@ Paste and run the whole block at once. It stops at the first error, and it chang
         return
     }
     $portParts = { param($Ports) @($Ports | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
-    $matching = @(Get-NetFirewallRule -PolicyStore ActiveStore |
+    $matching = @(Get-NetFirewallRule -PolicyStore ActiveStore -TracePolicyStore |
         Where-Object { "$($_.Direction)" -eq 'Outbound' -and "$($_.Action)" -eq 'Block' -and "$($_.Enabled)" -eq 'True' } |
         ForEach-Object {
             $pf = $_ | Get-NetFirewallPortFilter
