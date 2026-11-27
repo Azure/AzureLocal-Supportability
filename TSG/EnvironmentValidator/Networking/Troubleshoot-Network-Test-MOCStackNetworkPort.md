@@ -62,6 +62,7 @@ This environment validator fails when a node being validated can't open an outbo
 * During deployment validation and add-node validation, in the **Azure Local MOC Stack** validation step.
 * On every node being validated. Each node gets its own result, named `MOCStack Network Port Requirement <node name>`.
 * Only when no WinHTTP proxy is configured on the node that runs the validation. If `netsh winhttp show advproxy` on that node shows a `Proxy` value, the check is skipped and reports no result. Registering the nodes with Azure Arc through a proxy server or through Arc gateway configures this proxy.
+* Only on deployments that aren't disconnected. For a disconnected deployment (Azure Local with disconnected operations), the validator runs with the region name `AzureLocal`, and the check is skipped during deployment and add-node validation and reports no result.
 * Only with Environment Checker (`AzStackHci.EnvironmentChecker`) version 10.2509 and earlier. Version 10.2510 and later skip this check, so it doesn't appear for deployments that use a newer Environment Checker. To see the installed version, run this on the node:
 
 ```powershell
@@ -128,7 +129,7 @@ Type 'ValidateMOCStack' of Role 'EnvironmentValidator' raised an exception: {
 
 ## What runs this check
 
-The check is the function `Test-MOCStackNetworkPort` in the **AzStackHci.EnvironmentChecker** PowerShell module (file `AzStackHciMOCStack\AzStackHci.MOCStack.Helpers.psm1`). `Invoke-AzStackHciMOCStackValidation` runs it. The module is published on the PowerShell Gallery: https://www.powershellgallery.com/packages/AzStackHci.EnvironmentChecker
+The check is the function `Test-MOCStackNetworkPort` in the **AzStackHci.EnvironmentChecker** PowerShell module (file `AzStackHciMOCStack\AzStackHci.MOCStack.Helpers.psm1`). `Invoke-AzStackHciMOCStackValidation` runs it, except during deployment and add-node validation with the region name `AzureLocal` (a disconnected deployment), when it leaves the check out. The module is published on the PowerShell Gallery: https://www.powershellgallery.com/packages/AzStackHci.EnvironmentChecker
 
 What the check does:
 
@@ -329,6 +330,8 @@ If your network allows internet access only through a proxy server, the nodes mu
 
 Use the verification that matches the fix you made.
 
+On a disconnected deployment, deployment and add-node validation skip this check, so no result for `AzStackHci_MOCStack_Network_Port` is expected, the same as when a WinHTTP proxy is set. The rerun block below doesn't pass a region name, so it still runs the check even on a disconnected deployment.
+
 #### After a firewall or DNS fix
 
 From the node run
@@ -382,7 +385,7 @@ Then run the Environment Validator again. Because the check is skipped when a Wi
 ## Notes
 
 * This validator checks generic internet reachability through `internetbeacon.msedge.net` using the default behavior of `Test-NetConnection`  
-* The requirement applies during validation before deployment or add node, with Environment Checker 10.2509 and earlier, when no WinHTTP proxy is configured  
+* The requirement applies during validation before deployment or add node, with Environment Checker 10.2509 and earlier, when no WinHTTP proxy is configured and the deployment isn't disconnected  
 * `internetbeacon.msedge.net` is not part of the documented Azure Local firewall allowlist for service endpoints: https://learn.microsoft.com/en-us/azure/azure-local/concepts/firewall-requirements  
 * Document any temporary firewall changes and remove them after validation if they are not needed for ongoing operations
 
@@ -391,4 +394,4 @@ Then run the Environment Validator again. Because the check is skipped when a Wi
 * Symptom: `AzStackHci_MOCStack_Network_Port` failure blocks validation  
 * Cause: the node can't open outbound TCP 80 or 443 to `internetbeacon.msedge.net`, most often because a network firewall blocks it. DNS failures and Windows Firewall rules on the node fail the same way  
 * Fix: allow TCP 80 and 443 to `internetbeacon.msedge.net` on the firewall, or fix the DNS or node rule you found, and run validation again
-* Applies to: Environment Checker 10.2509 and earlier, without a WinHTTP proxy
+* Applies to: Environment Checker 10.2509 and earlier, without a WinHTTP proxy, on deployments that aren't disconnected
