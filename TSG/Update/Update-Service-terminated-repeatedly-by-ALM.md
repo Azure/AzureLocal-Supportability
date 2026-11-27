@@ -49,7 +49,7 @@ There is a bug found in 2509 which is a memory leak in a serializer used by the 
 # Mitigation Details
 
 ## Remove health check result files for installed updates
-Health check result files are stored in the `C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1> cd .\Updates\HealthCheck\` directory on the infrastructure volume. Within that directory, there will be a subdirectory named `System` and additional subdirectories containing the names of installed updates like (for example) `Solution11.2508.1001.51` or `SBE4.1.2508.1`. Directories that correspond to updates that are already installed can be cleaned up.
+Health check result files are stored in the `C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\HealthCheck` directory on the infrastructure volume. Within that directory, there will be a subdirectory named `System` and additional subdirectories containing the names of installed updates like (for example) `Solution11.2508.1001.51` or `SBE4.1.2508.1`. Directories that correspond to updates that are already installed can be cleaned up.
 
 The following command can be used to clean up all the directories. Save this script on one of the cluster nodes and run.
 
