@@ -81,7 +81,7 @@ All PowerShell/scripts **MUST be safe for production**
 
 - Use placeholders like `<hostname>` instead of real values
 - Describe what each state-changing command changes with a `**Changes:**` line, and what it does not affect
-- Add `**Plan for:**` for disruptive steps, and a `> [!WARNING]` callout for steps that can't be undone or can interrupt running workloads. You can also label those steps `[HIGH RISK]`.
+- Add `**Plan for:**` for disruptive steps, and a `> [!WARNING]` callout for steps that can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data. You can also label those steps `[HIGH RISK]`.
 - Do not add `[LOW RISK]`, `[MEDIUM RISK]`, or `[READ-ONLY]` labels. Older articles that use them are not required to change.
 - Include a pre-check, expected output, stop condition, rollback, and verification
 - Add comments explaining what commands do

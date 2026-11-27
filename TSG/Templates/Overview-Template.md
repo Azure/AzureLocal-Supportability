@@ -121,7 +121,7 @@ This overview complements the official [Azure Local documentation](https://learn
 | **Not covered here** | {State which troubleshooting, deployment, or repair actions belong in another article type.} |
 | **Workload or availability considerations** | {State whether concepts in this overview imply virtual machine (VM) downtime, maintenance windows, possible loss of quorum (the cluster losing enough voting members that it can't stay online), network interruption, or no workload effect.} |
 | **Security posture considerations** | {State whether the topic affects identity, role-based access control (RBAC), certificates, firewall policy, secrets, or has no expected security effect.} |
-| **Impact statement when actions are included** | {For any example that could change state, add a `**Changes:**` statement, `**Plan for:**` when the step is disruptive, and a `> [!WARNING]` callout, optionally with a `[HIGH RISK]` label, when it can't be undone or can interrupt running workloads.} |
+| **Impact statement when actions are included** | {For any example that could change state, add a `**Changes:**` statement, `**Plan for:**` when the step is disruptive, and a `> [!WARNING]` callout, optionally with a `[HIGH RISK]` label, when it can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data.} |
 | **Escalation or handoff** | {State when to involve CSS, product engineering, an OEM vendor, a partner or SI, or customer change-control owners.} |
 
 ### Action pattern for any state-changing example
@@ -130,7 +130,7 @@ Overview articles should avoid step-by-step repair flows. If an example action i
 
 | Field | Required prompt |
 | ----- | --------------- |
-| **What changes** | {Write a `**Changes:**` statement that says what changes and what is not affected. Add `**Plan for:**` for disruptive steps and a `> [!WARNING]` callout for steps that can't be undone or can interrupt running workloads.} |
+| **What changes** | {Write a `**Changes:**` statement that says what changes and what is not affected. Add `**Plan for:**` for disruptive steps and a `> [!WARNING]` callout for steps that can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data.} |
 | **Privilege and approval gate** | {State the minimum role, local admin right, RBAC assignment, vendor approval, or change-control approval required before the action.} |
 | **Pre-check** | {Condition that must be true before the action is safe. Include health, backup, recovery-key, and ownership checks where applicable.} |
 | **Workload or maintenance gate** | {State the required maintenance window, workload-drain state, customer approval, or confirmation that the example has no workload effect.} |

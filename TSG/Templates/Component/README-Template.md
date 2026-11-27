@@ -22,7 +22,7 @@ Use one row per support article. Every linked article must carry a valid HTML-co
 
 Supported versions, what each action changes, workload impact, and execution surface belong in the linked article, not in this index.
 
-For linked articles that include state-changing actions, confirm each state-changing step has a `**Changes:**` statement, plus `**Plan for:**` or a `> [!WARNING]` callout when needed, and includes pre-check, action, expected result or output, stop condition, rollback, and verification steps.
+For linked articles that include state-changing actions, confirm each new or edited state-changing step has a `**Changes:**` statement, plus `**Plan for:**` or a `> [!WARNING]` callout when the step's impact calls for one, and that every state-changing step includes pre-check, action, expected result or output, stop condition, rollback, and verification steps. Older articles that still use bracketed labels are not required to change.
 
 ### {TOPIC_AREA_1}
 <!-- Instructions: Replace {TOPIC_AREA_1} with a descriptive topic area name (e.g., "Arc Gateway & Outbound Connectivity") -->
@@ -65,7 +65,7 @@ Use this gate after copying the template to `TSG/{Component}/README.md`.
 | Inventory columns | Every topic table keeps Article, Type, Applicable products, and Owner. |
 | Required row values | Every row has a linked article title, a type that matches the article metadata `document_type`, explicit applicable products, and an accountable owner. |
 | Metadata marker | Every linked article has the required `azure-local-supportability/tsg-metadata/v2` marker, validates against `../Templates/tsg-metadata.schema.json`, and uses `detector.signal: null` when `detector.type` is `none`. |
-| State-changing articles | Any linked article with state-changing actions keeps `**Changes:**` and `**Plan for:**` statements and warning callouts, privilege requirements, workload-impact or maintenance-window gates, pre-check, action, expected result or output, stop condition, rollback, expected rollback output, rollback verification, escalation, and final verification in the linked article. |
+| State-changing articles | Any linked article with state-changing actions keeps its impact statements (`**Changes:**`, plus `**Plan for:**` and warning callouts when the step's impact calls for them, or the older bracketed labels in an article that has not been edited), privilege requirements, workload-impact or maintenance-window gates, pre-check, action, expected result or output, stop condition, rollback, expected rollback output, rollback verification, escalation, and final verification in the linked article. |
 | Row order | Rows are sorted or grouped consistently within each topic area so repeated site work stays predictable. |
 | Public-link hygiene | External references in article rows use public Microsoft links only. |
 | Evidence | The pull request notes what was checked, including placeholder removal, copied-context link validation, metadata-marker confirmation, and latest lint result. |
