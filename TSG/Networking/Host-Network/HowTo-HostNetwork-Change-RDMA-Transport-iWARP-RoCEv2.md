@@ -4241,6 +4241,67 @@ if (Test-Path -LiteralPath $ActiveValidationFailurePath) {
     )
 }
 
+# Identify each event exactly, so a disposition covers only the events reviewed.
+function Get-ActiveEventKey {
+    param($EventRecord)
+    $Created = ([datetime]$EventRecord.TimeCreated).ToUniversalTime()
+    (
+        "$("$($EventRecord.MachineName)".ToUpperInvariant())|" +
+        "$($EventRecord.LogName)|$($EventRecord.RecordId)|" +
+        "$($EventRecord.ProviderName)|$($EventRecord.Id)|" +
+        "$($Created.ToString('o'))"
+    )
+}
+
+# Return the event keys from a valid disposition record for this operation and
+# validation window. Refuse a record that was edited, belongs to another
+# operation or checkpoint, or lists an event that the check did not return.
+function Get-DispositionedEventKeys {
+    param([string[]]$ReturnedKeys = @())
+    $RecordPath = Join-Path $EvidenceRoot `
+        "active-validation-$Operation-event-disposition.json"
+    if (-not (Test-Path -LiteralPath $RecordPath)) {
+        return @()
+    }
+    $HashPath = "$RecordPath.sha256"
+    if (-not (Test-Path -LiteralPath $HashPath)) {
+        throw "The event disposition record has no recorded hash. Record the disposition again."
+    }
+    $RecordedHash = "$(Get-Content -LiteralPath $HashPath -Raw -ErrorAction Stop)".Trim()
+    $CurrentHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $RecordPath `
+        -ErrorAction Stop).Hash
+    if ($CurrentHash -ne $RecordedHash) {
+        throw "The event disposition record changed after it was recorded. Record the disposition again."
+    }
+    $Record = Get-Content -LiteralPath $RecordPath -Raw -ErrorAction Stop |
+        ConvertFrom-Json
+    $Keys = @(@($Record.Events) | ForEach-Object { "$($_.Key)" })
+    # PowerShell 7 parses ISO dates in JSON; Windows PowerShell 5.1 does not.
+    $RecordStartUtc = if ($Record.ActiveValidationStartUtc -is [datetime]) {
+        $Record.ActiveValidationStartUtc.ToUniversalTime()
+    } else {
+        [datetime]::Parse(
+            "$($Record.ActiveValidationStartUtc)",
+            [System.Globalization.CultureInfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::RoundtripKind
+        ).ToUniversalTime()
+    }
+    if (
+        "$($Record.ChangeId)" -ne $ChangeId -or
+        "$($Record.Operation)" -ne $Operation -or
+        "$($Record.Phase)" -ne 'ActiveAssertionsPassed' -or
+        $RecordStartUtc -ne $ActiveValidationStartUtc.ToUniversalTime() -or
+        @($Keys | Where-Object { $_ -notin $ReturnedKeys }).Count -gt 0
+    ) {
+        throw (
+            "The event disposition record does not match this operation, " +
+            "checkpoint, and validation window, or lists an event that the " +
+            "check did not return. Record the disposition again."
+        )
+    }
+    $Keys
+}
+
 # Reject cluster and SMB RDMA events from the representative-load window
 $ValidationAttemptId = (
     "$(Get-Date -Format 'yyyyMMdd-HHmmss')-" +
@@ -4261,8 +4322,8 @@ try {
                     Id = 1069, 1135, 1177, 5120, 5142
                     StartTime = $StartTime
                 } -ErrorAction Stop |
-                    Select-Object MachineName, TimeCreated, Id,
-                        LevelDisplayName, Message
+                    Select-Object MachineName, LogName, RecordId,
+                        ProviderName, TimeCreated, Id, LevelDisplayName, Message
             } catch {
                 if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') {
                     throw
@@ -4282,8 +4343,9 @@ try {
                         Where-Object {
                             $_.Level -le 3 -and $_.Message -match 'RDMA'
                         } |
-                        Select-Object MachineName, TimeCreated, Id,
-                            LevelDisplayName, ProviderName, Message
+                        Select-Object MachineName, LogName, RecordId,
+                            TimeCreated, Id, LevelDisplayName, ProviderName,
+                            Message
                 } catch {
                     if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') {
                         throw
@@ -4295,13 +4357,24 @@ try {
         -LiteralPath $ActiveClusterEventPath
     $ActiveSmbRdmaEvents | Export-Csv -NoTypeInformation -NoClobber `
         -LiteralPath $ActiveSmbRdmaEventPath
-    if ($ActiveClusterEvents.Count -gt 0 -or $ActiveSmbRdmaEvents.Count -gt 0) {
+    $DispositionedEventKeys = @(Get-DispositionedEventKeys -ReturnedKeys @(
+        @($ActiveClusterEvents) + @($ActiveSmbRdmaEvents) |
+            ForEach-Object { Get-ActiveEventKey -EventRecord $_ }
+    ))
+    $NewActiveClusterEvents = @($ActiveClusterEvents | Where-Object {
+        (Get-ActiveEventKey -EventRecord $_) -notin $DispositionedEventKeys
+    })
+    $NewActiveSmbRdmaEvents = @($ActiveSmbRdmaEvents | Where-Object {
+        (Get-ActiveEventKey -EventRecord $_) -notin $DispositionedEventKeys
+    })
+    if ($NewActiveClusterEvents.Count -gt 0 -or $NewActiveSmbRdmaEvents.Count -gt 0) {
         $ActiveEventFailureJson = [pscustomobject]@{
             ObservedUtc = (Get-Date).ToUniversalTime().ToString('o')
             Phase = $FinalHoldPhase
             FailureKind = 'ActiveEventValidation'
-            ClusterEventCount = $ActiveClusterEvents.Count
-            SmbRdmaEventCount = $ActiveSmbRdmaEvents.Count
+            ClusterEventCount = $NewActiveClusterEvents.Count
+            SmbRdmaEventCount = $NewActiveSmbRdmaEvents.Count
+            DispositionedEventCount = $DispositionedEventKeys.Count
             ClusterEventEvidence = $ActiveClusterEventPath
             SmbRdmaEventEvidence = $ActiveSmbRdmaEventPath
         } | ConvertTo-Json -Depth 8
@@ -4497,6 +4570,16 @@ do {
                 }
             }
         } -ErrorAction Stop)
+    $FinalHoldDispositionedKeys = @(Get-DispositionedEventKeys -ReturnedKeys @(
+        @($FinalHoldEvents) + @($FinalHoldSmbEvents) |
+            ForEach-Object { Get-ActiveEventKey -EventRecord $_ }
+    ))
+    $FinalHoldNewEvents = @($FinalHoldEvents | Where-Object {
+        (Get-ActiveEventKey -EventRecord $_) -notin $FinalHoldDispositionedKeys
+    })
+    $FinalHoldNewSmbEvents = @($FinalHoldSmbEvents | Where-Object {
+        (Get-ActiveEventKey -EventRecord $_) -notin $FinalHoldDispositionedKeys
+    })
     $FinalHoldEvents | Export-Csv -NoTypeInformation -NoClobber `
         -LiteralPath $FinalHoldClusterEventPath
     $FinalHoldSmbEvents | Export-Csv -NoTypeInformation -NoClobber `
@@ -4557,8 +4640,8 @@ do {
             -not [string]::IsNullOrWhiteSpace("$($_.Error)")
         }).Count -eq 0 -and
         $FinalHoldRdmaHealthy -and
-        $FinalHoldEvents.Count -eq 0 -and
-        $FinalHoldSmbEvents.Count -eq 0
+        $FinalHoldNewEvents.Count -eq 0 -and
+        $FinalHoldNewSmbEvents.Count -eq 0
     )
 
     if ($FinalHealthy) {
@@ -4625,8 +4708,9 @@ do {
                 "$($_.ProvisioningStatus):$($_.RetryCount):$($_.Error)"
             })
             ActiveRdmaHealthy = $FinalHoldRdmaHealthy
-            ClusterEventCount = $FinalHoldEvents.Count
-            SmbRdmaEventCount = $FinalHoldSmbEvents.Count
+            ClusterEventCount = $FinalHoldNewEvents.Count
+            SmbRdmaEventCount = $FinalHoldNewSmbEvents.Count
+            DispositionedEventCount = $FinalHoldDispositionedKeys.Count
             ClusterEventEvidence = $FinalHoldClusterEventPath
             SmbRdmaEventEvidence = $FinalHoldSmbEventPath
         } | ConvertTo-Json -Depth 8
@@ -4709,7 +4793,161 @@ Set-ChangePhase -Phase ActiveValidationPassed
 If an active-validation terminal failure artifact exists, copy it into the support evidence set,
 record the explicit disposition, and rename the original with a
 `-dispositioned-<UTC timestamp>` suffix before a new attempt. Never delete or
-overwrite the original failure evidence.
+overwrite the original failure evidence. The recording block below does the rename.
+
+**Stop here and confirm.** The change approver, with Microsoft Support when the failure needs it, reviews the failure artifact and every event that the event check returns, and decides whether each event is explained and safe to accept. Done looks like: every listed event is accepted, and the following recording block prints `EVENT_DISPOSITION_RECORDED`. If any event is not accepted, do not record a disposition; follow the rollback decision instead.
+
+The recording block re-runs the event queries from the original validation start, so it lists exactly the events that the check returns now. It saves each event's node, log name, record ID, provider, event ID, and time in `active-validation-<Operation>-event-disposition.json`, bound to the change ID, operation, `ActiveAssertionsPassed` checkpoint, validation start, and failure-artifact hash, with a SHA-256 hash file next to it. A retry keeps the original validation start and excludes only events whose exact identity is in that record. Any new or different event still fails. The retry refuses a record that was edited, belongs to another operation or checkpoint, or lists an event that the check no longer returns. A later disposition supersedes the earlier record, which is renamed, not deleted.
+
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
+```powershell
+& {
+# The name of the person who dispositioned the failure.
+$DispositionedBy = '<reviewer name>'
+# Where the disposition is recorded, for example a change-record or support-case reference.
+$DispositionReference = '<disposition reference>'
+
+$DispositionState = Get-Content -LiteralPath (
+    Join-Path $EvidenceRoot 'phase-state.json'
+) -Raw -ErrorAction Stop | ConvertFrom-Json
+if (
+    "$($DispositionState.Operation)" -ne $Operation -or
+    "$($DispositionState.Phase)" -ne 'ActiveAssertionsPassed' -or
+    [string]::IsNullOrWhiteSpace("$($DispositionState.ActiveValidationStartUtc)")
+) {
+    throw "Record an event disposition only at the ActiveAssertionsPassed checkpoint of the current operation."
+}
+if (
+    [string]::IsNullOrWhiteSpace($DispositionedBy) -or
+    $DispositionedBy -match '[<>]' -or
+    [string]::IsNullOrWhiteSpace($DispositionReference) -or
+    $DispositionReference -match '[<>]'
+) {
+    throw "Record who dispositioned the failure and where the disposition is recorded."
+}
+$FailurePath = Join-Path $EvidenceRoot `
+    "active-validation-$Operation-terminal-failure.json"
+if (-not (Test-Path -LiteralPath $FailurePath)) {
+    throw "No undispositioned active-validation failure artifact exists."
+}
+$FailureHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $FailurePath `
+    -ErrorAction Stop).Hash
+$WindowStartUtc = if ($DispositionState.ActiveValidationStartUtc -is [datetime]) {
+    $DispositionState.ActiveValidationStartUtc.ToUniversalTime()
+} else {
+    [datetime]::Parse(
+        "$($DispositionState.ActiveValidationStartUtc)",
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::RoundtripKind
+    ).ToUniversalTime()
+}
+
+function Get-ActiveEventKey {
+    param($EventRecord)
+    $Created = ([datetime]$EventRecord.TimeCreated).ToUniversalTime()
+    (
+        "$("$($EventRecord.MachineName)".ToUpperInvariant())|" +
+        "$($EventRecord.LogName)|$($EventRecord.RecordId)|" +
+        "$($EventRecord.ProviderName)|$($EventRecord.Id)|" +
+        "$($Created.ToString('o'))"
+    )
+}
+
+$ReviewedEvents = @(Invoke-Command -ComputerName $Nodes.Name `
+    -ArgumentList $WindowStartUtc -ScriptBlock {
+        param($StartTime)
+        try {
+            Get-WinEvent -FilterHashtable @{
+                LogName = 'System'
+                ProviderName = 'Microsoft-Windows-FailoverClustering'
+                Id = 1069, 1135, 1177, 5120, 5142
+                StartTime = $StartTime
+            } -ErrorAction Stop |
+                Select-Object MachineName, LogName, RecordId,
+                    ProviderName, Id, TimeCreated, Message
+        } catch {
+            if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') {
+                throw
+            }
+        }
+        foreach ($Log in @(Get-WinEvent -ListLog '*SMB*' `
+            -ErrorAction Stop | Where-Object IsEnabled)) {
+            try {
+                Get-WinEvent -FilterHashtable @{
+                    LogName = $Log.LogName
+                    StartTime = $StartTime
+                } -ErrorAction Stop |
+                    Where-Object {
+                        $_.Level -le 3 -and $_.Message -match 'RDMA'
+                    } |
+                    Select-Object MachineName, LogName, RecordId,
+                        ProviderName, Id, TimeCreated, Message
+            } catch {
+                if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') {
+                    throw
+                }
+            }
+        }
+    } -ErrorAction Stop)
+$ReviewedEvents |
+    Format-Table MachineName, LogName, RecordId, ProviderName, Id, TimeCreated -AutoSize
+
+$Stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
+$RecordPath = Join-Path $EvidenceRoot `
+    "active-validation-$Operation-event-disposition.json"
+$DispositionedFailureName = (
+    "active-validation-$Operation-terminal-failure-dispositioned-$Stamp.json"
+)
+$SupersededNames = @(
+    "active-validation-$Operation-event-disposition-superseded-$Stamp.json",
+    "active-validation-$Operation-event-disposition-superseded-$Stamp.json.sha256"
+)
+if (@(@($DispositionedFailureName) + $SupersededNames | Where-Object {
+    Test-Path -LiteralPath (Join-Path $EvidenceRoot $_)
+}).Count -gt 0) {
+    throw "A disposition file with this timestamp already exists. Wait one second and run the block again."
+}
+if (Test-Path -LiteralPath $RecordPath) {
+    Rename-Item -LiteralPath $RecordPath -NewName $SupersededNames[0] `
+        -ErrorAction Stop
+}
+if (Test-Path -LiteralPath "$RecordPath.sha256") {
+    Rename-Item -LiteralPath "$RecordPath.sha256" -NewName $SupersededNames[1] `
+        -ErrorAction Stop
+}
+
+[pscustomobject]@{
+    ChangeId = $ChangeId
+    Operation = $Operation
+    Phase = 'ActiveAssertionsPassed'
+    ActiveValidationStartUtc = $WindowStartUtc.ToString('o')
+    FailureArtifactSha256 = $FailureHash
+    DispositionedBy = $DispositionedBy
+    DispositionReference = $DispositionReference
+    DispositionedUtc = (Get-Date).ToUniversalTime().ToString('o')
+    Events = @($ReviewedEvents | ForEach-Object {
+        [pscustomobject]@{
+            Key = Get-ActiveEventKey -EventRecord $_
+            MachineName = "$($_.MachineName)"
+            LogName = "$($_.LogName)"
+            RecordId = "$($_.RecordId)"
+            ProviderName = "$($_.ProviderName)"
+            Id = [int]$_.Id
+            TimeCreatedUtc = ([datetime]$_.TimeCreated).ToUniversalTime().ToString('o')
+        }
+    })
+} | ConvertTo-Json -Depth 4 |
+    Set-Content -LiteralPath $RecordPath -ErrorAction Stop
+(Get-FileHash -Algorithm SHA256 -LiteralPath $RecordPath -ErrorAction Stop).Hash |
+    Set-Content -LiteralPath "$RecordPath.sha256" -ErrorAction Stop
+
+Rename-Item -LiteralPath $FailurePath -NewName $DispositionedFailureName `
+    -ErrorAction Stop
+"Dispositioned $($ReviewedEvents.Count) event(s)."
+'EVENT_DISPOSITION_RECORDED'
+}
+```
 
 Success requires:
 
