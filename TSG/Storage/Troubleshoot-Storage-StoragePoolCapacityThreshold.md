@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "command",
     "signal": "Get-HealthFault"
-  },
-  "validation": {
-    "fidelity_level": "L3",
-    "technical_grade": null,
-    "reproduction_substrate": "hardware",
-    "automation_status": "ready",
-    "last_validated": "2026-10-07",
-    "spec_ref": "AzStackHci_Storage_StoragePoolCapacityThreshold"
   }
 }
 -->
@@ -43,7 +35,7 @@
   </tr>
   <tr>
     <th style="text-align:left;">Validation Scope</th>
-    <td><strong>Use read-only checks first.</strong> Do not validate this by filling a production pool. If lab validation is needed, use an isolated scratch volume on physical S2D hardware.</td>
+    <td><strong>Use read-only checks first.</strong> Do not validate this by filling a production pool.</td>
   </tr>
 </table>
 
@@ -1027,9 +1019,9 @@ release, open a support case instead.
   that nothing needs any more is merged with the one disk built on it, deleted when
   no disk is built on it, and kept while two or more are. When the VM's checkpoints
   branch (someone applied an older checkpoint and kept the newer ones), removing one
-  checkpoint can delete a file and merge a disk of another branch. In a lab test,
-  removing the checkpoint at the end of one branch also merged the VM's current disk
-  into its base disk.
+  checkpoint can delete a file and merge a disk of another branch. For example,
+  removing the checkpoint at the end of one branch can also merge the VM's current
+  disk into its base disk.
 
   Paste these two functions once into the elevated session that you used for the VM
   list. `Test-CheckpointRemoval` only reads. `Remove-ApprovedCheckpoint` removes the
@@ -1226,8 +1218,8 @@ release, open a support case instead.
   `NeedGB` is the most that a merge can add to the volume that holds `Disk`, and it
   can be much more than `DataGB`, the size of the disk being merged. A checkpoint
   disk stores changes in 2 MB blocks, and each of them can add a whole 32 MB block to
-  a dynamic disk. In a lab test, merging 0.3 GB of scattered changes grew the dynamic
-  disk they went into by 4 GB. The function reports room only when, after the most
+  a dynamic disk. For example, merging 0.3 GB of scattered changes can grow the
+  dynamic disk they go into by about 4 GB. The function reports room only when, after the most
   that the merges can add:
 
   - each volume that a merge writes to still has 5% of its size free, and at least
@@ -1418,13 +1410,10 @@ release, open a support case instead.
    > volumes. Prefer a low-usage window on large or busy systems.
 
    > [!NOTE]
-   > **Substrate matters if you are validating in a lab.** The reclaim is only
-   > observable on **physical S2D hardware**. On a nested or VM-based cluster,
-   > `Optimize-Volume -SlabConsolidate` reports every purgable slab pinned
-   > unmovable and returns 0 bytes to the pool even when real interior free
-   > space exists, and the footprint stays flat. That is a substrate limitation,
-   > not a failure of the procedure and not a defect in the volume. Grade this
-   > remediation only on physical S2D, never on a nested or VM cluster.
+   > On a nested or VM-based cluster, `Optimize-Volume -SlabConsolidate` reports
+   > every purgable slab as pinned unmovable and returns 0 bytes to the pool even
+   > when real interior free space exists. This is a limitation of virtualized
+   > storage, not a defect in the volume, and the pool footprint does not change.
 
 3. **Wait about 15 minutes** after consolidation completes. The capacity is
    returned to the pool by the **ReFS background unmap workitem**, which runs

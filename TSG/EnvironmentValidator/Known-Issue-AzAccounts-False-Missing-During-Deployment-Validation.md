@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "envchecker",
     "signal": "AzStackHci_OSImageRecipeValidation_Package_Version"
-  },
-  "validation": {
-    "fidelity_level": "L4",
-    "technical_grade": "A",
-    "reproduction_substrate": "vm",
-    "automation_status": "proven",
-    "last_validated": "2026-09-15",
-    "spec_ref": "AzStackHci_OSImageRecipeValidation_Package_Version-Az.Accounts-culture"
   }
 }
 -->
@@ -35,7 +27,7 @@
 
 | Date | Version | Summary |
 | --- | --- | --- |
-| 2026-09-28 | 1.0 | Published the live-validated diagnosis and recovery procedure for culture-related false missing-module results. |
+| 2026-09-28 | 1.0 | Published the diagnosis and recovery procedure for culture-related false missing-module results. |
 
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; margin-bottom:1em;">
   <tr><th style="text-align:left; width:180px;">Component</th><td><strong>Azure Local Environment Validator - OS image recipe validation</strong></td></tr>

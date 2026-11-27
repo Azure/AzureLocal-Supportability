@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "envchecker",
     "signal": "AzStackHci_DNS_ExternalDnsResolution|AzStackHci_DNS_Test_External_Hostname_Resolution"
-  },
-  "validation": {
-    "fidelity_level": "L4",
-    "technical_grade": "A",
-    "reproduction_substrate": "vm",
-    "automation_status": "proven",
-    "last_validated": "2026-09-18",
-    "spec_ref": "AzStackHci_DNS_ExternalDnsResolution"
   }
 }
 -->
@@ -34,7 +26,6 @@
 | Date | Description |
 | --- | --- |
 | 2026-09-24 | Added connected-cloud target mapping, complete Environment Checker log roots, guarded proxy rollback, and GitHub-compatible metadata. |
-| 2026-09-18 | Revalidated the live DNS failure and recovery loop and synchronized the standalone PR with the current publication design. |
 | 2026-09-17 | Retrofitted mandatory publication metadata, audience scope, revision history, and source-article layout without changing the technical procedure. |
 
 # AzStackHci_DNS_ExternalDnsResolution

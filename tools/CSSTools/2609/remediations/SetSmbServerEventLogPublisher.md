@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "reference",
   "products": ["Azure Local"],
   "detector": {
     "type": "none",
     "signal": null
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "not-assessed",
-    "last_validated": "2026-11-02",
-    "spec_ref": ""
   }
 }
 -->
@@ -124,5 +116,3 @@ stop on any other outcome or failed verification and contact Microsoft Support.
 - Verification: PersistedStateVerified confirms that Enabled was read back as the requested
   REG_DWORD value. After the planned reboot, verify that the node and its workloads return to
   their expected operational state; stop and contact Microsoft Support if they do not.
-- Documentation validation: Static review only (L0), based on the module's 1.2609.30.2
-  documentation. The remediation has not been executed as part of this documentation update.

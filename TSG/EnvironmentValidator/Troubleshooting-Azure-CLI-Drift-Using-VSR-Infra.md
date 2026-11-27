@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "troubleshoot",
   "products": ["Azure Local"],
   "detector": {
     "type": "envchecker",
     "signal": "Invoke-AzStackHciVSRDriftDetectionValidation"
-  },
-  "validation": {
-    "fidelity_level": "L1",
-    "technical_grade": null,
-    "reproduction_substrate": "hardware",
-    "automation_status": "not-assessed",
-    "last_validated": "2026-11-06",
-    "spec_ref": ""
   }
 }
 -->
@@ -28,7 +20,6 @@
 | Applicability | Azure CLI core drift, with or without extension drift; the remediation path requires `Remediate-AzCli` and access to the recipe's installation sources. Extension-only drift does not use this remediation path. |
 | Severity | Inspect the severity returned by each check; severity can vary by release. |
 | Execution surface | on-device |
-| Validation | Diagnostic commands and module import exercised on a physical x64 lab node (OS build 26100, Windows PowerShell 5.1) on 2026-11-06. The full drift validator returned 20 successful checks, including CLI core and four extensions; CLI inventory selected the x64 path. Remediation, failure detection, the x86 fallback on a live installation, and health-fault clearing remain untested. |
 
 Do not infer applicability to disconnected, disaggregated, or multi-rack
 deployments. If required commands or installation sources are unavailable,
@@ -203,6 +194,8 @@ Inspect the returned result for completion or errors, then run
 validator still reports core CLI drift. Treat any remaining extension failures
 separately as described under [Issue validation](#issue-validation).
 Do not repeatedly reinstall or upgrade `az` without investigating the failure.
+Remediation behavior for the x86 installation path is not characterized; if
+`Remediate-AzCli` reports anything other than success, stop and contact Microsoft Support.
 
 ## Rollback and escalation
 
@@ -253,8 +246,6 @@ guidance for other extension findings.
 | Component / tool log files | absent | The validator and remediation log locations need validation on a supported release. |
 
 `absent` denotes an uncharacterized surface, not proof that no signal exists.
-These gaps and the untested commands require maintainer validation before
-publication.
 
 ## Related documentation
 

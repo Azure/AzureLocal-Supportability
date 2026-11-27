@@ -1,6 +1,6 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "deep-dive",
   "products": [
     "replace-me"
@@ -8,14 +8,6 @@
   "detector": {
     "type": "none",
     "signal": null
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "not-assessed",
-    "last_validated": null,
-    "spec_ref": ""
   }
 }
 -->
@@ -94,7 +86,7 @@ Do not publish or run copied actions from this template until every item is comp
 | Placeholders removed | Search for brace placeholders such as `{Title}` and replace every one with article-specific content. Do not publish while any placeholder remains. |
 | Products and versions explicit | Fill in applicable products and supported versions. Include at least one explicit out-of-scope version, topology, or product case. |
 | Public-link hygiene | Use public Microsoft Learn or Microsoft documentation links only. |
-| Metadata marker valid | Keep exactly one `azure-local-supportability/tsg-metadata/v1` marker and update it if the article gains a detector or validation evidence. |
+| Metadata marker valid | Keep exactly one `azure-local-supportability/tsg-metadata/v2` marker and update it if the article gains a detector. The marker records discovery metadata only; keep validation records, such as test runs, grades, and lab details, out of the article and its marker. |
 | Metadata schema checked | Validate the marker against the public schema. The schema lives at [`tsg-metadata.schema.json`](tsg-metadata.schema.json) in the template folder. After copying this article, use the copied file's relative path back to the schema: component root uses `../Templates/tsg-metadata.schema.json`, one nested topic folder uses `../../Templates/tsg-metadata.schema.json`, and each additional nested folder adds one `../`. |
 | Safety contract complete | Every action has an action type, required privilege, workload or maintenance gate, pre-check, action, expected result or output, stop condition, rollback with expected output, rollback verification, final verification, and escalation target. State-changing actions also have a [LOW RISK], [MEDIUM RISK], or [HIGH RISK] label. |
 | Evidence sanitized | Remove customer identifiers, secrets, private tenant values, internal URLs, and lab-only names from examples and artifacts. |
@@ -155,7 +147,7 @@ Do not publish or run copied actions from this template until every item is comp
 - [Operational boundaries and safety](#operational-boundaries-and-safety)
 - [Action pattern, if this article includes steps](#action-pattern-if-this-article-includes-steps)
 - [Validation](#validation)
-- [Future test automation metadata](#future-test-automation-metadata)
+- [Detector metadata](#detector-metadata)
 - [References](#references)
 
 ## Architecture and technical details
@@ -206,9 +198,9 @@ Use this section when the article may support a support case, escalation, partne
 
 ### Source-of-truth table
 
-| Mechanism claim | Evidence authority | Validation status | Notes |
-| --- | --- | --- | --- |
-| {Important mechanism, dependency, boundary, or limitation.} | {Public Microsoft documentation, product output, command output, event log, or lab validation.} | {Validated, partially validated, not validated, or not applicable.} | {What would disprove the claim or where it does not apply.} |
+| Mechanism claim | Evidence authority | Notes |
+| --- | --- | --- |
+| {Important mechanism, dependency, boundary, or limitation.} | {Public Microsoft documentation, product output, command output, or event log.} | {What would disprove the claim or where it does not apply.} |
 
 ### Ownership and vendor boundary
 
@@ -241,63 +233,36 @@ If this Deep Dive includes any command, configuration change, portal action, or 
 
 ## Validation
 
-{State how the article was validated. Include what was tested, what was not tested, and how a reader can validate the claims in their environment.}
-
-| Claim or procedure | Validation method | Result | Evidence | Gaps |
-| --- | --- | --- | --- | --- |
-| {Claim, explanation, or action.} | {Documentation review, lab run, command output, log evidence, or not validated.} | {Pass, fail, not applicable, or not assessed.} | {Public documentation link, sanitized output, or artifact reference.} | {Known uncertainty or future validation needed.} |
+{State how a reader can validate the claims in their environment. Record test runs and other validation of this article in the pull request description, not in the article.}
 
 ### Verify the fix or validate the guidance
 
 {For explanation-only content, describe how the reader validates that they understood the topic and selected the right next step. For operational content, describe the final read-only verification that proves the action reached the intended state.}
 
-## Future test automation metadata
+## Detector metadata
 
-Use this section to make future TSG-FORGE automation possible. Keep placeholders until the article is assessed.
+Keep the metadata marker aligned with the public schema. The marker records discovery metadata only: document type, applicable products, and detector.
 
 | Field | Value |
 | --- | --- |
-| Automation candidate | {yes, no, or unknown.} |
 | `detector.type` | {none, envchecker, eventlog, command, service, feature, registry, telemetry, manual, portal, or control-plane.} |
 | Detector signal | {Exact check name, Event ID, command, service, feature, registry key, telemetry table, or manual surface.} |
-| `validation.reproduction_substrate` | {none, vm, hardware, or either. Use only these schema values.} |
-| Special fixture note | {Plain-language detail for a lab fixture, scratch object, cluster shape, or manual condition, if any. This is not a `validation.reproduction_substrate` value.} |
-| Current fidelity level | {L0, L1, L2, L3, or L4.} |
-| Technical grade | {Use null in the JSON metadata marker until TSG-FORGE produces A, B, C, or F. This is the authoritative technical grade field for README indexes and companion evidence.} |
-| Automation status | {not-assessed, scaffold, ready, proven, blocked, or manual.} |
-| Last validated | {Use YYYY-MM-DD after validation, or null in the JSON metadata marker when not validated.} |
-| Execution surface | {on-device, mixed, cloud-diagnostic, cloud-control, or thin. This is separate from automation status.} |
-| Spec reference | {Path to future companion spec, or blank.} |
+| Execution surface | {on-device, mixed, cloud-diagnostic, cloud-control, or thin.} |
 
-Plain-language detector explanation: describe what evidence source the selected detector represents and why it matches the article. When `detector.type` is `none`, keep `detector.signal` as JSON `null`. When selecting any other detector type, set both `detector.type` and `detector.signal` together so automation can find the exact signal.
+Plain-language detector explanation: describe what evidence source the selected detector represents and why it matches the article. When `detector.type` is `none`, keep `detector.signal` as JSON `null`. When selecting any other detector type, set both `detector.type` and `detector.signal` together so readers and tooling can find the exact signal.
 
-### Automation vocabulary
-
-Automation status records test readiness. It is separate from execution surface terms such as on-device, cloud, or mixed, which describe where a generated action can run.
+### Detector vocabulary
 
 | Vocabulary | Values | Meaning |
 | --- | --- | --- |
-| Fidelity level | L0 | Static structure, metadata, and persona review only. No live validation. |
-| Fidelity level | L1 | Read-only diagnostics or claims were run or checked against a real or authoritative source. |
-| Fidelity level | L2 | A safe proxy, synthetic input, or data-source override exercised the same decision path without reproducing the full real-world failure. |
-| Fidelity level | L3 | A scratch object or isolated fixture exercised the real mechanism without changing the whole system. |
-| Fidelity level | L4 | Full inject, detect, mitigate, and revalidate loop was proven end to end on an appropriate lab substrate. |
-| Technical grade | null | No TSG-FORGE technical grade has been produced yet. |
-| Technical grade | A, B, C, or F | The authoritative TSG-FORGE technical grade, backed by report or spec evidence. Do not invent a separate grade vocabulary. |
 | Detector type | none | No machine detector applies yet. Use with `detector.signal: null`. |
 | Detector type | envchecker | Azure Local Environment Validator result or health-check signal. |
 | Detector type | eventlog | Windows event log provider, log name, and Event ID. |
 | Detector type | command | Read-only command or script result. |
 | Detector type | service, feature, registry | Operating system state probe for a service, Windows feature, or registry value. |
-| Detector type | telemetry | Fleet or service telemetry query used by internal validation. |
+| Detector type | telemetry | Fleet or service telemetry query. |
 | Detector type | manual or portal | Human-observed portal, visual, or manual validation surface. |
 | Detector type | control-plane | Azure Resource Manager or other Azure control-plane state. |
-| Automation status | not-assessed | No automation assessment has been completed. |
-| Automation status | scaffold | Metadata exists, but detector or validation automation is incomplete. |
-| Automation status | ready | Automation is authored and ready to run, but not yet proven. |
-| Automation status | proven | Automation has successful validation evidence and a validation date. |
-| Automation status | blocked | Automation is known to be blocked, with the blocking reason documented. |
-| Automation status | manual | Validation intentionally requires human judgment or an external manual step. |
 
 ## References
 

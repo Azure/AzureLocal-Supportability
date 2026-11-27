@@ -8,7 +8,7 @@ Use this file to define how contributors should scope, validate, and review cont
 
 ## Table of Contents
 
-- [Fast Path: Copy, Lint, and PR Evidence](#fast-path-copy-lint-and-pr-evidence)
+- [Fast Path: Copy and PR Evidence](#fast-path-copy-and-pr-evidence)
 - [Component Scope and Applicability](#component-scope-and-applicability)
 - [Required Article Metadata](#required-article-metadata)
 - [Safe and Testable Authoring](#safe-and-testable-authoring)
@@ -18,7 +18,7 @@ Use this file to define how contributors should scope, validate, and review cont
 - [Before Opening a Pull Request](#before-opening-a-pull-request)
 - [Need Help](#need-help)
 
-## Fast Path: Copy, Lint, and PR Evidence
+## Fast Path: Copy and PR Evidence
 
 Use this path when turning the template into a component `CONTRIBUTING.md` and pull request (PR) evidence:
 
@@ -31,27 +31,17 @@ Use this path when turning the template into a component `CONTRIBUTING.md` and p
    | Non-technical impact | What customer or operator problem this content helps with. |
    | Owner and required sign-off | Component owner, support owner, partner, SI, or OEM reviewer. |
    | Workload impact or downtime risk | None, possible disruption, maintenance window required, or unknown and blocked. |
-   | Technical grade and validation evidence | `validation.technical_grade`, TSG-FORGE report or spec evidence, lint result, link check, or not applicable with reason. |
+   | Validation evidence | What was checked, such as commands exercised, expected and observed output, link check, or lint result, or not applicable with reason. Keep this evidence in the PR, not in the article. |
    | Remaining blockers | Open evidence, applicability, support-boundary, or owner questions. |
 
-4. Run source-branch lint from the repository that contains the changed markdown:
-
-   ```bash
-   python3 <path-to-tsg-forge-harness.py> --lint --tsg <path-to-changed-markdown>
-   ```
-
-   `<path-to-tsg-forge-harness.py>` is the path to the TSG-FORGE `harness.py` script in the maintainer's checked-out tooling. Accepted output is `LINT (structure/safety component only) A` for this template, or a documented type false positive with the exact finding ID and reason. If the contributor cannot run TSG-FORGE locally, paste the command attempted, the error output, and a request for the maintainer to run the same lint before merge.
-
-5. Paste this evidence snippet into the PR description:
+4. Paste this evidence snippet into the PR description:
 
    ```text
    Component owner:
    Customer impact summary:
    Workload impact or downtime risk:
    Applicable products and supported versions:
-   validation.technical_grade:
-   TSG-FORGE report or spec evidence:
-   TSG-FORGE lint result:
+   Validation evidence:
    Link check result:
    Remaining blockers:
    ```
@@ -107,9 +97,9 @@ Use this handoff matrix for cross-component cases:
 
 ## Required Article Metadata
 
-Component README files should index every article and include its title, document type, link, applicable products, supported versions, Highest action classification, Highest state-changing risk, workload impact or downtime risk, owner or handoff, metadata-marker status, validation fidelity, `validation.technical_grade`, TSG-FORGE report or spec evidence, reproduction substrate, automation status, execution surface, and last validated date.
+Component README files should index every article in a table with the columns Article (the title as a relative link), Type, Applicable products, and Owner.
 
-Each article that is created from an article template must contain one valid HTML-comment JSON marker that starts with the literal `<!-- tsg-metadata` label and follows schema `azure-local-supportability/tsg-metadata/v1`. Do not embed that article metadata marker in this component contribution guide. Instead, require article authors to copy the marker from [Markdown snippets](../Templates/Markdown-Snippets.md), validate it against the copied-file-relative [metadata schema](../Templates/tsg-metadata.schema.json), keep `products` explicit, and set placeholders only while drafting.
+Each article that is created from an article template must contain one valid HTML-comment JSON marker that starts with the literal `<!-- tsg-metadata` label and follows schema `azure-local-supportability/tsg-metadata/v2`. Do not embed that article metadata marker in this component contribution guide. Instead, require article authors to copy the marker from [Markdown snippets](../Templates/Markdown-Snippets.md), validate it against the copied-file-relative [metadata schema](../Templates/tsg-metadata.schema.json), keep `products` explicit, and set placeholders only while drafting.
 
 For every contributed article, require these metadata fields or their article-template equivalent:
 
@@ -117,19 +107,13 @@ For every contributed article, require these metadata fields or their article-te
 - **Applicable products**: explicit product and component names. Do not leave this implicit.
 - **Supported versions**: exact version range, build, or `replace-me` during draft only.
 - **Detector**: `command`, `control-plane`, `envchecker`, `eventlog`, `feature`, `manual`, `none`, `portal`, `registry`, `service`, or `telemetry`. When `detector.type` is `none`, set `detector.signal` to JSON `null`; when selecting a detector, set both fields together.
-- **Validation**: fidelity level, technical grade, reproduction substrate, automation status, last validated date, and TSG-FORGE spec reference when available.
 - **Severity**: required for troubleshooting content and any approved component-specific known issue content when the article describes customer impact or a failing check.
 
 Use this metadata vocabulary consistently:
 
 | Field | Values | Meaning |
 | --- | --- | --- |
-| Fidelity level | L0, L1, L2, L3, L4 | L0 means static review only. L1 means read-only diagnostics were run. L2 means a safe proxy or configuration-restore loop proved the signal or fix direction. L3 means an isolated scratch object reproduced the failure mode and fix. L4 means a full live inject, detect, mitigate, and revalidate loop was proven. |
-| Technical grade | JSON `null`, `A`, `B`, `C`, `F` | `validation.technical_grade` is the authoritative TSG-FORGE grade. Set it to JSON `null` until a TSG-FORGE report or spec evidence assigns A, B, C, or F. Do not invent a separate grade vocabulary in component README files. |
-| Automation status | `not-assessed`, `scaffold`, `ready`, `proven`, `blocked`, `manual` | Maturity of validation automation. This is not the same as execution surface. |
-| Execution surface | `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, `thin` | Where the diagnostic or action runs. Do not write these values into `automation_status`. |
-| Reproduction substrate | `vm`, `hardware`, `either`, `none` | Where validation can be reproduced. Use `none` for explanation-only content. |
-| Last validated | ISO date or `null` in draft metadata | Date of the latest cited validation evidence. |
+| Execution surface | `on-device`, `mixed`, `cloud-diagnostic`, `cloud-control`, `thin` | Where the diagnostic or action runs. |
 
 ## Safe and Testable Authoring
 
@@ -164,7 +148,7 @@ State-changing PowerShell must check current state before changing it, avoid `-F
 
 Each article must show enough evidence for a reviewer and a field engineer to trust the guidance:
 
-- Include the exact validation performed: lab run, customer-safe repro, command output shape, screenshots, logs, Event IDs, telemetry, or source links.
+- Include the evidence that supports the guidance: command output shape, screenshots, logs, Event IDs, telemetry, or source links. Describe lab runs, repros, and other validation in the pull request, not in the article.
 - For troubleshooting content, add a **Where this failure appears** section or equivalent that explains the visible symptom and where to collect proof.
 - For remediation content, add a **Verify the fix** step that reruns the relevant health check, command, portal check, or validation procedure.
 - For generated code or action patterns, include expected result/output, stop condition, rollback, and verification as separate prompts.
@@ -206,7 +190,7 @@ The repo is organized by major topic areas. Add new files to existing folders wh
 
 | Folder | Description | Required README entry |
 | --- | --- | --- |
-| `OutboundConnectivity/` | Proxy, DNS, firewall, and endpoint requirements for Azure Local connectivity. | Title, document type, link, applicable products, supported versions, Highest action classification, Highest state-changing risk, workload impact, owner, metadata-marker status, validation fidelity, `validation.technical_grade`, TSG-FORGE report or spec evidence, reproduction substrate, automation status, execution surface, last validated date. |
+| `OutboundConnectivity/` | Proxy, DNS, firewall, and endpoint requirements for Azure Local connectivity. | Article, Type, Applicable products, Owner. |
 | `{FOLDER_1}/` | {FOLDER_1_DESCRIPTION} | {FOLDER_1_README_ENTRY_REQUIREMENT} |
 | `{FOLDER_2}/` | {FOLDER_2_DESCRIPTION} | {FOLDER_2_README_ENTRY_REQUIREMENT} |
 | `{FOLDER_3}/` | {FOLDER_3_DESCRIPTION} | {FOLDER_3_README_ENTRY_REQUIREMENT} |
@@ -219,14 +203,13 @@ A component contribution is not ready for review until every item below is true:
 
 - The copied component `CONTRIBUTING.md` links to the repository contribution guide as `../../CONTRIBUTING.md`.
 - The final file contains no `{curly brace}` placeholders and no authoring instruction comments.
-- The component README indexes every new or changed article with title, document type, link, applicable products, supported versions, Highest action classification, Highest state-changing risk, workload impact, owner, metadata-marker status, validation fidelity, `validation.technical_grade`, TSG-FORGE report or spec evidence, reproduction substrate, automation status, execution surface, and last validated date.
+- The component README indexes every new or changed article with Article (the title as a relative link), Type, Applicable products, and Owner.
 - Every article uses the correct template and includes the required metadata marker from `../Templates/Markdown-Snippets.md` when it is an article template output.
 - Every applicable product, supported version, operation phase, topology, owner, and support boundary is explicit.
 - Every action uses [READ-ONLY] when no state changes or [LOW RISK], [MEDIUM RISK], or [HIGH RISK] when state may change, and includes pre-check, action, expected result/output, stop condition, rollback, and verification.
 - Evidence is attached or cited in the PR: tested commands, expected outputs, logs, screenshots, Event IDs, telemetry samples, or source links as appropriate.
 - Internal relative links resolve from the copied file location, and external links use public Microsoft documentation without release-specific query parameters.
 - Public content contains no customer identifiers, secrets, tenant IDs, subscription IDs, private IP addresses, private support links, or internal-only URLs.
-- Source-branch TSG-FORGE lint or review has been run on changed markdown. Fix real findings, record any type false positives with the reason, and include the result in the PR description.
 
 ## Need Help
 

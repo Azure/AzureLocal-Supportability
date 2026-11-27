@@ -1,19 +1,11 @@
 <!-- tsg-metadata
 {
-  "schema": "azure-local-supportability/tsg-metadata/v1",
+  "schema": "azure-local-supportability/tsg-metadata/v2",
   "document_type": "how-to",
   "products": ["Azure Local"],
   "detector": {
     "type": "command",
     "signal": "Run C:\\Program Files\\PowerShell\\7\\pwsh.exe in a fresh process and check $PSVersionTable.PSVersion.ToString()."
-  },
-  "validation": {
-    "fidelity_level": "L0",
-    "technical_grade": null,
-    "reproduction_substrate": "none",
-    "automation_status": "manual",
-    "last_validated": "2026-10-22",
-    "spec_ref": ""
   }
 }
 -->
@@ -38,7 +30,7 @@ This guide describes **optional preinstallation** of PowerShell **7.6.7** on **e
 
 If the upgrade is already cancelled at that step, **manual installation is not required**: the dependency step has already installed PowerShell. Select **Resume deployment** as described in [Known issue: solution upgrade cancelled at Install software dependencies](./Known-issue-solution-upgrade-cancelled-at-Install-software-dependencies.md).
 
-This is not a general PowerShell downgrade procedure or guidance for unrelated upgrade failures. The cancellation and recovery are documented in the linked known-issue article; this port has received static review only.
+This is not a general PowerShell downgrade procedure or guidance for unrelated upgrade failures. The cancellation and recovery are documented in the linked known-issue article.
 
 ## Before you begin
 

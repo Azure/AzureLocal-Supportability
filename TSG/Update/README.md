@@ -39,3 +39,5 @@
 * [Live migration fails with "No mapping between account names and security IDs" (0x80070534)](./Live-migration-fails-with-No-mapping-between-account-names-and-security-IDs.md)
 * [Update Hangs after Secret Rotation](Update-Hangs-after-Secret-Rotation.md)
 * [Complete cleanup of older .NET runtime installations on Azure Local](./Complete-cleanup-of-older-.NET-runtime-installations-on-Azure-Local.md)
+* [Troubleshoot a missing .NET 10 runtime on Azure Local](./Troubleshoot-DotNet10-Missing-Runtime.md)
+
