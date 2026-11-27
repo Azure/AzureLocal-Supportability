@@ -430,7 +430,8 @@ function Set-ChangePhase {
             'ActiveValidationStarted',
             'ActiveAssertionsPassed',
             'ActiveValidationPassed',
-            'Completed'
+            'Completed',
+            'Abandoned'
         )]
         [string]$Phase,
 
@@ -457,9 +458,9 @@ function Set-ChangePhase {
     }
 
     $AllowedTransitions = @{
-        Initialized = @('BaselineSealed')
-        BaselineSealed = @('WorkloadsOff')
-        WorkloadsOff = @('PlatformOff')
+        Initialized = @('BaselineSealed', 'Abandoned')
+        BaselineSealed = @('WorkloadsOff', 'Abandoned')
+        WorkloadsOff = @('PlatformOff', 'Abandoned')
         PlatformOff = @('CsvsOff')
         CsvsOff = @('PoolOff')
         PoolOff = @('IntentSubmissionPending')
@@ -475,6 +476,7 @@ function Set-ChangePhase {
         ActiveAssertionsPassed = @('ActiveValidationPassed')
         ActiveValidationPassed = @('Completed')
         Completed = @()
+        Abandoned = @()
     }
     $RollbackOrigins = @(
         'TargetReadbackVerified',
@@ -1239,7 +1241,7 @@ Stop if any identity is ambiguous. Do not select the appliance VM or infrastruct
 
 ## Resume safely after a PowerShell, remoting, or operator-session loss
 
-Do not restart the article from the beginning and do not repeat the last state-changing command blindly. Open an elevated Windows PowerShell session on a cluster node, load the sealed state, inspect the last completed phase, and re-read the authoritative resource state.
+Run this change from one PowerShell session at a time. Before you resume, close every other session that loaded this change, so that two sessions cannot both act on the same checkpoint. Do not restart the article from the beginning and do not repeat the last state-changing command blindly. Open an elevated Windows PowerShell session on a cluster node, load the sealed state, inspect the last completed phase, and re-read the authoritative resource state.
 
 ```powershell
 $PreviousErrorActionPreference = $ErrorActionPreference
@@ -1298,7 +1300,8 @@ $ValidPhases = @(
     'ActiveValidationStarted',
     'ActiveAssertionsPassed',
     'ActiveValidationPassed',
-    'Completed'
+    'Completed',
+    'Abandoned'
 )
 if ("$($PhaseState.Phase)" -notin $ValidPhases) {
     throw "The phase state contains an unknown checkpoint."
@@ -1525,7 +1528,8 @@ function Set-ChangePhase {
             'ActiveValidationStarted',
             'ActiveAssertionsPassed',
             'ActiveValidationPassed',
-            'Completed'
+            'Completed',
+            'Abandoned'
         )]
         [string]$Phase,
 
@@ -1552,9 +1556,9 @@ function Set-ChangePhase {
     }
 
     $AllowedTransitions = @{
-        Initialized = @('BaselineSealed')
-        BaselineSealed = @('WorkloadsOff')
-        WorkloadsOff = @('PlatformOff')
+        Initialized = @('BaselineSealed', 'Abandoned')
+        BaselineSealed = @('WorkloadsOff', 'Abandoned')
+        WorkloadsOff = @('PlatformOff', 'Abandoned')
         PlatformOff = @('CsvsOff')
         CsvsOff = @('PoolOff')
         PoolOff = @('IntentSubmissionPending')
@@ -1570,6 +1574,7 @@ function Set-ChangePhase {
         ActiveAssertionsPassed = @('ActiveValidationPassed')
         ActiveValidationPassed = @('Completed')
         Completed = @()
+        Abandoned = @()
     }
     $RollbackOrigins = @(
         'TargetReadbackVerified',
@@ -1708,6 +1713,7 @@ Re-run any function-definition block needed by the next phase, such as `Set-Seal
 | `ActiveAssertionsPassed` | Complete the final event review and continuous clean hold. |
 | `ActiveValidationPassed` | Close the transcript and active pointer. |
 | `Completed` | Finish idempotent transcript and active-pointer cleanup. No cluster state-changing action remains. |
+| `Abandoned` | Re-run the block in [Abandon the change before the platform is quiesced](#abandon-the-change-before-the-platform-is-quiesced) to finish transcript and active-pointer cleanup. No cluster state-changing action remains. |
 
 If the live resource state does not match the checkpoint, stop and reconcile the discrepancy before continuing or rolling back.
 
@@ -1885,7 +1891,7 @@ Set-ChangePhase -Phase WorkloadsOff
 
 Retry behavior: do not repeatedly issue shutdown requests. Re-read the VM state, then return control to the workload owner if a VM does not stop.
 
-Rollback: no rollback is needed yet. The workload owner may restart the VMs if the change is abandoned before CSV quiescence begins.
+Rollback: no rollback is needed yet. If the change is abandoned before the appliance VM and MOC are stopped, use [Abandon the change before the platform is quiesced](#abandon-the-change-before-the-platform-is-quiesced). The workload owner restarts the VMs as part of that section.
 
 ### Step 2: Gracefully stop the appliance VM
 
@@ -2202,9 +2208,13 @@ foreach ($Csv in $WorkloadCsvs) {
 
 Set-SealedCsvState -CsvRecord $InfrastructureCsv[0] -State Offline
 
-Get-ClusterSharedVolume | Format-Table Name, State, OwnerNode
-if (@(Get-ClusterSharedVolume | Where-Object State -ne 'Offline').Count -gt 0) {
-    throw "At least one CSV is not Offline."
+$CsvGateState = @(Get-ClusterSharedVolume -ErrorAction Stop)
+$CsvGateState | Format-Table Name, State, OwnerNode
+if (
+    $CsvGateState.Count -ne @($ResourceManifest.Csvs).Count -or
+    @($CsvGateState | Where-Object State -ne 'Offline').Count -gt 0
+) {
+    throw "The CSV set does not match the sealed inventory, or at least one CSV is not Offline."
 }
 
 Set-ChangePhase -Phase CsvsOff
@@ -3112,10 +3122,13 @@ foreach ($Csv in $WorkloadCsvs) {
     Set-SealedCsvState -CsvRecord $Csv -State Online
 }
 
-Get-ClusterSharedVolume | Format-Table Name, State, OwnerNode
-
-if (@(Get-ClusterSharedVolume | Where-Object State -ne 'Online').Count -gt 0) {
-    throw "At least one CSV is not Online."
+$CsvGateState = @(Get-ClusterSharedVolume -ErrorAction Stop)
+$CsvGateState | Format-Table Name, State, OwnerNode
+if (
+    $CsvGateState.Count -ne @($ResourceManifest.Csvs).Count -or
+    @($CsvGateState | Where-Object State -ne 'Online').Count -gt 0
+) {
+    throw "The CSV set does not match the sealed inventory, or at least one CSV is not Online."
 }
 
 Set-ChangePhase -Phase PlatformOnline
@@ -3377,9 +3390,27 @@ The check verifies every recorded customer VM by its sealed VM ID against its se
 baseline state. A VM that was `Running` at the baseline must have a running clustered
 VM group and Hyper-V VM, and both the `Heartbeat` and `Shutdown` integration services
 must exist, be enabled, and report `OK`. A VM that was `Off` at the baseline must still
-be `Off` with an offline clustered VM group:
+be `Off` with an offline clustered VM group. The block verifies the sealed manifest hash
+before it uses the baseline states.
+
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
 
 ```powershell
+& {
+$StartupSealedHash = @(Get-Content -LiteralPath (
+    Join-Path $EvidenceRoot 'baseline-hashes.json'
+) -Raw | ConvertFrom-Json | Where-Object {
+    (Split-Path -Path "$($_.Path)" -Leaf) -eq 'resource-manifest.json'
+})
+$StartupManifestHash = Get-FileHash -Algorithm SHA256 -LiteralPath (
+    Join-Path $EvidenceRoot 'resource-manifest.json'
+) -ErrorAction Stop
+if (
+    $StartupSealedHash.Count -ne 1 -or
+    "$($StartupManifestHash.Hash)" -ne "$($StartupSealedHash[0].Hash)"
+) {
+    throw "Integrity check failed for 'resource-manifest.json'. Stop and recover the original evidence package."
+}
 $ResourceManifest = Get-Content -LiteralPath (
     Join-Path $EvidenceRoot 'resource-manifest.json'
 ) -Raw | ConvertFrom-Json
@@ -3498,6 +3529,7 @@ if (
     )
 }
 'CUSTOMER_VMS_RESTORED'
+}
 ```
 
 The workload owner must also confirm:
@@ -4595,6 +4627,163 @@ if (Test-Path -LiteralPath $ActivePointer) {
 }
 }
 ```
+
+## Abandon the change before the platform is quiesced
+
+**Action type:** State-changing (evidence state only)
+
+Use this section only when the change is abandoned while the durable phase is still `Initialized`, `BaselineSealed`, or `WorkloadsOff`. In those phases the appliance VM, MOC, CSVs, storage pool, and Network ATC intent have not been changed. From `PlatformOff` onward, do not use this section: continue the forward change or use [Rollback](#rollback).
+
+**Stop here and confirm.** The change approver named in the change record decides to abandon the change. Done looks like: the decision is recorded in the change record, and the following block prints `CHANGE_ABANDONED`.
+
+**Operator action.** If the phase is `WorkloadsOff`, the workload owner starts the customer VMs that were `Running` when the baseline was sealed, through the normal startup process, and leaves VMs that were `Off` at the baseline off. Done looks like: the following block prints `CHANGE_ABANDONED`.
+
+The block refuses any other phase. For `BaselineSealed` and `WorkloadsOff`, it first proves that every storage adapter still has the sealed source transport, that the sealed pool, MOC, every sealed CSV, and the appliance group are online, and that every customer VM is back in its sealed baseline state. It then persists `Abandoned`, stops the transcript, and removes only this operation's active pointer. It keeps the evidence directory.
+
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
+
+```powershell
+& {
+$AbandonState = Get-Content -LiteralPath (
+    Join-Path $EvidenceRoot 'phase-state.json'
+) -Raw -ErrorAction Stop | ConvertFrom-Json
+$AbandonPhase = "$($AbandonState.Phase)"
+if (
+    "$($AbandonState.Operation)" -ne 'Forward' -or
+    $AbandonPhase -notin @(
+        'Initialized', 'BaselineSealed', 'WorkloadsOff', 'Abandoned'
+    )
+) {
+    throw (
+        "Abandon is allowed only from Forward/Initialized, BaselineSealed, " +
+        "or WorkloadsOff. Current state is " +
+        "'$($AbandonState.Operation)/$AbandonPhase'. Continue the change or " +
+        "use Rollback."
+    )
+}
+
+if ($AbandonPhase -in @('BaselineSealed', 'WorkloadsOff')) {
+    if ($null -eq $ResourceManifest -or @($AdapterNames).Count -lt 1) {
+        throw "Load the sealed state with the resume block before abandoning."
+    }
+    $AbandonSourceValue = [int]$ResourceManifest.SourceTransportValue
+    $AbandonAdapters = @(Invoke-Command -ComputerName $Nodes.Name `
+        -ArgumentList ($AdapterNames -join ','), $AbandonSourceValue `
+        -ScriptBlock {
+            param($AdapterCsv, $ExpectedValue)
+            foreach ($Name in @($AdapterCsv -split ',')) {
+                $AdapterName = $Name.Trim()
+                $Transport = Get-NetAdapterAdvancedProperty `
+                    -Name $AdapterName `
+                    -RegistryKeyword '*NetworkDirectTechnology' `
+                    -ErrorAction Stop
+                [pscustomobject]@{
+                    Node = $env:COMPUTERNAME
+                    Adapter = $AdapterName
+                    TransportValue = [int]$Transport.RegistryValue[0]
+                    IsSource = (
+                        [int]$Transport.RegistryValue[0] -eq $ExpectedValue
+                    )
+                }
+            }
+        } -ErrorAction Stop)
+    $AbandonAdapters | Format-Table -AutoSize
+
+    $AbandonResources = @(Get-ClusterResource -ErrorAction Stop)
+    $AbandonPool = @($AbandonResources | Where-Object {
+        "$($_.Id)" -eq "$($ResourceManifest.Pool.Id)"
+    })
+    $AbandonMoc = @($AbandonResources | Where-Object {
+        "$($_.Id)" -eq "$($ResourceManifest.Moc.Id)"
+    })
+    $AbandonCsvs = @(Get-ClusterSharedVolume -ErrorAction Stop)
+    $AbandonSealedCsvNames = @($ResourceManifest.Csvs | ForEach-Object {
+        "$($_.Name)".ToUpperInvariant()
+    })
+    $AbandonGroups = @(Get-ClusterGroup -ErrorAction Stop |
+        Where-Object { "$($_.GroupType)" -eq 'VirtualMachine' })
+    $AbandonVmState = @(foreach ($Entry in @($ResourceManifest.ClusteredVms)) {
+        $Group = @($AbandonGroups | Where-Object {
+            "$($_.Id)" -eq "$($Entry.GroupId)" -and
+            "$($_.Name)" -eq "$($Entry.GroupName)"
+        })
+        if ($Group.Count -ne 1) {
+            throw "A sealed clustered VM group no longer resolves uniquely."
+        }
+        $Vm = @(Invoke-Command -ComputerName "$($Group[0].OwnerNode)" `
+            -ArgumentList "$($Entry.VmId)" -ScriptBlock {
+                param($VmId)
+                Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
+                    Select-Object VMId, Name, State
+            } -ErrorAction Stop)
+        if ($Vm.Count -ne 1 -or "$($Vm[0].VMId)" -ne "$($Entry.VmId)") {
+            throw "A sealed VM no longer resolves uniquely by VmId."
+        }
+        $ExpectedRunning = (
+            "$($Entry.VmId)" -eq "$($ResourceManifest.ControlPlaneVm.VmId)" -or
+            "$($Entry.VmState)" -eq 'Running'
+        )
+        [pscustomobject]@{
+            GroupName = "$($Entry.GroupName)"
+            GroupState = "$($Group[0].State)"
+            VmState = "$($Vm[0].State)"
+            ExpectedGroupState = if ($ExpectedRunning) { 'Online' } else { 'Offline' }
+            ExpectedVmState = if ($ExpectedRunning) { 'Running' } else { 'Off' }
+        }
+    })
+    $AbandonVmState | Format-Table -AutoSize
+
+    if (
+        $AbandonAdapters.Count -ne (
+            @($Nodes).Count * @($AdapterNames).Count
+        ) -or
+        @($AbandonAdapters | Where-Object { -not $_.IsSource }).Count -gt 0 -or
+        $AbandonPool.Count -ne 1 -or
+        "$($AbandonPool[0].State)" -ne 'Online' -or
+        $AbandonMoc.Count -ne 1 -or
+        "$($AbandonMoc[0].State)" -ne 'Online' -or
+        $AbandonCsvs.Count -ne $AbandonSealedCsvNames.Count -or
+        @($AbandonCsvs | Where-Object {
+            "$($_.Name)".ToUpperInvariant() -notin $AbandonSealedCsvNames -or
+            "$($_.State)" -ne 'Online'
+        }).Count -gt 0 -or
+        $AbandonVmState.Count -ne @($ResourceManifest.ClusteredVms).Count -or
+        @($AbandonVmState | Where-Object {
+            $_.GroupState -ne $_.ExpectedGroupState -or
+            $_.VmState -ne $_.ExpectedVmState
+        }).Count -gt 0
+    ) {
+        throw (
+            "The platform is not back in its sealed baseline state. Do not " +
+            "close the change. Restore the listed objects or contact Microsoft Support."
+        )
+    }
+}
+
+if ($AbandonPhase -ne 'Abandoned') {
+    Set-ChangePhase -Phase Abandoned
+}
+
+try {
+    Stop-Transcript -ErrorAction Stop
+} catch {
+    if ($_.Exception.Message -notmatch '(?i)not.*transcrib') {
+        throw
+    }
+}
+
+if (Test-Path -LiteralPath $ActivePointer) {
+    $PointerTarget = "$(Get-Content -LiteralPath $ActivePointer -Raw)".Trim()
+    if ($PointerTarget -ne $EvidenceRoot) {
+        throw "The active pointer belongs to another evidence directory."
+    }
+    Remove-Item -LiteralPath $ActivePointer -Force -ErrorAction Stop
+}
+'CHANGE_ABANDONED'
+}
+```
+
+Keep the evidence directory with the change record. A new change starts again from [Prepare variables and evidence storage](#prepare-variables-and-evidence-storage) with a new change ID.
 
 ## Rollback
 
