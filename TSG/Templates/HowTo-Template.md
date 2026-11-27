@@ -153,7 +153,8 @@ Describe the impact of each action in plain words before it appears in this guid
 - Read-only steps: diagnostics, checks, and information gathering that do not change state. Do not add a label. Optionally write "This step changes nothing."
 - State-changing steps: add a `**Changes:**` line that says what the step changes and what it does not affect, for example "**Changes:** removes the extra module folder. Running VMs are not affected."
 - Disruptive steps: steps that can affect management operations, a single node, or workload placement, or that need a restart, drain, or maintenance window. Also add a `**Plan for:**` line, for example "**Plan for:** drain the machine and schedule a maintenance window."
-- Steps that can't be undone, can interrupt running workloads, alter security posture, modify firmware, delete resources, or lose data: also add a `> [!WARNING]` callout that states the consequence, for example "This can't be undone." or "Running VMs stop if the machine is not drained first."
+- Steps that can't be undone, can interrupt running workloads, alter security posture, modify firmware, delete resources, or lose data: also add a `> [!WARNING]` callout that states the consequence, for example "This can't be undone." or "Running VMs stop if the machine is not drained first." You can also label these steps `[HIGH RISK]`.
+- Do not add `[LOW RISK]`, `[MEDIUM RISK]`, or `[READ-ONLY]` labels.
 
 Document the maintenance impact before any action that changes state:
 

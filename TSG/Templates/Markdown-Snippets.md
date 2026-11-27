@@ -71,7 +71,7 @@ Use this table whenever guidance depends on product, release, hardware, or opera
 
 ## Describing step impact
 
-Describe what each step changes in plain words. Read-only steps need no label; you can write "This step changes nothing." When an action may change state, add a `**Changes:**` line. Add `**Plan for:**` for disruptive steps, and a `> [!WARNING]` callout for steps that can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data. Replace the placeholders with the actual impact, gate, and rollback for the article.
+Describe what each step changes in plain words. Read-only steps need no label; you can write "This step changes nothing." When an action may change state, add a `**Changes:**` line. Add `**Plan for:**` for disruptive steps, and a `> [!WARNING]` callout for steps that can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data. You can also label those steps `[HIGH RISK]`. Do not use `[LOW RISK]`, `[MEDIUM RISK]`, or `[READ-ONLY]` labels. Replace the placeholders with the actual impact, gate, and rollback for the article.
 
 ```markdown
 ## Before you start
@@ -88,7 +88,7 @@ Describe what each step changes in plain words. Read-only steps need no label; y
 | Read-only | Non-mutating detection or validation only | No label. Optionally "This step changes nothing." | <command or observable condition> | <least privilege required> | <none, or state why no maintenance window is needed> | <what means do not proceed> | Not applicable because no state changes |
 | State-changing | Reversible changes with no expected workload impact | `**Changes:**` line | <command or observable condition> | <least privilege required> | <none, or state why no maintenance window is needed> | <what means do not proceed> | <how to return to the prior state> |
 | Disruptive | Reversible state changes that can interrupt management, networking, or workload placement | `**Changes:**` and `**Plan for:**` lines | <command or observable condition> | <least privilege required> | <approval or maintenance window needed before action> | <what means do not proceed> | <how to return to the prior state> |
-| Can't be undone or interrupts workloads | Firmware, reboot, destructive cleanup, storage, quorum, or workload-interrupting actions | `**Changes:**` and `**Plan for:**` lines plus a `> [!WARNING]` callout | <command or observable condition> | <least privilege required> | <approved maintenance window and workload-owner notification> | <what means do not proceed> | <how to return to the prior state or escalate> |
+| Can't be undone or interrupts workloads | Firmware, reboot, destructive cleanup, storage, quorum, or workload-interrupting actions | `**Changes:**` and `**Plan for:**` lines plus a `> [!WARNING]` callout, optionally with a `[HIGH RISK]` label | <command or observable condition> | <least privilege required> | <approved maintenance window and workload-owner notification> | <what means do not proceed> | <how to return to the prior state or escalate> |
 ```
 
 ---

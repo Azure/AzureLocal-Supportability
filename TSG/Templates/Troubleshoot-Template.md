@@ -155,7 +155,7 @@ Use blameless language. Do not assign human error or state a single root cause u
 
 ## Mitigation
 
-Only run a mitigation after the matching diagnosis branch is satisfied and the preconditions are met. Diagnostic and verification actions that do not change state need no label; you can write "This step changes nothing." For every state-changing step, write a `**Changes:**` statement that says what the step changes and what it does not affect. Add `**Plan for:**` when the step is disruptive, such as a restart, drain, or maintenance window. Add a `> [!WARNING]` callout before any step that can't be undone, can interrupt running workloads, changes firmware or security posture, or can lose data, and state the consequence in plain words.
+Only run a mitigation after the matching diagnosis branch is satisfied and the preconditions are met. Diagnostic and verification actions that do not change state need no label; you can write "This step changes nothing." For every state-changing step, write a `**Changes:**` statement that says what the step changes and what it does not affect. Add `**Plan for:**` when the step is disruptive, such as a restart, drain, or maintenance window. Add a `> [!WARNING]` callout before any step that can't be undone, can interrupt running workloads, changes firmware or security posture, or can lose data, and state the consequence in plain words. You can also label that step `[HIGH RISK]`. Do not use `[LOW RISK]`, `[MEDIUM RISK]`, or `[READ-ONLY]` labels.
 
 | Step | What changes | Privilege | Workload or maintenance gate | Pre-check | Action | Expected result or output | Stop condition | Rollback | Rollback verification | Escalation if blocked |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

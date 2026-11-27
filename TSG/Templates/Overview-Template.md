@@ -121,7 +121,7 @@ This overview complements the official [Azure Local documentation](https://learn
 | **Not covered here** | {State which troubleshooting, deployment, or repair actions belong in another article type.} |
 | **Workload or availability considerations** | {State whether concepts in this overview imply virtual machine (VM) downtime, maintenance windows, possible loss of quorum (the cluster losing enough voting members that it can't stay online), network interruption, or no workload effect.} |
 | **Security posture considerations** | {State whether the topic affects identity, role-based access control (RBAC), certificates, firewall policy, secrets, or has no expected security effect.} |
-| **Impact statement when actions are included** | {For any example that could change state, add a `**Changes:**` statement, `**Plan for:**` when the step is disruptive, and a `> [!WARNING]` callout when it can't be undone or can interrupt running workloads.} |
+| **Impact statement when actions are included** | {For any example that could change state, add a `**Changes:**` statement, `**Plan for:**` when the step is disruptive, and a `> [!WARNING]` callout, optionally with a `[HIGH RISK]` label, when it can't be undone or can interrupt running workloads.} |
 | **Escalation or handoff** | {State when to involve CSS, product engineering, an OEM vendor, a partner or SI, or customer change-control owners.} |
 
 ### Action pattern for any state-changing example

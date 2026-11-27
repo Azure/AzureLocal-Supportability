@@ -186,7 +186,7 @@ Update this table of contents if you rename, add, or remove sections.
 
 #### Action or configuration example
 
-Classify the action type first. Read-only inspection or validation needs no label; you can write "This step changes nothing." If the action changes or could change state, write a `**Changes:**` statement that says what changes and what is not affected. Add `**Plan for:**` when the change affects availability or operations or needs a maintenance window. Add a `> [!WARNING]` callout when the change is privileged and broad, hard to roll back, or can interrupt running workloads, and state the consequence in plain words.
+Classify the action type first. Read-only inspection or validation needs no label; you can write "This step changes nothing." If the action changes or could change state, write a `**Changes:**` statement that says what changes and what is not affected. Add `**Plan for:**` when the change affects availability or operations or needs a maintenance window. Add a `> [!WARNING]` callout when the change is privileged and broad, hard to roll back, or can interrupt running workloads, and state the consequence in plain words. You can also label that action `[HIGH RISK]`. Do not use `[LOW RISK]`, `[MEDIUM RISK]`, or `[READ-ONLY]` labels.
 
 | Field | Required content |
 | ----- | ---------------- |
