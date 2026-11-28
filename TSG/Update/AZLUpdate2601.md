@@ -3,7 +3,7 @@ Azure Local Update Failed when updating from earlier preview versions (Local Ide
 # Symptoms
 An Update action plan fails with an AgentLifecycleManager error message "Access is denied" during update action plan.
 ```text
-Connecting to remote server v-Host1 failed with the following error message : Access is denied. For more information, see the about_Remote_Troubleshooting Help topic.  
+Connecting to remote server <node name> failed with the following error message : Access is denied. For more information, see the about_Remote_Troubleshooting Help topic.  
 at New-AgentUpdateTriggerOnNode, C:\NugetStore\Microsoft.AzureStack.Infrastructure.Orchestration.AgentLifecycleManagerRole.1.25.0.2114\content\Powershell\Roles\AgentLifecycleManager\AgentLifecycleManagerUtils.psm1: line 345  
 at Update, C:\NugetStore\Microsoft.AzureStack.Infrastructure.Orchestration.AgentLifecycleManagerRole.1.25.0.2114\content\Powershell\Classes\AgentLifecycleManager\AgentLifecycleManager.psm1: line 505  
 at UpdateRuntimeAgents, C:\NugetStore\Microsoft.AzureStack.Infrastructure.Orchestration.AgentLifecycleManagerRole.1.25.0.2114\content\Powershell\Classes\AgentLifecycleManager\AgentLifecycleManager.psm1: line 158  
