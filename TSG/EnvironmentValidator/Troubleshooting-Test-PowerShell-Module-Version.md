@@ -50,6 +50,11 @@
 | 2026-11-24 | The manual alternative's dependency check now stops with `No changes were made` when a module manifest builds a file path with an expression, such as joined strings or `-f`, that it cannot resolve without running the manifest, instead of checking the parts of the path separately. |
 | 2026-11-25 | The manual alternative's dependency check now treats a `NestedModules` entry that names the module with a version (`RequiredVersion`, `ModuleVersion`, or `MaximumVersion`, with or without a module GUID) as a requirement, as it does for `RequiredModules` and `ModuleList`, and stops with `No changes were made` when only a version that it would remove meets the entry. PowerShell loads such an entry from the module path, so the module that lists it cannot be imported once that version is gone; an entry that gives only the module name needs no particular version. The article previously said that these entries did not matter. The check also lists the modules that have such an entry, which `Get-Module` left out of its list when it ran with the block's setting to stop at the first error. The checklist before you run the recipe-aware helper, and its read-only list, now cover only the versions that the helper removes: those of the recipe modules that fail the same test as the validator, and the `Az.Accounts` versions other than the recipe version; a module that passes the test keeps its older versions. After the manual alternative, the stops that list users who are not signed in, or ask you to set `$AssumeDefaultDocumentsForSignedOutUsers` to `$false` or `$true`, now point to the steps for that stop; contact Microsoft Support only if the block still stops after those users sign in or the setting is changed. |
 | 2026-11-25 | The manual alternative now lists the installed modules in a separate PowerShell process (a background job) and reads back only their names, versions, paths, and requirements. In Windows PowerShell 5.1, listing them in the block's own session loaded the newest installed version of a module that another module names in `NestedModules`, and the block then stopped with `The module became loaded. No versions will be removed.` on every run, even when a version that it keeps met that entry. If the separate listing fails, the block stops with `No changes were made`. The check for the recipe-aware helper now looks only in `AzureLocalImageModule` (`Get-Command -Name Remediate-PSModules -Module AzureLocalImageModule`), as the import and helper blocks do, instead of searching every module. |
+| 2026-11-25 | When a check before the recipe-aware helper fails, the article now says that the manual alternative is for nodes without the helper and stops on a node that has it, with `Use the recipe-aware helper instead of the manual alternative.`, and that this message does not mean the helper is safe to run. Before, it pointed to the manual alternative as if it could run there. |
+| 2026-11-25 | In the per-node view of the last system health check in [Symptoms](#symptoms), a node that has no entry, or an entry without a `Detail`, now goes to the read-only check in [Issue validation](#issue-validation). The article no longer says why an entry can be missing. |
+| 2026-11-25 | [Administrator detection surfaces](#administrator-detection-surfaces) now covers Windows Admin Center in the Azure portal: its **Events** tool shows the same Event ID 17205 entry. |
+| 2026-11-26 | The manual alternative no longer asks you to type a module name and a repository name. It reads the module from the current validator failure, one module each time it runs (first a module that no other newer module requires; among those, Az modules other than `Az.Accounts` first, then `Az.Accounts`, then the others), and uses the registered repository that has the recipe version, as the helper does, and prints both. It stops before any change if the validator reports a module as not installed, or if no registered repository, or more than one, has the recipe version. When other modules are still newer than the recipe, it says so at the end, so you run it again. Because it installs with `-Force` and does not ask you to confirm the repository, you first confirm with Microsoft Support that every registered repository (`Get-PSRepository`) is an approved source. |
+| 2026-11-28 | When more than one module is newer than the recipe, the manual alternative now first repairs a module that no other newer module requires, as their installed manifests declare. Before, it picked the other modules by name, so when `moc` had a newer version together with the exact `DownloadSdk` and `TraceProvider` versions it requires, every run picked `DownloadSdk` and stopped with `No changes were made`, because the newer `moc` still needed it, and never reached `moc`. It now repairs `moc` first, then `DownloadSdk` and `TraceProvider`, and a newer `ArcHci`, which requires an exact `moc` version, before `moc`. The order for Az modules is unchanged. |
 
 ## Overview
 
@@ -98,7 +103,8 @@ This result means the validation found PowerShell Modules it was not expecting b
 
 On newer builds the system health check keeps one result per node, with the module detail. This
 read-only block, run on any node, lists each node's latest result. It reads the last completed
-health check; the `completed` time shows how old that result is.
+health check; the `completed` time shows how old that result is. Without
+`-FullHealthCheckDetails`, the same record returns only `FAILURE` results.
 
 ```powershell
 $checkName = 'AzStackHci_ValidatedRecipe_PowerShellModule_Version'
@@ -118,8 +124,8 @@ Expected result: one entry per node. A node with `Status : FAILURE` needs the st
 
 While a health check is running, the first line shows `InProgress` with a completion time of
 `01/01/0001` and no entries are listed; run the block again after it finishes. If a completed health
-check returns no entry, it did not evaluate this check; use the read-only check in
-[Issue validation](#issue-validation) on each node instead.
+check returns no entry for a node, or an entry without a `Detail`, use the read-only check in
+[Issue validation](#issue-validation) on that node instead.
 
 
 ## Issue Validation
@@ -384,9 +390,11 @@ module fails the test, so the helper would change nothing. An error means the dr
 unknown: do not run the helper.
 
 If either check fails, do not run the helper; contact Microsoft Support. The
-[manual alternative](#manual-alternative-for-nodes-without-the-helper) makes the
-dependent-module check itself and stops before any change, but use it only with
-Microsoft Support guidance.
+[manual alternative](#manual-alternative-for-nodes-without-the-helper) checks
+dependent modules itself, but it is for nodes without the helper: on a node that
+has the helper, it stops before any change with
+`Use the recipe-aware helper instead of the manual alternative.` That message does
+not mean the helper is safe to run after a failed check.
 
 Paste or run the whole block at once. It runs as one statement, so if the helper is
 unavailable the check stops the block before `Remediate-PSModules` runs.
@@ -408,13 +416,29 @@ condition, not permission to repeatedly uninstall modules.
 ### Manual alternative for nodes without the helper
 
 Use this path only when the recipe-aware helper is unavailable,
-with Microsoft Support guidance and the recovery plan agreed above. Set only the
-module name from the current failure and the approved repository name. The block
-derives the exact target from `Get-ValidatedRecipe.RequiredVersion`. If that
+with Microsoft Support guidance and the recovery plan agreed above. You don't
+type a module name, version, or repository. The block runs the validator and
+repairs a module that the current failure reports as newer than the recipe. When
+more than one module is newer, it repairs one each time it runs, and it first picks
+a module that no other newer module requires, as their installed manifest files
+declare. A newer module can require exact newer versions of other recipe modules:
+for example, `moc` requires exact `DownloadSdk` and `TraceProvider` versions, and
+`ArcHci` requires an exact `moc` version, so the block repairs `ArcHci`, then `moc`,
+before `DownloadSdk` and `TraceProvider`. Among the modules it can pick, and when
+every newer module is required by another, it uses the order the helper removes
+versions: Az modules other than `Az.Accounts` first, then `Az.Accounts`, then the
+others. Run it again in a new session for the next one.
+It derives the exact target from `Get-ValidatedRecipe.RequiredVersion`. If that
 product authority is unavailable, empty, ambiguous, or invalid, the recipe-version
 guard throws before any install or removal. Do not replace that guard
 with the historical `4.0.2` example or interpret a validator upper bound as an
-exact pin.
+exact pin. Like the helper, it installs from the registered PowerShell repository
+that has the recipe version, and it prints that repository's name; if no
+registered repository has that version, or more than one does, it stops before
+any change. It installs with `-Force`, so it does not ask you to confirm a
+repository that is not trusted. Before you run it, list the registered
+repositories with `Get-PSRepository` and confirm with Microsoft Support that each
+one is an approved source; if one is not, do not run the block.
 
 This narrow fallback handles versioned, PowerShellGet-managed modules in the
 Windows PowerShell **AllUsers** directory only (`C:\Program Files\WindowsPowerShell\Modules`,
@@ -425,8 +449,8 @@ providing the validator and recipe commands; those require Support-led recovery.
 Install the recipe version side by side if missing, verify the exact installed
 path, and only then remove versions above the recipe upper bound. Preserve older
 versions; this validator message alone does not justify removing them. If the
-module is not installed at all, the block stops; use the recipe-aware helper or
-contact Microsoft Support. The block also stops, before any change, and names the
+validator reports a module as not installed, the block stops before any change;
+use the recipe-aware helper or contact Microsoft Support. The block also stops, before any change, and names the
 module, if another installed module declares a requirement that the remaining
 versions do not meet: an exact version (`RequiredVersion`) that would be removed,
 or a minimum (`ModuleVersion`) or maximum (`MaximumVersion`) version that no
@@ -478,9 +502,8 @@ copy in a user's `Documents` folder, or a version that the block has not
 installed yet, does not count. It
 compares versions the way PowerShell does when it loads a module, so a
 requirement of exactly `5.5.5.0` is not met by version `5.5.5`. The block also stops before any change if a version
-that it would remove is not available in `$ApprovedRepository`, because that
-repository is where the version would be restored from; use a repository that has
-those versions, or contact Microsoft Support. After an installation, the block
+that it would remove is not available in the repository it uses, because that
+repository is where the version would be restored from; contact Microsoft Support. After an installation, the block
 reads the inventory again and repeats these checks before it removes anything,
 because `Install-Module` can also install dependency modules. In that repeated
 check, only versions that are now installed count as kept.
@@ -493,10 +516,11 @@ the node, or delete module folders as a workaround.
 
 **[HIGH RISK]**
 
-**Changes:** For the one module you name, installs the recipe version if it is
-missing and uninstalls only versions newer than that recipe version. Older
-versions are not changed. Before any change, it confirms that every version it
-would remove is available in `$ApprovedRepository`. That check uses `Find-Module`, which
+**Changes:** For one module that the validator reports as newer than the recipe,
+installs the recipe version if it is missing and uninstalls only versions newer
+than that recipe version. Older versions are not changed. Before any change, it
+confirms that every version it would remove is available in the repository it
+uses. That check uses `Find-Module`, which
 does not show that the download hosts in [Preconditions](#preconditions) are reachable;
 the block installs before it removes, so a failed download stops it before any removal.
 When it installs the recipe version, `Install-Module`
@@ -508,9 +532,10 @@ repository has, even when a compatible version is already installed. For an Az
 module other than `Az.Accounts`, that usually adds an `Az.Accounts` version newer
 than the recipe. The block does not remove that version. After it finishes the
 named module, it stops with an error that names each added version that is newer
-than the recipe; then run this block again, in a new session, with
-`$RequiredModuleName` set to that module (for example `Az.Accounts`), because
-[Verify resolution](#verify-resolution) fails until you do.
+than the recipe; then run this block again in a new session, once for each module
+that is still newer, because [Verify resolution](#verify-resolution) fails until the
+block has repaired them. It repairs such a module after any newer module that
+requires it.
 No other modules are uninstalled. If it would remove a version while a user who
 has a profile on the node is not signed in, it stops before any change unless you
 set `$AssumeDefaultDocumentsForSignedOutUsers` as described above.
@@ -520,8 +545,8 @@ set `$AssumeDefaultDocumentsForSignedOutUsers` as described above.
 > management operation is using can interrupt that operation, so run it only in
 > the maintenance window agreed with Microsoft Support.
 
-Edit the two names on the lines near the top, and change
-`$AssumeDefaultDocumentsForSignedOutUsers` only as described above, then paste the whole block at once
+Change only `$AssumeDefaultDocumentsForSignedOutUsers`, and only as described
+above, then paste the whole block at once
 or save it as a `.ps1` file and run that file. The block is one statement,
 wrapped in `& { }`: the console reads it up to the closing brace before running
 any of it, and a failed check (`throw`) ends the whole block, so no install or
@@ -532,16 +557,10 @@ preceding guards and inventories are required in the same run.
 & {
     $ErrorActionPreference = 'Stop'
     if ($PSVersionTable.PSEdition -ne 'Desktop') { throw 'Run this block in Windows PowerShell 5.1. No changes were made.' }
-    $RequiredModuleName = '<module-from-current-failure>'
-    $ApprovedRepository = '<approved-repository>'
     # Leave $false unless your domain or endpoint administrator confirms that Documents folder redirection is not
     # used for the users that the block lists as not signed in.
     $AssumeDefaultDocumentsForSignedOutUsers = $false
 
-    if ($RequiredModuleName -notmatch '^[A-Za-z][A-Za-z0-9.]{0,99}$' -or
-        $ApprovedRepository -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$') {
-        throw 'Set the affected module and approved repository names. No changes were made.'
-    }
     if ($AssumeDefaultDocumentsForSignedOutUsers -isnot [bool]) { throw 'Set $AssumeDefaultDocumentsForSignedOutUsers to $false or $true. No changes were made.' }
 
     $imageModule = Get-Module -ListAvailable -Name AzureLocalImageModule |
@@ -553,21 +572,44 @@ preceding guards and inventories are required in the same run.
         throw 'Use the recipe-aware helper instead of the manual alternative.'
     }
     $checkName = 'AzStackHci_ValidatedRecipe_PowerShellModule_Version'
-    $escapedName = [regex]::Escape($RequiredModuleName)
-    $failurePattern = "Checking version of PS module '$escapedName' on host '[^']*'\. " +
-        "Got '[^']*' but expected less-than or equal to '[^']*' so it is invalid\."
-    $missingPattern = "Failed to parse installed version of PS module '$escapedName' on host '[^']*'\."
     $checks = @(Invoke-AzStackHciValidatedRecipeValidation -PassThru -Include Test-PSModules -ErrorAction Stop |
         Where-Object Name -eq $checkName)
-    if (@($checks | Where-Object { "$($_.Status)" -eq 'FAILURE' -and
-            ([string]$_.AdditionalData.Detail) -match $missingPattern }).Count -gt 0) {
-        throw "$RequiredModuleName is missing or its version is unreadable. Use the recipe-aware helper or contact Microsoft Support. No changes were made."
+    if ($checks.Count -eq 0 -or @($checks | Where-Object { "$($_.Status)" -notin @('SUCCESS', 'FAILURE') }).Count -gt 0) {
+        throw 'The validator did not return a clear result for this check. No changes were made.'
     }
-    if ($checks.Count -eq 0 -or @($checks | Where-Object { "$($_.Status)" -notin @('SUCCESS', 'FAILURE') }).Count -gt 0 -or
-        @($checks | Where-Object { "$($_.Status)" -eq 'FAILURE' -and
-            ([string]$_.AdditionalData.Detail) -match $failurePattern }).Count -eq 0) {
-        throw 'No confirmed validator failure for this module. No changes were made.'
+    # The module to repair comes from the current validator failure, so no name is typed in.
+    $failureText = @($checks | Where-Object { "$($_.Status)" -eq 'FAILURE' } | ForEach-Object { [string]$_.AdditionalData.Detail }) -join ';'
+    $missingNames = @([regex]::Matches($failureText, "Failed to parse installed version of PS module '([^']+)' on host '[^']*'\.") |
+        ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+    if ($missingNames.Count -gt 0) {
+        throw "$($missingNames -join ', ') is missing or its version is unreadable. Use the recipe-aware helper or contact Microsoft Support. No changes were made."
     }
+    $newerNames = @([regex]::Matches($failureText, "Checking version of PS module '([^']+)' on host '[^']*'\. " +
+            "Got '[^']*' but expected less-than or equal to '[^']*' so it is invalid\.") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+    if ($newerNames.Count -eq 0) { throw 'The validator reports no module newer than the recipe. No changes were made.' }
+    # One module each run: first a module that no other newer module requires, because the newer version of a module can
+    # pin the newer versions of the modules it requires (moc pins exact DownloadSdk and TraceProvider versions, and ArcHci
+    # pins moc), so those can be removed only after it. The installed manifests of the newer modules are read as data
+    # files, which loads no module; one that cannot be read adds nothing here, and the checks below still stop before any
+    # change. Ties, and a list in which every module is required by another, use the order the recipe-aware helper
+    # removes versions: Az modules other than Az.Accounts, then Az.Accounts, then Az, then the rest.
+    $requiredByOther = @(foreach ($owner in $newerNames) {
+        foreach ($copy in @(Get-InstalledModule -Name $owner -AllVersions -ErrorAction SilentlyContinue)) {
+            $data = $null
+            try { $data = Import-PowerShellDataFile -LiteralPath (Join-Path ([string]$copy.InstalledLocation) "$($copy.Name).psd1") -ErrorAction Stop } catch { continue }
+            $entries = @(@($data.RequiredModules) + @($data.ModuleList) + @(@($data.NestedModules) | Where-Object {
+                    $_ -is [hashtable] -and ($_.RequiredVersion -or $_.ModuleVersion -or $_.MaximumVersion) }) | Where-Object { $_ })
+            foreach ($entry in $entries) {
+                $name = $null
+                try { $name = ([Microsoft.PowerShell.Commands.ModuleSpecification]::new($entry)).Name } catch { continue }
+                if ($name -ne $owner -and $newerNames -contains $name) { $name }
+            }
+        }
+    })
+    $firstCandidates = @($newerNames | Where-Object { $requiredByOther -notcontains $_ })
+    if ($firstCandidates.Count -eq 0) { $firstCandidates = $newerNames }
+    $RequiredModuleName = @($firstCandidates | Sort-Object { if ($_ -eq 'Az.Accounts') { 1 } elseif ($_ -eq 'Az') { 2 } elseif ($_ -like 'Az.*') { 0 } else { 3 } }, { $_ })[0]
+    if ($RequiredModuleName -notmatch '^[A-Za-z][A-Za-z0-9.]{0,99}$') { throw 'The module name in the validator result is not valid. No changes were made.' }
     $artifactPath = Get-ASArtifactPath -NugetName Microsoft.AzureStack.VersionControl.Operations -ErrorAction Stop
     Import-Module (Join-Path $artifactPath 'content\Scripts\VersionControlHelpers.psm1') -Force -DisableNameChecking -ErrorAction Stop
     $recipeAll = @(Get-ValidatedRecipe -TypesToInclude @('PowerShell') -TagsToInclude @('Azure') -ErrorAction Stop)
@@ -837,6 +879,17 @@ preceding guards and inventories are required in the same run.
         try { $found = @(Find-Module -Name $Name -RequiredVersion ([string]$Version) -Repository $Repository) } catch { $found = @() }
         ($found.Count -eq 1) -and ((ConvertTo-FullVersion ([string]$found[0].Version)) -eq (ConvertTo-FullVersion $Version))
     }
+    # Like the recipe-aware helper, which installs from the registered repositories, use the registered repository that
+    # has the recipe version. If none has it, or more than one does, stop.
+    $sourceCandidates = @(Get-PSRepository -ErrorAction Stop | Where-Object { Test-RepositoryVersion -Name $RequiredModuleName -Version $targetVersion -Repository $_.Name } |
+        ForEach-Object { [string]$_.Name })
+    if ($sourceCandidates.Count -ne 1) {
+        throw ("$RequiredModuleName $RequiredModuleVersion is in " + $(if ($sourceCandidates.Count) { 'more than one registered repository (' + ($sourceCandidates -join ', ') + ')' } else { 'no registered repository' }) +
+            '. Contact Microsoft Support. No changes were made.')
+    }
+    $SourceRepository = $sourceCandidates[0]
+    if ($SourceRepository -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$') { throw 'The repository name is not valid. No changes were made.' }
+    "Repairing $RequiredModuleName to recipe version $RequiredModuleVersion from repository $SourceRepository."
     $targetFull = ConvertTo-FullVersion $targetVersion
     $before = @(Get-ScopedModuleInventory)
     $before | Select-Object Name, Version, InstalledLocation
@@ -858,11 +911,10 @@ preceding guards and inventories are required in the same run.
                 (($fileReferences | ForEach-Object { "$($_.Name) $($_.Version) loads $($_.Reference)" }) -join '; ') + '. Contact Microsoft Support. No changes were made.')
         }
         # A removed version can be restored only from a repository that has it.
-        Get-PSRepository -Name $ApprovedRepository -ErrorAction Stop | Out-Null
-        $missing = @($toRemove | Where-Object { -not (Test-RepositoryVersion -Name $RequiredModuleName -Version $_.Version -Repository $ApprovedRepository) })
+        $missing = @($toRemove | Where-Object { -not (Test-RepositoryVersion -Name $RequiredModuleName -Version $_.Version -Repository $SourceRepository) })
         if ($missing.Count -gt 0) {
-            throw ("These versions would be removed, but $ApprovedRepository does not have them, so they could not be restored: " +
-                (($missing | ForEach-Object { "$RequiredModuleName $($_.Version)" }) -join ', ') + '. Use a repository that has them, or contact Microsoft Support. No changes were made.')
+            throw ("These versions would be removed, but $SourceRepository does not have them, so they could not be restored: " +
+                (($missing | ForEach-Object { "$RequiredModuleName $($_.Version)" }) -join ', ') + '. Contact Microsoft Support. No changes were made.')
         }
     }
     # Install-Module -Force also installs the newest version of each dependency that the repository has, such as Az.Accounts.
@@ -870,11 +922,7 @@ preceding guards and inventories are required in the same run.
     $otherBefore = @()
     if ($otherNames.Count -gt 0) { $otherBefore = @(Get-Module -Name $otherNames -ListAvailable | ForEach-Object { $_.ModuleBase }) }
     if (@($before | Where-Object { (ConvertTo-FullVersion $_.Version) -eq $targetFull }).Count -eq 0) {
-        Get-PSRepository -Name $ApprovedRepository -ErrorAction Stop | Out-Null
-        if (-not (Test-RepositoryVersion -Name $RequiredModuleName -Version $targetVersion -Repository $ApprovedRepository)) {
-            throw 'The exact recipe package is unavailable. No changes were made.'
-        }
-        Install-Module -Name $RequiredModuleName -RequiredVersion $RequiredModuleVersion -Repository $ApprovedRepository -Scope AllUsers -Force -ErrorAction Stop
+        Install-Module -Name $RequiredModuleName -RequiredVersion $RequiredModuleVersion -Repository $SourceRepository -Scope AllUsers -Force -ErrorAction Stop
     }
     $installed = @(Get-ScopedModuleInventory)
     if (@($installed | Where-Object { (ConvertTo-FullVersion $_.Version) -eq $targetFull }).Count -ne 1) {
@@ -898,9 +946,9 @@ preceding guards and inventories are required in the same run.
             throw ("These installed modules load a file from a version of $RequiredModuleName that this block would remove: " +
                 (($fileReferences | ForEach-Object { "$($_.Name) $($_.Version) loads $($_.Reference)" }) -join '; ') + '. No versions were removed. Contact Microsoft Support.')
         }
-        $missing = @($toRemove | Where-Object { -not (Test-RepositoryVersion -Name $RequiredModuleName -Version $_.Version -Repository $ApprovedRepository) })
+        $missing = @($toRemove | Where-Object { -not (Test-RepositoryVersion -Name $RequiredModuleName -Version $_.Version -Repository $SourceRepository) })
         if ($missing.Count -gt 0) {
-            throw ("These versions would be removed, but $ApprovedRepository does not have them, so they could not be restored: " +
+            throw ("These versions would be removed, but $SourceRepository does not have them, so they could not be restored: " +
                 (($missing | ForEach-Object { "$RequiredModuleName $($_.Version)" }) -join ', ') + '. No versions were removed. Contact Microsoft Support.')
         }
     }
@@ -934,8 +982,11 @@ preceding guards and inventories are required in the same run.
     })
     if ($newer.Count -gt 0) {
         throw ("$RequiredModuleName now matches the recipe, but Install-Module also installed " + ($newer -join ', ') +
-            ', newer than the recipe. Run this block again in a new session for each of those modules, for example with $RequiredModuleName = ''' +
-            (($newer[0] -split ' ')[0]) + "'. Do not continue to other modules until then.")
+            ', newer than the recipe. Run this block again in a new session; each run repairs the next module that the validator reports.')
+    }
+    $others = @($newerNames | Where-Object { $_ -ne $RequiredModuleName })
+    if ($others.Count -gt 0) {
+        "Other modules are still newer than the recipe: $($others -join ', '). Run this block again in a new session for the next one."
     }
 }
 ```
@@ -950,8 +1001,10 @@ and contact Microsoft Support only if the block still stops after those users si
 or the setting is changed. If removal or final inventory fails, stop and retain the error for
 Microsoft Support. Do not continue to other modules after an error. The one
 exception is the error that says `Install-Module also installed` a version newer
-than the recipe: the named module is already done, so run this block again for
-each module it names, as the error says.
+than the recipe: the named module is already done, so run this block again in a
+new session, as the error says. When the block finishes with
+`Other modules are still newer than the recipe`, also run it again in a new
+session for the next one.
 After replacement, run [Verify resolution](#verify-resolution) in a new session.
 
 ## Rollback and escalation
@@ -962,13 +1015,13 @@ If installation, removal, or final validation fails, stop state-changing command
 and contact Microsoft Support with the before/after module inventory, validator
 details, and installation errors. Use only the recovery plan agreed before
 remediation; do not restore an arbitrary module version or apply a CLI upgrade.
-The manual alternative confirmed, before it changed anything, that every version
-it removed was available in `$ApprovedRepository`; if the recovery plan restores
-one, install that exact version from the same repository with `Install-Module`
-and `-RequiredVersion`. If that repository is not trusted on the node,
-`Install-Module` asks for confirmation, which a non-interactive remote session (for
-example `Invoke-Command`) cannot answer. Run the rollback in an interactive session, or
-add `-Force` only after confirming `$ApprovedRepository` is the approved source.
+The manual alternative printed the repository it used and confirmed, before it
+changed anything, that every version it removed was available there; if the
+recovery plan restores one, install that exact version from that repository with
+`Install-Module` and `-RequiredVersion`. If that repository is not trusted on the
+node, `Install-Module` asks for confirmation, which a non-interactive remote session
+(for example `Invoke-Command`) cannot answer. Run the rollback in an interactive
+session, or add `-Force` only after confirming that repository is the approved source.
 
 ## Verify resolution
 
@@ -1000,7 +1053,5 @@ cover about 15 minutes in which the module is missing, before it is repaired.
 | Cluster logs (`Get-ClusterLog`) | not evident | `Get-ClusterLog -TimeSpan 15` from every node, covering the time the module was missing and a full system health check, contains no entry for this check, its title, or `Test-PSModules`. |
 | Windows Failover Cluster Manager | not evident | No node, role, or resource changes state compared with its state before the module goes missing, and `Microsoft-Windows-FailoverClustering/Operational` records no Critical, Error, or Warning event in the same 15 minutes. |
 | Windows Admin Center (standalone) | shown | On a node connection, the **Events** tool reads the same **AzStackHciEnvironmentChecker** log, so it carries the Event ID 17205 entry described in the Windows event logs row; the tool view itself is not characterized. The cluster dashboard **Alerts** do not carry this failure: `Get-HealthFault` shows no new Health Service fault while the module is missing. The **Updates** tool is not characterized. |
-| Windows Admin Center in the Azure portal | absent | Not characterized. |
+| Windows Admin Center in the Azure portal | shown | Windows Admin Center in the Azure portal includes the same **Events** tool ([Manage Azure Local clusters using Windows Admin Center in Azure](https://learn.microsoft.com/windows-server/manage/windows-admin-center/azure/manage-hci-clusters)), so on a node connection it shows the Event ID 17205 entry described in the Windows event logs row; the tool view itself is not characterized. As in the standalone row, its dashboard alerts do not carry this failure. |
 | Component / tool log files | shown | Each system health check writes `HealthCheckResult.EnvironmentChecker.<date-time>.json` to `C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\HealthCheck\System`. It lists this check as `FAILURE` for the affected node with the `Failed to parse installed version` detail. A validator run that you start yourself also writes `%USERPROFILE%\.AzStackHci\AzStackHciEnvironmentChecker.log`; retain both for support. |
-
-`absent` denotes an uncharacterized surface, not proof that no signal exists.
