@@ -130,7 +130,7 @@ Every action pattern in a contributed article must include these fields:
 | Field | Requirement |
 | --- | --- |
 | Action classification | Read-only when no state changes, otherwise state-changing. |
-| What changes | For read-only actions, optionally write "This step changes nothing." For state-changing actions, a `**Changes:**` statement that says what changes and what is not affected, plus `**Plan for:**` or a `> [!WARNING]` callout when the step is disruptive or can't be undone. |
+| What changes | For read-only actions, optionally write "This step changes nothing." For state-changing actions, a `**Changes:**` statement that says what changes and what is not affected, plus a `**Plan for:**` statement when the step is disruptive. When the step can't be undone, can interrupt running workloads, changes firmware or security posture, or can lose data, put a `> [!WARNING]` callout on its own lines in the step, not in a table cell, because a table cell can't show it. |
 | Required privilege | Role, local admin right, Azure role, OEM access, or support entitlement needed before the action. |
 | Workload or maintenance gate | Whether the action needs a maintenance window, workload owner approval, node drain, reboot plan, or no workload impact. |
 | Pre-check | What the operator must confirm before running the action, including prerequisites, current state, backup, recovery key, maintenance window, and workload impact. |
