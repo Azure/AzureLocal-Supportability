@@ -47,7 +47,7 @@ Below is an example of a validator result (note that the machine name, IP addres
     "TargetResourceType":  "NetworkDefaultGateway",
     "Timestamp":  "\/Date(1758300600191)\/",
     "AdditionalData":  {
-                            "Detail":  "Multiple default gateways found on AZLOC-NODE1: 192.168.2.1, 200.121.1.1. There should be only one default gateway defined on the server. Please run below PowerShell cmdlet to verify the default gateway configuration on the machine:     Get-NetRoute -DestinationPrefix "0.0.0.0/0" -AddressFamily IPv4 If you find multiple different gateway defined for the NextHop property from the above cmdlet call, please remove the one that you do not need from the system.     Remove-NetRoute -DestinationPrefix "0.0.0.0/0" -NextHop <GATEWAY_IP_YOU_DO_NOT_NEED> -Confirm:$false",
+                            "Detail":  "Multiple default gateways found on AZLOC-NODE1: 192.168.2.1, 198.51.100.1. There should be only one default gateway defined on the server. Please run below PowerShell cmdlet to verify the default gateway configuration on the machine:     Get-NetRoute -DestinationPrefix "0.0.0.0/0" -AddressFamily IPv4 If you find multiple different gateway defined for the NextHop property from the above cmdlet call, please remove the one that you do not need from the system.     Remove-NetRoute -DestinationPrefix "0.0.0.0/0" -NextHop <GATEWAY_IP_YOU_DO_NOT_NEED> -Confirm:$false",
                             "Status":  "FAILURE",
                             "TimeStamp":  "09/19/2025 16:50:00",
                             "Resource":  "NetworkDefaultGateway",
@@ -64,7 +64,7 @@ Below is an example of a validator result (note that the machine name, IP addres
 **Error Message:**
 (NOTE: The IP address below is just an example. It might be different in your actual environment.)
 ```text
-Multiple default gateways found on MACHINENAME: 192.168.2.1, 200.121.1.1.
+Multiple default gateways found on MACHINENAME: 192.168.2.1, 198.51.100.1.
 ```
 
 **Root Cause:** The validator found multiple default gateways defined in the system.

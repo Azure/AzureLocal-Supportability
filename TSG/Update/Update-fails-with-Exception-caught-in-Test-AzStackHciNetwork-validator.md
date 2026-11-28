@@ -31,8 +31,8 @@ Version                     State UpdateStateProperties Hea
 * Get-ActionPlanInstances | Select-Object ActionPlanName, status, StartDateTime, EndDateTime, InstanceID | Sort-Object EndDateTime | ft
 You will see below failed action plan instance(s)
 ```
-Check Update readiness           Failed 5/29/2025 11:54:27 PM 5/30/2025 12:50:25 AM 41c752fa-c333-46a9-b41f-61ea72dd0c7e
-Check System Update readiness    Failed 5/30/2025 7:14:26 PM  5/30/2025 7:22:29 PM  870ad365-08d4-4cd5-91a4-22ccf49dd0c1
+Check Update readiness           Failed 5/29/2025 11:54:27 PM 5/30/2025 12:50:25 AM 00000000-0000-0000-0000-000000000001
+Check System Update readiness    Failed 5/30/2025 7:14:26 PM  5/30/2025 7:22:29 PM  00000000-0000-0000-0000-000000000002
 ```
 * Start-MonitoringActionPlanInstanceToComplete -ationPlanInstanceID <ACTION PLAN ID GOT FROM ABOVE FAILED "Check Update readiness">
 You could see below error information:
@@ -55,7 +55,7 @@ On the cluster node(s), you might see below output while trying to look the stor
 ```
 InterfaceIndex IPAddress                    PrefixLength    PrefixOrigin    AddressState       Store
 -------------- ---------                    ------------    ------------    ------------       -----
-15             196.214.96.20                          24          Manual       Preferred    ActiveStore
+15             198.51.100.20                          24          Manual       Preferred    ActiveStore
 15             10.71.2.132                            24          Manual       Preferred    ActiveStore
 ```
 
