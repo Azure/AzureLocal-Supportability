@@ -86,7 +86,8 @@ The deployment process will automatically create the VMSwitch. It is not require
 
    ```powershell
    # Step 1: Identify VMSwitches on affected adapters
-   Get-VMSwitch | Where-Object { $_.NetAdapterInterfaceDescription -like "*ethernet 2*" }
+   $adapterDescription = (Get-NetAdapter -Name "ethernet 2").InterfaceDescription
+   Get-VMSwitch | Where-Object { $_.NetAdapterInterfaceDescriptions -contains $adapterDescription }
 
    # Step 2: Remove the VMSwitch from each node (run on each affected node)
    Remove-VMSwitch -Name "testSwitch" -Force
@@ -109,7 +110,8 @@ Compare the VMSwitch configuration across all nodes and ensure they are consiste
    Get-VMSwitch | Select-Object Name, SwitchType, NetAdapterInterfaceDescription
 
    # Check specific adapter VMSwitch association
-   Get-VMSwitch | Where-Object { $_.NetAdapterInterfaceDescription -like "*ethernet 2*" }
+   $adapterDescription = (Get-NetAdapter -Name "ethernet 2").InterfaceDescription
+   Get-VMSwitch | Where-Object { $_.NetAdapterInterfaceDescriptions -contains $adapterDescription }
 
    # Check adapter details
    Get-NetAdapter -Name "ethernet 2" | Select-Object Name, Status, LinkSpeed
