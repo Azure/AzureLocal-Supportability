@@ -79,16 +79,16 @@ Verify Network ATC intent configuration and status:
 
 ```powershell
 # Check all Network ATC intents
-Get-NetIntent | Format-List Name, IntentType, IsComputeIntentSet, IsManagementIntentSet, IsStorageIntentSet, ProvisioningStatus
+Get-NetIntent | Format-List IntentName, IntentType, IsComputeIntentSet, IsManagementIntentSet, IsStorageIntentSet
 
-# Check intent status
-Get-NetIntentStatus
+# Check intent status on each machine
+Get-NetIntentStatus | Format-List IntentName, Host, ProvisioningStatus, ConfigurationStatus
 
 ```
 
 **Expected output for healthy intent:**
 ```
-Name                   : ManagementIntent
+IntentName             : ManagementIntent
 IsManagementIntentSet  : True
 ProvisioningStatus     : Completed
 ConfigurationStatus    : Success
