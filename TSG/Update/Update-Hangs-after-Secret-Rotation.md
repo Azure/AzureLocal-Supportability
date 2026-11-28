@@ -195,7 +195,7 @@ Function Restart-AzureLocalServices {
     # This will move the cluster service to another node.
     Function Move-ClusterService($Name) {
 
-        if ($nodes.Length -eq 1)
+        if (@($nodes).Count -eq 1)
         {
             $Name = $Name.Replace(" Cluster Group", "")
             Write-Local "Single Node Cluster, restarting '$Name' service"
