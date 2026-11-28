@@ -47,7 +47,7 @@ function CheckForAgentUpdateSlowness()
 
         if ($mostRecentMASUpdate.Status -eq "Running" -or $mostRecentMASUpdate.Status -eq "Waiting" -or $mostRecentMASUpdate.Status -eq "Pending" )
         {
-            if  ($startTime.AddMinutes(15) -lt $(Get-Date))
+            if  ((-not $endTime) -and $startTime.AddMinutes(15) -lt $(Get-Date))
             {
                 Write-Host "ECE slowness issue detected. Please run the agent restart remediation from the ECEAgent Causing Slowness during Update TSG"
                 return
