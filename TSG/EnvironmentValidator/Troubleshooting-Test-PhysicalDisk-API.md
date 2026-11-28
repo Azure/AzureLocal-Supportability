@@ -72,13 +72,13 @@ This rule is checking that disks suitable for Storage Spaces are present.  If no
                                         
                                         ServerName PhysicalLocation                                           UniqueId                             HCISupported
                                         ---------- ----------------                                           --------                             ------------
-                                        NODE3   Integrated : Bus 130 : Device 0 : Function 0 : Adapter 8   eui.61124572600061BE1238970000000000        False
-                                        NODE3   PCI Slot 9 : Bus 194 : Device 0 : Function 0 : Adapter 5   eui.00000000000000008CE29FE205E4F901        False
-                                        NODE3   PCI Slot 10 : Bus 133 : Device 0 : Function 0 : Adapter 9  eui.00000000000000008CE29FE206537601        False
-                                        NODE3   PCI Slot 11 : Bus 196 : Device 0 : Function 0 : Adapter 7  eui.00000000000000008CE29FE205E50301        False
-                                        NODE3   PCI Slot 8 : Bus 193 : Device 0 : Function 0 : Adapter 4   eui.00000000000000008CE29FE205E4FC01        False
-                                        NODE3   PCI Slot 11 : Bus 134 : Device 0 : Function 0 : Adapter 10 eui.00000000000000008CE29FE205E4FF01        False
-                                        NODE3   PCI Slot 10 : Bus 195 : Device 0 : Function 0 : Adapter 6  eui.00000000000000008CE29FE20653B701        False",
+                                        NODE3   Integrated : Bus 130 : Device 0 : Function 0 : Adapter 8   eui.00000000000000000000000000000301        False
+                                        NODE3   PCI Slot 9 : Bus 194 : Device 0 : Function 0 : Adapter 5   eui.00000000000000000000000000000302        False
+                                        NODE3   PCI Slot 10 : Bus 133 : Device 0 : Function 0 : Adapter 9  eui.00000000000000000000000000000303        False
+                                        NODE3   PCI Slot 11 : Bus 196 : Device 0 : Function 0 : Adapter 7  eui.00000000000000000000000000000304        False
+                                        NODE3   PCI Slot 8 : Bus 193 : Device 0 : Function 0 : Adapter 4   eui.00000000000000000000000000000305        False
+                                        NODE3   PCI Slot 11 : Bus 134 : Device 0 : Function 0 : Adapter 10 eui.00000000000000000000000000000306        False
+                                        NODE3   PCI Slot 10 : Bus 195 : Device 0 : Function 0 : Adapter 6  eui.00000000000000000000000000000307        False",
                            "Status":  "FAILURE",
                            "TimeStamp":  "09/27/2025 12:59:30",
                            "Resource":  "Null",
@@ -163,30 +163,30 @@ This rule is checking that all nodes have the same number of disks, in total or 
                                         ServerName PhysicalLocation                                                  UniqueId                             HCISup
                                                                                                                                                         ported
                                         ---------- ----------------                                                  --------                             ------
-                                        NODE13 PCIe SSD in Slot 23 Bay 2                                         eui.363145304E8015010025384500000005   True
-                                        NODE13 PCIe SSD in Slot 9 Bay 1                                          eui.363145304E9001670025384500000005   True
-                                        NODE13 PCIe SSD in Slot 8 Bay 1                                          eui.363145304E7000880025384500000005   True
-                                        NODE13 PCIe SSD in Slot 18 Bay 2                                         eui.363145304E7000350025384500000005   True
-                                        NODE13 PCIe SSD in Slot 22 Bay 2                                         eui.363145304E8033700025384500000005   True
-                                        NODE13 PCIe SSD in Slot 17 Bay 2                                         eui.363145304E8061580025384500000005   True
-                                        NODE13 PCIe SSD in Slot 16 Bay 2                                         eui.363145304E7000330025384500000005   True
-                                        NODE13 PCIe SSD in Slot 5 Bay 1                                          eui.363145304E8032860025384500000006   True
-                                        NODE13 PCIe SSD in Slot 4 Bay 1                                          eui.363145304E7000850025384500000005   True
-                                        NODE13 PCIe SSD in Slot 7 Bay 1                                          eui.363145304E7000920025384500000005   True
-                                        NODE13 PCIe SSD in Slot 21 Bay 2                                         eui.363145304E8033890025384500000005   True
-                                        NODE13 PCIe SSD in Slot 19 Bay 2                                         eui.363145304E7000980025384500000005   True
-                                        NODE13 PCIe SSD in Slot 1 Bay 1                                          eui.363145304E8015060025384500000005   True
-                                        NODE13 PCIe SSD in Slot 0 Bay 1                                          eui.363145304E8015020025384500000005   True
-                                        NODE13 PCIe SSD in Slot 11 Bay 1                                         eui.363145304E9001630025384500000005   True
-                                        NODE13 PCIe SSD in Slot 6 Bay 1                                          eui.363145304E7000970025384500000005   True
-                                        NODE13 PCIe SSD in Slot 15 Bay 2                                         eui.363145304E8033780025384500000005   True
-                                        NODE13 PCIe SSD in Slot 3 Bay 1                                          eui.363145304E7000360025384500000005   True
-                                        NODE13 PCIe SSD in Slot 10 Bay 1                                         eui.363145304E8033850025384500000005   True
-                                        NODE13 PCIe SSD in Slot 13 Bay 2                                         eui.363145304E7000560025384500000005   True
-                                        NODE13 PCIe SSD in Slot 14 Bay 2                                         eui.363145304E9001280025384500000005   True
+                                        NODE13 PCIe SSD in Slot 23 Bay 2                                         eui.00000000000000000000000000001301   True
+                                        NODE13 PCIe SSD in Slot 9 Bay 1                                          eui.00000000000000000000000000001302   True
+                                        NODE13 PCIe SSD in Slot 8 Bay 1                                          eui.00000000000000000000000000001303   True
+                                        NODE13 PCIe SSD in Slot 18 Bay 2                                         eui.00000000000000000000000000001304   True
+                                        NODE13 PCIe SSD in Slot 22 Bay 2                                         eui.00000000000000000000000000001305   True
+                                        NODE13 PCIe SSD in Slot 17 Bay 2                                         eui.00000000000000000000000000001306   True
+                                        NODE13 PCIe SSD in Slot 16 Bay 2                                         eui.00000000000000000000000000001307   True
+                                        NODE13 PCIe SSD in Slot 5 Bay 1                                          eui.00000000000000000000000000001308   True
+                                        NODE13 PCIe SSD in Slot 4 Bay 1                                          eui.00000000000000000000000000001309   True
+                                        NODE13 PCIe SSD in Slot 7 Bay 1                                          eui.00000000000000000000000000001310   True
+                                        NODE13 PCIe SSD in Slot 21 Bay 2                                         eui.00000000000000000000000000001311   True
+                                        NODE13 PCIe SSD in Slot 19 Bay 2                                         eui.00000000000000000000000000001312   True
+                                        NODE13 PCIe SSD in Slot 1 Bay 1                                          eui.00000000000000000000000000001313   True
+                                        NODE13 PCIe SSD in Slot 0 Bay 1                                          eui.00000000000000000000000000001314   True
+                                        NODE13 PCIe SSD in Slot 11 Bay 1                                         eui.00000000000000000000000000001315   True
+                                        NODE13 PCIe SSD in Slot 6 Bay 1                                          eui.00000000000000000000000000001316   True
+                                        NODE13 PCIe SSD in Slot 15 Bay 2                                         eui.00000000000000000000000000001317   True
+                                        NODE13 PCIe SSD in Slot 3 Bay 1                                          eui.00000000000000000000000000001318   True
+                                        NODE13 PCIe SSD in Slot 10 Bay 1                                         eui.00000000000000000000000000001319   True
+                                        NODE13 PCIe SSD in Slot 13 Bay 2                                         eui.00000000000000000000000000001320   True
+                                        NODE13 PCIe SSD in Slot 14 Bay 2                                         eui.00000000000000000000000000001321   True
                                         NODE13 PCI Slot 5 : Bus 129 : Device 0 : Function 0 : Adapter 0 : Port 0      ATADELLBOSS VD                   False
-                                        NODE13 PCIe SSD in Slot 20 Bay 2                                         eui.363145304E9001290025384500000005   True
-                                        NODE13 PCIe SSD in Slot 2 Bay 1                                          eui.363145304E8014840025384500000005   True
+                                        NODE13 PCIe SSD in Slot 20 Bay 2                                         eui.00000000000000000000000000001322   True
+                                        NODE13 PCIe SSD in Slot 2 Bay 1                                          eui.00000000000000000000000000001323   True
 
                                         Node: NODE14
                                         Scenario: Deployment\\Standard\\Medium\\Hardware\\d6c9ca17
@@ -198,31 +198,31 @@ This rule is checking that all nodes have the same number of disks, in total or 
                                         ServerName PhysicalLocation                                                  UniqueId                             HCISup
                                                                                                                                                         ported
                                         ---------- ----------------                                                  --------                             ------
-                                        NODE14 PCIe SSD in Slot 6 Bay 1                                          eui.363145304D8134540025384500000005   True
-                                        NODE14 PCIe SSD in Slot 14 Bay 2                                         eui.363145304E7000680025384500000005   True
-                                        NODE14 PCIe SSD in Slot 22 Bay 2                                         eui.363145304D8134410025384500000005   True
-                                        NODE14 PCIe SSD in Slot 20 Bay 2                                         eui.363145304E9001300025384500000005   True
-                                        NODE14 PCIe SSD in Slot 8 Bay 1                                          eui.363145304D8134350025384500000005   True
-                                        NODE14 PCIe SSD in Slot 2 Bay 1                                          eui.363145304D8134560025384500000005   True
-                                        NODE14 PCIe SSD in Slot 3 Bay 1                                          eui.363145304D8134640025384500000005   True
-                                        NODE14 PCIe SSD in Slot 18 Bay 2                                         eui.363145304E9001310025384500000005   True
-                                        NODE14 PCIe SSD in Slot 17 Bay 2                                         eui.363145304D8134450025384500000005   True
-                                        NODE14 PCIe SSD in Slot 15 Bay 2                                         eui.363145304D8134580025384500000005   True
-                                        NODE14 PCIe SSD in Slot 4 Bay 1                                          eui.363145304E9001110025384500000005   True
-                                        NODE14 PCIe SSD in Slot 5 Bay 1                                          eui.363145304E8033800025384500000005   True
-                                        NODE14 PCIe SSD in Slot 12 Bay 2                                         eui.363145304D8134360025384500000005   True
-                                        NODE14 PCIe SSD in Slot 9 Bay 1                                          eui.363145304E8061570025384500000005   True
-                                        NODE14 PCIe SSD in Slot 16 Bay 2                                         eui.363145304D8134420025384500000005   True
-                                        NODE14 PCIe SSD in Slot 0 Bay 1                                          eui.363145304D8134440025384500000005   True
-                                        NODE14 PCIe SSD in Slot 10 Bay 1                                         eui.363145304D8134330025384500000005   True
-                                        NODE14 PCIe SSD in Slot 21 Bay 2                                         eui.363145304E8033790025384500000005   True
-                                        NODE14 PCIe SSD in Slot 23 Bay 2                                         eui.363145304E9001090025384500000005   True
+                                        NODE14 PCIe SSD in Slot 6 Bay 1                                          eui.00000000000000000000000000001401   True
+                                        NODE14 PCIe SSD in Slot 14 Bay 2                                         eui.00000000000000000000000000001402   True
+                                        NODE14 PCIe SSD in Slot 22 Bay 2                                         eui.00000000000000000000000000001403   True
+                                        NODE14 PCIe SSD in Slot 20 Bay 2                                         eui.00000000000000000000000000001404   True
+                                        NODE14 PCIe SSD in Slot 8 Bay 1                                          eui.00000000000000000000000000001405   True
+                                        NODE14 PCIe SSD in Slot 2 Bay 1                                          eui.00000000000000000000000000001406   True
+                                        NODE14 PCIe SSD in Slot 3 Bay 1                                          eui.00000000000000000000000000001407   True
+                                        NODE14 PCIe SSD in Slot 18 Bay 2                                         eui.00000000000000000000000000001408   True
+                                        NODE14 PCIe SSD in Slot 17 Bay 2                                         eui.00000000000000000000000000001409   True
+                                        NODE14 PCIe SSD in Slot 15 Bay 2                                         eui.00000000000000000000000000001410   True
+                                        NODE14 PCIe SSD in Slot 4 Bay 1                                          eui.00000000000000000000000000001411   True
+                                        NODE14 PCIe SSD in Slot 5 Bay 1                                          eui.00000000000000000000000000001412   True
+                                        NODE14 PCIe SSD in Slot 12 Bay 2                                         eui.00000000000000000000000000001413   True
+                                        NODE14 PCIe SSD in Slot 9 Bay 1                                          eui.00000000000000000000000000001414   True
+                                        NODE14 PCIe SSD in Slot 16 Bay 2                                         eui.00000000000000000000000000001415   True
+                                        NODE14 PCIe SSD in Slot 0 Bay 1                                          eui.00000000000000000000000000001416   True
+                                        NODE14 PCIe SSD in Slot 10 Bay 1                                         eui.00000000000000000000000000001417   True
+                                        NODE14 PCIe SSD in Slot 21 Bay 2                                         eui.00000000000000000000000000001418   True
+                                        NODE14 PCIe SSD in Slot 23 Bay 2                                         eui.00000000000000000000000000001419   True
                                         NODE14 PCI Slot 5 : Bus 129 : Device 0 : Function 0 : Adapter 0 : Port 0      ATADELLBOSS VD                   False
-                                        NODE14 PCIe SSD in Slot 13 Bay 2                                         eui.363145304D8134590025384500000005   True
-                                        NODE14 PCIe SSD in Slot 7 Bay 1                                          eui.363145304D8134530025384500000005   True
-                                        NODE14 PCIe SSD in Slot 1 Bay 1                                          eui.363145304D8134320025384500000005   True
-                                        NODE14 PCIe SSD in Slot 19 Bay 2                                         eui.363145304D8134570025384500000005   True
-                                        NODE14 PCIe SSD in Slot 11 Bay 1                                         eui.363145304D8134470025384500000005   True",
+                                        NODE14 PCIe SSD in Slot 13 Bay 2                                         eui.00000000000000000000000000001420   True
+                                        NODE14 PCIe SSD in Slot 7 Bay 1                                          eui.00000000000000000000000000001421   True
+                                        NODE14 PCIe SSD in Slot 1 Bay 1                                          eui.00000000000000000000000000001422   True
+                                        NODE14 PCIe SSD in Slot 19 Bay 2                                         eui.00000000000000000000000000001423   True
+                                        NODE14 PCIe SSD in Slot 11 Bay 1                                         eui.00000000000000000000000000001424   True",
                            "Status":  "FAILURE",
                            "TimeStamp":  "09/26/2025 16:05:48",
                            "Resource":  "PhysicalDisk",

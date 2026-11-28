@@ -70,10 +70,10 @@ Sample output:
 ```Powershell
 VMName      : testvm1 
 Name        : nic1 
-MacAddress  : 00155D000F04 
-ProfileId   : {0b536664-5529-408b-8c1e-8bfd5aabcaed} #NOTICE
+MacAddress  : 020000000001 
+ProfileId   : {00000000-0000-0000-0000-000000000001} #NOTICE
 ProfileData : 1 
-PortId      : 732A69F0-B555-4AB2-8A30-6D77639BEC31
+PortId      : 00000000-0000-0000-0000-000000000002
 ```
 > Note:  
 > *   The ProfileData should be 1 here for tenant VM. 
@@ -92,8 +92,8 @@ Sample output:
 ```Powershell
 Tags             : 
 ResourceRef      : /networkInterfaces/testvm1nic 
-InstanceId       : 0b536664-5529-408b-8c1e-8bfd5aabcaed #NOTICE
-Etag             : W/"229b1db1-b3d0-407a-8607-44455832a074" 
+InstanceId       : 00000000-0000-0000-0000-000000000001 #NOTICE
+Etag             : W/"00000000-0000-0000-0000-000000000003" 
 ResourceMetadata : 
 ResourceId       : testvm1nic 
 Properties       : Microsoft.Windows.NetworkController.NetworkInterfaceProperties
@@ -104,7 +104,7 @@ The VM Network Adapter’s Port Profile ID need to match **InstanceId**
 
 In case the Port Profile ID didn’t match InstanceId of Network Interface resource. You can update by PowerShell:
 ```Powershell
-Set-SdnVMNetworkAdapterPortProfile -VMName testvm1 -MacAddress 00155D000F04 -ProfileId "{0b536664-5529-408b-8c1e-8bfd5aabcaed}" -ProfileData 1
+Set-SdnVMNetworkAdapterPortProfile -VMName testvm1 -MacAddress 020000000001 -ProfileId "{00000000-0000-0000-0000-000000000001}" -ProfileData 1
 ```
 Reference: [Set SdnVMNetworkAdapterPortProfile · microsoft/SdnDiagnostics Wiki](https://github.com/microsoft/SdnDiagnostics/wiki/Set-SdnVMNetworkAdapterPortProfile)
 

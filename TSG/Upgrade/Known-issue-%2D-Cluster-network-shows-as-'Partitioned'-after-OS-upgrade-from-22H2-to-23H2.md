@@ -43,7 +43,7 @@ AddressMask       :
 AutoMetric        : True
 Cluster           : hcicluster
 Description       :
-Id                : c39b56cd-6c81-4557-bbe0-b85d17d343a6
+Id                : 00000000-0000-0000-0000-000000000001
 Ipv4Addresses     : {}
 Ipv4PrefixLengths : {}
 Ipv6Addresses     : {fde1:53ba:e9a0:de11::}
@@ -57,12 +57,12 @@ PS C:\> Get-ClusterNetwork | Where-Object {$_.State -eq "Partitioned"} | Get-Clu
 
 
 Adapter       : Remote NDIS Compatible Device #2
-AdapterId     : 7E31A928-04DB-4BFD-86B1-9DBBA427F827
+AdapterId     : 00000000-0000-0000-0000-000000000002
 Address       :
 Cluster       : hcicluster
 Description   :
 DhcpEnabled   : 1
-Id            : fd057638-22a0-427c-9bb7-22863f345f9b
+Id            : 00000000-0000-0000-0000-000000000003
 Ipv4Addresses : {}
 Ipv6Addresses : {fde1:53ba:e9a0:de11:8412:5aa4:b420:9ed9}
 Name          : hcihost01 - Ethernet
@@ -71,12 +71,12 @@ Node          : hcihost01
 State         : Unreachable
 
 Adapter       : Remote NDIS Compatible Device #2
-AdapterId     : 7A539A4A-1F41-4CE0-97CB-A8BA1046CE51
+AdapterId     : 00000000-0000-0000-0000-000000000004
 Address       :
 Cluster       : hcicluster
 Description   :
 DhcpEnabled   : 1
-Id            : bbe4f75a-b4c7-4138-83a3-bed4d5763ca2
+Id            : 00000000-0000-0000-0000-000000000005
 Ipv4Addresses : {}
 Ipv6Addresses : {fde1:53ba:e9a0:de11:4c94:1268:7602:c29b}
 Name          : hcihost02 - Ethernet

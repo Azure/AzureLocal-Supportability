@@ -119,14 +119,14 @@ Sample output:
 
 ```Powershell
     IP:port                      : 0.0.0.0:443
-    Certificate Hash             : 411fb4637cc223c876a300d26b814e086634c35c
+    Certificate Hash             : 0123456789abcdef0123456789abcdef01234567
     Application ID               : {28f7fb0f-eab3-4960-9693-9289ca768dea}
 ```
       
 Review the output and find section match for application ID `28f7fb0f-eab3-4960-9693-9289ca768dea` and ensure there is a certificate hash configured. Confirm if that is the right certificate:
 
 ```Powershell
-Get-ChildItem Cert:\LocalMachine\My\411FB4637CC223C876A300D26B814E086634C35C | fl *
+Get-ChildItem Cert:\LocalMachine\My\0123456789ABCDEF0123456789ABCDEF01234567 | fl *
 ```
 ### Mitigation Details
 
