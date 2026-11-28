@@ -41,7 +41,7 @@ If you start to prepare to install update A, but then opt to switch to installin
 3. You observe this issue with the pre-update tests failing as reported by `Get-SolutionUpdate`
 
 # Issue Validation
-The output of Get-SolutionUpdateEnvironment lists a failing HealthCheckResult entry similar to the following with 2 key details in AdditionalData property:
+The output of `Get-SolutionUpdateEnvironment -FullHealthCheckDetails` lists a failing HealthCheckResult entry similar to the following with 2 key details in AdditionalData property:
 - `SolutionExtension content failed integrity check`  errors for reasons other than the integrity check may be unrelated to this guide.
 - The path should failing integrity checks should contain `C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\CloudMedia\SBE\Installed\Content\`. Exceptions not containing `SBE\Installed\Content` in the path may be for other issues (not discussed in this guide).
 
@@ -111,7 +111,7 @@ If you have confirmed this is a case of scenario 3 you can use the following ste
    (e.g. `Get-SolutionUpdate -Id redmond/Solution12.2510.1002.83`)
    * The `HealthCheckResult` of that `Get-SolutionUpdate` matches the Issue Validation described above.
    For example:
-   `(Get-SolutionUpdate -Id redmond/Solution12.2510.1002.83).HealthCheckResult | ?{$_.Status -eq "FAILURE"}` contains the result that mentions both:
+   `(Get-SolutionUpdate -Id redmond/Solution12.2510.1002.83 -FullHealthCheckDetails).HealthCheckResult | ?{$_.Status -eq "FAILURE"}` contains the result that mentions both:
       * `SolutionExtension content failed integrity check in`
       * The path to the mentioned SolutionExtension directory includes `SBECache`.  For example, if the HealthCheckResult failure mentions a path like this (where x.xxxx.xx are replaced with a SBE version value) then this IS scenario 3:
       'C:\CloudContent\Microsoft_Reserved\Update\SBECache\4.x.xxxx.xx\Configuration\SolutionExtension'
@@ -123,7 +123,7 @@ If the path mentioned in the HealthCheckResult does NOT mention `SBECache` this 
 1. Run the script below on any cluster node to reset the environment variable to the default value on all nodes. Specify the normal AD deployment user (the LCM user as prompted during the cloud deployment process).
 
 ```Powershell
-[array]$failedHealthCheckUpdates = Get-SolutionUpdateEnvironment | ?{$_.State -eq "HealthCheckFailed"}
+[array]$failedHealthCheckUpdates = Get-SolutionUpdate -FullHealthCheckDetails | ?{$_.State -eq "HealthCheckFailed"}
 $scenario3Updates = @()
 foreach ($update in $failedHealthCheckUpdates) {
     $healthCheckResult = $update.HealthCheckResult
