@@ -2104,9 +2104,20 @@ $AcceptedOffStates = if (
 } else {
     @('Off')
 }
-if (@($CustomerVmState | Where-Object {
+$NotOffCustomerVms = @($CustomerVmState | Where-Object {
     "$($_.State)" -notin $AcceptedOffStates
-}).Count -gt 0) {
+})
+if ($NotOffCustomerVms.Count -gt 0) {
+    if (@($NotOffCustomerVms | Where-Object {
+        "$($_.State)" -eq 'OffCritical'
+    }).Count -gt 0) {
+        throw (
+            "At least one customer VM reads OffCritical, so Hyper-V cannot " +
+            "reach its configuration storage. Wait about 30 seconds and run " +
+            "this block again. If it stays OffCritical, check that its CSV " +
+            "is Online."
+        )
+    }
     throw "At least one customer VM is not Off. Stop and return to the workload owner."
 }
 
@@ -2255,6 +2266,18 @@ $AcceptedOffStates = if (
     @('Off', 'OffCritical')
 } else {
     @('Off')
+}
+if (
+    $ControlPlaneState.Count -eq 1 -and
+    "$($ControlPlaneState[0].State)" -eq 'OffCritical' -and
+    'OffCritical' -notin $AcceptedOffStates
+) {
+    throw (
+        "The appliance VM reads OffCritical, so Hyper-V cannot reach its " +
+        "configuration storage. Wait about 30 seconds and run this block " +
+        "again. If it stays OffCritical, check that the infrastructure CSV " +
+        "is Online."
+    )
 }
 if (
     $ControlPlaneState.Count -ne 1 -or
@@ -3638,7 +3661,7 @@ Stop on the first CSV that does not return online. Do not continue to workload s
 
 **Action type:** [READ-ONLY]
 
-Require all health conditions to remain continuously clean for at least five minutes. Restart the five-minute clock after any unhealthy sample. The block stops before it records anything if a helper it needs is not defined in the session; after a lost session, run the resume block first.
+Require all health conditions to remain continuously clean for at least five minutes. Restart the five-minute clock after any unhealthy sample. Right after a CSV comes back online, a stopped VM on it can read `OffCritical` (Hyper-V cannot reach its configuration storage yet) for about 30 seconds before it returns to `Off`; the hold keeps sampling through that, and if a VM is still `OffCritical` when the hold fails, check that its CSV is `Online` before you run the block again. The block stops before it records anything if a helper it needs is not defined in the session; after a lost session, run the resume block first.
 
 **Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
 
@@ -3755,6 +3778,7 @@ do {
             IsControlPlane = (
                 "$($Entry.GroupId)" -eq "$($ControlPlaneEntry.GroupId)"
             )
+            GroupName = "$($Entry.GroupName)"
             GroupState = "$($CurrentGroup[0].State)"
             VmState = "$($HyperV[0].State)"
         }
@@ -3824,6 +3848,20 @@ do {
         }).Count -eq 0
     )
 
+    # Right after a CSV comes back online, Get-VM can still report a stopped
+    # VM as OffCritical for about 30 seconds before it reads Off again.
+    $OffCriticalNow = @($VmStateNow | Where-Object {
+        -not $_.IsControlPlane -and $_.VmState -eq 'OffCritical'
+    })
+    if ($OffCriticalNow.Count -gt 0) {
+        Write-Warning (
+            "Hyper-V cannot reach the configuration storage of these stopped " +
+            "VMs yet, so they read OffCritical, not Off: " +
+            "$(@($OffCriticalNow | ForEach-Object { $_.GroupName }) -join ', '). " +
+            "The hold keeps sampling; this usually clears within about 30 seconds."
+        )
+    }
+
     if ($Healthy) {
         if ($null -eq $CleanSince) {
             $CleanSince = Get-Date
@@ -3841,6 +3879,15 @@ do {
 } while ((Get-Date) -lt $Deadline)
 
 if (-not $HoldPassed) {
+    if ($OffCriticalNow.Count -gt 0) {
+        throw (
+            "A stopped VM still read OffCritical at the last sample, so Hyper-V " +
+            "cannot reach its configuration storage: " +
+            "$(@($OffCriticalNow | ForEach-Object { $_.GroupName }) -join ', '). " +
+            "Check that its CSV is Online, then run this block again. Do not " +
+            "start customer workloads."
+        )
+    }
     throw "The platform did not maintain a continuous five-minute clean hold."
 }
 
@@ -3899,7 +3946,9 @@ The check verifies every recorded customer VM by its sealed VM ID against its se
 baseline state. A VM that was `Running` at the baseline must have a running clustered
 VM group and Hyper-V VM, and both the `Heartbeat` and `Shutdown` integration services
 must exist, be enabled, and report `OK`. A VM that was `Off` at the baseline must still
-be `Off` with an offline clustered VM group. The block verifies the sealed manifest hash
+be `Off` with an offline clustered VM group. If such a VM reads `OffCritical`, Hyper-V
+cannot reach its configuration storage yet; the check refuses and tells you to wait about
+30 seconds and run it again, and if the VM stays `OffCritical`, check that its CSV is `Online`. The block verifies the sealed manifest hash
 before it uses the baseline states.
 
 **Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
@@ -4031,6 +4080,18 @@ $BaselineStoppedVmState | Format-Table -AutoSize
 $BadBaselineStoppedVms = @($BaselineStoppedVmState | Where-Object {
     $_.GroupState -ne 'Offline' -or $_.VmState -ne 'Off'
 })
+$OffCriticalStoppedVms = @($BadBaselineStoppedVms | Where-Object {
+    $_.VmState -eq 'OffCritical'
+})
+if ($OffCriticalStoppedVms.Count -gt 0) {
+    throw (
+        "A VM that was Off at the baseline reads OffCritical, so Hyper-V " +
+        "cannot reach its configuration storage yet: " +
+        "$(@($OffCriticalStoppedVms | ForEach-Object { $_.GroupName }) -join ', '). " +
+        "Wait about 30 seconds and run this check again. If it stays " +
+        "OffCritical, check that its CSV is Online."
+    )
+}
 if (
     $VmIntegrationState.Count -ne ($BaselineRunningVmEntries.Count * 2) -or
     $BadVmIntegrationState.Count -gt 0 -or
@@ -5923,6 +5984,18 @@ $RollbackWorkloadsMayBeOnline = (
     } else {
         @('Offline|Off', 'Offline|OffCritical')
     }
+    $RollbackOffCriticalVms = @($RollbackCustomerVmState | Where-Object {
+        $_.VmState -eq 'OffCritical' -and
+        "$($_.GroupState)|$($_.VmState)" -notin $RollbackAllowedCustomerVmPairs
+    })
+    if ($RollbackOffCriticalVms.Count -gt 0) {
+        throw (
+            "At least one customer VM reads OffCritical, so Hyper-V cannot " +
+            "reach its configuration storage. Wait about 30 seconds and run " +
+            "this block again. If it stays OffCritical, check that its CSV " +
+            "is Online."
+        )
+    }
     $RollbackIntent = @(Get-NetIntent -ClusterName $Cluster.Name `
         -ErrorAction Stop | Where-Object {
             "$($_.IntentName)" -eq "$($StorageIntent.IntentName)"
@@ -6095,7 +6168,7 @@ After the rollback direction is persisted, complete the rollback steps in order.
 
 A rollback that starts after customer workloads were returned to the application owner must shut those VMs down again. There is no less disruptive path in this procedure. Rollback re-runs the same quiesce sequence as the forward change: every workload CSV and the clustered Storage Pool go offline, and every node changes transport together because a mixed-transport storage fabric is not supported. Every customer VM stores its configuration and virtual disks on those CSVs, so live migration or draining a node does not help: there is no node or volume left online to move the VM to. Saving VM state is not an alternative either, because saved-state files are also on the CSVs and this procedure rejects `Saved` VMs.
 
-If the rollback starts before workloads were returned to the application owner, the customer VMs are still stopped. The list in Part A then contains no VM to stop. Skip Parts B and C and go to Part D. From `TargetReadbackVerified` or `PoolOnline` every CSV is still offline, so Hyper-V reports a stopped VM whose configuration is on a CSV as `OffCritical` instead of `Off`. Part A, Part D, rollback step 2, and the point-of-no-return recheck accept `OffCritical` in that case. The storage hold and the workload startup check, which run after the CSVs are back online, still require `Off`.
+If the rollback starts before workloads were returned to the application owner, the customer VMs are still stopped. The list in Part A then contains no VM to stop. Skip Parts B and C and go to Part D. From `TargetReadbackVerified` or `PoolOnline` every CSV is still offline, so Hyper-V reports a stopped VM whose configuration is on a CSV as `OffCritical` instead of `Off`. Part A, Part D, rollback step 2, and the point-of-no-return recheck accept `OffCritical` in that case. The storage hold and the workload startup check, which run after the CSVs are back online, still require `Off`. Wherever a check requires `Off` and a VM reads `OffCritical`, the check refuses with a message to wait about 30 seconds and run the block again, because a stopped VM can read `OffCritical` for that long right after its CSV comes back online; if it stays `OffCritical`, check that its CSV is `Online`.
 
 > [!WARNING]
 > Part C shuts down running customer VMs. A shutdown interrupts every application in those VMs until the application owner starts them again after the rollback completes. Never stop a VM that is not on the reviewed and confirmed list, and never use `-TurnOff`, `-Force`, save state, or pause.
@@ -6204,6 +6277,16 @@ $UnexpectedVmStates = @($VmShutdownRows | Where-Object {
     $_.State -notin $ShutdownAllowedStates
 })
 if ($UnexpectedVmStates.Count -gt 0) {
+    if (@($UnexpectedVmStates | Where-Object {
+        $_.State -eq 'OffCritical'
+    }).Count -gt 0) {
+        throw (
+            "At least one customer VM reads OffCritical, so Hyper-V cannot " +
+            "reach its configuration storage. Wait about 30 seconds and run " +
+            "this block again. If it stays OffCritical, check that its CSV " +
+            "is Online."
+        )
+    }
     throw (
         "At least one customer VM is neither Running nor Off. Return it to " +
         "the workload owner. Do not force, save, or pause it."
