@@ -45,12 +45,83 @@ A table mapping rule names to rule GUIDs is also available [here](https://learn.
 
 ## Mitigation Details
 
-1. Modify the rule from block (value 1) to audit (value 2) to prevent it from blocking Azure Local Solution Update installer with this powershell command:
+The fix depends on your Azure Local version. To find it, run this command on any node and read the second number in `CurrentVersion` (for example, `2610` in a version that starts with `12.2610`). For more information, see [Verify the installation](https://learn.microsoft.com/azure/azure-local/update/update-via-powershell-23h2#step-8-verify-the-installation).
+
+```powershell
+Get-SolutionUpdateEnvironment | Format-Table State, CurrentVersion
+```
+
+- Version 2609 and earlier: follow [Version 2609 and earlier](#version-2609-and-earlier).
+- Version 2610 and later: follow [Version 2610 and later](#version-2610-and-later).
+
+### Version 2609 and earlier
+
+1. On every node in the cluster, modify the rule from block (value 1) to audit (value 2) to prevent it from blocking Azure Local Solution Update installer with this powershell command. The command changes only the node you run it on, and the CAU run installs updates on every node, so any node you skip still blocks the installer:
 
 ```
 Set-OSConfigDesiredConfiguration -Scenario Defender/Antivirus -Setting ASRBlockProcessCreationFromPSExecAndWMICommands -Value "2"
 ```
 2. There are other places that this rule can be enabled, such as [Group policy (GP)](https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction#group-policy "https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction#group-policy"), [Mobile Device Management (MDM)](https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction#mdm "https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction#mdm"), and [Microsoft Configuration Manager](https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction#microsoft-configuration-manager "https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction#microsoft-configuration-manager").  You may need to explore these configurations and modify the rule there as well to avoid them overwriting the Azure Local security baseline setting configured in step 1.
+
+### Version 2610 and later
+
+Starting with version 2610, this rule is one of the [settings you can't customize](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-baseline#settings-you-cant-customize). `Set-AzsSecurity` rejects a new value for it, and changing it any other way, including with `Set-OSConfigDesiredConfiguration`, Group Policy or the registry, isn't supported. The baseline value is Audit (value 2), so a node that has the rule in Block mode got that value from a source outside Azure Local, such as Group Policy, Mobile Device Management (MDM), Microsoft Defender for Endpoint or Microsoft Configuration Manager.
+
+1. Check the effective value of the rule on every node. Run this from one node. It only reads settings:
+
+```powershell
+$ruleId = 'd1e49aac-8f56-4280-b9ba-993a6d77406c'
+$nodes = (Get-ClusterNode).Name
+Invoke-Command -ComputerName $nodes -ArgumentList $ruleId -ScriptBlock {
+    param($ruleId)
+    $pref = Get-MpPreference -ErrorAction Stop
+    $ids = @($pref.AttackSurfaceReductionRules_Ids)
+    $actions = @($pref.AttackSurfaceReductionRules_Actions)
+    $action = 'Not configured'
+    for ($i = 0; $i -lt $ids.Count; $i++) {
+        if ($ids[$i] -eq $ruleId) {
+            switch ([int]$actions[$i]) {
+                0 { $action = 'Disabled (0)' }
+                1 { $action = 'Block (1)' }
+                2 { $action = 'Audit (2)' }
+                6 { $action = 'Warn (6)' }
+                default { $action = "Other ($($actions[$i]))" }
+            }
+        }
+    }
+    [pscustomobject]@{ Node = $env:COMPUTERNAME; RuleAction = $action }
+} | Select-Object Node, RuleAction
+```
+
+2. For each node that shows `Block (1)`, remove the Block setting for this rule at the source that sets it: [Group policy (GP)](https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction#group-policy), [Mobile Device Management (MDM)](https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction#mdm), Microsoft Defender for Endpoint security settings management, or [Microsoft Configuration Manager](https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction#microsoft-configuration-manager). If you skip this step, that source applies Block again.
+
+    That source is usually a policy that also applies to other devices, so don't remove Block from the policy itself. Agree the change with the owner of the policy, record its current setting for this rule and its assignments, and then change it only for the Azure Local nodes: exclude the nodes from the assignment that sets Block, or assign the nodes a policy that sets this rule to Audit or Not configured.
+
+    **Changes:** Stops that source from setting this rule to Block on the Azure Local nodes. The rule keeps its current value on the nodes until step 3, and the policy doesn't change for any other device.
+
+    **Plan for:** The policy owner's agreement, and the time the policy takes to reach the nodes, for example the next Group Policy refresh or `gpupdate /force` on each node.
+
+> [!WARNING]
+> Together with step 3, this stops Defender from blocking process creation from PSExec and WMI commands on the Azure Local nodes; it logs it instead.
+
+If the change reaches devices other than the Azure Local nodes, put back the setting and assignments you recorded for those devices. Don't put Block back on the Azure Local nodes: on version 2610 and later it isn't a supported value for this rule, and it blocks the update installer again.
+
+3. Return the rule to its baseline value on every node. Run this on one node. The cmdlet asks you to confirm before it changes anything. For more information, see [Reset a setting to its baseline value](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-baseline#reset-a-setting-to-its-baseline-value).
+
+    **Changes:** Sets the rule back to the Azure Local baseline value, Audit (value 2), on every node and removes any recorded cluster customization for this rule. It does not change any other security setting, and it does not change the Group Policy, MDM or Configuration Manager source from step 2.
+
+    **Plan for:** Your security team's agreement, because the rule stops blocking on every node.
+
+> [!WARNING]
+> After this step, Defender logs process creation from PSExec and WMI commands on every node instead of blocking it. On version 2610 and later this can't be undone with a supported method: Audit is the baseline value for this setting, and Block isn't supported.
+
+```powershell
+Set-AzsSecurity -Type DefenderAntivirus -SettingName "ASRBlockProcessCreationFromPSExecAndWMICommands" -Default -Cluster
+```
+
+If the cmdlet returns an error, or step 4 still shows `Block (1)` on a node, stop and don't resume the update. A node that still shows Block is usually still in scope of the source from step 2, so check that source again. If the source no longer applies to the node and it still shows Block, contact Microsoft Support with the output of step 1.
+
+4. Run the command from step 1 again and confirm that every node shows `Audit (2)`. In Audit mode Defender logs event ID 1122 instead of blocking, so new event ID 1121 entries for rule ID D1E49AAC-8F56-4280-B9BA-993A6D77406C should stop. Then [resume the update](https://learn.microsoft.com/azure/azure-local/update/update-via-powershell-23h2#step-7-resume-the-update-if-needed).
 
 ### **Additional Notes**
 More background information on Defender attack surface reduction rules is available [here](https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction "https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction"):
