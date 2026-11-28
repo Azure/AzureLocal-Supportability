@@ -50,19 +50,19 @@ foreach ($node in $nodes) {
             $dotnet = Join-Path $env:ProgramW6432 'dotnet\dotnet.exe'
             $dotnet_exists = Test-Path -LiteralPath $dotnet -PathType Leaf
             if (!$dotnet_exists) {
-                Write-Output "dotnet.exe is missing; issue detected on $env:COMPUTERNAME."
+                Write-Host "dotnet.exe is missing; issue detected on $env:COMPUTERNAME."
                 $foundIssue = $true
             }
 
             $runtimes = @(& $dotnet --list-runtimes)
             if ($dotnet_exists -and -not ($runtimes -match '\s10\.0\.')) {
-                Write-Output "Required .NET 10 runtime is missing; issue detected on $env:COMPUTERNAME."
+                Write-Host "Required .NET 10 runtime is missing; issue detected on $env:COMPUTERNAME."
                 $foundIssue = $true
             }
 
             $service = Get-Service -Name 'ECEAgent'
             if ($service.Status -ne 'Running') {
-                Write-Output "ECEAgent is $($service.Status) on $env:COMPUTERNAME; node could be impacted."
+                Write-Host "ECEAgent is $($service.Status) on $env:COMPUTERNAME; node could be impacted."
                 $foundIssue = $true
             }
 
