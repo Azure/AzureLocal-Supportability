@@ -3599,12 +3599,22 @@ Stop on the first CSV that does not return online. Do not continue to workload s
 
 **Action type:** [READ-ONLY]
 
-Require all health conditions to remain continuously clean for at least five minutes. Restart the five-minute clock after any unhealthy sample.
+Require all health conditions to remain continuously clean for at least five minutes. Restart the five-minute clock after any unhealthy sample. The block stops before it records anything if a helper it needs is not defined in the session; after a lost session, run the resume block first.
 
 **Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
 
 ```powershell
 & {
+foreach ($RequiredHelper in @(
+    'Get-VerifiedSealedCsv',
+    'Assert-IntentStatusCoverage',
+    'Set-ChangePhase'
+)) {
+    if (-not (Get-Command -Name $RequiredHelper -ErrorAction SilentlyContinue)) {
+        throw "'$RequiredHelper' is not defined. Run the resume block first in this session."
+    }
+}
+
 $CleanSince = $null
 $HoldPassed = $false
 $Deadline = (Get-Date).AddMinutes(30)
@@ -4018,12 +4028,20 @@ any startup or health failure remains.
 
 Static adapter state and `Get-SmbMultichannelConnection` alone do not prove that the recovered storage workload is actively using the persisted desired transport. Use an approved representative workload, then combine all of the following:
 
-Before starting representative load, seal the beginning of the active-validation window.
+Before starting representative load, seal the beginning of the active-validation window. The block stops before it records anything if `Set-ChangePhase` is not defined in the session; after a lost session, run the resume block first.
 
 **Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
 
 ```powershell
 & {
+foreach ($RequiredHelper in @(
+    'Set-ChangePhase'
+)) {
+    if (-not (Get-Command -Name $RequiredHelper -ErrorAction SilentlyContinue)) {
+        throw "'$RequiredHelper' is not defined. Run the resume block first in this session."
+    }
+}
+
 $ActiveValidationStartUtcPath = Join-Path $EvidenceRoot `
     "active-validation-$Operation-start-utc.txt"
 $CurrentPhaseState = Get-Content -LiteralPath (
