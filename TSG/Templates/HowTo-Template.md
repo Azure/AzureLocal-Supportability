@@ -229,7 +229,7 @@ Every generated action must complete each row. Read-only diagnostics need no imp
 | --- | --- |
 | Action type | {Use read-only for diagnostics or information gathering. Use state-changing when the action modifies configuration, data, resources, firmware, or workload state.} |
 | What changes | {Required only when action type is state-changing. Write a `**Changes:**` statement that says what changes and what is not affected. For read-only actions, write "This step changes nothing."} |
-| Plan for | {Required only for disruptive actions. State what to arrange first, such as a drain, maintenance window, or recovery keys. Add a `> [!WARNING]` callout when the action can't be undone, can interrupt running workloads, changes firmware or security posture, or can lose data.} |
+| Plan for | {Required only for disruptive actions. State what to arrange first, such as a drain, maintenance window, or recovery keys. When the action can't be undone, can interrupt running workloads, changes firmware or security posture, or can lose data, put a `> [!WARNING]` callout on its own lines in the procedure step, not in this cell, because a table cell can't show it.} |
 | Privilege required | {Least-privilege role, RBAC assignment, local right, or tool access required for this action.} |
 | Workload impact | {State whether the action affects VM uptime, app traffic, live migration, storage paths, networking, security posture, or update flow.} |
 | Drain or maintenance approval | {State whether VM drain, node pause, reboot, maintenance window, or customer approval is required.} |
