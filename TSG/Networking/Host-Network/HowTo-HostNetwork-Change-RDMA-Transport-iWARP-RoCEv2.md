@@ -2087,7 +2087,26 @@ $CustomerVmState = @(foreach ($Entry in $CustomerVms) {
 })
 $CustomerVmState | Format-Table -AutoSize
 
-if (@($CustomerVmState | Where-Object State -ne 'Off').Count -gt 0) {
+# A rollback from TargetReadbackVerified or PoolOnline starts with every
+# CSV offline. Get-VM then reports a stopped VM whose configuration is on
+# a CSV as OffCritical, so accept that state only in that rollback.
+$OffStatePhase = Get-Content -LiteralPath (
+    Join-Path $EvidenceRoot 'phase-state.json'
+) -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+$AcceptedOffStates = if (
+    "$($OffStatePhase.Operation)" -eq 'Rollback' -and
+    "$($OffStatePhase.RollbackOriginPhase)" -in @(
+        'TargetReadbackVerified',
+        'PoolOnline'
+    )
+) {
+    @('Off', 'OffCritical')
+} else {
+    @('Off')
+}
+if (@($CustomerVmState | Where-Object {
+    "$($_.State)" -notin $AcceptedOffStates
+}).Count -gt 0) {
     throw "At least one customer VM is not Off. Stop and return to the workload owner."
 }
 
@@ -2153,7 +2172,7 @@ try {
         -ArgumentList "$($ControlPlaneEntry.VmId)" -ScriptBlock {
             param($VmId)
             $Vm = Get-VM -Id ([guid]$VmId) -ErrorAction Stop
-            if ($Vm.State -ne 'Off') {
+            if ("$($Vm.State)" -notin @('Off', 'OffCritical')) {
                 # Without -TurnOff, -Save, or -Force, Stop-VM requests guest OS shutdown.
                 Stop-VM -VM $Vm -ErrorAction Stop
             }
@@ -2220,10 +2239,27 @@ $ControlPlaneState = @(Invoke-Command `
     } -ErrorAction Stop)
 $ControlPlaneState | Format-Table -AutoSize
 
+# A rollback from TargetReadbackVerified or PoolOnline starts with every
+# CSV offline. Get-VM then reports a stopped VM whose configuration is on
+# a CSV as OffCritical, so accept that state only in that rollback.
+$OffStatePhase = Get-Content -LiteralPath (
+    Join-Path $EvidenceRoot 'phase-state.json'
+) -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+$AcceptedOffStates = if (
+    "$($OffStatePhase.Operation)" -eq 'Rollback' -and
+    "$($OffStatePhase.RollbackOriginPhase)" -in @(
+        'TargetReadbackVerified',
+        'PoolOnline'
+    )
+) {
+    @('Off', 'OffCritical')
+} else {
+    @('Off')
+}
 if (
     $ControlPlaneState.Count -ne 1 -or
     "$($ControlPlaneState[0].VMId)" -ne "$($ControlPlaneEntry.VmId)" -or
-    "$($ControlPlaneState[0].State)" -ne 'Off'
+    "$($ControlPlaneState[0].State)" -notin $AcceptedOffStates
 ) {
     throw "The appliance VM is not Off."
 }
@@ -2694,7 +2730,7 @@ if (
 }
 ```
 
-Then submit the change. The submit block refuses to run unless the recorded approval matches the current checkpoint, operation, desired transport, and sealed manifest hash. Its final health check accepts only `Microsoft.Health.FaultType.VirtualDisks.Detached` faults on the sealed CSV volumes and virtual disks, which the Health Service raises because this procedure took those CSVs offline; any other health fault blocks the submission. Before it submits, it records the storage intent's `ResourceContentVersion`, so that the convergence wait can prove every node applied the new version.
+Then submit the change. The submit block refuses to run unless the recorded approval matches the current checkpoint, operation, desired transport, and sealed manifest hash. Its final health check accepts only `Microsoft.Health.FaultType.VirtualDisks.Detached` faults on the sealed CSV volumes and virtual disks, which the Health Service raises because this procedure took those CSVs offline; any other health fault blocks the submission. For the same reason it accepts a sealed VM that reads `OffCritical` as well as `Off`: with every CSV offline, Hyper-V reports a stopped VM whose configuration is on a CSV as `OffCritical`. Before it submits, it records the storage intent's `ResourceContentVersion`, so that the convergence wait can prove every node applied the new version.
 
 ```powershell
 $SubmissionState = Get-Content -LiteralPath (
@@ -2986,8 +3022,11 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
         @($PointOfNoReturnVmIdentityPairs | Where-Object {
             $_ -notin $ExpectedVmIdentityPairs
         }).Count -gt 0 -or
-        @($PointOfNoReturnVmState |
-            Where-Object State -ne 'Off').Count -gt 0 -or
+        # Every CSV is offline here, so a stopped VM whose configuration is
+        # on a CSV reads OffCritical rather than Off.
+        @($PointOfNoReturnVmState | Where-Object {
+            "$($_.State)" -notin @('Off', 'OffCritical')
+        }).Count -gt 0 -or
         $PointOfNoReturnAdapters.Count -ne `
             $PointOfNoReturnExpectedAdapterPairs.Count -or
         @($PointOfNoReturnExpectedAdapterPairs | Where-Object {
@@ -5824,10 +5863,12 @@ $RollbackWorkloadsMayBeOnline = (
     } else {
         'Offline'
     }
-    $RollbackExpectedVmState = if ($RollbackPlatformShouldBeOnline) {
-        'Running'
+    # With every CSV offline, a stopped VM whose configuration is on a CSV
+    # reads OffCritical rather than Off.
+    $RollbackExpectedVmStates = if ($RollbackPlatformShouldBeOnline) {
+        @('Running')
     } else {
-        'Off'
+        @('Off', 'OffCritical')
     }
     $RollbackVmGroups = @(Get-ClusterGroup -ErrorAction Stop |
         Where-Object { "$($_.GroupType)" -eq 'VirtualMachine' })
@@ -5877,8 +5918,10 @@ $RollbackWorkloadsMayBeOnline = (
     )
     $RollbackAllowedCustomerVmPairs = if ($RollbackWorkloadsMayBeOnline) {
         @('Online|Running', 'Offline|Off')
-    } else {
+    } elseif ($RollbackCsvsShouldBeOnline) {
         @('Offline|Off')
+    } else {
+        @('Offline|Off', 'Offline|OffCritical')
     }
     $RollbackIntent = @(Get-NetIntent -ClusterName $Cluster.Name `
         -ErrorAction Stop | Where-Object {
@@ -5940,8 +5983,8 @@ $RollbackWorkloadsMayBeOnline = (
         $RollbackControlPlaneVm.Count -ne 1 -or
         "$($RollbackControlPlaneGroup[0].State)" -ne `
             $RollbackExpectedPlatformState -or
-        "$($RollbackControlPlaneVm[0].State)" -ne `
-            $RollbackExpectedVmState -or
+        "$($RollbackControlPlaneVm[0].State)" -notin `
+            $RollbackExpectedVmStates -or
         $RollbackVmIdentityPairs.Count -ne $ExpectedVmIdentityPairs.Count -or
         @($ExpectedVmIdentityPairs | Where-Object {
             $_ -notin $RollbackVmIdentityPairs
@@ -6052,7 +6095,7 @@ After the rollback direction is persisted, complete the rollback steps in order.
 
 A rollback that starts after customer workloads were returned to the application owner must shut those VMs down again. There is no less disruptive path in this procedure. Rollback re-runs the same quiesce sequence as the forward change: every workload CSV and the clustered Storage Pool go offline, and every node changes transport together because a mixed-transport storage fabric is not supported. Every customer VM stores its configuration and virtual disks on those CSVs, so live migration or draining a node does not help: there is no node or volume left online to move the VM to. Saving VM state is not an alternative either, because saved-state files are also on the CSVs and this procedure rejects `Saved` VMs.
 
-If the rollback starts before workloads were returned to the application owner, the customer VMs are still `Off`. The list in Part A then contains no VM to stop. Skip Parts B and C and go to Part D.
+If the rollback starts before workloads were returned to the application owner, the customer VMs are still stopped. The list in Part A then contains no VM to stop. Skip Parts B and C and go to Part D. From `TargetReadbackVerified` or `PoolOnline` every CSV is still offline, so Hyper-V reports a stopped VM whose configuration is on a CSV as `OffCritical` instead of `Off`. Part A, Part D, rollback step 2, and the point-of-no-return recheck accept `OffCritical` in that case. The storage hold and the workload startup check, which run after the CSVs are back online, still require `Off`.
 
 > [!WARNING]
 > Part C shuts down running customer VMs. A shutdown interrupts every application in those VMs until the application owner starts them again after the rollback completes. Never stop a VM that is not on the reviewed and confirmed list, and never use `-TurnOff`, `-Force`, save state, or pause.
@@ -6145,8 +6188,20 @@ $VmShutdownRows = @(foreach ($Entry in @($ResourceManifest.ClusteredVms |
 })
 $VmShutdownRows | Format-Table VmName, Host, State, WillStop, VmId -AutoSize
 
+# From TargetReadbackVerified or PoolOnline every CSV is still offline, and
+# a stopped VM whose configuration is on a CSV reads OffCritical.
+$ShutdownAllowedStates = if (
+    "$($ShutdownPhaseState.RollbackOriginPhase)" -in @(
+        'TargetReadbackVerified',
+        'PoolOnline'
+    )
+) {
+    @('Running', 'Off', 'OffCritical')
+} else {
+    @('Running', 'Off')
+}
 $UnexpectedVmStates = @($VmShutdownRows | Where-Object {
-    $_.State -notin @('Running', 'Off')
+    $_.State -notin $ShutdownAllowedStates
 })
 if ($UnexpectedVmStates.Count -gt 0) {
     throw (
@@ -6352,7 +6407,7 @@ foreach ($Listed in $ListedVms) {
                 Select-Object VMId, Name,
                     @{ Name = 'State'; Expression = { "$($_.State)" } }
         } -ErrorAction Stop)
-    $ExpectedState = if ($Listed.WillStop) { 'Running' } else { 'Off' }
+    $ExpectedState = if ($Listed.WillStop) { 'Running' } else { "$($Listed.State)" }
     if (
         $Current.Count -ne 1 -or
         "$($Current[0].VMId)" -ne "$($Listed.VmId)" -or
@@ -6406,7 +6461,7 @@ Retry behavior: do not re-run Part C after a failure. Re-read VM state with Part
 
 #### Part D: Verify every customer VM is Off and persist `WorkloadsOff`
 
-Run the verification block in [Step 1: Gracefully shut down customer VMs](#step-1-gracefully-shut-down-customer-vms). It confirms that every customer VM is `Off` and persists `WorkloadsOff` for the rollback.
+Run the verification block in [Step 1: Gracefully shut down customer VMs](#step-1-gracefully-shut-down-customer-vms). It confirms that every customer VM is `Off`, or `OffCritical` when the rollback started from `TargetReadbackVerified` or `PoolOnline`, and persists `WorkloadsOff` for the rollback.
 
 ### Rollback step 2: Complete the rollback sequence
 
