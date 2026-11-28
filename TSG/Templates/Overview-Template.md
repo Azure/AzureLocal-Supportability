@@ -130,7 +130,7 @@ Overview articles should avoid step-by-step repair flows. If an example action i
 
 | Field | Required prompt |
 | ----- | --------------- |
-| **What changes** | {Write a `**Changes:**` statement that says what changes and what is not affected. Add `**Plan for:**` for disruptive steps and a `> [!WARNING]` callout for steps that can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data.} |
+| **What changes** | {Write a `**Changes:**` statement that says what changes and what is not affected. Add `**Plan for:**` for disruptive steps. A table cell can't show a `> [!WARNING]` callout, so for steps that can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data, put the callout on its own lines above this table, followed by a blank line, and name the step in it.} |
 | **Privilege and approval gate** | {State the minimum role, local admin right, RBAC assignment, vendor approval, or change-control approval required before the action.} |
 | **Pre-check** | {Condition that must be true before the action is safe. Include health, backup, recovery-key, and ownership checks where applicable.} |
 | **Workload or maintenance gate** | {State the required maintenance window, workload-drain state, customer approval, or confirmation that the example has no workload effect.} |

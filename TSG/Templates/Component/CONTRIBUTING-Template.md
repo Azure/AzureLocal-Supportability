@@ -121,8 +121,8 @@ All contributed commands, scripts, portal actions, and configuration changes mus
 
 - Read-only steps: diagnostics, status checks, link checks, or metadata checks that do not change state. Do not add a label. Optionally write "This step changes nothing."
 - State-changing steps: add a `**Changes:**` line that says what changes and what is not affected, for example "**Changes:** removes the extra module folder. Running VMs are not affected."
-- Disruptive steps: service restarts, cache cleanup, firewall updates, drains, or changes that may briefly affect manageability or need a maintenance window. Also add a `**Plan for:**` line, for example "**Plan for:** drain the machine and schedule a maintenance window."
-- Steps that can't be undone or can interrupt running workloads: node reboot, firmware change, BitLocker or Secure Boot change, storage repair, cluster quorum change, destructive cleanup, or any step that can lose data. Also add a `> [!WARNING]` callout that states the consequence, for example "This can't be undone." or "Running VMs stop if the machine is not drained first." You can also label these steps `[HIGH RISK]`.
+- Disruptive steps: service restarts, cache cleanup, drains, or changes that may briefly affect manageability or need a maintenance window. Also add a `**Plan for:**` line, for example "**Plan for:** drain the machine and schedule a maintenance window."
+- Steps that can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data: node reboot, firmware change, BitLocker or Secure Boot change, firewall rule change, role-based access control (RBAC) assignment change, certificate change, storage repair, cluster quorum change, destructive cleanup, or any step that can lose data. Also add a `> [!WARNING]` callout that states the consequence, for example "This can't be undone." or "Running VMs stop if the machine is not drained first." You can also label these steps `[HIGH RISK]`.
 - Do not add `[LOW RISK]`, `[MEDIUM RISK]`, or `[READ-ONLY]` labels.
 
 Every action pattern in a contributed article must include these fields:

@@ -191,7 +191,7 @@ Classify the action type first. Read-only inspection or validation needs no labe
 | Field | Required content |
 | ----- | ---------------- |
 | Action type | {Read-only for non-mutating actions, otherwise state-changing} |
-| What changes | {"This step changes nothing." for read-only actions, otherwise a `**Changes:**` statement, plus `**Plan for:**` or a `> [!WARNING]` callout when needed} |
+| What changes | {"This step changes nothing." for read-only actions, otherwise a `**Changes:**` statement, plus `**Plan for:**` when the action is disruptive. A table cell can't show a `> [!WARNING]` callout, so put any callout on its own lines above this table, followed by a blank line, and name the step in it} |
 | Privilege required | {None, local administrator, Azure role, OEM access, or other privilege} |
 | State-changing | {Yes or no} |
 | Workload impact | {Expected VM, cluster, network, storage, update, security, drain, reboot, live migration, or application-availability impact} |
@@ -246,7 +246,7 @@ Every generated action pattern must include all rows below. If a row does not ap
 | Pattern element | Author prompt |
 | --------------- | ------------- |
 | Action type | {Read-only for non-mutating actions, otherwise state-changing} |
-| What changes | {"This step changes nothing." for read-only actions, otherwise a `**Changes:**` statement, plus `**Plan for:**` or a `> [!WARNING]` callout when needed} |
+| What changes | {"This step changes nothing." for read-only actions, otherwise a `**Changes:**` statement, plus `**Plan for:**` when the action is disruptive. A table cell can't show a `> [!WARNING]` callout, so put any callout on its own lines above this table, followed by a blank line, and name the step in it} |
 | Privilege required | {None, local administrator, Azure role, OEM access, or other privilege} |
 | Workload impact | {Expected VM, cluster, network, storage, update, security, drain, reboot, live migration, or application-availability impact} |
 | Maintenance window or approval gate | {Required, recommended, not required, or not applicable, plus the approval owner when required} |
@@ -289,7 +289,7 @@ Every generated action pattern must include all rows below. If a row does not ap
 | Field | Value |
 | ----- | ----- |
 | Action type | {Read-only for non-mutating examples, otherwise state-changing} |
-| What changes | {"This step changes nothing." for read-only actions, otherwise a `**Changes:**` statement, plus `**Plan for:**` or a `> [!WARNING]` callout when needed} |
+| What changes | {"This step changes nothing." for read-only actions, otherwise a `**Changes:**` statement, plus `**Plan for:**` when the action is disruptive. A table cell can't show a `> [!WARNING]` callout, so put any callout on its own lines above this table, followed by a blank line, and name the step in it} |
 | Pre-check | {Pre-check command or inspection} |
 | Action | {Configuration command or portal action} |
 | Expected result or output | {Exact expected result} |
@@ -326,7 +326,7 @@ Every generated action pattern must include all rows below. If a row does not ap
 | Field | Required content |
 | ----- | ---------------- |
 | Action type | {Read-only for non-mutating validation, otherwise state-changing} |
-| What changes | {"This step changes nothing." for read-only actions, otherwise a `**Changes:**` statement, plus `**Plan for:**` or a `> [!WARNING]` callout when needed} |
+| What changes | {"This step changes nothing." for read-only actions, otherwise a `**Changes:**` statement, plus `**Plan for:**` when the action is disruptive. A table cell can't show a `> [!WARNING]` callout, so put any callout on its own lines above this table, followed by a blank line, and name the step in it} |
 | Privilege required | {None, local administrator, Azure role, OEM access, or other privilege} |
 | Workload impact | {Expected VM, cluster, network, storage, update, security, drain, reboot, live migration, or application-availability impact} |
 | Maintenance window or approval gate | {Required, recommended, not required, or not applicable, plus the approval owner when required} |
