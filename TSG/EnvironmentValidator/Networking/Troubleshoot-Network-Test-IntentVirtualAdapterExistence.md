@@ -239,7 +239,8 @@ Ensure the adapter is connected to the virtual switch:
 
 ```powershell
 # Check VMNetworkAdapter connection
-Get-VMNetworkAdapter -ManagementOS -Name "vManagement(ManagementIntent)"
+$vmAdapter = Get-VMNetworkAdapter -ManagementOS -Name "vManagement(ManagementIntent)"
+$vmAdapter
 
 # Check virtual switch status
 Get-VMSwitch -Name $vmAdapter.SwitchName
