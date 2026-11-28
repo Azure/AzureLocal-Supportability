@@ -171,6 +171,8 @@ This read-only block lists the Windows Firewall settings on the node that can bl
 # Read-only: list Windows Firewall settings on this node that can block the check
 & {
     $ErrorActionPreference = 'Stop'
+    # Firewall cmdlets do not see the preference above, so make their errors stop the block too
+    $PSDefaultParameterValues = @{ '*-NetFirewall*:ErrorAction' = 'Stop' }
     try {
         $rules = @()
         $Endpoint = 'internetbeacon.msedge.net'
@@ -265,6 +267,8 @@ Paste and run the whole block at once. It stops at the first error, and it chang
 # Disable local outbound block rules whose only scope is internetbeacon.msedge.net on TCP 80 or 443
 & {
     $ErrorActionPreference = 'Stop'
+    # Firewall cmdlets do not see the preference above, so make their errors stop the block too
+    $PSDefaultParameterValues = @{ '*-NetFirewall*:ErrorAction' = 'Stop' }
     $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         'This session is not elevated, so nothing was changed. Open PowerShell with Run as administrator, then run this block again.'
