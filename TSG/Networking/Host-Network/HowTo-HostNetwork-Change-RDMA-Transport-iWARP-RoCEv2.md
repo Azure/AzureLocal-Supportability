@@ -1743,6 +1743,148 @@ function Set-ChangePhase {
     }
 }
 
+function Get-VerifiedSealedCsv {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        $CsvRecord,
+
+        [switch]$RequireOnlineMetadata
+    )
+
+    $EscapedName = "$($CsvRecord.Name)".Replace("'", "''")
+    $CimMatches = @(Get-CimInstance -Namespace root/MSCluster `
+        -ClassName MSCluster_Resource -Filter "Name='$EscapedName'" `
+        -ErrorAction Stop |
+        Where-Object {
+            "$($_.Id)" -eq "$($CsvRecord.CimId)" -and
+            "$($_.Type)" -eq "$($CsvRecord.CimType)" -and
+            "$($_.OwnerGroup)" -eq "$($CsvRecord.CimOwnerGroup)"
+        })
+    $CsvMatches = @(Get-ClusterSharedVolume -Name "$($CsvRecord.Name)" `
+        -ErrorAction Stop)
+    if ($CimMatches.Count -ne 1 -or $CsvMatches.Count -ne 1) {
+        throw "The sealed CSV identity '$($CsvRecord.Name)' no longer resolves uniquely."
+    }
+
+    if ($RequireOnlineMetadata) {
+        if ("$($CsvMatches[0].State)" -ne 'Online') {
+            throw "CSV '$($CsvRecord.Name)' must be Online for metadata verification."
+        }
+        $Info = @($CsvMatches[0].SharedVolumeInfo)
+        if ($Info.Count -ne 1) {
+            throw "CSV '$($CsvRecord.Name)' has ambiguous shared-volume information."
+        }
+        $PartitionName = "$($Info[0].Partition.Name)"
+        $FriendlyVolumeName = "$($Info[0].FriendlyVolumeName)"
+        $VolumeLeaf = Split-Path -Path $FriendlyVolumeName -Leaf
+        if ([string]::IsNullOrWhiteSpace($VolumeLeaf)) {
+            throw "CSV '$($CsvRecord.Name)' has no usable volume leaf name."
+        }
+        $VirtualDisks = @(Get-VirtualDisk -FriendlyName $VolumeLeaf `
+            -ErrorAction Stop)
+        if ($VirtualDisks.Count -ne 1) {
+            throw "CSV '$($CsvRecord.Name)' no longer maps to one virtual disk."
+        }
+        if (
+            $FriendlyVolumeName -ine "$($CsvRecord.FriendlyVolumeName)" -or
+            $PartitionName -ine "$($CsvRecord.PartitionName)" -or
+            "$($VirtualDisks[0].UniqueId)" -ne "$($CsvRecord.VirtualDiskUniqueId)"
+        ) {
+            throw (
+                "CSV '$($CsvRecord.Name)' no longer matches its sealed mount " +
+                "path, partition, or virtual-disk identity."
+            )
+        }
+    }
+
+    [pscustomobject]@{
+        Csv = $CsvMatches[0]
+        Cim = $CimMatches[0]
+    }
+}
+
+function Assert-AdapterOverrideReadback {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object]$LiveOverride,
+
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$SealedOverrides,
+
+        [Parameter(Mandatory)]
+        [int]$ExpectedTransportValue,
+
+        # Pre-submission forward check only: the sealed intent may leave the
+        # transport at its default, so the live override may also omit it.
+        [switch]$AllowUnsetTransport
+    )
+
+    $DefaultOverride = New-NetIntentAdapterPropertyOverrides
+    $ExpectedOverrides = [ordered]@{}
+    foreach ($Property in $SealedOverrides.GetEnumerator()) {
+        if ($Property.Key -in @(
+            'InstanceId',
+            'ObjectVersion',
+            'NetworkDirectTechnology'
+        )) {
+            continue
+        }
+        $ExpectedOverrides[$Property.Key] = $Property.Value
+    }
+    $ExpectedOverrides.NetworkDirectTechnology = $ExpectedTransportValue
+
+    $ActualOverrides = [ordered]@{}
+    foreach ($Property in @($LiveOverride.PSObject.Properties |
+        Sort-Object Name)) {
+        if ($Property.Name -in @('InstanceId', 'ObjectVersion')) {
+            continue
+        }
+        $DefaultProperty = $DefaultOverride.PSObject.Properties[$Property.Name]
+        if ($null -eq $DefaultProperty) {
+            throw (
+                "Live override property '$($Property.Name)' cannot be " +
+                "represented by New-NetIntentAdapterPropertyOverrides on " +
+                "this node."
+            )
+        }
+        $ActualJson = $Property.Value |
+            ConvertTo-Json -Depth 8 -Compress
+        $DefaultJson = $DefaultProperty.Value |
+            ConvertTo-Json -Depth 8 -Compress
+        if ($ActualJson -ne $DefaultJson) {
+            $ActualOverrides[$Property.Name] = $Property.Value
+        }
+    }
+    if (
+        $AllowUnsetTransport -and
+        -not $SealedOverrides.Contains('NetworkDirectTechnology') -and
+        -not $ActualOverrides.Contains('NetworkDirectTechnology')
+    ) {
+        $ExpectedOverrides.Remove('NetworkDirectTechnology')
+    }
+
+    $ExpectedKeys = @($ExpectedOverrides.Keys | Sort-Object)
+    $ActualKeys = @($ActualOverrides.Keys | Sort-Object)
+    if (
+        $ExpectedKeys.Count -ne $ActualKeys.Count -or
+        @($ExpectedKeys | Where-Object { $_ -notin $ActualKeys }).Count -gt 0 -or
+        @($ActualKeys | Where-Object { $_ -notin $ExpectedKeys }).Count -gt 0
+    ) {
+        throw "The live explicit adapter-override property set changed."
+    }
+    foreach ($Key in $ExpectedKeys) {
+        $ExpectedJson = $ExpectedOverrides[$Key] |
+            ConvertTo-Json -Depth 8 -Compress
+        $ActualJson = $ActualOverrides[$Key] |
+            ConvertTo-Json -Depth 8 -Compress
+        if ($ExpectedJson -ne $ActualJson) {
+            throw "The live adapter override '$Key' does not match the sealed value."
+        }
+    }
+}
+
 $PhaseState | Format-List *
 }
 finally {
@@ -1752,7 +1894,7 @@ finally {
 
 Re-run only the read-only verification for the next phase. The named phase means the previous phase completed, not that the current live state is still healthy.
 
-Re-run any function-definition block needed by the next phase, such as `Set-SealedCsvState`. Defining the function does not change cluster state.
+The resume block defines `Assert-IntentStatusCoverage`, `Set-ChangePhase`, `Get-VerifiedSealedCsv`, and `Assert-AdapterOverrideReadback`. Re-run any other function-definition block needed by the next phase: the mutation-failure evidence helper below before a state-changing step, and [Step 1: Define the sealed CSV state helper](#step-1-define-the-sealed-csv-state-helper) before a CSV state change. Defining a function does not change cluster state. The intent submission, convergence, final-validation, and rollback-approval blocks stop before they change anything if a helper they need is not defined in the session.
 
 `Operation` identifies whether the current run is the approved forward change or a rollback. `DesiredTransport` and `DesiredTransportValue` are the only transport values used by the mutation, readback, and final-validation blocks. Do not overwrite them manually after resume.
 
@@ -1930,8 +2072,10 @@ $CustomerVmState = @(foreach ($Entry in $CustomerVms) {
         -ComputerName "$($CurrentGroup[0].OwnerNode)" `
         -ArgumentList "$($Entry.VmId)" -ScriptBlock {
             param($VmId)
+            # Return the state as text: remoting returns an enum as a bare integer.
             Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-                Select-Object VMId, Name, State
+                Select-Object VMId, Name,
+                    @{ Name = 'State'; Expression = { "$($_.State)" } }
         } -ErrorAction Stop)
     if (
         $CurrentState.Count -ne 1 -or
@@ -1978,7 +2122,8 @@ $ControlPlaneState = @(Invoke-Command `
     -ArgumentList "$($ControlPlaneEntry.VmId)" -ScriptBlock {
         param($VmId)
         Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-            Select-Object VMId, Name, State
+            Select-Object VMId, Name,
+                @{ Name = 'State'; Expression = { "$($_.State)" } }
     } -ErrorAction Stop)
 if (
     $ControlPlaneState.Count -ne 1 -or
@@ -2035,7 +2180,8 @@ catch {
                     -ArgumentList "$($ControlPlaneEntry.VmId)" -ScriptBlock {
                         param($VmId)
                         Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-                            Select-Object VMId, Name, State
+                            Select-Object VMId, Name,
+                                @{ Name = 'State'; Expression = { "$($_.State)" } }
                     } -ErrorAction Stop)
             }
             [pscustomobject]@{
@@ -2069,7 +2215,8 @@ $ControlPlaneState = @(Invoke-Command `
     -ArgumentList "$($ControlPlaneEntry.VmId)" -ScriptBlock {
         param($VmId)
         Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-            Select-Object VMId, Name, State
+            Select-Object VMId, Name,
+                @{ Name = 'State'; Expression = { "$($_.State)" } }
     } -ErrorAction Stop)
 $ControlPlaneState | Format-Table -AutoSize
 
@@ -2136,7 +2283,7 @@ Set-ChangePhase -Phase PlatformOff
 
 Retry behavior: do not repeat `Stop-ClusterResource` while the resource is `Pending`. Wait for the command timeout, re-read state, and stop on failure.
 
-Rollback before CSV quiescence: start the same sealed resource, then start the appliance cluster group and verify both return online.
+Rollback: do not restart MOC or the appliance VM after this step persists `PlatformOff`. [Rollback](#rollback) starts only from `TargetReadbackVerified` or a later phase, so between `PlatformOff` and `TargetReadbackVerified` continue the forward change. If the forward change cannot continue, stop and contact Microsoft Support; do not improvise a restore.
 
 ## Offline CSVs and the Storage Spaces Direct pool
 
@@ -2217,7 +2364,28 @@ function Set-SealedCsvState {
         [string]$State
     )
 
-    $Current = Get-VerifiedSealedCsv -CsvRecord $CsvRecord
+    # A CSV transition can still be pending when a call returns. Re-read until
+    # the CSV leaves any pending state or the deadline passes.
+    function Read-SettledSealedCsv {
+        param([int]$Seconds)
+        $SettleDeadline = (Get-Date).AddSeconds($Seconds)
+        do {
+            $Read = Get-VerifiedSealedCsv -CsvRecord $CsvRecord
+            if ("$($Read.Csv.State)" -notmatch '(?i)Pending|Initializing') {
+                break
+            }
+            Start-Sleep -Seconds 5
+        } while ((Get-Date) -lt $SettleDeadline)
+        $Read
+    }
+
+    $Current = Read-SettledSealedCsv -Seconds 120
+    if ("$($Current.Csv.State)" -match '(?i)Pending|Initializing') {
+        throw (
+            "CSV '$($CsvRecord.Name)' is still '$($Current.Csv.State)'. Do " +
+            "not repeat the operation while it is pending."
+        )
+    }
     if ("$($Current.Csv.State)" -eq $State) {
         if ($State -eq 'Online') {
             Get-VerifiedSealedCsv -CsvRecord $CsvRecord `
@@ -2233,25 +2401,27 @@ function Set-SealedCsvState {
     }
     $Method = if ($State -eq 'Online') { 'BringOnline' } else { 'TakeOffline' }
     try {
+        # TimeOut is how long, in seconds, the provider waits for the
+        # transition. Without it, the call returns once the request is accepted.
         Invoke-CimMethod -InputObject $Before.Cim -MethodName $Method `
-            -ErrorAction Stop | Out-Null
+            -Arguments @{ TimeOut = [uint32]600 } -ErrorAction Stop | Out-Null
     } catch {
         Write-Warning "The CSV provider returned: $($_.Exception.Message)"
         Write-Warning "Provider text is not authoritative. Re-read the recorded CSV state before deciding whether to retry."
     }
 
-    $After = if ($State -eq 'Online') {
-        Get-VerifiedSealedCsv -CsvRecord $CsvRecord -RequireOnlineMetadata
-    } else {
-        Get-VerifiedSealedCsv -CsvRecord $CsvRecord
-    }
+    $After = Read-SettledSealedCsv -Seconds 120
     if ("$($After.Csv.State)" -ne $State) {
         throw "CSV '$($CsvRecord.Name)' is '$($After.Csv.State)', expected '$State'."
+    }
+    if ($State -eq 'Online') {
+        Get-VerifiedSealedCsv -CsvRecord $CsvRecord `
+            -RequireOnlineMetadata | Out-Null
     }
 }
 ```
 
-The helper catches provider text because a CSV operation can report `Generic failure` after the requested state has already changed. The authoritative decision is the re-read state. If the sealed CSV is already in the requested state, the helper verifies its identity and makes no change, which keeps a resumed run or a rollback that starts with CSVs already offline from failing on the first CSV.
+The helper catches provider text because a CSV operation can report `Generic failure` after the requested state has already changed. The authoritative decision is the re-read state. The helper asks the cluster provider to wait up to 600 seconds for each transition, then re-reads the CSV every 5 seconds, for up to 2 more minutes, while it is still pending, and only then compares it with the requested state. It also waits the same way before it acts on a CSV that is already pending, and stops without acting if the CSV is still pending. If the sealed CSV is already in the requested state, the helper verifies its identity and makes no change, which keeps a resumed run or a rollback that starts with CSVs already offline from failing on the first CSV. For the same reason, the blocks that call the helper are safe to run again after a stop, once no CSV is pending.
 
 ### Step 2: Offline workload CSVs, then the infrastructure CSV
 
@@ -2288,7 +2458,7 @@ Expected result: every CSV is `Offline`.
 
 Retry behavior: if provider text reports failure, re-read state first. Retry only when the resource is not `Pending` and remains in the original state. Never issue repeated state changes blindly.
 
-Rollback: online the infrastructure CSV first, then workload CSVs, using the restoration sequence later in this guide.
+Rollback: do not bring a CSV back online in this window, even if only some CSVs went offline. [Rollback](#rollback) starts only from `TargetReadbackVerified` or a later phase, so between `PlatformOff` and `TargetReadbackVerified` continue the forward change. If the forward change cannot continue, stop and contact Microsoft Support; do not improvise a restore.
 
 ### Step 3: Offline the exact clustered Storage Pool resource
 
@@ -2524,13 +2694,28 @@ if (
 }
 ```
 
-Then submit the change. The submit block refuses to run unless the recorded approval matches the current checkpoint, operation, desired transport, and sealed manifest hash.
+Then submit the change. The submit block refuses to run unless the recorded approval matches the current checkpoint, operation, desired transport, and sealed manifest hash. Its final health check accepts only `Microsoft.Health.FaultType.VirtualDisks.Detached` faults on the sealed CSV volumes and virtual disks, which the Health Service raises because this procedure took those CSVs offline; any other health fault blocks the submission. Before it submits, it records the storage intent's `ResourceContentVersion`, so that the convergence wait can prove every node applied the new version.
 
 ```powershell
 $SubmissionState = Get-Content -LiteralPath (
     Join-Path $EvidenceRoot 'phase-state.json'
 ) -Raw | ConvertFrom-Json
 if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
+    foreach ($RequiredHelper in @(
+        'Assert-AdapterOverrideReadback',
+        'Assert-IntentStatusCoverage',
+        'Set-ChangePhase'
+    )) {
+        if (-not (Get-Command -Name $RequiredHelper -ErrorAction SilentlyContinue)) {
+            throw "'$RequiredHelper' is not defined. Run the resume block first in this session."
+        }
+    }
+    if (
+        $null -eq $AdapterOverride -or
+        [int]$AdapterOverride.NetworkDirectTechnology -ne [int]$DesiredTransportValue
+    ) {
+        throw "Run Step 1 in this session to rebuild and preview the adapter override before you submit."
+    }
     $PonrApprovalPath = Join-Path $EvidenceRoot `
         "point-of-no-return-approval-$Operation.json"
     if (-not (Test-Path -LiteralPath $PonrApprovalPath)) {
@@ -2585,7 +2770,33 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
         Where-Object { "$_" -ne 'RunNotInProgress' })
     $PointOfNoReturnNodes = @(Get-ClusterNode -ErrorAction Stop)
     $PointOfNoReturnJobs = @(Get-StorageJob -ErrorAction Stop)
-    $PointOfNoReturnFaults = @(Get-HealthFault -ErrorAction Stop)
+    $PointOfNoReturnAllFaults = @(Get-HealthFault -ErrorAction Stop)
+    # With the sealed CSVs offline, the Health Service raises
+    # VirtualDisks.Detached for each one. Accept only that fault type on a
+    # sealed CSV volume or virtual disk; every other fault still blocks.
+    $OfflineCsvVolumeSuffixes = @($ResourceManifest.Csvs | ForEach-Object {
+        "$($_.PartitionName)".ToUpperInvariant()
+    } | Where-Object {
+        $_ -match '^\\\\\?\\VOLUME\{[0-9A-F-]{36}\}\\$'
+    } | ForEach-Object { ":VO:$_" })
+    $OfflineCsvDiskIds = @($ResourceManifest.Csvs | ForEach-Object {
+        ("$($_.VirtualDiskUniqueId)" -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+    } | Where-Object { $_.Length -ge 32 })
+    $PointOfNoReturnFaults = @($PointOfNoReturnAllFaults | Where-Object {
+        $FaultObjectId = "$($_.FaultingObjectUniqueId)".ToUpperInvariant()
+        $FaultObjectHex = $FaultObjectId -replace '[^0-9A-F]', ''
+        -not (
+            "$($_.FaultType)" -eq 'Microsoft.Health.FaultType.VirtualDisks.Detached' -and
+            (
+                @($OfflineCsvVolumeSuffixes | Where-Object {
+                    $FaultObjectId.EndsWith($_)
+                }).Count -gt 0 -or
+                @($OfflineCsvDiskIds | Where-Object {
+                    $FaultObjectHex.Contains($_)
+                }).Count -gt 0
+            )
+        )
+    })
     $PointOfNoReturnQuorum = Get-ClusterQuorum -ErrorAction Stop
     $PointOfNoReturnWitnessHealthy = $true
     if (-not [string]::IsNullOrWhiteSpace(
@@ -2665,7 +2876,8 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
                 -ArgumentList "$($Entry.VmId)" -ScriptBlock {
                     param($VmId)
                     Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-                        Select-Object VMId, State
+                        Select-Object VMId,
+                            @{ Name = 'State'; Expression = { "$($_.State)" } }
                 } -ErrorAction Stop
         }
     )
@@ -2796,6 +3008,25 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
         )
     }
 
+    # Record the intent version before submission. The convergence wait
+    # requires a higher version that every node reports as applied.
+    $IntentVersionBefore = [int64]0
+    if (
+        $null -eq $PointOfNoReturnIntent[0].PSObject.Properties['ResourceContentVersion'] -or
+        -not [int64]::TryParse(
+            "$($PointOfNoReturnIntent[0].ResourceContentVersion)",
+            [ref]$IntentVersionBefore
+        )
+    ) {
+        throw (
+            "The storage intent does not report a numeric ResourceContentVersion, " +
+            "so convergence on the new override cannot be proven. Do not submit."
+        )
+    }
+    Set-Content -LiteralPath (
+        Join-Path $EvidenceRoot "network-atc-intent-version-before-$Operation.txt"
+    ) -Value "$IntentVersionBefore" -ErrorAction Stop
+
     Set-ChangePhase -Phase IntentSubmissionPending
     try {
         Set-NetIntent -Name "$($StorageIntent.IntentName)" `
@@ -2811,6 +3042,15 @@ if ("$($SubmissionState.Phase)" -eq 'PoolOff') {
     }
     Set-ChangePhase -Phase IntentSubmitted
 } elseif ("$($SubmissionState.Phase)" -eq 'IntentSubmissionPending') {
+    foreach ($RequiredHelper in @(
+        'Assert-AdapterOverrideReadback',
+        'Assert-IntentStatusCoverage',
+        'Set-ChangePhase'
+    )) {
+        if (-not (Get-Command -Name $RequiredHelper -ErrorAction SilentlyContinue)) {
+            throw "'$RequiredHelper' is not defined. Run the resume block first in this session."
+        }
+    }
     $LiveIntent = @(Get-NetIntent -ClusterName $Cluster.Name `
         -ErrorAction Stop | Where-Object {
             "$($_.IntentName)" -eq "$($StorageIntent.IntentName)"
@@ -2869,7 +3109,7 @@ Error handling:
 - If the command returns an error after submission, query `Get-NetIntent` and `Get-NetIntentStatus` before deciding that the change was not accepted.
 - Stop if the intent identity or adapter membership changes or the requested override cannot be read back.
 
-Rollback: repeat this entire guide with the original transport value after the cluster is restored to a controlled quiesced state. Do not issue an automatic transport reversal while Network ATC is still converging.
+Rollback: do not reverse the transport from this step. [Rollback](#rollback) starts only from `TargetReadbackVerified` or a later phase, after the change approver decides to roll back, and it re-runs this procedure with the sealed source transport. Until then, continue the forward change or contact Microsoft Support. Do not issue an automatic transport reversal while Network ATC is still converging.
 
 ### Step 3: Wait for Network ATC convergence
 
@@ -2879,31 +3119,78 @@ Rollback: repeat this entire guide with the original transport value after the c
 
 ```powershell
 & {
+foreach ($RequiredHelper in @(
+    'Assert-AdapterOverrideReadback',
+    'Assert-IntentStatusCoverage',
+    'Set-ChangePhase'
+)) {
+    if (-not (Get-Command -Name $RequiredHelper -ErrorAction SilentlyContinue)) {
+        throw "'$RequiredHelper' is not defined. Run the resume block first in this session."
+    }
+}
+$IntentVersionPath = Join-Path $EvidenceRoot `
+    "network-atc-intent-version-before-$Operation.txt"
+$IntentVersionBefore = [int64]0
+if (
+    -not (Test-Path -LiteralPath $IntentVersionPath) -or
+    -not [int64]::TryParse(
+        "$(Get-Content -LiteralPath $IntentVersionPath -Raw -ErrorAction Stop)".Trim(),
+        [ref]$IntentVersionBefore
+    )
+) {
+    throw (
+        "The intent version recorded before submission is missing or unreadable. " +
+        "Do not resubmit. Preserve status and contact Microsoft Support."
+    )
+}
+
+$Converged = $false
 $Deadline = (Get-Date).AddMinutes(30)
 do {
+    $SampleIntent = @(Get-NetIntent -ClusterName $Cluster.Name `
+        -ErrorAction Stop | Where-Object {
+            "$($_.IntentName)" -eq "$($StorageIntent.IntentName)"
+        })
+    $IntentVersion = [int64]0
+    if (
+        $SampleIntent.Count -ne 1 -or
+        -not [int64]::TryParse(
+            "$($SampleIntent[0].ResourceContentVersion)", [ref]$IntentVersion
+        )
+    ) {
+        throw "The storage intent no longer resolves uniquely with a numeric ResourceContentVersion."
+    }
     $IntentStatus = @(Get-NetIntentStatus -ClusterName $Cluster.Name `
         -Name $StorageIntent.IntentName -ErrorAction Stop)
     $IntentStatus |
-        Format-Table Host, IntentName, ConfigurationStatus, ProvisioningStatus, RetryCount, Error
+        Format-Table Host, IntentName, ConfigurationStatus, ProvisioningStatus, LastConfigApplied, RetryCount, Error
 
     Assert-IntentStatusCoverage -Status $IntentStatus `
         -ClusterNodes $Nodes -IntentName "$($StorageIntent.IntentName)"
+    # Until a node picks up the new intent, its status still reports the
+    # previous success, so a node counts only once it reports this version.
     $Incomplete = @($IntentStatus | Where-Object {
         "$($_.ConfigurationStatus)" -ne 'Success' -or
         "$($_.ProvisioningStatus)" -notmatch '^(Success|Completed)$' -or
         [int]$_.RetryCount -gt 0 -or
-        -not [string]::IsNullOrWhiteSpace("$($_.Error)")
+        -not [string]::IsNullOrWhiteSpace("$($_.Error)") -or
+        "$($_.LastConfigApplied)".Trim() -ne "$IntentVersion"
     })
 
-    if ($Incomplete.Count -eq 0) {
+    if ($IntentVersion -gt $IntentVersionBefore -and $Incomplete.Count -eq 0) {
+        $Converged = $true
         break
     }
 
     Start-Sleep -Seconds 30
 } while ((Get-Date) -lt $Deadline)
 
-if ($Incomplete.Count -gt 0) {
-    throw "Network ATC did not converge cleanly within 30 minutes."
+if (-not $Converged) {
+    throw (
+        "Network ATC did not converge cleanly on the submitted intent version " +
+        "within 30 minutes. Intent version: $IntentVersion; before submission: " +
+        "$IntentVersionBefore."
+    )
 }
 
 $ConvergedIntent = @(Get-NetIntent -ClusterName $Cluster.Name `
@@ -2922,7 +3209,7 @@ Set-ChangePhase -Phase IntentConverged
 }
 ```
 
-Expected result: every node reaches successful configuration and successful or completed provisioning with zero retry debt and no error.
+Expected result: the storage intent's `ResourceContentVersion` is higher than the value recorded before submission, and every node reports `LastConfigApplied` equal to it, with successful configuration, successful or completed provisioning, zero retry debt, and no error. A sample in which any node still reports the earlier version does not count, even if its status is clean.
 
 Stop if the timeout expires. Do not call `Set-NetIntent` again. Collect the status and escalate.
 
@@ -3214,7 +3501,8 @@ if ("$($ControlPlaneGroup[0].State)" -ne 'Online') {
                         -ScriptBlock {
                             param($VmId)
                             Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-                                Select-Object VMId, Name, State
+                                Select-Object VMId, Name,
+                                    @{ Name = 'State'; Expression = { "$($_.State)" } }
                         } -ErrorAction Stop)
                 }
                 [pscustomobject]@{
@@ -3251,7 +3539,8 @@ $ControlPlaneState = @(Invoke-Command `
     -ScriptBlock {
         param($VmId)
         Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-            Select-Object VMId, Name, State
+            Select-Object VMId, Name,
+                @{ Name = 'State'; Expression = { "$($_.State)" } }
     } -ErrorAction Stop)
 if (
     $ControlPlaneState.Count -ne 1 -or
@@ -3407,7 +3696,8 @@ do {
             -ArgumentList "$($Entry.VmId)" -ScriptBlock {
                 param($VmId)
                 Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-                    Select-Object VMId, State
+                    Select-Object VMId,
+                        @{ Name = 'State'; Expression = { "$($_.State)" } }
             } -ErrorAction Stop)
         if ($HyperV.Count -ne 1) {
             throw "A sealed VM no longer resolves uniquely."
@@ -3605,7 +3895,8 @@ $BaselineStoppedVmState = @($BaselineStoppedVmEntries | ForEach-Object {
         -ArgumentList "$($Entry.VmId)" -ScriptBlock {
             param($SealedVmId)
             Get-VM -Id ([guid]$SealedVmId) -ErrorAction Stop |
-                Select-Object VMId, Name, State
+                Select-Object VMId, Name,
+                    @{ Name = 'State'; Expression = { "$($_.State)" } }
         } -ErrorAction Stop)
     if ($Vm.Count -ne 1 -or "$($Vm[0].VMId)" -ne "$($Entry.VmId)") {
         throw "A sealed customer VM no longer resolves uniquely by VmId."
@@ -3727,9 +4018,12 @@ any startup or health failure remains.
 
 Static adapter state and `Get-SmbMultichannelConnection` alone do not prove that the recovered storage workload is actively using the persisted desired transport. Use an approved representative workload, then combine all of the following:
 
-Before starting representative load, seal the beginning of the active-validation window:
+Before starting representative load, seal the beginning of the active-validation window.
+
+**Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
 
 ```powershell
+& {
 $ActiveValidationStartUtcPath = Join-Path $EvidenceRoot `
     "active-validation-$Operation-start-utc.txt"
 $CurrentPhaseState = Get-Content -LiteralPath (
@@ -3786,6 +4080,7 @@ if (Test-Path -LiteralPath $ActiveValidationStartUtcPath) {
         throw "Could not create the active-validation evidence file: $($_.Exception.Message)"
     }
 }
+}
 ```
 
 **Stop here and confirm.** The workload owner decides whether application health probes, dependency checks, and representative transactions passed. Do not record the attestation until that owner approves the evidence. Done looks like: the owner has approved, and the following recording block prints `APPLICATION_VALIDATION_RECORDED`.
@@ -3810,6 +4105,15 @@ Do not create the attestation until the checks have actually passed. The final v
 
 ```powershell
 . {
+foreach ($RequiredHelper in @(
+    'Assert-AdapterOverrideReadback',
+    'Assert-IntentStatusCoverage',
+    'Set-ChangePhase'
+)) {
+    if (-not (Get-Command -Name $RequiredHelper -ErrorAction SilentlyContinue)) {
+        throw "'$RequiredHelper' is not defined. Run the resume block first in this session."
+    }
+}
 $ActiveValidationStartUtcPath = Join-Path $EvidenceRoot `
     "active-validation-$Operation-start-utc.txt"
 $ApplicationValidationPath = Join-Path $EvidenceRoot `
@@ -4125,12 +4429,22 @@ Set-ChangePhase -Phase ActiveAssertionsPassed
 }
 ```
 
-If the session ends after `ActiveAssertionsPassed`, rerun the resume block and then run the following block. It reconstructs adapter coverage on every sample and does not depend on variables from the lost session.
+If the session ends after `ActiveAssertionsPassed`, rerun the resume block, which also defines the `Get-VerifiedSealedCsv` helper that this block uses, and then run the following block. It reconstructs adapter coverage on every sample and does not depend on variables from the lost session. It stops before it records anything if a helper it needs is not defined in the session.
 
 **Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it.
 
 ```powershell
 & {
+foreach ($RequiredHelper in @(
+    'Get-VerifiedSealedCsv',
+    'Assert-IntentStatusCoverage',
+    'Set-ChangePhase'
+)) {
+    if (-not (Get-Command -Name $RequiredHelper -ErrorAction SilentlyContinue)) {
+        throw "'$RequiredHelper' is not defined. Run the resume block first in this session."
+    }
+}
+
 function Test-ActiveRdmaState {
     $AdapterState = @(Invoke-Command -ComputerName $Nodes.Name `
         -ArgumentList ($AdapterNames -join ','), $DesiredTransportValue `
@@ -4554,7 +4868,8 @@ do {
             -ArgumentList "$($Entry.VmId)" -ScriptBlock {
                 param($VmId)
                 Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-                    Select-Object VMId, State
+                    Select-Object VMId,
+                        @{ Name = 'State'; Expression = { "$($_.State)" } }
             } -ErrorAction Stop)
         if ($HyperV.Count -ne 1) {
             throw "A sealed VM no longer resolves uniquely."
@@ -5177,7 +5492,8 @@ if ($AbandonPhase -in @('BaselineSealed', 'WorkloadsOff')) {
             -ArgumentList "$($Entry.VmId)" -ScriptBlock {
                 param($VmId)
                 Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-                    Select-Object VMId, Name, State
+                    Select-Object VMId, Name,
+                        @{ Name = 'State'; Expression = { "$($_.State)" } }
             } -ErrorAction Stop)
         if ($Vm.Count -ne 1 -or "$($Vm[0].VMId)" -ne "$($Entry.VmId)") {
             throw "A sealed VM no longer resolves uniquely by VmId."
@@ -5252,12 +5568,23 @@ Keep the evidence directory with the change record. A new change starts again fr
 
 Rollback is a deliberate operator and approver decision. It is not automatic.
 
+The approval block below requires a healthy, idle cluster. When the rollback starts from `TargetReadbackVerified` or `PoolOnline`, the CSVs are still offline, so its health-fault check accepts `Microsoft.Health.FaultType.VirtualDisks.Detached` faults on the sealed CSV volumes and virtual disks only, and from `PoolOnline` its virtual-disk check accepts a sealed CSV virtual disk that is `Detached` with the reason `By Policy`, the state of a virtual disk taken offline on purpose. Any other health fault or virtual-disk state still blocks the rollback. From `PlatformOnline` onward, any health fault or unhealthy virtual disk blocks it.
+
 **Stop here and confirm.** Do not start a rollback until the change approver named in the change record has decided to roll back and the workload owner has accepted the additional outage. Done looks like: both decisions are recorded in the change record, and the following block, which validates the sealed rollback direction and persists it as the active operation, prints `ROLLBACK_APPROVED`.
 
 **Paste or run the whole block at once, not line by line.** It runs as one unit so that a failed check stops everything after it. It starts with `. {` so that the variables it sets remain in the session for later steps.
 
 ```powershell
 . {
+foreach ($RequiredHelper in @(
+    'Assert-AdapterOverrideReadback',
+    'Assert-IntentStatusCoverage',
+    'Set-ChangePhase'
+)) {
+    if (-not (Get-Command -Name $RequiredHelper -ErrorAction SilentlyContinue)) {
+        throw "'$RequiredHelper' is not defined. Run the resume block first in this session."
+    }
+}
 $RollbackState = Get-Content -LiteralPath (
     Join-Path $EvidenceRoot 'phase-state.json'
 ) -Raw | ConvertFrom-Json
@@ -5344,7 +5671,35 @@ $RollbackWorkloadsMayBeOnline = (
         -ErrorAction Stop |
         Where-Object { "$_" -ne 'RunNotInProgress' })
     $RollbackNodes = @(Get-ClusterNode -ErrorAction Stop)
-    $RollbackHealthFaults = @(Get-HealthFault -ErrorAction Stop)
+    $RollbackAllHealthFaults = @(Get-HealthFault -ErrorAction Stop)
+    # From TargetReadbackVerified or PoolOnline the sealed CSVs are still
+    # offline, and the Health Service raises VirtualDisks.Detached for each
+    # one. Accept only that fault type on a sealed CSV volume or virtual disk
+    # then; every other fault, and any fault once CSVs are online, blocks.
+    $OfflineCsvVolumeSuffixes = @($ResourceManifest.Csvs | ForEach-Object {
+        "$($_.PartitionName)".ToUpperInvariant()
+    } | Where-Object {
+        $_ -match '^\\\\\?\\VOLUME\{[0-9A-F-]{36}\}\\$'
+    } | ForEach-Object { ":VO:$_" })
+    $OfflineCsvDiskIds = @($ResourceManifest.Csvs | ForEach-Object {
+        ("$($_.VirtualDiskUniqueId)" -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+    } | Where-Object { $_.Length -ge 32 })
+    $RollbackHealthFaults = @($RollbackAllHealthFaults | Where-Object {
+        $FaultObjectId = "$($_.FaultingObjectUniqueId)".ToUpperInvariant()
+        $FaultObjectHex = $FaultObjectId -replace '[^0-9A-F]', ''
+        $RollbackCsvsShouldBeOnline -or
+        -not (
+            "$($_.FaultType)" -eq 'Microsoft.Health.FaultType.VirtualDisks.Detached' -and
+            (
+                @($OfflineCsvVolumeSuffixes | Where-Object {
+                    $FaultObjectId.EndsWith($_)
+                }).Count -gt 0 -or
+                @($OfflineCsvDiskIds | Where-Object {
+                    $FaultObjectHex.Contains($_)
+                }).Count -gt 0
+            )
+        )
+    })
     $RollbackStorageJobs = @(Get-StorageJob -ErrorAction Stop)
     $RollbackQuorum = Get-ClusterQuorum -ErrorAction Stop
     $RollbackWitnessHealthy = $true
@@ -5443,7 +5798,8 @@ $RollbackWorkloadsMayBeOnline = (
         -ArgumentList "$($ControlPlaneEntry.VmId)" -ScriptBlock {
             param($VmId)
             Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-                Select-Object VMId, State
+                Select-Object VMId,
+                    @{ Name = 'State'; Expression = { "$($_.State)" } }
         } -ErrorAction Stop)
     $RollbackExpectedPlatformState = if ($RollbackPlatformShouldBeOnline) {
         'Online'
@@ -5487,7 +5843,8 @@ $RollbackWorkloadsMayBeOnline = (
                 -ArgumentList "$($Entry.VmId)" -ScriptBlock {
                     param($VmId)
                     Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-                        Select-Object VMId, State
+                        Select-Object VMId,
+                            @{ Name = 'State'; Expression = { "$($_.State)" } }
                 } -ErrorAction Stop)
             if ($HyperV.Count -ne 1) {
                 throw "A sealed customer VM no longer resolves uniquely."
@@ -5588,8 +5945,18 @@ $RollbackWorkloadsMayBeOnline = (
                 $RollbackVirtualDisks.Count -ne `
                     $ExpectedRollbackVirtualDiskIds.Count -or
                 @($RollbackVirtualDisks | Where-Object {
-                    "$($_.HealthStatus)" -ne 'Healthy' -or
-                    "$($_.OperationalStatus)" -notmatch 'OK'
+                    # A sealed CSV virtual disk is detached by policy while
+                    # its CSV is offline. Any other state still blocks.
+                    $CsvDetachedByPolicy = (
+                        -not $RollbackCsvsShouldBeOnline -and
+                        "$($_.UniqueId)" -in @($ResourceManifest.Csvs.VirtualDiskUniqueId) -and
+                        "$($_.OperationalStatus)" -eq 'Detached' -and
+                        ("$($_.DetachedReason)" -replace '[^A-Za-z]', '') -eq 'ByPolicy'
+                    )
+                    -not $CsvDetachedByPolicy -and (
+                        "$($_.HealthStatus)" -ne 'Healthy' -or
+                        "$($_.OperationalStatus)" -notmatch 'OK'
+                    )
                 }).Count -gt 0 -or
                 @($ExpectedRollbackVirtualDiskIds | Where-Object {
                     $_ -notin $ActualRollbackVirtualDiskIds
@@ -5742,7 +6109,8 @@ $VmShutdownRows = @(foreach ($Entry in @($ResourceManifest.ClusteredVms |
         -ArgumentList "$($Entry.VmId)" -ScriptBlock {
             param($VmId)
             Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-                Select-Object VMId, Name, State
+                Select-Object VMId, Name,
+                    @{ Name = 'State'; Expression = { "$($_.State)" } }
         } -ErrorAction Stop)
     if ($Vm.Count -ne 1 -or "$($Vm[0].VMId)" -ne "$($Entry.VmId)") {
         throw "A sealed customer VM no longer resolves uniquely by VmId."
@@ -5963,7 +6331,8 @@ foreach ($Listed in $ListedVms) {
         -ArgumentList "$($Listed.VmId)" -ScriptBlock {
             param($VmId)
             Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-                Select-Object VMId, Name, State
+                Select-Object VMId, Name,
+                    @{ Name = 'State'; Expression = { "$($_.State)" } }
         } -ErrorAction Stop)
     $ExpectedState = if ($Listed.WillStop) { 'Running' } else { 'Off' }
     if (
@@ -6005,7 +6374,8 @@ foreach ($Listed in @($ListedVms | Where-Object { $_.WillStop })) {
                     -ArgumentList "$($Listed.VmId)" -ScriptBlock {
                         param($VmId)
                         Get-VM -Id ([guid]$VmId) -ErrorAction Stop |
-                            Select-Object VMId, Name, State
+                            Select-Object VMId, Name,
+                                @{ Name = 'State'; Expression = { "$($_.State)" } }
                     } -ErrorAction Stop
             }
     }
