@@ -93,7 +93,7 @@ You can enable attack surface reduction rules by using any of the following meth
 ### 0x80070005 (access denied) errors in C:\Windows\Logs\DISM\dism.log
 
 ```
-<date> <time>, Info         DISM   DISM Manager: PID=13912 TID=14268 Create session event 0x384 for current DISM session and event name is Global\{53382856-8E48-4046-9078-EA8B9E1DB109}  - CDISMManager::CheckSessionAndLock
+<date> <time>, Info         DISM   DISM Manager: PID=13912 TID=14268 Create session event 0x384 for current DISM session and event name is Global\{00000000-0000-0000-0000-000000000000}  - CDISMManager::CheckSessionAndLock
 <date> <time>, Info         DISM   DISM Manager: PID=13912 TID=14268 Copying DISM from "C:\Windows\System32\Dism" - CDISMManager::CreateImageSessionFromLocation
 <date> <time>, Info         DISM   DISM Manager: PID=13912 TID=14268 No Sandbox was created, DISM running in-place. - CDISMManager::CreateImageSessionFromLocation
 <date> <time>, Error        DISM   DismHostLib: PID=13912 TID=14268 Failed to create dismhost.exe servicing process. - DismCreateObjectInHostFromCLSID(hr:0x80070005)

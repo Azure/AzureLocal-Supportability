@@ -62,20 +62,20 @@ To fix this issue, rename the management vNIC back to the name expected by Netwo
 
    Name                                     InterfaceDescription                                                                    ifIndex Status       MacAddress         LinkSpeed
    ----                                     --------------------                                                                    ------- ------       ----------         ---------
-   vEthernet (ConvergedSwitch(mgmtcompute)) Hyper-V Virtual Ethernet Adapter                                                             14 Up           5C-6F-69-0E-75-5E    10 Gbps
-   Storage1                                 QLogic FastLinQ QL41262-DE 25GbE Adapter (VBD Client)                                        13 Up           F4-C7-AA-37-E3-AE    25 Gbps
-   Mgmt_Compute2                            Broadcom NetXtreme E-Series Advanc...#2                                                       9 Up           5C-6F-69-0E-75-5F    10 Gbps
-   Ethernet                                 Remote NDIS Compatible Device #2                                                             36 Up           D0-8E-79-EE-C6-6F 426.0 Mbps
-   Storage2                                 QLogic FastLinQ QL41262-DE 25GbE A...#2                                                       8 Up           F4-C7-AA-37-E3-AF    25 Gbps
-   NIC4                                     Broadcom NetXtreme Gigabit Ethernet                                                           7 Disconnected 5C-6F-69-0E-75-5D      0 bps
-   NIC3                                     Broadcom NetXtreme Gigabit Ethernet #2                                                        6 Disconnected 5C-6F-69-0E-75-5C      0 bps
-   Mgmt_Compute1                            Broadcom NetXtreme E-Series Advanced Dual-port 10Gb SFP+ Ethernet Network Daughter Card       3 Up           5C-6F-69-0E-75-5E    10 Gbps
+   vEthernet (ConvergedSwitch(mgmtcompute)) Hyper-V Virtual Ethernet Adapter                                                             14 Up           02-00-00-00-00-5E    10 Gbps
+   Storage1                                 QLogic FastLinQ QL41262-DE 25GbE Adapter (VBD Client)                                        13 Up           02-00-00-00-01-AE    25 Gbps
+   Mgmt_Compute2                            Broadcom NetXtreme E-Series Advanc...#2                                                       9 Up           02-00-00-00-00-5F    10 Gbps
+   Ethernet                                 Remote NDIS Compatible Device #2                                                             36 Up           02-00-00-00-02-6F 426.0 Mbps
+   Storage2                                 QLogic FastLinQ QL41262-DE 25GbE A...#2                                                       8 Up           02-00-00-00-01-AF    25 Gbps
+   NIC4                                     Broadcom NetXtreme Gigabit Ethernet                                                           7 Disconnected 02-00-00-00-00-5D      0 bps
+   NIC3                                     Broadcom NetXtreme Gigabit Ethernet #2                                                        6 Disconnected 02-00-00-00-00-5C      0 bps
+   Mgmt_Compute1                            Broadcom NetXtreme E-Series Advanced Dual-port 10Gb SFP+ Ethernet Network Daughter Card       3 Up           02-00-00-00-00-5E    10 Gbps
    
    PS C:\> Get-VMNetworkAdapter -ManagementOS #This command shows the correct name that BOTH NICs need to have.
 
    Name                     IsManagementOs VMName SwitchName                   MacAddress   Status IPAddresses
    ----                     -------------- ------ ----------                   ----------   ------ -----------
-   vManagement(mgmtcompute) True                  ConvergedSwitch(mgmtcompute) 5C6F690E755E {Ok} 
+   vManagement(mgmtcompute) True                  ConvergedSwitch(mgmtcompute) 02000000005E {Ok} 
 
    PS C:\> Rename-NetAdapter -Name “vEthernet (ConvergedSwitch(mgmtcompute))” -NewName “vManagement(mgmtcompute)” #This command renames the adapter to the correct name.
 
@@ -83,14 +83,14 @@ To fix this issue, rename the management vNIC back to the name expected by Netwo
 
    Name                      InterfaceDescription                    ifIndex Status       MacAddress             LinkSpeed
    ----                      --------------------                    ------- ------       ----------             ---------
-   vManagement(mgmtcompute)  Hyper-V Virtual Ethernet Adapter             14 Up           5C-6F-69-0E-75-5E        10 Gbps
-   Storage1                  QLogic FastLinQ QL41262-DE 25GbE Ada...      13 Up           F4-C7-AA-37-E3-AE        25 Gbps
-   Mgmt_Compute2             Broadcom NetXtreme E-Series Advanc...#2       9 Up           5C-6F-69-0E-75-5F        10 Gbps
-   Ethernet                  Remote NDIS Compatible Device #2             36 Up           D0-8E-79-EE-C6-6F     426.0 Mbps
-   Storage2                  QLogic FastLinQ QL41262-DE 25GbE A...#2       8 Up           F4-C7-AA-37-E3-AF        25 Gbps
-   NIC4                      Broadcom NetXtreme Gigabit Ethernet           7 Disconnected 5C-6F-69-0E-75-5D          0 bps
-   NIC3                      Broadcom NetXtreme Gigabit Ethernet #2        6 Disconnected 5C-6F-69-0E-75-5C          0 bps
-   Mgmt_Compute1             Broadcom NetXtreme E-Series Advanced...       3 Up           5C-6F-69-0E-75-5E        10 Gbps
+   vManagement(mgmtcompute)  Hyper-V Virtual Ethernet Adapter             14 Up           02-00-00-00-00-5E        10 Gbps
+   Storage1                  QLogic FastLinQ QL41262-DE 25GbE Ada...      13 Up           02-00-00-00-01-AE        25 Gbps
+   Mgmt_Compute2             Broadcom NetXtreme E-Series Advanc...#2       9 Up           02-00-00-00-00-5F        10 Gbps
+   Ethernet                  Remote NDIS Compatible Device #2             36 Up           02-00-00-00-02-6F     426.0 Mbps
+   Storage2                  QLogic FastLinQ QL41262-DE 25GbE A...#2       8 Up           02-00-00-00-01-AF        25 Gbps
+   NIC4                      Broadcom NetXtreme Gigabit Ethernet           7 Disconnected 02-00-00-00-00-5D          0 bps
+   NIC3                      Broadcom NetXtreme Gigabit Ethernet #2        6 Disconnected 02-00-00-00-00-5C          0 bps
+   Mgmt_Compute1             Broadcom NetXtreme E-Series Advanced...       3 Up           02-00-00-00-00-5E        10 Gbps
    ```
 
 1. Once the adapter has been renamed, force Network ATC to retry the failed intent.  Note that you must specify a `NodeName` in this command, so you must run it for each node where the intent needs to be retried.

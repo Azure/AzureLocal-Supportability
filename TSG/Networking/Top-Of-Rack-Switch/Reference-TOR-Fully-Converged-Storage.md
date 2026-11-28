@@ -287,11 +287,11 @@ Get-VMNetworkAdapterIsolation -ManagementOS | Format-Table ParentAdapter, Isolat
 
 InterfaceAlias                     VlanID MacAddress       
 --------------                     ------ ----------       
-ethernet                                0 0C-42-A1-F9-69-4A
-vSMB(managementcompute#ethernet 2)        00-15-5D-C8-20-07
-ethernet 2                              0 0C-42-A1-F9-69-4B
-vManagement(managementcompute)            0C-42-A1-F9-69-4A
-vSMB(managementcompute#ethernet)          00-15-5D-C8-20-06
+ethernet                                0 02-00-00-00-00-4A
+vSMB(managementcompute#ethernet 2)        02-00-00-00-01-07
+ethernet 2                              0 02-00-00-00-00-4B
+vManagement(managementcompute)            02-00-00-00-00-4A
+vSMB(managementcompute#ethernet)          02-00-00-00-01-06
 
 [Host3]: PS C:\Users\Administrator\Documents> Get-VMNetworkAdapterIsolation -ManagementOS | ft ParentAdapter, IsolationMode, DefaultIsolationID
 
@@ -367,7 +367,7 @@ Legend:
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*  711     0015.5dc8.2006   dynamic  0         F      F    Eth1/3
+*  711     0200.0000.0106   dynamic  0         F      F    Eth1/3
 
 TOR-A# show mac address-table vlan 712
 Legend:
@@ -376,7 +376,7 @@ Legend:
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*  712     0015.5dc8.2007   dynamic  0         F      F    Eth1/3
+*  712     0200.0000.0107   dynamic  0         F      F    Eth1/3
 
 ```
 

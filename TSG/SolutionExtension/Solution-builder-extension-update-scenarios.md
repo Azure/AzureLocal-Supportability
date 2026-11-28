@@ -43,9 +43,9 @@ $helperModule = Join-Path -Path (Get-ASArtifactPath -NugetName Microsoft.AzureSt
 
 Import-Module $helperModule -Force
 
-# Generate a report of events logged by that action plan (in this example w/ InstanceId being 0dd5e575-91ea-4d2e-b890-87db7d1b7687)
+# Generate a report of events logged by that action plan (in this example w/ InstanceId being 00000000-0000-0000-0000-000000000000)
 
-Get-ActionPlanInstanceLog -actionPlanInstanceID 0dd5e575-91ea-4d2e-b890-87db7d1b7687 > LogVerbose.txt
+Get-ActionPlanInstanceLog -actionPlanInstanceID 00000000-0000-0000-0000-000000000000 > LogVerbose.txt
 
 ```
 

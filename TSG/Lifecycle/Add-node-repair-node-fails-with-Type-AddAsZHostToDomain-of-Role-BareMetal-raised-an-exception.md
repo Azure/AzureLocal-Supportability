@@ -9,7 +9,7 @@ To confirm the scenario that you are encountering is the issue documented in thi
 
 
 ```
-ActionPlanInstanceID: a542a185-4e82-4432-913f-4771ed0cc599 WarningMessage:[F0901-121]:Task: Invocation of interface 'AddAsZHostToDomain' of role 'Cloud\Infrastructure\BareMetal' failed:
+ActionPlanInstanceID: 00000000-0000-0000-0000-000000000000 WarningMessage:[NODE01]:Task: Invocation of interface 'AddAsZHostToDomain' of role 'Cloud\Infrastructure\BareMetal' failed:
 
 Type 'AddAsZHostToDomain' of Role 'BareMetal' raised an exception:
 

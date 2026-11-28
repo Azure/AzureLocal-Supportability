@@ -3,7 +3,7 @@
 # Symptoms
 After update to 2411, the Add Node or Repair Node operation will fail at "GenerateSSLCertificatesForAddScaleUnitNodes" with the error:
 
-_ActionPlanInstanceID: b5918716-de3c-41fe-9eb8-addadcb9f439 WarningMessage:[CRKR6S7C01]:Task: Invocation of interface 'GenerateSSLCertificatesForAddScaleUnitNodes' of role 'Cloud\Infrastructure\ASCA' failed:
+_ActionPlanInstanceID: 00000000-0000-0000-0000-000000000000 WarningMessage:[NODE01]:Task: Invocation of interface 'GenerateSSLCertificatesForAddScaleUnitNodes' of role 'Cloud\Infrastructure\ASCA' failed:
 
 Type 'GenerateSSLCertificatesForAddScaleUnitNodes' of Role 'ASCA' raised an exception:
 
@@ -37,15 +37,15 @@ EtlLogs
 | where AEODeviceARMResourceUri contains "<ARM RESOURCE URI>" and * contains "<ACTION PLAN INSTANCE ID OF ADD NODE/REPAIR NODE> "
 
 You should see the following in the logs:
-ActionPlanInstanceID: **<ID>** VerboseMessage:[CRKR6S7C01]:[ASCA:GenerateSSLCertificatesForAddScaleUnitNodes] Creating **-NC.<fqdn>** Certificate Request for crkr6s7c02 - 1/3/2025 4:34:59 AM
+ActionPlanInstanceID: **<ID>** VerboseMessage:[NODE01]:[ASCA:GenerateSSLCertificatesForAddScaleUnitNodes] Creating **-NC.<fqdn>** Certificate Request for node02 - 1/3/2025 4:34:59 AM
 
 SDN Prefix shouldnt have been set:
 
-ActionPlanInstanceID: **<ID>** VerboseMessage:[CRKR6S7C01]:[ASCA:GenerateSSLCertificatesForAddScaleUnitNodes] Could not get SDN Prefix: Object reference not set to an instance of an object. - 1/3/2025 9:48:59 AM
+ActionPlanInstanceID: **<ID>** VerboseMessage:[NODE01]:[ASCA:GenerateSSLCertificatesForAddScaleUnitNodes] Could not get SDN Prefix: Object reference not set to an instance of an object. - 1/3/2025 9:48:59 AM
 
 The action plan should be looking for the below 2 pfx paths:
 
-ActionPlanInstanceID: **<ID>** VerboseMessage:[CRKR6S7C01]:[ASCA:GenerateSSLCertificatesForAddScaleUnitNodes] Got certificate paths: C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\AzureStackCertStore\Internal\Current\ALMManagedAgents\crkr6s7c01\ECServiceSecretEncryption.pfx C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\AzureStackCertStore\Internal\Current\ALMManagedAgents\crkr6s7c01\ **-NCREST.pfx** - 1/3/2025 9:48:59 AM
+ActionPlanInstanceID: **<ID>** VerboseMessage:[NODE01]:[ASCA:GenerateSSLCertificatesForAddScaleUnitNodes] Got certificate paths: C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\AzureStackCertStore\Internal\Current\ALMManagedAgents\node01\ECServiceSecretEncryption.pfx C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\AzureStackCertStore\Internal\Current\ALMManagedAgents\node01\ **-NCREST.pfx** - 1/3/2025 9:48:59 AM
 
 Notice that the -NCREST.pfx has no value before the '-'. The expected value is <prefix>-NCREST.pfx.
 

@@ -449,7 +449,7 @@ param (
 
     # Custom Arc Gateway URL including https:// prefix.
     # Automatically enables -ArcGatewayDeployment.
-    # Example: https://1be59945-12c0-4cda-9580-84a66a1120a0.gw.arc.azure.com
+    # Example: https://00000000-0000-0000-0000-000000000000.gw.arc.azure.com
     [System.Uri]$ArcGatewayURL,
 
     # Custom DNS Name for NTP Time Server (no http:// or https:// prefix).

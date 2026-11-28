@@ -189,9 +189,9 @@ Raw LLDP TLVs → Byte String Parsing → Data Conversion → Network Analysis �
 
 #### Example Data Flow:
 
-**Raw Chassis ID TLV**: `"4 36 22 157 159 8 164"`
-- **Parsing**: Split by spaces, convert to bytes: [4, 36, 22, 157, 159, 8, 164]
-- **Conversion**: Subtype 4 = MAC Address format: `24:16:9D:9F:08:A4`
+**Raw Chassis ID TLV**: `"4 2 0 0 0 0 164"`
+- **Parsing**: Split by spaces, convert to bytes: [4, 2, 0, 0, 0, 0, 164]
+- **Conversion**: Subtype 4 = MAC Address format: `02:00:00:00:00:A4`
 - **Result**: Switch MAC address for unique identification
 
 ## NetLLDPAgent Commands and Usage
@@ -238,7 +238,7 @@ PS> Get-NetLldpAgent -NetAdapterName "Ethernet 4"
 
 Name               : Ethernet 4
 Scope              : NearestBridge
-MacAddress         : 0C-42-A1-7E-10-1A
+MacAddress         : 02-00-00-00-01-1A
 Neighbor           : Microsoft.Management.Infrastructure.CimInstance#ROOT/StandardCimv2/MSFT_NetLldpNeighbor
 AdminStatus        : EnabledTxRx
 OperStatus         : Up
@@ -252,7 +252,7 @@ PS> $neighbor.Neighbor.Tlvs | Select-Object TlvType, TlvName, Data
 
 TlvType TlvName              Data
 ------- -------              ----
-      1 Chassis ID          4 36 22 157 159 8 164
+      1 Chassis ID          4 2 0 0 0 0 164
       2 Port ID             5 69 116 104 101 114 110 101 116 49 47 50 57
       5 System Name         84 79 82 45 83 119 105 116 99 104 45 48 49
       6 System Description  67 105 115 99 111 32 78 101 120 117 115...
@@ -395,7 +395,7 @@ This manual process shows what the automated tool does across all adapters on al
 {
   "10.0.1.100": {
     "ethernet 4": {
-      "RemoteChassisID": "24:16:9D:9F:08:A4",
+      "RemoteChassisID": "02:00:00:00:00:A4",
       "RemoteSystemName": "TOR-Switch-01.contoso.local",
       "RemotePortID": "Ethernet1/29",
       "RemoteMaxFrameSize": 9216,
