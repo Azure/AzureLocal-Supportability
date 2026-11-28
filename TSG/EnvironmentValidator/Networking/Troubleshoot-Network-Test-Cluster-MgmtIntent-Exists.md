@@ -84,7 +84,7 @@ There are [ 0 ] management intent(s) on the cluster. Expecting [ 1 ]. Please che
    Start-Sleep -Seconds 10
 
    # Create new management intent
-   Add-NetIntent -ClusterName (Get-Cluster).Name -Name $intentName `-AdapterName $adapters -Management ... # Replace make sure string $intentName and string array $adapters, and put other necessary parameters as well
+   Add-NetIntent -ClusterName (Get-Cluster).Name -Name $intentName -AdapterName $adapters -Management ... # Replace make sure string $intentName and string array $adapters, and put other necessary parameters as well
    ```
 
 3. Verify the management intent was created:
