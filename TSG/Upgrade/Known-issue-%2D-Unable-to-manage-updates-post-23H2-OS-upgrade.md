@@ -30,8 +30,8 @@ To install the available updates, customers can use the following PowerShell com
 ```PowerShell
 $parameters = @{
     ClusterName = 'hci-cluster'
-    CauPluginName = 'Microsoft.WindowsUpdatePlugin',
-    CauPluginArguments = @{'IncludeRecommendedUpdates'='True'},
+    CauPluginName = 'Microsoft.WindowsUpdatePlugin'
+    CauPluginArguments = @{'IncludeRecommendedUpdates'='True'}
     MaxFailedNodes = '1'
     MaxRetriesPerNode = '3'
     RequireAllNodesOnline = $true
