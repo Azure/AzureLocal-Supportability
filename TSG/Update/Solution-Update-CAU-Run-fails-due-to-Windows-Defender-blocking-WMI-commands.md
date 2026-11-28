@@ -45,7 +45,7 @@ A table mapping rule names to rule GUIDs is also available [here](https://learn.
 
 ## Mitigation Details
 
-1. Modify the rule from block (value 1) to audit (value 2) to prevent it from blocking Azure Local Solution Update installer with this powershell command:
+1. On every node in the cluster, modify the rule from block (value 1) to audit (value 2) to prevent it from blocking Azure Local Solution Update installer with this powershell command. The command changes only the node you run it on, and the CAU run installs updates on every node, so any node you skip still blocks the installer:
 
 ```
 Set-OSConfigDesiredConfiguration -Scenario Defender/Antivirus -Setting ASRBlockProcessCreationFromPSExecAndWMICommands -Value "2"
