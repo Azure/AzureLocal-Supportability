@@ -73,6 +73,10 @@ CheckForAgentUpdateSlowness
 
 Running the below command from one of the cluster nodes while the agent is stuck should clear up the slowness and the update should auto remediate its state. The script forces a restart of the ECEAgent on all of the nodes in the cluster. The ECEAgent service is configured to restart itself a few seconds after its process stops, so the script's `Start-Service` call only makes sure the service is running; do not replace it with starting the program file directly, which runs a second copy outside the service.
 
+Run it only when the detection script above reports "ECE slowness issue detected", or when a previous update got stuck at the 'Failover ECE Service to new Node' step as described in Issue Validation.
+
+**Changes:** On every cluster node, the script force-stops the ECEAgent process and then makes sure the `ECEAgent` service is running again. Any work the agent is doing on that node at that moment is interrupted. It does not restart the nodes or any virtual machines, and it does not change the update or the cluster configuration.
+
 ``` Powershell 
  $scriptBlock = {
             try {
