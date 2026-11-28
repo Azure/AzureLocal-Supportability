@@ -28,7 +28,7 @@ Function Get-OrchestrationLastCrash {
     # Just grab the exceptions from that node
     $error_messages = Invoke-Command -ComputerName $node -ScriptBlock {
         $startTime = (Get-Date).AddHours(-1)
-        Get-WinEvent -FilterHashtable @{LogName = "Application"; StartTime = $($startTime); ID = 1000 } -ErrorAction SilentlyContinue
+        Get-WinEvent -FilterHashtable @{LogName = "Application"; StartTime = $($startTime); ID = 1025 } -ErrorAction SilentlyContinue
     } 
 
     $sorted_error_messages = $error_messages | Sort-Object TimeCreated -Descending
