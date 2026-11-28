@@ -10,7 +10,7 @@ Use text labels in addition to any visual styling. Do not use icons as the only 
 
 - [Article metadata marker](#article-metadata-marker)
 - [Applicable products and supported versions](#applicable-products-and-supported-versions)
-- [Risk and safety labels](#risk-and-safety-labels)
+- [Describing step impact](#describing-step-impact)
 - [Prerequisites and stop gates](#prerequisites-and-stop-gates)
 - [Author assembly checklist](#author-assembly-checklist)
 - [Complete action pattern](#complete-action-pattern)
@@ -69,22 +69,26 @@ Use this table whenever guidance depends on product, release, hardware, or opera
 
 ---
 
-## Risk and safety labels
+## Describing step impact
 
-Use `[READ-ONLY]` for steps that do not change state. It is not a risk label. When an action may change state, use one of the canonical risk labels and replace the placeholders with the actual impact, gate, and rollback for the article.
+Describe what each step changes in plain words. Read-only steps need no label; you can write "This step changes nothing." When an action may change state, add a `**Changes:**` line. Add `**Plan for:**` for disruptive steps, and a `> [!WARNING]` callout for steps that can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data. You can also label those steps `[HIGH RISK]`. Do not use `[LOW RISK]`, `[MEDIUM RISK]`, or `[READ-ONLY]` labels. Replace the placeholders with the actual impact, gate, and rollback for the article.
 
 ```markdown
-## Risk and safety
+## Before you start
+
+**Changes:** <what the action changes, such as a service, configuration, workload placement, or firmware>. <What it does not affect, such as "Running VMs are not affected.">
+
+**Plan for:** <what to arrange first, such as draining the machine, scheduling a maintenance window, or having recovery keys>. Do not continue unless <precondition> is true, <required privilege> is present, and <rollback or backup> is available.
 
 > [!WARNING]
-> [<READ-ONLY|LOW RISK|MEDIUM RISK|HIGH RISK>] This action changes <state, service, configuration, workload placement, or firmware>, or is read-only. Expected impact: <none, brief reconnect, workload failover, reboot, or downtime>. Do not continue unless <precondition> is true, <required privilege> is present, <maintenance window or approval> is satisfied for the workload impact, and <rollback or backup> is available.
+> <Concrete consequence in plain words, such as "This can't be undone." or "Running VMs stop if the machine is not drained first.">
 
-| Label | When to use | Required pre-check | Required privilege | Workload or maintenance gate | Stop condition | Rollback |
-| --- | --- | --- | --- | --- | --- | --- |
-| [READ-ONLY] | Non-mutating detection or validation only | <command or observable condition> | <least privilege required> | <none, or state why no maintenance window is needed> | <what means do not proceed> | Not applicable because no state changes |
-| [LOW RISK] | Reversible changes with no expected workload impact | <command or observable condition> | <least privilege required> | <none, or state why no maintenance window is needed> | <what means do not proceed> | <how to return to the prior state> |
-| [MEDIUM RISK] | Reversible state changes that can interrupt management, networking, or workload placement | <command or observable condition> | <least privilege required> | <approval or maintenance window needed before action> | <what means do not proceed> | <how to return to the prior state> |
-| [HIGH RISK] | Firmware, reboot, destructive cleanup, storage, quorum, or workload-impacting actions | <command or observable condition> | <least privilege required> | <approved maintenance window and workload-owner notification> | <what means do not proceed> | <how to return to the prior state or escalate> |
+| Kind of step | When to use | What to write | Required pre-check | Required privilege | Workload or maintenance gate | Stop condition | Rollback |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Read-only | Non-mutating detection or validation only | No label. Optionally "This step changes nothing." | <command or observable condition> | <least privilege required> | <none, or state why no maintenance window is needed> | <what means do not proceed> | Not applicable because no state changes |
+| State-changing | Reversible changes with no expected workload impact and no firmware or security posture change | `**Changes:**` line | <command or observable condition> | <least privilege required> | <none, or state why no maintenance window is needed> | <what means do not proceed> | <how to return to the prior state> |
+| Disruptive | Reversible state changes that can interrupt management, networking, or workload placement | `**Changes:**` and `**Plan for:**` lines | <command or observable condition> | <least privilege required> | <approval or maintenance window needed before action> | <what means do not proceed> | <how to return to the prior state> |
+| Can't be undone or interrupts workloads | Firmware or security posture changes, reboot, destructive cleanup, storage, quorum, workload-interrupting actions, or possible data loss | `**Changes:**` and `**Plan for:**` lines plus a `> [!WARNING]` callout, optionally with a `[HIGH RISK]` label | <command or observable condition> | <least privilege required> | <approved maintenance window and workload-owner notification> | <what means do not proceed> | <how to return to the prior state or escalate> |
 ```
 
 ---
@@ -111,8 +115,8 @@ Use this checklist before copying snippets into an article. It keeps article aut
 
 | Document type | Required snippet blocks | Optional snippet blocks | Fast path placement |
 | --- | --- | --- | --- |
-| Troubleshooting guide | Metadata marker, applicable products, risk and safety, prerequisites, where this appears, complete action pattern, expected output, verify the fix, evidence bundle | Owner handoff, workload impact, OEM boundary, multi-node rollout | Put the fastest safe diagnosis and stop gate before deeper explanation |
-| How-to guide | Metadata marker, applicable products, prerequisites, risk and safety, complete action pattern, expected output, rollback, verification | Workload impact, rollout table, customer summary | Put the top three actions before background information |
+| Troubleshooting guide | Metadata marker, applicable products, step impact, prerequisites, where this appears, complete action pattern, expected output, verify the fix, evidence bundle | Owner handoff, workload impact, OEM boundary, multi-node rollout | Put the fastest safe diagnosis and stop gate before deeper explanation |
+| How-to guide | Metadata marker, applicable products, prerequisites, step impact, complete action pattern, expected output, rollback, verification | Workload impact, rollout table, customer summary | Put the top three actions before background information |
 | Reference article | Metadata marker, applicable products, supported versions, defaults, constraints, expected output, validation command | Glossary, owner handoff, evidence bundle | Put required settings and supported versions before examples |
 | Overview | Metadata marker, applicable products, owner and impact summary, customer-facing summary, scope, next action | Glossary, handoff table | Put the reader decision and owner first |
 | Deep dive | Metadata marker, applicable products, glossary, evidence, validation command, operational boundaries | Workload impact, OEM boundary, rollout table | Put the mechanism summary before detailed internals |
@@ -123,7 +127,7 @@ Use this fast-path table when the reader needs the shortest safe path before the
 | --- | --- | --- | --- |
 | 1. Confirm scope | Product, supported version, node or site, and owner | Stop if the product or version is out of scope | Record the scope in the evidence bundle |
 | 2. Run read-only detection | The command or portal check that proves the issue exists | Stop if the output is healthy, empty when empty is healthy, or inconclusive | Save the exact output and timestamp |
-| 3. Choose the action | The risk-labeled action, privilege, workload gate, maintenance window, rollback, and escalation owner | Stop if rollback is unavailable, privilege is missing, workload approval is missing, or maintenance gating is unresolved | Run the verification command and record pass or fail |
+| 3. Choose the action | The action and its `**Changes:**` statement, privilege, workload gate, maintenance window, rollback, and escalation owner | Stop if rollback is unavailable, privilege is missing, workload approval is missing, or maintenance gating is unresolved | Run the verification command and record pass or fail |
 
 ---
 
@@ -134,8 +138,12 @@ Every generated action pattern should prompt for pre-check, action, expected res
 ````markdown
 ## Action: <short action name>
 
+**Changes:** <What the action changes and what it does not affect. For a read-only action, write "This step changes nothing." instead.>
+
+**Plan for:** <Disruptive actions only: what to arrange first, such as a drain or maintenance window. Delete this line otherwise.>
+
 > [!WARNING]
-> [<READ-ONLY|LOW RISK|MEDIUM RISK|HIGH RISK>] <Explain the impact in one sentence. Use READ-ONLY only when no state changes.>
+> <Only for actions that can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data: state the consequence in plain words. Delete this callout otherwise.>
 
 ### Privilege and workload gate
 
@@ -276,12 +284,12 @@ Use this compact set when the article needs a decision owner, customer context, 
 
 | Snippet | Copy-ready prompt |
 | --- | --- |
-| Owner and impact summary | State the business impact, technical owner, customer-visible impact, expected duration, downtime risk, and escalation path in one paragraph. |
+| Owner and impact summary | State the business impact, technical owner, customer-visible impact, expected duration, effect on workloads, and escalation path in one paragraph. |
 | Customer-facing summary | In plain language, state the current state, who owns the next action, what will happen next, expected timing, and what the customer can safely do while waiting. |
 | Owner handoff | Record the primary owner, secondary owner, evidence already collected, evidence still needed, and the condition that transfers ownership. |
 | Workload impact | State whether VMs move, live migrate, pause, restart, drain, or experience downtime. Name the required approval and maintenance window. |
 | OEM boundary | State the hardware evidence, firmware or driver target, owner, and the signal that this is not an OEM action. |
-| Accessibility context | Explain why the step matters, who it helps, what risk it avoids, and the safe next action for a reader who cannot perform the change. |
+| Accessibility context | Explain why the step matters, who it helps, what problem it avoids, and the safe next action for a reader who cannot perform the change. |
 
 ```markdown
 ## Owner, impact, and handoff
@@ -292,7 +300,7 @@ Use this compact set when the article needs a decision owner, customer context, 
 | Primary owner | <customer IT, partner or system integrator (SI), original equipment manufacturer (OEM), Microsoft Customer Service and Support (CSS), or product group> |
 | Secondary owner or handoff target | <team or role> |
 | Expected duration | <time estimate or not known> |
-| Downtime or workload risk | <none, live migration, reboot, drain, or outage> |
+| Effect on workloads | <none, live migration, reboot, drain, or outage> |
 | Approval required | <none, change record, maintenance window, or customer approval> |
 | Evidence collected | <commands, logs, screenshots, timestamps, and validation output> |
 | Escalation path | <who to contact and what evidence to include> |
@@ -308,7 +316,7 @@ Use a filled safe-action example when readers may not know how to replace placeh
 
 | Contract field | Filled example |
 | --- | --- |
-| Label | [READ-ONLY] |
+| What changes | This step changes nothing. |
 | Required privilege | User rights sufficient to run read-only PowerShell DNS queries on the node. |
 | Workload or maintenance gate | No workload impact and no maintenance window required because this is read-only. |
 | Pre-check | Confirm PowerShell can resolve a public Microsoft endpoint from the node. |
@@ -398,7 +406,7 @@ Prefer standard Markdown admonitions for public TSGs. Use styled HTML only when 
 
 ```markdown
 > [!WARNING]
-> [MEDIUM RISK] This action could cause system downtime or data loss. Complete the pre-check, rollback, and verification steps before proceeding.
+> Running VMs stop if the machine is not drained first. Complete the pre-check, rollback, and verification steps before proceeding.
 ```
 
 ### Helpful notes
@@ -419,7 +427,7 @@ Prefer standard Markdown admonitions for public TSGs. Use styled HTML only when 
 
 ```markdown
 > [!CAUTION]
-> This warns about potential issues or risks to consider.
+> This warns about potential issues to consider.
 ```
 
 ---

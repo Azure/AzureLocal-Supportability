@@ -8,6 +8,7 @@ This is a public repository for all of Azure Local Troubleshooting guides (TSGs)
 - [Article metadata](#article-metadata)
 - [Language assistance guidelines](#language-assistance-guidelines)
 - [PowerShell code guidelines](#powershell-code-guidelines)
+  - [Describing step impact](#describing-step-impact)
 - [Link guidelines](#link-guidelines)
 - [New file guidelines](#new-file-guidelines)
 
@@ -68,7 +69,7 @@ Format each review comment with:
 - [ ] Every administrator detection surface is shown or explicitly marked not evident
 - [ ] Diagnostic steps are in logical sequence
 - [ ] Resolution steps are distinct from diagnostic steps
-- [ ] State-changing steps carry a [LOW RISK], [MEDIUM RISK], or [HIGH RISK] label
+- [ ] State-changing steps describe their impact with a `**Changes:**` line, plus `**Plan for:**` or a `> [!WARNING]` callout when needed, and no `[LOW RISK]`, `[MEDIUM RISK]`, or `[READ-ONLY]` label (see [Describing step impact](#describing-step-impact))
 - [ ] Preconditions, workload impact, rollback, and escalation criteria are explicit
 - [ ] Verification steps confirm issue resolution
 - [ ] PowerShell code follows safety guidelines
@@ -86,7 +87,7 @@ Use the administrator-surface states consistently:
 - [ ] Clear prerequisites section
 - [ ] Numbered step-by-step instructions
 - [ ] Each step has a single, clear action
-- [ ] Each state-changing step includes risk, impact, expected result, and rollback
+- [ ] Each state-changing step includes a `**Changes:**` statement, workload impact, expected result, and rollback
 - [ ] Verification steps follow configuration changes
 - [ ] Expected outcomes are clearly documented
 - [ ] Alternative approaches mentioned where applicable
@@ -132,7 +133,7 @@ Frame language suggestions as "improvements" rather than "corrections"
 When reviewing or suggesting PowerShell code in documentation:
 - Pay special attention to commands that change environment state (e.g., restart, stop, remove, set, write).
 - For state-changing commands:
-  - Assign one canonical risk label: [LOW RISK], [MEDIUM RISK], or [HIGH RISK].
+  - Describe the impact with a `**Changes:**` line, and add `**Plan for:**` or a `> [!WARNING]` callout when the step is disruptive or can't be undone. See [Describing step impact](#describing-step-impact).
   - Verify code is safe for production environments.
   - Implement defensive coding techniques (check conditions before taking action). But avoid excessive complexity.
   - Include a pre-check, expected output, stop condition, rollback, and verification.
@@ -140,8 +141,7 @@ When reviewing or suggesting PowerShell code in documentation:
   - Check for proper error handling.
   - Use placeholders like <hostname> instead of hardcoded values.
 - For read-only commands:
-  - Use [READ-ONLY] as the action type, not as a risk label.
-  - Record the risk label as not applicable because the command does not change state.
+  - Do not add a label. Optionally add one short sentence, such as "This step changes nothing."
 
 Example:
 ```powershell
@@ -158,6 +158,19 @@ Example:
 $ErrorActionPreference = "Stop"
 Get-Service -Name "NonExistentService"
 ```
+
+### Describing step impact
+
+Readers want to know what a step changes, not a threat rating. Describe impact in plain words:
+
+- **Read-only or diagnostic steps:** no label. Optionally add one short sentence, such as "This step changes nothing."
+- **State-changing steps:** add a line that starts with `**Changes:**` and says concretely what the step changes and what it does not affect. Example: "**Changes:** removes the extra module folder. Running VMs are not affected."
+- **Disruptive steps** (restart, drain, node or workload interruption, management interruption, or a maintenance window is needed): also add a line that starts with `**Plan for:**` and states what to arrange first. Example: "**Plan for:** drain the machine and schedule a maintenance window."
+- **Steps that can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data:** add a `> [!WARNING]` callout that states the concrete consequence in plain words. Example: "This can't be undone." or "Running VMs stop if the machine is not drained first." You can also add a `[HIGH RISK]` label to these steps, alongside the callout.
+
+Use the word "risk" in a label only for `[HIGH RISK]`. Do not add `[LOW RISK]`, `[MEDIUM RISK]`, or `[READ-ONLY]` labels to new or edited steps. These statements replace those labels only. Every state-changing step still needs its pre-check, expected result, stop condition, rollback, verification, required privilege, maintenance gate, and escalation path.
+
+Existing articles that still use the older bracketed labels, such as `[READ-ONLY]`, `[LOW RISK]`, or `[MEDIUM RISK]`, are acceptable and are not required to change. Do not flag them or block a pull request on them.
 
 ## Link Guidelines
 - Check for broken internal links and references

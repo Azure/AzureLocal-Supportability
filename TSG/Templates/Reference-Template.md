@@ -92,8 +92,8 @@ Use this summary so readers can decide whether this reference applies before cop
 | Customer impact | {What reader decision or operational outcome this reference supports} |
 | Expected decision time | {Estimated time to decide applicability, or why timing is not applicable} |
 | Maintenance-window length | {Expected maintenance-window length, or why no window is required} |
-| Downtime or workload risk | {None, read-only, maintenance window required, workload impact possible, or not applicable} |
-| Workload-impact checklist | {State whether the guidance can involve VM movement, drain, reboot, live migration, or application-availability risk} |
+| Effect on workloads | {None, read-only, maintenance window required, workload impact possible, or not applicable} |
+| Workload-impact checklist | {State whether the guidance can involve VM movement, drain, reboot, live migration, or application-availability impact} |
 | Handoff trigger and evidence | {When networking, OEM, Microsoft Customer Support Services (CSS), partner, or product group owns the next step, and the exact logs, command output, firmware data, or screenshots to attach} |
 | Fastest validation | {The shortest safe command or check that proves the configured state} |
 
@@ -186,12 +186,12 @@ Update this table of contents if you rename, add, or remove sections.
 
 #### Action or configuration example
 
-Classify the action type first. Use [READ-ONLY] for non-mutating inspection or validation. If the action changes or could change state, choose one canonical risk label: [LOW RISK] for low-impact state changes, [MEDIUM RISK] for reversible configuration changes that may affect availability or operations, and [HIGH RISK] for privileged, broad, hard-to-rollback, or workload-impacting changes.
+Classify the action type first. Read-only inspection or validation needs no label; you can write "This step changes nothing." If the action changes or could change state, write a `**Changes:**` statement that says what changes and what is not affected. Add `**Plan for:**` when the change affects availability or operations or needs a maintenance window. Add a `> [!WARNING]` callout when the change is privileged and broad, hard to roll back, can interrupt running workloads, changes firmware or security posture, or can lose data, and state the consequence in plain words. You can also label that action `[HIGH RISK]`. Do not use `[LOW RISK]`, `[MEDIUM RISK]`, or `[READ-ONLY]` labels.
 
 | Field | Required content |
 | ----- | ---------------- |
-| Action type | {[READ-ONLY] for non-mutating actions, otherwise state-changing} |
-| Risk label | {Not applicable for read-only action type, otherwise [LOW RISK], [MEDIUM RISK], or [HIGH RISK]} |
+| Action type | {Read-only for non-mutating actions, otherwise state-changing} |
+| What changes | {"This step changes nothing." for read-only actions, otherwise a `**Changes:**` statement, plus `**Plan for:**` when the action is disruptive. A table cell can't show a `> [!WARNING]` callout, so put any callout on its own lines above this table, followed by a blank line, and name the step in it} |
 | Privilege required | {None, local administrator, Azure role, OEM access, or other privilege} |
 | State-changing | {Yes or no} |
 | Workload impact | {Expected VM, cluster, network, storage, update, security, drain, reboot, live migration, or application-availability impact} |
@@ -245,15 +245,15 @@ Every generated action pattern must include all rows below. If a row does not ap
 
 | Pattern element | Author prompt |
 | --------------- | ------------- |
-| Action type | {[READ-ONLY] for non-mutating actions, otherwise state-changing} |
-| Risk label | {Not applicable for read-only action type, otherwise [LOW RISK], [MEDIUM RISK], or [HIGH RISK]} |
+| Action type | {Read-only for non-mutating actions, otherwise state-changing} |
+| What changes | {"This step changes nothing." for read-only actions, otherwise a `**Changes:**` statement, plus `**Plan for:**` when the action is disruptive. A table cell can't show a `> [!WARNING]` callout, so put any callout on its own lines above this table, followed by a blank line, and name the step in it} |
 | Privilege required | {None, local administrator, Azure role, OEM access, or other privilege} |
 | Workload impact | {Expected VM, cluster, network, storage, update, security, drain, reboot, live migration, or application-availability impact} |
 | Maintenance window or approval gate | {Required, recommended, not required, or not applicable, plus the approval owner when required} |
 | Pre-check | {What confirms the current state and proves it is safe to continue?} |
 | Action | {What exact command, portal operation, file edit, or configuration change should the reader perform?} |
 | Expected result or output | {What exact output or state should appear after the action?} |
-| Stop condition | {What error, missing prerequisite, unexpected state, or risk should make the reader stop?} |
+| Stop condition | {What error, missing prerequisite, unexpected state, or impact should make the reader stop?} |
 | Rollback | {How does the reader return to the prior state if the action fails or is no longer wanted?} |
 | Expected rollback output | {What output or state proves the rollback command succeeded?} |
 | Rollback verification | {What independent check proves rollback restored the previous or safe state?} |
@@ -274,7 +274,7 @@ Every generated action pattern must include all rows below. If a row does not ap
 - Supported versions: {Version or build range}
 - Ownership lane: {Customer IT, partner, Microsoft Customer Support Services (CSS), OEM, or product group}
 - Scale of application: {Per node, per cluster, per site, across a fleet, or not applicable}
-- Workload impact: {None, possible, expected, or unknown. Call out VM movement, drain, reboot, live migration, and application-availability risk when relevant.}
+- Workload impact: {None, possible, expected, or unknown. Call out VM movement, drain, reboot, live migration, and application-availability impact when relevant.}
 - Required privileges: {Privilege required}
 
 **Variables:**
@@ -288,8 +288,8 @@ Every generated action pattern must include all rows below. If a row does not ap
 
 | Field | Value |
 | ----- | ----- |
-| Action type | {[READ-ONLY] for non-mutating examples, otherwise state-changing} |
-| Risk label | {Not applicable for read-only action type, otherwise [LOW RISK], [MEDIUM RISK], or [HIGH RISK]} |
+| Action type | {Read-only for non-mutating examples, otherwise state-changing} |
+| What changes | {"This step changes nothing." for read-only actions, otherwise a `**Changes:**` statement, plus `**Plan for:**` when the action is disruptive. A table cell can't show a `> [!WARNING]` callout, so put any callout on its own lines above this table, followed by a blank line, and name the step in it} |
 | Pre-check | {Pre-check command or inspection} |
 | Action | {Configuration command or portal action} |
 | Expected result or output | {Exact expected result} |
@@ -325,8 +325,8 @@ Every generated action pattern must include all rows below. If a row does not ap
 
 | Field | Required content |
 | ----- | ---------------- |
-| Action type | {[READ-ONLY] for non-mutating validation, otherwise state-changing} |
-| Risk label | {Not applicable for read-only action type, otherwise [LOW RISK], [MEDIUM RISK], or [HIGH RISK]} |
+| Action type | {Read-only for non-mutating validation, otherwise state-changing} |
+| What changes | {"This step changes nothing." for read-only actions, otherwise a `**Changes:**` statement, plus `**Plan for:**` when the action is disruptive. A table cell can't show a `> [!WARNING]` callout, so put any callout on its own lines above this table, followed by a blank line, and name the step in it} |
 | Privilege required | {None, local administrator, Azure role, OEM access, or other privilege} |
 | Workload impact | {Expected VM, cluster, network, storage, update, security, drain, reboot, live migration, or application-availability impact} |
 | Maintenance window or approval gate | {Required, recommended, not required, or not applicable, plus the approval owner when required} |
@@ -368,8 +368,8 @@ Validation command:
 | Constraints | {Constraints} | {Constraints} | {Constraints} |
 | Supported versions | {Versions} | {Versions} | {Versions} |
 | Use case | {When to use} | {When to use} | {When to use} |
-| Action type | {[READ-ONLY] or state-changing} | {[READ-ONLY] or state-changing} | {[READ-ONLY] or state-changing} |
-| State-changing risk label | {Not applicable, [LOW RISK], [MEDIUM RISK], or [HIGH RISK]} | {Not applicable, [LOW RISK], [MEDIUM RISK], or [HIGH RISK]} | {Not applicable, [LOW RISK], [MEDIUM RISK], or [HIGH RISK]} |
+| Action type | {Read-only or state-changing} | {Read-only or state-changing} | {Read-only or state-changing} |
+| What changes | {Changes nothing, or what changes and what to plan for} | {Changes nothing, or what changes and what to plan for} | {Changes nothing, or what changes and what to plan for} |
 | Validation | {How to validate} | {How to validate} | {How to validate} |
 
 ## Metadata marker

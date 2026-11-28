@@ -27,7 +27,7 @@ Complete this card before writing the body. It gives skimmers, account teams, an
 | **Use this overview when** | {State the reader situation where conceptual orientation or decision support is the right article type.} |
 | **Do not use this overview when** | {State when the reader should use a Troubleshoot, How-To, Reference, or Deep Dive article instead. If the reader is blocked by an active failure, point them to the appropriate public troubleshooting article when one exists.} |
 | **Customer or workload impact** | {Summarize whether the topic can affect customers, virtual machine (VM) availability, deployment timelines, operations, security posture, or has no expected customer impact.} |
-| **Downtime or change risk** | {State whether the overview implies no change, planning-only change, or a potential state-changing action that must use [LOW RISK], [MEDIUM RISK], or [HIGH RISK] labeling in the action pattern.} |
+| **What could change** | {State whether the overview implies no change, planning-only change, or a potential state-changing action that must be described with `**Changes:**` and, when needed, `**Plan for:**` statements in the action pattern.} |
 | **Expected reader decision** | {Name the decision, understanding, or next conversation the reader should be ready for after reading.} |
 | **Accountable owner and escalation lane** | {Name the owning role and the handoff path. Examples: customer IT, Microsoft CSS, product engineering, partner or SI, or OEM vendor.} |
 | **Next action** | {Link or name the next public Microsoft article, decision review, or owner follow-up.} |
@@ -38,7 +38,7 @@ Complete this card before writing the body. It gives skimmers, account teams, an
 - [1. Purpose and audience](#1-purpose-and-audience)
 - [2. Scope and applicability](#2-scope-and-applicability)
 - [3. Architecture and key concepts](#3-architecture-and-key-concepts)
-- [4. Operational boundaries and risks](#4-operational-boundaries-and-risks)
+- [4. Operational boundaries and impact](#4-operational-boundaries-and-impact)
 - [5. Claims and evidence](#5-claims-and-evidence)
 - [6. Frequently asked questions](#6-frequently-asked-questions)
 - [7. Additional resources](#7-additional-resources)
@@ -111,26 +111,26 @@ This overview complements the official [Azure Local documentation](https://learn
 | **{Option 2}** | {Scenario} | {Benefit} | {Constraint} | {Owner} |
 | **{Option 3}** | {Scenario} | {Benefit} | {Constraint} | {Owner} |
 
-## 4. Operational boundaries and risks
+## 4. Operational boundaries and impact
 
 {Use this section when overview guidance could influence operations, change planning, support routing, workload availability, security posture, or vendor ownership. If there is no operational effect, state that explicitly.}
 
-| Boundary or risk | Author prompt |
+| Boundary or impact | Author prompt |
 | ---------------- | ------------- |
 | **Safe use** | {Explain how the overview should be used without treating it as a procedure.} |
 | **Not covered here** | {State which troubleshooting, deployment, or repair actions belong in another article type.} |
-| **Workload or availability considerations** | {State whether concepts in this overview imply virtual machine (VM) downtime, maintenance windows, quorum risk (risk that the cluster loses enough voting members to stay online), network interruption, or no workload effect.} |
+| **Workload or availability considerations** | {State whether concepts in this overview imply virtual machine (VM) downtime, maintenance windows, possible loss of quorum (the cluster losing enough voting members that it can't stay online), network interruption, or no workload effect.} |
 | **Security posture considerations** | {State whether the topic affects identity, role-based access control (RBAC), certificates, firewall policy, secrets, or has no expected security effect.} |
-| **Risk label when actions are included** | {Use [LOW RISK], [MEDIUM RISK], or [HIGH RISK] for any example that could change state.} |
+| **Impact statement when actions are included** | {For any example that could change state, add a `**Changes:**` statement, `**Plan for:**` when the step is disruptive, and a `> [!WARNING]` callout, optionally with a `[HIGH RISK]` label, when it can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data.} |
 | **Escalation or handoff** | {State when to involve CSS, product engineering, an OEM vendor, a partner or SI, or customer change-control owners.} |
 
 ### Action pattern for any state-changing example
 
-Overview articles should avoid step-by-step repair flows. If an example action is necessary for context, label the risk and include every field below.
+Overview articles should avoid step-by-step repair flows. If an example action is necessary for context, describe what it changes and include every field below.
 
 | Field | Required prompt |
 | ----- | --------------- |
-| **Risk label** | {Choose [LOW RISK], [MEDIUM RISK], or [HIGH RISK].} |
+| **What changes** | {Write a `**Changes:**` statement that says what changes and what is not affected. Add `**Plan for:**` for disruptive steps. A table cell can't show a `> [!WARNING]` callout, so for steps that can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data, put the callout on its own lines above this table, followed by a blank line, and name the step in it.} |
 | **Privilege and approval gate** | {State the minimum role, local admin right, RBAC assignment, vendor approval, or change-control approval required before the action.} |
 | **Pre-check** | {Condition that must be true before the action is safe. Include health, backup, recovery-key, and ownership checks where applicable.} |
 | **Workload or maintenance gate** | {State the required maintenance window, workload-drain state, customer approval, or confirmation that the example has no workload effect.} |
@@ -230,4 +230,4 @@ Use this checklist before opening a pull request. It prevents the reusable templ
 | **Public-link hygiene** | {Use public Microsoft links only. Remove internal work-item, wiki, Kusto, or engineering links from the public article.} |
 | **Applicability** | {Confirm applicable products, supported versions, environment assumptions, rollout repeatability, and OEM or partner boundaries are explicit.} |
 | **Claims** | {Confirm every testable or operationally important claim has an evidence reference.} |
-| **Actions, if any** | {Confirm any state-changing example has risk, privilege, workload or maintenance gate, pre-check, action, expected output, stop condition and escalation target, rollback, expected rollback output, rollback verification, and final verification.} |
+| **Actions, if any** | {Confirm any state-changing example has a `**Changes:**` statement, privilege, workload or maintenance gate, pre-check, action, expected output, stop condition and escalation target, rollback, expected rollback output, rollback verification, and final verification.} |

@@ -45,7 +45,7 @@ Use this template for Azure Local troubleshooting guides. Replace all placeholde
 | Customer impact | {VM impact, update blocked, deployment blocked, degraded redundancy, monitoring only, or none} |
 | Primary owner | {Customer IT, Microsoft Customer Support Services (CSS), product group, OEM, partner, or systems integrator (SI)} |
 | Execution surface | {on-device, mixed, cloud-diagnostic, cloud-control, or thin} |
-| Risk summary | {Highest expected mitigation risk and whether a maintenance window is needed} |
+| Impact summary | {What the most disruptive mitigation step changes and whether a maintenance window is needed} |
 
 ## Executive triage summary
 
@@ -55,7 +55,7 @@ Use this template for Azure Local troubleshooting guides. Replace all placeholde
 | Who should act? | {Role or team that should run the guide} |
 | Fastest safe next action | {The first read-only check to run} |
 | Estimated duration | {Expected time to diagnose and mitigate} |
-| Downtime or workload risk | {None, possible, expected, or unknown, with reason} |
+| Effect on workloads | {None, possible, expected, or unknown, with reason} |
 | Escalate immediately if | {Condition that requires CSS, product group, OEM, or partner help} |
 
 ## Symptoms and scope
@@ -90,7 +90,7 @@ Define acronyms, Azure Local objects, command names, and component names that a 
 | Term | Plain-language definition | Why the reader needs it |
 | --- | --- | --- |
 | {Acronym or product object} | {Short definition using customer-facing language} | {Decision, command, or safety gate that depends on this term} |
-| {Safety term, such as quorum, detached virtual disk, or degraded redundancy} | {What the state means and how to recognize it} | {Why it changes the stop condition, risk label, or rollback path} |
+| {Safety term, such as quorum, detached virtual disk, or degraded redundancy} | {What the state means and how to recognize it} | {Why it changes the stop condition, impact statement, or rollback path} |
 | {Cmdlet, portal blade, Event ID, or log name} | {What it is and where the reader sees it} | {How it is used in diagnosis, mitigation, rollback, or verification} |
 
 ## Where this appears
@@ -122,8 +122,8 @@ Complete these checks before any mitigation. If a stop condition is met, do not 
 | --- | --- | --- | --- | --- |
 | Permissions | {Command or portal check for required role or local admin rights} | {Required role or privilege is present} | {Required privilege is missing} | {Customer IT, Microsoft CSS, OEM, partner, or product group} |
 | Workload safety | {Check VM state, owner node, redundancy, or maintenance window} | {Workloads can tolerate the action or are drained} | {Critical workload cannot be moved or protected} | {Workload owner} |
-| Cluster health | {Read-only command to confirm quorum, node, storage, and network health} | {Cluster is stable enough for the action} | {Quorum risk, meaning not enough voting members to keep the cluster online; node down; detached virtual disk, meaning disconnected from storage; or degraded redundancy, meaning fewer healthy copies than policy requires} | {Cluster admin} |
-| Recovery material | {Check backups, BitLocker recovery keys, snapshots, or configuration export when applicable} | {Recovery material is available and current} | {Recovery material is missing for a risky action} | {Customer IT} |
+| Cluster health | {Read-only command to confirm quorum, node, storage, and network health} | {Cluster is stable enough for the action} | {Quorum could be lost, meaning not enough voting members to keep the cluster online; node down; detached virtual disk, meaning disconnected from storage; or degraded redundancy, meaning fewer healthy copies than policy requires} | {Cluster admin} |
+| Recovery material | {Check backups, BitLocker recovery keys, snapshots, or configuration export when applicable} | {Recovery material is available and current} | {Recovery material is missing for an action that can't be undone or can interrupt workloads} | {Customer IT} |
 | OEM or firmware readiness | {Check model, firmware, BIOS, BMC, driver, or qualified configuration when applicable} | {Prerequisites are met or not applicable} | {OEM prerequisite is unmet or unclear} | {OEM or partner} |
 
 ## Diagnosis
@@ -155,13 +155,13 @@ Use blameless language. Do not assign human error or state a single root cause u
 
 ## Mitigation
 
-Only run a mitigation after the matching diagnosis branch is satisfied and the preconditions are met. Use [READ-ONLY] for diagnostic or verification actions that do not change state; risk is not applicable because no state changes. Reserve the canonical risk labels for state-changing steps: [LOW RISK], [MEDIUM RISK], or [HIGH RISK].
+Only run a mitigation after the matching diagnosis branch is satisfied and the preconditions are met. Diagnostic and verification actions that do not change state need no label; you can write "This step changes nothing." For every state-changing step, write a `**Changes:**` statement that says what the step changes and what it does not affect. Add `**Plan for:**` when the step is disruptive, such as a restart, drain, or maintenance window. Add a `> [!WARNING]` callout above the mitigation table for any step that can't be undone, can interrupt running workloads, changes firmware or security posture, or can lose data. Put it on its own lines, followed by a blank line, name the step, and state the consequence in plain words. You can also label that step `[HIGH RISK]`. Do not use `[LOW RISK]`, `[MEDIUM RISK]`, or `[READ-ONLY]` labels.
 
-| Step | Action type or risk label | Privilege | Workload or maintenance gate | Pre-check | Action | Expected result or output | Stop condition | Rollback | Rollback verification | Escalation if blocked |
+| Step | What changes | Privilege | Workload or maintenance gate | Pre-check | Action | Expected result or output | Stop condition | Rollback | Rollback verification | Escalation if blocked |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | [READ-ONLY] | {Required role or local right to read state} | {Risk not applicable because no state changes; no maintenance window required} | {Read-only check that confirms this step applies} | {Diagnostic or verification action that does not change state} | {Expected output} | {Condition that stops the step} | {Not applicable because no state changes} | {Not applicable because no state changes} | {Owner to contact if blocked} |
-| 2 | [MEDIUM RISK] | {Required role or local right} | {Maintenance window, workload drain, or owner approval required} | {Check workload, cluster, and permission prerequisites} | {State-changing command or portal action} | {Expected output} | {Condition that stops the step before or during execution} | {Command or procedure that restores the prior state} | {Expected rollback output and command or surface that confirms rollback} | {Owner to contact if blocked} |
-| 3 | [HIGH RISK] | {Required role or local right} | {Explicit maintenance window, recovery material, redundancy, and escalation approval required} | {Explicit maintenance window, recovery material, redundancy, and escalation approval check} | {High-risk action, if this TSG truly requires one} | {Expected output} | {Any unmet safety gate, unexpected output, or customer impact} | {Exact rollback or vendor-supported recovery path} | {Expected rollback output and post-rollback health validation} | {CSS, product group, OEM, partner, or SI escalation path} |
+| 1 | This step changes nothing. | {Required role or local right to read state} | {No state changes; no maintenance window required} | {Read-only check that confirms this step applies} | {Diagnostic or verification action that does not change state} | {Expected output} | {Condition that stops the step} | {Not applicable because no state changes} | {Not applicable because no state changes} | {Owner to contact if blocked} |
+| 2 | **Changes:** {what the step changes and what it does not affect}. **Plan for:** {what to arrange first, if the step is disruptive} | {Required role or local right} | {Maintenance window, workload drain, or owner approval required} | {Check workload, cluster, and permission prerequisites} | {State-changing command or portal action} | {Expected output} | {Condition that stops the step before or during execution} | {Command or procedure that restores the prior state} | {Expected rollback output and command or surface that confirms rollback} | {Owner to contact if blocked} |
+| 3 | **Changes:** {what the step changes and what it does not affect}. **Plan for:** {drain, maintenance window, or recovery material}. {A table cell can't show a `> [!WARNING]` callout. Put it above the mitigation table, name this step, and state the consequence, such as "This can't be undone."} | {Required role or local right} | {Explicit maintenance window, recovery material, redundancy, and escalation approval required} | {Explicit maintenance window, recovery material, redundancy, and escalation approval check} | {Disruptive or irreversible action, if this TSG truly requires one} | {Expected output} | {Any unmet safety gate, unexpected output, or customer impact} | {Exact rollback or vendor-supported recovery path} | {Expected rollback output and post-rollback health validation} | {CSS, product group, OEM, partner, or SI escalation path} |
 
 ```powershell
 # Pre-check
@@ -186,7 +186,7 @@ Run the rollback block below **only** if a stop condition was met or the verific
 
 ## Rollback
 
-Every state-changing mitigation step must have a rollback plan. If rollback is not possible, state that clearly, label the step [HIGH RISK], and require escalation before the action.
+Every state-changing mitigation step must have a rollback plan. If rollback is not possible, state that clearly in a `> [!WARNING]` callout, such as "This can't be undone.", and require escalation before the action.
 
 | Mitigation step | Trigger to roll back | Rollback action | Expected rollback output | Verification after rollback |
 | --- | --- | --- | --- | --- |
@@ -216,7 +216,7 @@ Verify both technical recovery and customer impact recovery. Include timing, bec
 
 ## Escalation and evidence package
 
-Escalate when diagnosis is inconclusive, a stop gate is met, mitigation risk is unacceptable, the issue recurs, or the guide points to a product group, OEM, partner, or Microsoft CSS owner.
+Escalate when diagnosis is inconclusive, a stop gate is met, the mitigation impact is unacceptable, the issue recurs, or the guide points to a product group, OEM, partner, or Microsoft CSS owner.
 
 | Escalation target | Escalate when | Evidence to include |
 | --- | --- | --- |

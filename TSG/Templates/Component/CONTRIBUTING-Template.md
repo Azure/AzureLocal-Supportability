@@ -30,7 +30,7 @@ Use this path when turning the template into a component `CONTRIBUTING.md` and p
    | --- | --- |
    | Non-technical impact | What customer or operator problem this content helps with. |
    | Owner and required sign-off | Component owner, support owner, partner, SI, or OEM reviewer. |
-   | Workload impact or downtime risk | None, possible disruption, maintenance window required, or unknown and blocked. |
+   | Effect on workloads | None, possible disruption, maintenance window required, or unknown and blocked. |
    | Validation evidence | What was checked, such as commands exercised, expected and observed output, link check, or lint result, or not applicable with reason. Keep this evidence in the PR, not in the article. |
    | Remaining blockers | Open evidence, applicability, support-boundary, or owner questions. |
 
@@ -39,7 +39,7 @@ Use this path when turning the template into a component `CONTRIBUTING.md` and p
    ```text
    Component owner:
    Customer impact summary:
-   Workload impact or downtime risk:
+   Effect on workloads:
    Applicable products and supported versions:
    Validation evidence:
    Link check result:
@@ -92,7 +92,7 @@ Use this handoff matrix for cross-component cases:
 | Firmware, BIOS, driver, or hardware qualification | OEM vendor with Microsoft CSS as needed | Name model, firmware or driver range, and support-boundary evidence. |
 | Solution Builder Extension package, model/SKU match, or solution extension content | OEM vendor or SBE publisher | Name SBE version, hardware family, and validation evidence. |
 | Network symptom with storage, update, or compute impact | Start with the component whose evidence proves the failing layer | Explain why the issue is or is not in this component's lane. |
-| VM workload drain, reboot, or live migration exposure | Customer workload owner and app or VM engineer | State workload impact, downtime risk, maintenance window, and validation plan. |
+| VM workload drain, reboot, or live migration exposure | Customer workload owner and app or VM engineer | State workload impact, expected downtime, maintenance window, and validation plan. |
 | Repeated site deployment variance | Partner or SI deployment owner | Record hardware family, topology, version variance, and reuse guidance for future sites. |
 
 ## Required Article Metadata
@@ -117,19 +117,20 @@ Use this metadata vocabulary consistently:
 
 ## Safe and Testable Authoring
 
-All contributed commands, scripts, portal actions, and configuration changes must be production-safe, tested, and labeled with a canonical action classification:
+All contributed commands, scripts, portal actions, and configuration changes must be production-safe, tested, and describe their impact in plain words:
 
-- [READ-ONLY]: diagnostics, status checks, link checks, or metadata checks that do not change state. Risk is not applicable because no state changes.
-- [LOW RISK]: state-changing actions with narrow, reversible impact and no expected workload or availability effect.
-- [MEDIUM RISK]: reversible configuration changes, service restarts, cache cleanup, firewall updates, or changes that may briefly affect manageability.
-- [HIGH RISK]: node reboot, drain, firmware change, BitLocker or Secure Boot change, storage repair, cluster quorum change, destructive cleanup, or any step that can affect workload availability.
+- Read-only steps: diagnostics, status checks, link checks, or metadata checks that do not change state. Do not add a label. Optionally write "This step changes nothing."
+- State-changing steps: add a `**Changes:**` line that says what changes and what is not affected, for example "**Changes:** removes the extra module folder. Running VMs are not affected."
+- Disruptive steps: service restarts, cache cleanup, drains, or changes that may briefly affect manageability or need a maintenance window. Also add a `**Plan for:**` line, for example "**Plan for:** drain the machine and schedule a maintenance window."
+- Steps that can't be undone, can interrupt running workloads, change firmware or security posture, or can lose data: node reboot, firmware change, BitLocker or Secure Boot change, firewall rule change, role-based access control (RBAC) assignment change, certificate change, storage repair, cluster quorum change, destructive cleanup, or any step that can lose data. Also add a `> [!WARNING]` callout that states the consequence, for example "This can't be undone." or "Running VMs stop if the machine is not drained first." You can also label these steps `[HIGH RISK]`.
+- Do not add `[LOW RISK]`, `[MEDIUM RISK]`, or `[READ-ONLY]` labels.
 
 Every action pattern in a contributed article must include these fields:
 
 | Field | Requirement |
 | --- | --- |
-| Action classification | [READ-ONLY] when no state changes. Use [LOW RISK], [MEDIUM RISK], or [HIGH RISK] only when the action may change state. |
-| Risk statement | For [READ-ONLY], state that risk is not applicable because no state changes. For state-changing actions, explain why the selected risk label is correct. |
+| Action classification | Read-only when no state changes, otherwise state-changing. |
+| What changes | For read-only actions, optionally write "This step changes nothing." For state-changing actions, a `**Changes:**` statement that says what changes and what is not affected, plus a `**Plan for:**` statement when the step is disruptive. When the step can't be undone, can interrupt running workloads, changes firmware or security posture, or can lose data, put a `> [!WARNING]` callout on its own lines in the step, not in a table cell, because a table cell can't show it. |
 | Required privilege | Role, local admin right, Azure role, OEM access, or support entitlement needed before the action. |
 | Workload or maintenance gate | Whether the action needs a maintenance window, workload owner approval, node drain, reboot plan, or no workload impact. |
 | Pre-check | What the operator must confirm before running the action, including prerequisites, current state, backup, recovery key, maintenance window, and workload impact. |
@@ -137,12 +138,12 @@ Every action pattern in a contributed article must include these fields:
 | Expected result or output | The success shape, status, log entry, portal state, or command output the reader should see. |
 | Stop condition | The condition that means the reader must stop and escalate instead of continuing. |
 | Escalation target | Component owner, Microsoft CSS, OEM vendor, product group, or customer workload owner to contact when a stop condition is hit. |
-| Rollback | How to undo the change or return to the previous state. If rollback is not available, label the action [HIGH RISK] and say so before the action. |
+| Rollback | How to undo the change or return to the previous state. If rollback is not available, say so in a `> [!WARNING]` callout before the action, such as "This can't be undone." |
 | Expected rollback output | The command output, portal state, or log entry that shows rollback started and completed. |
 | Rollback verification | The independent check that proves the rollback restored the previous state. |
 | Verification | The command, portal check, log, event, or validation run that proves the change worked. |
 
-State-changing PowerShell must check current state before changing it, avoid `-Force` unless justified, set error handling where appropriate, and include verification after changes. Do not include commands that delete drive roots, erase customer data, disable security controls, or reboot or drain nodes without explicit pre-checks, stop conditions, rollback guidance, and a [HIGH RISK] label.
+State-changing PowerShell must check current state before changing it, avoid `-Force` unless justified, set error handling where appropriate, and include verification after changes. Do not include commands that delete drive roots, erase customer data, disable security controls, or reboot or drain nodes without explicit pre-checks, stop conditions, rollback guidance, and a `> [!WARNING]` callout that states the consequence.
 
 ## Evidence, Validation, and Discoverability
 
@@ -206,7 +207,7 @@ A component contribution is not ready for review until every item below is true:
 - The component README indexes every new or changed article with Article (the title as a relative link), Type, Applicable products, and Owner.
 - Every article uses the correct template and includes the required metadata marker from `../Templates/Markdown-Snippets.md` when it is an article template output.
 - Every applicable product, supported version, operation phase, topology, owner, and support boundary is explicit.
-- Every action uses [READ-ONLY] when no state changes or [LOW RISK], [MEDIUM RISK], or [HIGH RISK] when state may change, and includes pre-check, action, expected result/output, stop condition, rollback, and verification.
+- Every state-changing action has a `**Changes:**` statement, plus `**Plan for:**` or a `> [!WARNING]` callout when needed, and every action includes pre-check, action, expected result/output, stop condition, rollback, and verification.
 - Evidence is attached or cited in the PR: tested commands, expected outputs, logs, screenshots, Event IDs, telemetry samples, or source links as appropriate.
 - Internal relative links resolve from the copied file location, and external links use public Microsoft documentation without release-specific query parameters.
 - Public content contains no customer identifiers, secrets, tenant IDs, subscription IDs, private IP addresses, private support links, or internal-only URLs.
@@ -215,4 +216,4 @@ A component contribution is not ready for review until every item below is true:
 
 - Use the repository contribution guide at [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for universal process, CLA, document-type, and code-safety rules.
 - Use Microsoft Learn for public Azure Local product references: <https://learn.microsoft.com/azure/azure-local/>.
-- Ask the component owner when applicability, version support, risk, or support boundary is unclear.
+- Ask the component owner when applicability, version support, workload impact, or support boundary is unclear.
