@@ -177,8 +177,8 @@ interface Ethernet1/21
 TOR1# show int ethernet 1/1
 Ethernet1/1 is up
 admin state is up, Dedicated Interface
-  Hardware: 10000/25000/40000/50000/100000 Ethernet, address: 4874
-.1039.e2e8 (bia 4874.1039.e2e8)
+  Hardware: 10000/25000/40000/50000/100000 Ethernet, address: 0200
+.0000.01e8 (bia 0200.0000.01e8)
   Description: Switched-Compute
   MTU 9216 bytes, BW 100000000 Kbit , DLY 10 usec
   reliability 255/255, txload 1/255, rxload 1/255
@@ -264,10 +264,10 @@ flowchart LR
 
 Name                                 MacAddress        Status
 ----                                 ----------        ------
-ethernet 2                           C8-4B-D6-90-C7-E6 Up
-ethernet 4                           C8-4B-D6-90-C7-E8 Up
-ethernet                             C8-4B-D6-90-C7-E5 Up
-ethernet 3                           C8-4B-D6-90-C7-E7 Up
+ethernet 2                           02-00-00-00-00-E6 Up
+ethernet 4                           02-00-00-00-00-E8 Up
+ethernet                             02-00-00-00-00-E5 Up
+ethernet 3                           02-00-00-00-00-E7 Up
 
 ```
 
@@ -280,9 +280,9 @@ Capability codes:
   (R) Router, (B) Bridge, (T) Telephone, (C) DOCSIS Cable Device
   (W) WLAN Access Point, (P) Repeater, (S) Station, (O) Other
 Device ID            Local Intf      Hold-time  Capability  Port ID
-c84b.d690.c7e5       Eth1/1          30                     c84b.d690.c7e5
+0200.0000.00e5       Eth1/1          30                     0200.0000.00e5
 ...
-c84b.d690.c7e7       Eth1/21         30                     c84b.d690.c7e7
+0200.0000.00e7       Eth1/21         30                     0200.0000.00e7
 ...
 
 # on TOR2
@@ -291,9 +291,9 @@ Capability codes:
   (R) Router, (B) Bridge, (T) Telephone, (C) DOCSIS Cable Device
   (W) WLAN Access Point, (P) Repeater, (S) Station, (O) Other
 Device ID            Local Intf      Hold-time  Capability  Port ID
-c84b.d690.c7e6       Eth1/1          30                     c84b.d690.c7e6
+0200.0000.00e6       Eth1/1          30                     0200.0000.00e6
 ...
-c84b.d690.c7e8       Eth1/21         30                     c84b.d690.c7e8
+0200.0000.00e8       Eth1/21         30                     0200.0000.00e8
 ...
 ```
 
@@ -301,10 +301,10 @@ So the cable mapping based on the lldp neighbors output is as follows:
 
 | Host Name | NIC Name     | MAC Address           | Connected ToR | ToR Interface     |
 |-----------|--------------|------------------------|---------------|-------------------|
-| Host1     | Ethernet     | C8-4B-D6-90-C7-E5      | ToR1          | Ethernet1/1     |
-| Host1     | Ethernet 2   | C8-4B-D6-90-C7-E6      | ToR2          | Ethernet1/1   |
-| Host1     | Ethernet 3   | C8-4B-D6-90-C7-E7      | ToR1          | Ethernet1/21    |
-| Host1     | Ethernet 4   | C8-4B-D6-90-C7-E8      | ToR2          | Ethernet1/21   |
+| Host1     | Ethernet     | 02-00-00-00-00-E5      | ToR1          | Ethernet1/1     |
+| Host1     | Ethernet 2   | 02-00-00-00-00-E6      | ToR2          | Ethernet1/1   |
+| Host1     | Ethernet 3   | 02-00-00-00-00-E7      | ToR1          | Ethernet1/21    |
+| Host1     | Ethernet 4   | 02-00-00-00-00-E8      | ToR2          | Ethernet1/21   |
 
 
 ---
@@ -341,10 +341,10 @@ flowchart LR
  
 InterfaceAlias VlanID MacAddress
 -------------- ------ ----------
-ethernet 4        712 C8-4B-D6-90-C7-E8
-ethernet 3        711 C8-4B-D6-90-C7-E7
-ethernet 2        0   C8-4B-D6-90-C7-E6
-ethernet          0   C8-4B-D6-90-C7-E5
+ethernet 4        712 02-00-00-00-00-E8
+ethernet 3        711 02-00-00-00-00-E7
+ethernet 2        0   02-00-00-00-00-E6
+ethernet          0   02-00-00-00-00-E5
 
 ```
 
@@ -358,7 +358,7 @@ Legend:
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*    7     cb4b.d690.c7e5   dynamic  0         F      F    Eth1/1
+*    7     0200.0000.00e5   dynamic  0         F      F    Eth1/1
 
 TOR1# show mac address-table interface ethernet 1/21
 Legend:
@@ -367,7 +367,7 @@ Legend:
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*  711     cb4b.d690.c7e7   dynamic  0         F      F    Eth1/21
+*  711     0200.0000.00e7   dynamic  0         F      F    Eth1/21
 
 
 # On TOR2
@@ -378,7 +378,7 @@ Legend:
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*    7     cb4b.d690.c7e6   dynamic  0         F      F    Eth1/1
+*    7     0200.0000.00e6   dynamic  0         F      F    Eth1/1
 
 TOR2# show mac address-table interface ethernet 1/21
 Legend:
@@ -387,7 +387,7 @@ Legend:
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*  712     cb4b.d690.c7e8   dynamic  0         F      F    Eth1/21
+*  712     0200.0000.00e8   dynamic  0         F      F    Eth1/21
 ```
 
 ### 1.4 Advanced Troubleshooting
@@ -472,12 +472,12 @@ Missing MAC addresses usually indicate Layer 2 connectivity or VLAN configuratio
 This is **expected behavior** in Azure Local deployments and not an issue that requires troubleshooting.
 
 **Explanation:**
-- **Storage VLANs** are typically configured as **Layer 2 (L2) networks** without IP subnets
-- Storage traffic is **VLAN-tagged and handled entirely at Layer 2**
-- No IP-based communication or ARP resolution occurs for storage traffic
-- **Management and Compute VLANs** are **Layer 3 networks** with IP addresses, which is why their entries appear in the ARP table
+- **Storage VLANs** are typically configured on the ToR switches as **Layer 2 (L2) VLANs** with no switch IP interface (SVI) or gateway
+- The switch forwards storage frames at Layer 2 only, so it does not resolve or store IP-to-MAC entries for storage addresses
+- The hosts still use IP on the storage networks (SMB Direct over RoCEv2 or iWARP) and resolve each other with ARP; check those entries on a host with `Get-NetNeighbor`, not on the switch
+- **Management and Compute VLANs** usually have a switch IP interface (SVI) that acts as the gateway on those VLANs, which is why their entries appear in the switch ARP table
 
-This design is intentional and optimizes storage performance by eliminating unnecessary Layer 3 overhead.
+This design is intentional: storage traffic stays on its VLANs and is not routed by the ToR switches.
 
 
 ## 3. Additional Resources
