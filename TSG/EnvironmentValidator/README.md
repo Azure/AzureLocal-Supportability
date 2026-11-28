@@ -27,7 +27,7 @@ This folder contains the TSG's related to Environment Validators.
 * [Troubleshooting ARB Resource Lock (ARBStack ARBIsLocked)](./Troubleshooting-AzStackHci_ARBStack_ARBIsLocked.md)
 * [Troubleshooting Azure Kubernetes Service Cluster Connect (Azure_Kubernetes_Service_Cluster_connect)](./Troubleshooting-Azure_Kubernetes_Service_Cluster_connect.md)
 * [Troubleshooting Subscription State (AzStackHci_Subscription_State)](./Troubleshooting-AzStackHci_Subscription_State.md)
-* [Known Issue: High Disk Space Usage in TEMP](Known-Issue-High-Disk-Space-usage-in-TEMP.md)
+* [Known Issue: High Disk Space Usage in TEMP](Known-Issue-High-Disk-Space-usage-in-TEMP.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator.
 * [Known Issue: WinRM cannot process the configuration request](Known-Issue-WinRM-cannot-process-the-configuration-request.md)
 * [Known Issue: This module requires Az.Accounts version 5.3.0](Known-Issue-This-module-requires-Az-Accounts-version-5-3-0.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator.
 * [Known Issue: Az.Accounts Is Reported as Missing During Deployment Validation](Known-Issue-AzAccounts-False-Missing-During-Deployment-Validation.md) - Type: troubleshoot; Products: Azure Local; Owner: Azure Local Environment Validator.
