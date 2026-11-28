@@ -88,7 +88,7 @@ Name            : Arc Integration
 Command         : Test-AzStackHciArcIntegration
 Status          : Error
 ExecutionDetail : Exception occurred (Test-AzStackHciArcIntegration): The provided account MSI@50342 
-                  does not have access to subscription ID "b435cdaa-..."
+                  does not have access to subscription ID "00000000-..."
 ```
 
 The `ExecutionDetail` field contains the actual exception message from the validator that failed.

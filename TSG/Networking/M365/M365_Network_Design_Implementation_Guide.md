@@ -116,7 +116,7 @@ All servers are dual-homed to both TOR switches for redundancy.
 
 ```mermaid
 flowchart TD
-    Internet[Internet/ISP<br/>64.124.41.193/29 Gateway]
+    Internet[Internet/ISP<br/>203.0.113.193/29 Gateway]
     
     subgraph TOR["TOR Switches (Dell 5232HL x2)"]
         TORUplink["Uplink Port: Internet Connection"]
@@ -127,7 +127,7 @@ flowchart TD
         vSwitch["Hyper-V Virtual Switch<br/>(Processes VLAN Tags)"]
         
         subgraph PAVM["Palo Alto VM-Series Firewall"]
-            PA_WAN["ethernet1/2: Internet VLAN<br/>64.124.41.197/29"]
+            PA_WAN["ethernet1/2: Internet VLAN<br/>203.0.113.197/29"]
             PA_DMZ["ethernet1/1: VLAN 500 DMZ<br/>192.168.100.1/28"]
         end
         
@@ -276,7 +276,7 @@ Separate management and compute VLANs enable independent scaling and easier trou
 > 
 > **Virtual Appliance Interfaces:**
 > - **Palo Alto Firewall**: Only has 2 interfaces:
->   - `ethernet1/2`: Internet/WAN (64.124.41.197/29) - Direct connection, not through TOR switches
+>   - `ethernet1/2`: Internet/WAN (203.0.113.197/29) - Direct connection, not through TOR switches
 >   - `ethernet1/1`: DMZ VLAN 500 (192.168.100.1/28) - Connects to F5
 > - **F5 Load Balancer**: Has 4 VLAN interfaces (102, 203, 302, 500)
 > 
@@ -381,7 +381,7 @@ The Palo Alto VM-Series firewall creates a security boundary between the interne
 
 | Zone | Interface | IP Address | VLAN | Purpose |
 |------|-----------|------------|------|---------|
-| **Internet** | ethernet1/2 | 64.124.41.197/29 | N/A (WAN) | External-facing interface for public internet connectivity |
+| **Internet** | ethernet1/2 | 203.0.113.197/29 | N/A (WAN) | External-facing interface for public internet connectivity |
 | **DMZ** | ethernet1/1 | 192.168.100.1/28 | 500 | Internal-facing interface for load balancer connectivity via VLAN 500 |
 
 > [!NOTE]
