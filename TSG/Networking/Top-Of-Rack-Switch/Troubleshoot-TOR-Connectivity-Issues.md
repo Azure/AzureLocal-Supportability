@@ -358,7 +358,7 @@ Legend:
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*    7     cb4b.d690.c7e5   dynamic  0         F      F    Eth1/1
+*    7     c84b.d690.c7e5   dynamic  0         F      F    Eth1/1
 
 TOR1# show mac address-table interface ethernet 1/21
 Legend:
@@ -367,7 +367,7 @@ Legend:
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*  711     cb4b.d690.c7e7   dynamic  0         F      F    Eth1/21
+*  711     c84b.d690.c7e7   dynamic  0         F      F    Eth1/21
 
 
 # On TOR2
@@ -378,7 +378,7 @@ Legend:
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*    7     cb4b.d690.c7e6   dynamic  0         F      F    Eth1/1
+*    7     c84b.d690.c7e6   dynamic  0         F      F    Eth1/1
 
 TOR2# show mac address-table interface ethernet 1/21
 Legend:
@@ -387,7 +387,7 @@ Legend:
         (T) - True, (F) - False, C - ControlPlane MAC, ~ - vsan
    VLAN     MAC Address      Type      age     Secure NTFY Ports
 ---------+-----------------+--------+---------+------+----+------------------
-*  712     cb4b.d690.c7e8   dynamic  0         F      F    Eth1/21
+*  712     c84b.d690.c7e8   dynamic  0         F      F    Eth1/21
 ```
 
 ### 1.4 Advanced Troubleshooting
@@ -472,12 +472,12 @@ Missing MAC addresses usually indicate Layer 2 connectivity or VLAN configuratio
 This is **expected behavior** in Azure Local deployments and not an issue that requires troubleshooting.
 
 **Explanation:**
-- **Storage VLANs** are typically configured as **Layer 2 (L2) networks** without IP subnets
-- Storage traffic is **VLAN-tagged and handled entirely at Layer 2**
-- No IP-based communication or ARP resolution occurs for storage traffic
-- **Management and Compute VLANs** are **Layer 3 networks** with IP addresses, which is why their entries appear in the ARP table
+- **Storage VLANs** are typically configured on the ToR switches as **Layer 2 (L2) VLANs** with no switch IP interface (SVI) or gateway
+- The switch forwards storage frames at Layer 2 only, so it does not resolve or store IP-to-MAC entries for storage addresses
+- The hosts still use IP on the storage networks (SMB Direct over RoCEv2 or iWARP) and resolve each other with ARP; check those entries on a host with `Get-NetNeighbor`, not on the switch
+- **Management and Compute VLANs** usually have a switch IP interface (SVI) that acts as the gateway on those VLANs, which is why their entries appear in the switch ARP table
 
-This design is intentional and optimizes storage performance by eliminating unnecessary Layer 3 overhead.
+This design is intentional: storage traffic stays on its VLANs and is not routed by the ToR switches.
 
 
 ## 3. Additional Resources
