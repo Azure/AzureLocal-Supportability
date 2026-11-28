@@ -103,30 +103,30 @@ $tempPath = 'C:\Users\HCIOrchestrator\AppData\Local\Temp'
 $tempNugetFolders = Get-ChildItem -Path $tempPath -Recurse -Filter "$nugetName.*" -Directory -ErrorAction SilentlyContinue
 foreach ($tnf in $tempNugetFolders)
 {
-    try
-    {
-        $randomFileNameRegex = '^[a-z0-9]{8}\.[a-z0-9]{3}$'
-        $tnfParent = Split-Path -Path $tnf.FullName -Parent
-        $parentFolderName = Split-Path -Path $tnfParent -Leaf
-        if (-not ($parentFolderName -match $randomFileNameRegex))
-        {
-            Write-Host "Skipping removal of temp nuget folder $tnfParent as it does not match expected pattern."
-            continue
-        }
-        $allowedAgeDays = 1
-        $age = (Get-Date) - (Get-Item -Path $tnfParent | ForEach-Object LastWriteTime)
-        if ($age.TotalDays -lt $allowedAgeDays)
-        {
-            Write-Host "Skipping removal of temp nuget folder $tnfParent as its last write time was $($age.TotalDays) days ago, which is less than $allowedAgeDays days."
-            continue
-        }
-        Write-Host "Removing temp nuget folder $tnfParent"
-        Remove-Item -Path $tnfParent -Recurse -Force -ErrorAction Stop
-    }
-    catch
-    {
-        Write-Host "Unable to remove temp nuget folder. Exception: $($_.Exception.GetType().FullName): $($_.Exception.Message)" -ForegroundColor Red
-    }
+    try
+    {
+        $randomFileNameRegex = '^[a-z0-9]{8}\.[a-z0-9]{3}$'
+        $tnfParent = Split-Path -Path $tnf.FullName -Parent
+        $parentFolderName = Split-Path -Path $tnfParent -Leaf
+        if (-not ($parentFolderName -match $randomFileNameRegex))
+        {
+            Write-Host "Skipping removal of temp nuget folder $tnfParent as it does not match expected pattern."
+            continue
+        }
+        $allowedAgeDays = 1
+        $age = (Get-Date) - (Get-Item -Path $tnfParent | ForEach-Object LastWriteTime)
+        if ($age.TotalDays -lt $allowedAgeDays)
+        {
+            Write-Host "Skipping removal of temp nuget folder $tnfParent as its last write time was $($age.TotalDays) days ago, which is less than $allowedAgeDays days."
+            continue
+        }
+        Write-Host "Removing temp nuget folder $tnfParent"
+        Remove-Item -Path $tnfParent -Recurse -Force -ErrorAction Stop
+    }
+    catch
+    {
+        Write-Host "Unable to remove temp nuget folder. Exception: $($_.Exception.GetType().FullName): $($_.Exception.Message)" -ForegroundColor Red
+    }
 }
 ```
 
@@ -155,7 +155,7 @@ If the folders build up again after later updates, first check whether the clust
 Test-Path -LiteralPath 'C:\Users\HCIOrchestrator\AppData\Local\Temp\AzStackHci.EnvironmentChecker.NugetsForUpdate'
 ```
 
-- If it returns `False` on every node, the cluster is on a build without the fix. Repeat these steps after each update until the cluster runs a build with the fix.
+- If it returns `False` on every node, the cluster is on a build without the fix, or on a build with the fix that has not prepared an update since it was installed (the update that installs the fix runs its checks with the build it replaces). Repeat these steps after each update, and run this check again after the next one.
 - If it returns `True` on any node, the cluster is on a build with the fix. Folders left from earlier updates can stay on the other nodes until you remove them once with these steps. New random-named folders that are more than one day old on a node that has the `AzStackHci.EnvironmentChecker.NugetsForUpdate` folder, or new folders that come back on every node after each update, are not expected. Do not keep repeating the cleanup; see [When to contact Microsoft support](#when-to-contact-microsoft-support).
 
 ## When to contact Microsoft support
