@@ -74,7 +74,7 @@ $ruleId = 'd1e49aac-8f56-4280-b9ba-993a6d77406c'
 $nodes = (Get-ClusterNode).Name
 Invoke-Command -ComputerName $nodes -ArgumentList $ruleId -ScriptBlock {
     param($ruleId)
-    $pref = Get-MpPreference
+    $pref = Get-MpPreference -ErrorAction Stop
     $ids = @($pref.AttackSurfaceReductionRules_Ids)
     $actions = @($pref.AttackSurfaceReductionRules_Actions)
     $action = 'Not configured'
@@ -95,13 +95,31 @@ Invoke-Command -ComputerName $nodes -ArgumentList $ruleId -ScriptBlock {
 
 2. For each node that shows `Block (1)`, remove the Block setting for this rule at the source that sets it: [Group policy (GP)](https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction#group-policy), [Mobile Device Management (MDM)](https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction#mdm), Microsoft Defender for Endpoint security settings management, or [Microsoft Configuration Manager](https://learn.microsoft.com/defender-endpoint/enable-attack-surface-reduction#microsoft-configuration-manager). If you skip this step, that source applies Block again.
 
+    That source is usually a policy that also applies to other devices, so don't remove Block from the policy itself. Agree the change with the owner of the policy, record its current setting for this rule and its assignments, and then change it only for the Azure Local nodes: exclude the nodes from the assignment that sets Block, or assign the nodes a policy that sets this rule to Audit or Not configured.
+
+    **Changes:** Stops that source from setting this rule to Block on the Azure Local nodes. The rule keeps its current value on the nodes until step 3, and the policy doesn't change for any other device.
+
+    **Plan for:** The policy owner's agreement, and the time the policy takes to reach the nodes, for example the next Group Policy refresh or `gpupdate /force` on each node.
+
+> [!WARNING]
+> Together with step 3, this stops Defender from blocking process creation from PSExec and WMI commands on the Azure Local nodes; it logs it instead.
+
+If the change reaches devices other than the Azure Local nodes, put back the setting and assignments you recorded for those devices. Don't put Block back on the Azure Local nodes: on version 2610 and later it isn't a supported value for this rule, and it blocks the update installer again.
+
 3. Return the rule to its baseline value on every node. Run this on one node. The cmdlet asks you to confirm before it changes anything. For more information, see [Reset a setting to its baseline value](https://learn.microsoft.com/azure/azure-local/manage/manage-secure-baseline#reset-a-setting-to-its-baseline-value).
 
     **Changes:** Sets the rule back to the Azure Local baseline value, Audit (value 2), on every node and removes any recorded cluster customization for this rule. It does not change any other security setting, and it does not change the Group Policy, MDM or Configuration Manager source from step 2.
 
+    **Plan for:** Your security team's agreement, because the rule stops blocking on every node.
+
+> [!WARNING]
+> After this step, Defender logs process creation from PSExec and WMI commands on every node instead of blocking it. On version 2610 and later this can't be undone with a supported method: Audit is the baseline value for this setting, and Block isn't supported.
+
 ```powershell
 Set-AzsSecurity -Type DefenderAntivirus -SettingName "ASRBlockProcessCreationFromPSExecAndWMICommands" -Default -Cluster
 ```
+
+If the cmdlet returns an error, or step 4 still shows `Block (1)` on a node, stop and don't resume the update. A node that still shows Block is usually still in scope of the source from step 2, so check that source again. If the source no longer applies to the node and it still shows Block, contact Microsoft Support with the output of step 1.
 
 4. Run the command from step 1 again and confirm that every node shows `Audit (2)`. In Audit mode Defender logs event ID 1122 instead of blocking, so new event ID 1121 entries for rule ID D1E49AAC-8F56-4280-B9BA-993A6D77406C should stop. Then [resume the update](https://learn.microsoft.com/azure/azure-local/update/update-via-powershell-23h2#step-7-resume-the-update-if-needed).
 
