@@ -77,6 +77,8 @@ Run it only when the detection script above reports "ECE slowness issue detected
 
 **Changes:** On every cluster node, the script force-stops the ECEAgent process and then makes sure the `ECEAgent` service is running again. Any work the agent is doing on that node at that moment is interrupted. It does not restart the nodes or any virtual machines, and it does not change the update or the cluster configuration.
 
+**Plan for:** The agents on all nodes restart at the same time, so run it while the update is stuck, not during other cluster maintenance. The update continues on its own once the agents are running again.
+
 ``` Powershell 
  $scriptBlock = {
             try {
@@ -87,13 +89,20 @@ Run it only when the detection script above reports "ECE slowness issue detected
                 $eceagent = Get-WmiObject -Class Win32_Service -Filter "Name='ECEAgent'"
                 
                 $retry = 0
+                $startError = $null
                 while ($eceagent.State -ne "Running")
                 {
-                    Start-Service -Name ECEAgent
+                    try {
+                        Start-Service -Name ECEAgent -ErrorAction Stop
+                    }
+                    catch {
+                        $startError = $_.Exception.Message
+                    }
                     $eceagent = Get-WmiObject -Class Win32_Service -Filter "Name='ECEAgent'"
-                    if(++$retry -ge 5)
+                    if(($eceagent.State -ne "Running") -and (++$retry -ge 5))
                     {
-                        throw "Failed to start ECEAgent during agent restart on $(hostname)"
+                        $reason = if ($startError) { $startError } else { "the service state is $($eceagent.State)" }
+                        throw "Failed to start ECEAgent during agent restart on $(hostname): $reason"
                     }
                     Start-Sleep -Seconds 1
                 }
@@ -109,3 +118,13 @@ Run it only when the detection script above reports "ECE slowness issue detected
     
     Invoke-Command -ComputerName $nodes -ScriptBlock $scriptBlock -Verbose -ErrorAction 'Stop'
 ```
+
+To confirm the restart, run this on each cluster node:
+
+``` Powershell
+Get-Service -Name ECEAgent | Select-Object Name, Status
+```
+
+Expected result: `Status` is `Running` on every node. Then watch the update: the 'Failover ECE Service to new Node' step should finish. If it's still stuck after 15 minutes, run the detection script again.
+
+**If the agent doesn't start on a node:** The script stops with "Failed to restart ECEAgent on <node>: <reason>". There is nothing to roll back: the script only stops the agent process and starts the service, and it doesn't change the service's settings. To recover, sign in to that node, run `Start-Service -Name ECEAgent`, and check `Get-Service -Name ECEAgent` again. If the service still doesn't reach `Running`, stop here and don't retry the update. Contact Microsoft Support with the node name and the message the script printed.
