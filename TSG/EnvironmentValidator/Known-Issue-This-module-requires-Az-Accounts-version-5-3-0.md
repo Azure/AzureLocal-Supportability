@@ -14,8 +14,8 @@
 
 ## Table of contents
 
-- [Revision history](#revision-history)
 - [At a glance](#at-a-glance)
+- [Revision history](#revision-history)
 - [Symptoms](#symptoms)
 - [Cause](#cause)
 - [Where you can see this problem](#where-you-can-see-this-problem)
@@ -26,6 +26,17 @@
 - [Rollback](#rollback)
 - [When to contact Microsoft support](#when-to-contact-microsoft-support)
 - [Related documentation](#related-documentation)
+
+## At a glance
+
+| | |
+| --- | --- |
+| What happens | An Environment Validator step, reported in the cluster witness check during deployment, fails with `This module requires Az.Accounts version 5.3.0`. The version number in the message can differ. |
+| Applies to | Azure Local, any release. The correct module versions depend on the build and come from the machine's validated recipe, not from this article. |
+| Severity | High. The operation stays blocked until the module versions are corrected. |
+| Who should act | An administrator with local administrator rights on every machine. |
+| Time to fix | About 15 minutes per machine, plus the time to retry the operation. No machine restart is needed, virtual machines are not affected, and the retry can follow as soon as every affected machine is fixed. |
+| First step | Run the read-only check in [Issue Validation](#issue-validation) on every machine. After the fix, resume the deployment from the Azure portal (**Deployments** > **Resume deployment**). |
 
 ## Revision history
 
@@ -47,17 +58,8 @@
 | 2026-11-24 | Step 2's dependency check now stops with `No changes were made` when a module manifest builds a file path with an expression, such as joined strings or `-f`, that it cannot resolve without running the manifest, instead of checking the parts of the path separately. |
 | 2026-11-25 | Step 2's dependency check now treats a `NestedModules` entry that names a module with a version (`RequiredVersion`, `ModuleVersion`, or `MaximumVersion`, with or without a module GUID) as a requirement, as it does for `RequiredModules` and `ModuleList`, and stops with `No changes were made` when only a version that it would remove meets the entry. PowerShell loads such an entry from the module path, so the module that lists it cannot be imported once that version is gone; an entry that gives only the module name needs no particular version. The article previously said that these entries did not matter. The check also lists the modules that have such an entry, which `Get-Module` left out of its list when it ran with the block's setting to stop at the first error. The expected result after Step 2, and [When to contact Microsoft support](#when-to-contact-microsoft-support), now send the stops that list users who are not signed in, or ask you to set `$AssumeDefaultDocumentsForSignedOutUsers` to `$false` or `$true`, to the steps for that stop in Step 2; contact Microsoft support only if the block still stops after those users sign in or the setting is changed. |
 | 2026-11-25 | Step 2 now lists the installed modules in a separate PowerShell process (a background job) and reads back only their names, versions, paths, and requirements. In Windows PowerShell 5.1, listing them in the Step 2 session loaded the newest installed version of an Azure PowerShell module that another module names in `NestedModules`, and Step 2 then stopped with `An Azure PowerShell module became loaded` on every run, even when a version that it keeps met that entry. If the separate listing fails, Step 2 stops with `No changes were made`. |
-
-## At a glance
-
-| | |
-| --- | --- |
-| What happens | An Environment Validator step, reported in the cluster witness check during deployment, fails with `This module requires Az.Accounts version 5.3.0`. The version number in the message can differ. |
-| Applies to | Azure Local, any release. The correct module versions depend on the build and come from the machine's validated recipe, not from this article. |
-| Severity | High. The operation stays blocked until the module versions are corrected. |
-| Who should act | An administrator with local administrator rights on every machine. |
-| Time to fix | About 15 minutes per machine, plus the time to retry the operation. No machine restart is needed, virtual machines are not affected, and the retry can follow as soon as every affected machine is fixed. |
-| First step | Run the read-only check in [Issue Validation](#issue-validation) on every machine. After the fix, resume the deployment from the Azure portal (**Deployments** > **Resume deployment**). |
+| 2026-11-25 | Step 3 now says when to retry: only after Issue Validation, run again unchanged in a new session, reports `RESULT: NOT AFFECTED` on every machine. When a machine reports `RESULT: AFFECTED` or `RESULT: UNKNOWN`, Step 3 now says not to retry, to follow [Mitigation Details](#mitigation-details) first on an affected machine where Step 2 has not run, and otherwise to contact Microsoft support. [When to contact Microsoft support](#when-to-contact-microsoft-support) now lists `RESULT: AFFECTED` after Step 2 ended with `RESULT: CHANGED` or `RESULT: NO CHANGE NEEDED`. Before this change Step 3 said to run Issue Validation again and then retry, without saying what to do when it did not report `RESULT: NOT AFFECTED`. |
+| 2026-11-25 | [At a glance](#at-a-glance) now comes before this table. Step 2 now lists, in order, what its block does and what a stop at each point leaves in place, including that a stop after a `REMOVING:` line can leave those versions removed, which [Rollback](#rollback) can restore. In Issue Validation, the `Finding` notes now say that Step 2 also installs the recipe version of a `CAUSE` module when it is missing for all users, and removes an `Az.Accounts` version marked `Newer than recipe`. [Where you can see this problem](#where-you-can-see-this-problem) now describes Windows Admin Center in the Azure portal, which carries the same Event ID 17205 entry through its **Events** tool. [Rollback](#rollback) now stops unless it runs in Windows PowerShell 5.1, as Step 2 does: PowerShell 7 can be installed on Azure Local machines, and there `Install-Module` installs for all users in a folder that Windows PowerShell 5.1 does not read, so the block reported `RESTORED:` for a version that the cluster witness check could not load. The Issue Validation and Step 2 PowerShell blocks are unchanged. |
 
 ## Symptoms
 
@@ -116,7 +118,7 @@ module newer than the recipe; it is consistent with the first cause but does not
 | Cluster logs (`Get-ClusterLog`) | not evident | `Get-ClusterLog -TimeSpan 16` from every machine, covering the last 16 minutes of the time the state was present, including a full system health check, contains no entry with `requires Az.Accounts version` or the check name. |
 | Windows Failover Cluster Manager | not evident | No machine, role, or resource changes state compared with its state before `Az.Storage` 9.8.0 is installed, and `Microsoft-Windows-FailoverClustering/Operational` records no Critical, Error, or Warning event in the same time window. |
 | Windows Admin Center (standalone) | shown | On a node connection, the **Events** tool reads the same **AzStackHciEnvironmentChecker** log, so it carries the Event ID 17205 entry described in the Windows event logs row; the tool view itself is not characterized. The cluster dashboard **Alerts** do not carry this failure: `Get-HealthFault` shows no new Health Service fault while the state is present. The **Updates** tool is not characterized. |
-| Windows Admin Center in the Azure portal | absent | Not characterized. |
+| Windows Admin Center in the Azure portal | shown | When its extension is installed on the machines, [Windows Admin Center in the Azure portal](https://learn.microsoft.com/windows-server/manage/windows-admin-center/azure/manage-hci-clusters) (preview) includes the same **Events** tool, which reads the **AzStackHciEnvironmentChecker** log and so carries the Event ID 17205 entry described in the Windows event logs row; the tool view itself is not characterized. |
 | Component / tool log files | shown | The system health check wrote `HealthCheckResult.EnvironmentChecker.<date-time>.json` to `C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\HealthCheck\System`; it lists `Test PowerShell Module Version` as `FAILURE` for the affected machine with the `Az.Storage` 9.8.0 detail. The import error text was not found in files written during that time under the `.AzStackHci` folders, `C:\CloudDeployment\Logs`, or `C:\MASLogs`. |
 
 `absent` marks a surface that was not characterized; it is not proof that the problem does not
@@ -262,9 +264,9 @@ How to read the result for each machine:
 
 In the table, `Finding` explains each row:
 
-- `CAUSE: newer than recipe and needs a newer Az.Accounts`: this version causes the error. The fix removes it and keeps the recipe version.
+- `CAUSE: newer than recipe and needs a newer Az.Accounts`: this version causes the error. The fix removes it and keeps the recipe version, or installs the recipe version for all users if it is missing.
 - `Not in recipe; needs a newer Az.Accounts`: a module that Azure Local does not use, for example one installed with `Install-Module Az`. The fix does not remove it, but it stops if removing a newer `Az.Accounts` would break it. If neither an installed `Az.Accounts` version nor the recipe version is new enough for it, the module cannot be imported, and the check prints a `WARNING:` line for it before the `RESULT` line. It does not change the result: `RESULT: NOT AFFECTED` when it is the only finding, and `RESULT: AFFECTED` when another cause is also present.
-- `Newer than recipe` or `Older than recipe`: not the cause of this error. If the system health check reports `Test PowerShell Module Version`, see [Troubleshooting Test PowerShell Module Version](Troubleshooting-Test-PowerShell-Module-Version.md).
+- `Newer than recipe` or `Older than recipe`: not the cause of this error. On a machine where Issue Validation reports `RESULT: AFFECTED`, Step 2 also removes an `Az.Accounts` version marked `Newer than recipe`, so that the recipe version is the one that loads. It does not change other modules marked `Newer than recipe` or `Older than recipe`. If the system health check reports `Test PowerShell Module Version`, see [Troubleshooting Test PowerShell Module Version](Troubleshooting-Test-PowerShell-Module-Version.md).
 - A row whose `Path` is not under `C:\Program Files\WindowsPowerShell\Modules` is a copy in another module folder, such as a user's `Documents` folder. Such copies can load before the all-users copies. For `Az.Accounts`, the check reports `RESULT: UNKNOWN` in this case, and Step 2 stops without changes.
 
 ## Mitigation Details
@@ -297,7 +299,13 @@ The block stops before changing anything, and prints `No changes were made`, whe
 
 The dependency check fails closed: when it cannot show that a requirement is still met, for example because a manifest cannot be read or names any module by a file path, including an entry that is only a path to the module's folder or manifest, it treats the requirement as unmet and stops with `No changes were made`. A requirement that also names a module GUID is met only by a remaining all-users copy whose manifest has that GUID; a copy in a user's `Documents` folder, or a version that the block has not installed yet, does not count. A copy of a module in another user's `Documents` folder is checked even when an all-users copy with the same name and version would be removed. It compares versions the way PowerShell does when it loads a module, so a module that requires exactly `5.5.5.0` is not satisfied by version `5.5.5`. When it compares installed versions with the recipe or the repository, it treats a missing build or revision number as 0, so `5.5.3` and `5.5.3.0` are the same version.
 
-After it installs a version, the block reads the installed modules again and builds the plan again with the same checks, including the repository check, because `Install-Module` can also install a newer `Az.Accounts` as a dependency. That newer version is then removed as well. If a check fails at that point, the block stops with `The installed versions were kept and no versions were removed`. It prints `RESULT: CHANGED` only after it confirms that the recipe version of `Az.Accounts` is installed for all users and that no newer `Az.Accounts` remains.
+The block works in this order. Its output shows how far it got, and so what a stop left in place:
+
+1. It checks the session, reads the validated recipe, and prints a table of the installed Azure PowerShell modules.
+2. It plans the change and runs the checks in the list above against the plan, including the repository check. If nothing needs to change, it prints `RESULT: NO CHANGE NEEDED` and ends. If it stops at or before this point, nothing was changed.
+3. It installs each missing recipe version and prints an `INSTALLING:` line for it. It then reads the installed modules again and builds the plan again with the same checks, because `Install-Module` can also install a newer `Az.Accounts` as a dependency; that newer version is then removed as well. A stop here keeps what it installed and removes nothing, for example `The installed versions were kept and no versions were removed`.
+4. It removes the planned versions, other modules first and `Az.Accounts` last, and prints a `REMOVING:` line before each one. If it stops here, treat every version on a `REMOVING:` line as possibly removed: keep the output, and use those lines for [Rollback](#rollback) if you need to restore a version.
+5. It reads the installed modules again and prints `RESULT: CHANGED` only after it confirms that the recipe version of `Az.Accounts` is installed for all users and that no newer `Az.Accounts` remains.
 
 If a module that is not in the recipe needs a newer `Az.Accounts` than the recipe version, the block prints a `WARNING:` line that names it, as Issue Validation does, and does not change it. That module cannot be imported after the fix; contact Microsoft support or the owner of that module about it.
 
@@ -737,7 +745,12 @@ If `Uninstall-Module` reports that a module version is in use, a process still h
 
 ### Step 3: Retry the operation
 
-**Changes:** resumes the operation that failed. After Step 2 completed on every affected machine, run [Issue Validation](#issue-validation) again in a new session on each machine, then retry:
+After Step 2 completed on every affected machine, run the [Issue Validation](#issue-validation) block again, unchanged, in a new elevated Windows PowerShell 5.1 session on each machine. This check is read-only.
+
+- If every machine reports `RESULT: NOT AFFECTED`, retry the operation as the table below describes. A `WARNING:` line before it, for a module that is not in the recipe, does not block the retry.
+- If a machine reports `RESULT: AFFECTED` or `RESULT: UNKNOWN`, do not retry. For `RESULT: AFFECTED` on a machine where you have not run Step 2, follow [Mitigation Details](#mitigation-details) on that machine and then run this check again. Otherwise, keep the output from that machine and [contact Microsoft support](#when-to-contact-microsoft-support).
+
+**Changes:** resumes the operation that failed.
 
 | Operation | How to retry |
 | --- | --- |
@@ -753,7 +766,7 @@ If `Uninstall-Module` reports that a module version is in use, a process still h
 
 ## Rollback
 
-There is no automatic rollback. Step 2 confirmed, before it changed anything, that every version it removed was available in its `$Repository`. To restore a version that Step 2 removed, take the `Name` and `Version` from its `REMOVING:` line, put them in the block below, and run it in an elevated Windows PowerShell 5.1 session on the same machine.
+There is no automatic rollback. Step 2 confirmed, before it changed anything, that every version it removed was available in its `$Repository`. To restore a version that Step 2 removed, take the `Name` and `Version` from its `REMOVING:` line, put them in the block below, and run it in an elevated Windows PowerShell 5.1 session on the same machine. The block stops in PowerShell 7, because there `Install-Module` installs for all users in `C:\Program Files\PowerShell\Modules`, a folder that Windows PowerShell 5.1 does not read.
 
 Set `$Repository` to the same repository that you used in Step 2: leave it set to `'PSGallery'` unless your organization requires an approved internal repository, in which case use that repository's name. The block first confirms with `Find-Module` that this exact version is available in that repository, treating a missing build or revision number as 0 as Step 2 does, so `5.5.5` and `5.5.5.0` are the same version; it then installs the version as the repository lists it. If it is not available, the block stops without installing anything; choose an approved repository that contains this exact version, or contact Microsoft support.
 
@@ -766,6 +779,7 @@ Set `$Repository` to the same repository that you used in Step 2: leave it set t
     $Name = 'module-name-from-REMOVING-line'
     $Version = 'version-from-REMOVING-line'
 
+    if ($PSVersionTable.PSEdition -ne 'Desktop') { throw 'Run this block in Windows PowerShell 5.1. Nothing was installed.' }
     if (-not ($Version -as [version])) { throw "Replace the version placeholder with the version from the REMOVING: line. Nothing was installed." }
     function ConvertTo-FullVersion {
         # Missing build and revision numbers count as 0, so 5.5.3 and 5.5.3.0 name the same installed version.
@@ -798,6 +812,7 @@ Do not uninstall a version that Step 2 installed. It is the version that the mac
 Open a support request if any of these is true:
 
 - Issue Validation reports `RESULT: UNKNOWN` on a machine.
+- Issue Validation still reports `RESULT: AFFECTED` on a machine after Step 2 ended with `RESULT: CHANGED` or `RESULT: NO CHANGE NEEDED` there.
 - Step 2 stops with a message other than one asking you to open a new session, to have users who are not signed in sign in, or to set `$AssumeDefaultDocumentsForSignedOutUsers` to `$false` or `$true`, or it still stops with one of those messages after you followed it.
 - Every machine reports `RESULT: NOT AFFECTED`, but the operation still fails with this error.
 - The error returns after the retry.
