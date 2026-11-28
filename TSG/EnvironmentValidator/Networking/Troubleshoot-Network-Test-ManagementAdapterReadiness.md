@@ -115,8 +115,8 @@ Note that this validator may report multiple failures in the `Detail` field. Eac
   
   Get-NetAdapter -Name $AdapterName
 
-  New-NetIPAddress -InterfaceAlias "AdapterName" -IPAddress $IPAddress -PrefixLength $PrefixLength -DefaultGateway $DefaultGateway
-  Set-DnsClientServerAddress -InterfaceAlias "AdapterName" -ServerAddresses $DNSServers
+  New-NetIPAddress -InterfaceAlias $AdapterName -IPAddress $IPAddress -PrefixLength $PrefixLength -DefaultGateway $DefaultGateway
+  Set-DnsClientServerAddress -InterfaceAlias $AdapterName -ServerAddresses $DNSServers
   ```
 
 ### Failure: `[FAIL] First management adapter [AdapterName] has [0] DNS Client Servers configured, but expected [1+].`
